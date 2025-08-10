@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Live Red Finder</title>
+<style>
+  :root {
+    --bg:#0f1117; --panel:#141a25; --ink:#e7e9ee; --muted:#9aa3b2; --accent:#ff5757; --ok:#2ecc71; --warn:#ffb84d;
+    --border: #22304a;
+  }
+  html,body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+  header { padding: .8rem 1rem; background: var(--panel); border-bottom:1px solid var(--border); position: sticky; top: 0; z-index: 2; }
+  header h1 { margin:0; font-size:16px; }
+  main { display:grid; grid-template-columns: 1fr 320px; gap:12px; padding:12px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .stage { position: relative; background:#0b0f16; border:1px solid var(--border); border-radius:10px; overflow:hidden; aspect-ratio: 3/4; }
+  video, canvas { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .hud { position:absolute; left:8px; bottom:8px; background:rgba(0,0,0,.45); backdrop-filter: blur(6px); padding:6px 8px; border-radius:8px; font-size:12px; color:#d9dee7; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:12px; }
+  .row { display:flex; align-items:center; gap:10px; }
+  .row label { min-width:110px; color:var(--muted); font-size:12px; }
+  input[type="range"] { width:100%; }
+  button { appearance:none; border:1px solid var(--border); background:#1a2233; color:var(--ink); padding:.6rem .8rem; border-radius:8px; cursor:pointer; font-weight:600; }
+  button.primary { background: var(--accent); border-color:#000; color:#fff; }
+  button.ghost { background:#161d2a; }
+  .stat { font-variant-numeric: tabular-nums; }
+  .log { background:#0c111a; border:1px dashed var(--border); border-radius:8px; padding:8px; min-height:110px; max-height:210px; overflow:auto; white-space:pre-wrap; line-height:1.35; }
+  .pill { padding:.1rem .4rem; border-radius:999px; font-size:11px; border:1px solid var(--border); }
+  .ok { color:var(--ok); border-color: rgba(46,204,113,.4); }
+  .warn { color:var(--warn); border-color: rgba(255,184,77,.4); }
+  footer { padding:8px 12px; color:var(--muted); font-size:12px; text-align:center; }
+  .tip { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>📷 Live Red Finder — camera demo (iOS-friendly)</h1>
+  </header>
+
+  <main>
+    <section class="stage" id="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div class="hud">
+        <span>Detection: <span id="detPct" class="stat">0.0%</span></span>
+        &nbsp;•&nbsp;
+        <span>Boxes: <span id="boxCount" class="stat">0</span></span>
+        &nbsp;•&nbsp;
+        <span id="perf" class="stat">0 ms</span>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="row">
+        <button id="btnStart" class="primary">Start camera</button>
+        <button id="btnStop" class="ghost">Stop</button>
+        <span id="status" class="pill warn">idle</span>
+      </div>
+
+      <div class="row">
+        <label>Sensitivity</label>
+        <input type="range" id="sensitivity" min="0" max="100" value="60">
+      </div>
+      <div class="row">
+        <label>Min box area</label>
+        <input type="range" id="minArea" min="100" max="8000" value="1500">
+      </div>
+      <div class="row">
+        <label>Grid size</label>
+        <input type="range" id="grid" min="8" max="64" step="1" value="28">
+      </div>
+      <div class="tip">Tip: use good light. Point at something red (shirt, cup, logo). You can pinch-zoom the page to see details.</div>
+
+      <div>
+        <strong>Live comments</strong>
+        <div id="log" class="log"></div>
+      </div>
+
+      <div class="row">
+        <label>Speak out</label>
+        <input type="checkbox" id="tts" />
+        <span class="tip">Uses system voice for short hints.</span>
+      </div>
+
+      <div class="row">
+        <label>About</label>
+        <div class="tip">
+          Works entirely on-device. No uploads. Requires HTTPS and a user tap to start.
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer>Made for iPhone Safari. If it won’t start, ensure you’re on HTTPS and tap “Start camera”.</footer>
+
+<script>
+(() => {
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const ctx = overlay.getContext('2d', { willReadFrequently: true });
+
+  const detPctEl = document.getElementById('detPct');
+  const boxEl = document.getElementById('boxCount');
+  const perfEl = document.getElementById('perf');
+  const logEl = document.getElementById('log');
+  const btnStart = document.getElementById('btnStart');
+  const btnStop = document.getElementById('btnStop');
+  const statusEl = document.getElementById('status');
+
+  const sensEl = document.getElementById('sensitivity');
+  const areaEl = document.getElementById('minArea');
+  const gridEl = document.getElementById('grid');
+  const ttsEl = document.getElementById('tts');
+
+  let stream = null;
+  let rafId = null;
+  let running = false;
+  let lastSpoken = '';
+  let lastCommentAt = 0;
+
+  // Downsampled working canvas for fast pixel work
+  const work = document.createElement('canvas');
+  const wctx = work.getContext('2d', { willReadFrequently: true });
+
+  function setStatus(text, ok=false) {
+    statusEl.textContent = text;
+    statusEl.className = 'pill ' + (ok ? 'ok' : 'warn');
+  }
+
+  function speak(text) {
+    if (!ttsEl.checked) return;
+    if (!window.speechSynthesis) return;
+    if (text === lastSpoken) return;
+    lastSpoken = text;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0; u.pitch = 1.0;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  }
+
+  function posToWords(cx, cy, W, H) {
+    const h = cx / W, v = cy / H;
+    const cols = (h < .33) ? 'left' : (h > .66) ? 'right' : 'center';
+    const rows = (v < .33) ? 'top'  : (v > .66) ? 'bottom' : 'middle';
+    return `${cols}, ${rows}`;
+  }
+
+  function sizeLabel(area, total) {
+    const r = area / total;
+    if (r > 0.15) return 'huge';
+    if (r > 0.06) return 'large';
+    if (r > 0.025) return 'medium';
+    if (r > 0.008) return 'small';
+    return 'tiny';
+  }
+
+  function isProbablyRed(r,g,b, sensitivity) {
+    // Fast heuristic: red dominates, not too dark, and enough distance from magenta/yellow mixing
+    // sensitivity (0..100) -> tighten dominance & brightness thresholds
+    const domFactor = 1.1 + (sensitivity/100)*0.8; // 1.1..1.9
+    const minR = 40 + Math.round(160*(sensitivity/100)); // 40..200
+    if (r < minR) return false;
+    if (r < g * domFactor) return false;
+    if (r < b * domFactor) return false;
+    // Avoid white/gray: require saturation-ish
+    const maxGB = Math.max(g,b);
+    if (r - maxGB < 25) return false;
+    return true;
+  }
+
+  function mergeBoxes(boxes, maxGap=10) {
+    // Simple N^2 merge of overlapping/nearby boxes
+    let merged = [];
+    for (let b of boxes) {
+      let found = false;
+      for (let m of merged) {
+        const touch = !(b.x > m.x+m.w+maxGap ||
+                        m.x > b.x+b.w+maxGap ||
+                        b.y > m.y+m.h+maxGap ||
+                        m.y > b.y+b.h+maxGap);
+        if (touch) {
+          // expand m to include b
+          const nx = Math.min(m.x, b.x);
+          const ny = Math.min(m.y, b.y);
+          const rx = Math.max(m.x+m.w, b.x+b.w);
+          const ry = Math.max(m.y+m.h, b.y+b.h);
+          m.x = nx; m.y = ny; m.w = rx-nx; m.h = ry-ny;
+          m.area += b.area;
+          found = true;
+          break;
+        }
+      }
+      if (!found) merged.push({ ...b });
+    }
+    return merged;
+  }
+
+  async function start() {
+    try {
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        setStatus('needs HTTPS', false);
+        alert('Camera access requires HTTPS on iOS. Open this file via https:// or a local server.');
+        return;
+      }
+      setStatus('requesting…', false);
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 }, height: { ideal: 720 }
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+
+      // Size canvases to video aspect
+      const vw = video.videoWidth || 720;
+      const vh = video.videoHeight || 1280;
+      const stage = document.getElementById('stage');
+      const rect = stage.getBoundingClientRect();
+      overlay.width = vw;
+      overlay.height = vh;
+      // Work canvas: downsample to keep pixel work fast
+      const scale = 0.5; // adjust for performance
+      work.width = Math.round(vw * scale);
+      work.height = Math.round(vh * scale);
+
+      running = true;
+      setStatus('running', true);
+      loop();
+    } catch (err) {
+      console.error(err);
+      setStatus('blocked', false);
+      alert('Could not start camera. Check permissions in Settings > Safari > Camera.');
+    }
+  }
+
+  function stop() {
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+    ctx.clearRect(0,0,overlay.width, overlay.height);
+    setStatus('stopped', false);
+  }
+
+  function loop() {
+    if (!running) return;
+    const t0 = performance.now();
+
+    // Draw current frame into small work canvas
+    wctx.drawImage(video, 0, 0, work.width, work.height);
+    const { data } = wctx.getImageData(0, 0, work.width, work.height);
+
+    // Grid-based detection: mark cells with enough red pixels
+    const grid = Math.max(8, parseInt(gridEl.value, 10));
+    const cellW = Math.floor(work.width / grid);
+    const cellH = Math.floor(work.height / grid);
+    const minArea = parseInt(areaEl.value, 10);
+    const sensitivity = parseInt(sensEl.value, 10);
+
+    const cells = [];
+    let totalRed = 0;
+    const perCellRedCount = new Array(grid*grid).fill(0);
+    const perCellTotal = cellW * cellH;
+
+    // Iterate pixels with stride 1 over downsampled frame
+    // Count reds per cell
+    for (let y=0; y<work.height; y++) {
+      for (let x=0; x<work.width; x++) {
+        const idx = (y*work.width + x)*4;
+        const r = data[idx], g = data[idx+1], b = data[idx+2];
+        if (isProbablyRed(r,g,b, sensitivity)) {
+          totalRed++;
+          const cx = Math.min(Math.floor(x / cellW), grid-1);
+          const cy = Math.min(Math.floor(y / cellH), grid-1);
+          perCellRedCount[cy*grid + cx]++;
+        }
+      }
+    }
+
+    // Create boxes from adjacent "hot" cells
+    const hot = [];
+    const cellThresh = Math.max(10, Math.floor( (perCellTotal) * 0.08 )); // 8% of cell pixels red
+    for (let cy=0; cy<grid; cy++) {
+      for (let cx=0; cx<grid; cx++) {
+        const rc = perCellRedCount[cy*grid+cx];
+        if (rc >= cellThresh) hot.push({cx, cy});
+      }
+    }
+
+    // Convert hot cells to boxes in work-space, then merge, then scale up to video-space
+    const rawBoxes = hot.map(({cx,cy}) => ({
+      x: cx*cellW, y: cy*cellH, w: cellW, h: cellH, area: cellW*cellH
+    }));
+
+    let merged = mergeBoxes(rawBoxes, 2); // merge neighbors in work space
+
+    // Filter tiny merged boxes
+    merged = merged.filter(b => b.w*b.h >= minArea);
+
+    // Scale boxes to overlay (video) coords
+    const sx = overlay.width / work.width;
+    const sy = overlay.height / work.height;
+    const boxes = merged.map(b => ({ x: Math.round(b.x*sx), y: Math.round(b.y*sy), w: Math.round(b.w*sx), h: Math.round(b.h*sy), area: Math.round(b.w*b.h*sx*sy) }));
+
+    // Draw overlay
+    ctx.clearRect(0,0,overlay.width, overlay.height);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255,87,87,0.95)';
+    ctx.fillStyle = 'rgba(255,87,87,0.15)';
+    ctx.font = '14px ui-sans-serif, system-ui, -apple-system';
+
+    for (const b of boxes) {
+      ctx.strokeRect(b.x, b.y, b.w, b.h);
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      // Label
+      const cx = b.x + b.w/2, cy = b.y + b.h/2;
+      const pos = posToWords(cx, cy, overlay.width, overlay.height);
+      const size = sizeLabel(b.w*b.h, overlay.width*overlay.height);
+      const label = `red • ${size} • ${pos}`;
+      const pad = 4;
+      const textW = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(b.x, Math.max(0,b.y-18), textW+pad*2, 18);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, b.x+pad, Math.max(13, b.y-5));
+      ctx.fillStyle = 'rgba(255,87,87,0.15)';
+    }
+
+    // Live comments: summarize top 3 by area
+    boxes.sort((a,b)=> (b.w*b.h)-(a.w*a.h));
+    const comments = [];
+    const now = performance.now();
+    for (let i=0; i<Math.min(3, boxes.length); i++) {
+      const b = boxes[i];
+      const cx = b.x + b.w/2, cy = b.y + b.h/2;
+      const pos = posToWords(cx, cy, overlay.width, overlay.height);
+      const size = sizeLabel(b.w*b.h, overlay.width*overlay.height);
+      comments.push(`${i===0?'➡️':'•'} ${size} red object ${pos}`);
+    }
+    const pct = ((totalRed / (work.width*work.height)) * 100).toFixed(1);
+    detPctEl.textContent = `${pct}%`;
+    boxEl.textContent = boxes.length.toString();
+    perfEl.textContent = `${(performance.now()-t0).toFixed(0)} ms`;
+
+    // Update log every ~400ms to reduce churn
+    if (now - lastCommentAt > 400) {
+      lastCommentAt = now;
+      if (comments.length === 0) {
+        logEl.textContent = 'No clear red detected. Try stronger light or raise sensitivity.';
+        if (pct > 2) speak('Some red noise, move closer');
+      } else {
+        logEl.textContent = comments.join('\n');
+        if (comments[0]) speak(comments[0].replace('➡️ ',''));
+      }
+    }
+
+    rafId = requestAnimationFrame(loop);
+  }
+
+  btnStart.addEventListener('click', start);
+  btnStop.addEventListener('click', stop);
+
+  // Keep overlay sizing correct if container resizes (rotation/zoom). We redraw in video-space anyway.
+  const ro = new ResizeObserver(() => {
+    if (!video.videoWidth) return;
+    overlay.width = video.videoWidth;
+    overlay.height = video.videoHeight;
+  });
+  ro.observe(document.getElementById('stage'));
+
+  // Safety: stop stream on page hide
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stop();
+  });
+})();
+</script>
+</body>
+</html>
