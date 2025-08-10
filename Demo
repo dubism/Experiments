@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cyber HUD Interface</title>
+    <style>
+        :root {
+            --hud-color: #00ffff;
+            --hud-glow: 0 0 5px #00ffff, 0 0 10px #00ffff, 0 0 20px #00aaff, 0 0 30px #00aaff;
+            --background-color: #020408;
+            --scanline-color: rgba(0, 255, 255, 0.05);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--background-color);
+            color: var(--hud-color);
+            font-family: 'Courier New', Courier, monospace;
+            width: 100%;
+            height: 100%;
+        }
+
+        #camera-view {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: translate(-50%, -50%) scaleX(-1);
+            opacity: 0.5;
+            z-index: 1;
+        }
+
+        #hud-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+        
+        #parametric-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            opacity: 0.6;
+        }
+
+        .hud-element {
+            position: absolute;
+            text-shadow: var(--hud-glow);
+            z-index: 4;
+        }
+
+        #status-text {
+            top: 20px;
+            left: 20px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        #sensor-readout {
+            bottom: 20px;
+            right: 20px;
+            font-size: 12px;
+            text-align: right;
+            white-space: pre;
+        }
+
+        #crosshair {
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            transform: translate(-50%, -50%);
+            border: 1px solid var(--hud-color);
+            border-radius: 50%;
+            box-shadow: var(--hud-glow);
+            animation: pulse 2s infinite ease-in-out;
+        }
+
+        #scanline {
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: var(--hud-color);
+            box-shadow: var(--hud-glow);
+            animation: scan 5s linear infinite;
+            z-index: 5;
+        }
+        
+        .corner-bracket {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-color: var(--hud-color);
+            border-style: solid;
+        }
+
+        .top-left { top: 15px; left: 15px; border-width: 2px 0 0 2px; }
+        .top-right { top: 15px; right: 15px; border-width: 2px 2px 0 0; }
+        .bottom-left { bottom: 15px; left: 15px; border-width: 0 0 2px 2px; }
+        .bottom-right { bottom: 15px; right: 15px; border-width: 0 2px 2px 0; }
+
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.7; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                var(--scanline-color),
+                var(--scanline-color) 1px,
+                transparent 1px,
+                transparent 3px
+            );
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <video id="camera-view" autoplay playsinline></video>
+    <canvas id="hud-overlay"></canvas>
+    <canvas id="parametric-canvas"></canvas>
+
+    <div id="status-text" class="hud-element">SYSTEM: ONLINE</div>
+    <div id="crosshair" class="hud-element"></div>
+    <div id="scanline"></div>
+
+    <div class="corner-bracket top-left"></div>
+    <div class="corner-bracket top-right"></div>
+    <div class="corner-bracket bottom-left"></div>
+    <div class="corner-bracket bottom-right"></div>
+
+    <div id="sensor-readout" class="hud-element">
+        ACCEL (X, Y, Z): ...
+        GYRO  (α, β, γ): ...
+        GEO   (LAT, LON): ...
+    </div>
+
+    <script>
+        const video = document.getElementById('camera-view');
+        const hudCanvas = document.getElementById('hud-overlay');
+        const hudCtx = hudCanvas.getContext('2d');
+        const parametricCanvas = document.getElementById('parametric-canvas');
+        const pCtx = parametricCanvas.getContext('2d');
+
+        const statusText = document.getElementById('status-text');
+        const sensorReadout = document.getElementById('sensor-readout');
+
+        let motion = { ax: 0, ay: 0, az: 0, alpha: 0, beta: 0, gamma: 0 };
+        let geo = { lat: 'N/A', lon: 'N/A' };
+        let detectedObjects = [];
+
+        function resizeCanvas() {
+            [hudCanvas, parametricCanvas].forEach(canvas => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 1. ACCESS CAMERA
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+                video.srcObject = stream;
+                statusText.textContent = 'SYSTEM: LIVE FEED ACTIVE';
+            } catch (err) {
+                console.error("Camera access denied:", err);
+                statusText.textContent = `ERROR: CAM ACCESS DENIED`;
+            }
+        }
+
+        // 2. ACCESS SENSORS
+        function setupSensors() {
+            // Motion Sensors (Accelerometer, Gyroscope)
+            if (window.DeviceMotionEvent) {
+                window.addEventListener('devicemotion', (event) => {
+                    motion.ax = event.accelerationIncludingGravity.x || 0;
+                    motion.ay = event.accelerationIncludingGravity.y || 0;
+                    motion.az = event.accelerationIncludingGravity.z || 0;
+                });
+            }
+            if (window.DeviceOrientationEvent) {
+                window.addEventListener('deviceorientation', (event) => {
+                    motion.alpha = event.alpha || 0;
+                    motion.beta = event.beta || 0;
+                    motion.gamma = event.gamma || 0;
+                });
+            }
+            
+            // Geolocation
+            if(navigator.geolocation) {
+                navigator.geolocation.watchPosition((position) => {
+                    geo.lat = position.coords.latitude.toFixed(5);
+                    geo.lon = position.coords.longitude.toFixed(5);
+                }, (error) => {
+                    console.warn(`GEO ERROR(${error.code}): ${error.message}`);
+                    geo.lat = 'DENIED';
+                    geo.lon = 'DENIED';
+                }, {
+                    enableHighAccuracy: true,
+                    maximumAge: 10000,
+                    timeout: 5000
+                });
+            }
+        }
+        
+        // 3. SIMULATE IMAGE RECOGNITION
+        function simulateRecognition() {
+            // Randomly generate "detected" objects for visual effect
+            if (Math.random() > 0.95 && detectedObjects.length < 5) {
+                detectedObjects.push({
+                    x: Math.random() * hudCanvas.width,
+                    y: Math.random() * hudCanvas.height,
+                    w: 50 + Math.random() * 100,
+                    h: 50 + Math.random() * 100,
+                    life: 100,
+                    id: `OBJ_${(Math.random() * 1000).toFixed(0)}`
+                });
+            }
+
+            // Update and draw objects
+            hudCtx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
+            hudCtx.strokeStyle = 'var(--hud-color)';
+            hudCtx.fillStyle = 'var(--hud-color)';
+            hudCtx.shadowColor = 'var(--hud-color)';
+            hudCtx.shadowBlur = 10;
+            hudCtx.font = '10px "Courier New"';
+
+            for (let i = detectedObjects.length - 1; i >= 0; i--) {
+                let obj = detectedObjects[i];
+                obj.life--;
+                if (obj.life <= 0) {
+                    detectedObjects.splice(i, 1);
+                    continue;
+                }
+                
+                hudCtx.globalAlpha = obj.life / 100;
+                hudCtx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+                hudCtx.fillText(`[${obj.id}]`, obj.x + 5, obj.y + 15);
+                
+                // Draw connecting line to crosshair
+                hudCtx.beginPath();
+                hudCtx.moveTo(obj.x + obj.w / 2, obj.y + obj.h / 2);
+                hudCtx.lineTo(hudCanvas.width / 2, hudCanvas.height / 2);
+                hudCtx.lineWidth = 0.5;
+                hudCtx.stroke();
+            }
+            hudCtx.globalAlpha = 1;
+            hudCtx.lineWidth = 1;
+        }
+
+        // 4. GENERATE PARAMETRIC PATTERNS
+        let particles = [];
+        function updateParametric() {
+            pCtx.clearRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
+
+            // Create new particle based on motion
+            if (particles.length < 100) {
+                particles.push({
+                    x: pCtx.canvas.width / 2,
+                    y: pCtx.canvas.height / 2,
+                    vx: (motion.gamma / 90) * 5, // Use gyroscope for velocity
+                    vy: (motion.beta / 90) * 5,
+                    life: 50,
+                    hue: 180 // Cyan
+                });
+            }
+            
+            pCtx.shadowBlur = 15;
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 1;
+
+                if (p.life <= 0 || p.x < 0 || p.x > pCtx.canvas.width || p.y < 0 || p.y > pCtx.canvas.height) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                
+                pCtx.beginPath();
+                pCtx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${p.life / 50})`;
+                pCtx.shadowColor = `hsla(${p.hue}, 100%, 50%, 1)`;
+                pCtx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                pCtx.fill();
+            }
+        }
+
+        // Main animation loop
+        function animate() {
+            // Update sensor readout
+            sensorReadout.textContent = `ACCEL (X, Y, Z): ${motion.ax.toFixed(2)}, ${motion.ay.toFixed(2)}, ${motion.az.toFixed(2)}\nGYRO  (α, β, γ): ${motion.alpha.toFixed(1)}, ${motion.beta.toFixed(1)}, ${motion.gamma.toFixed(1)}\nGEO   (LAT, LON): ${geo.lat}, ${geo.lon}`;
+            
+            simulateRecognition();
+            updateParametric();
+
+            requestAnimationFrame(animate);
+        }
+
+        // Initialization
+        setupCamera();
+        setupSensors();
+        animate();
+    </script>
+
+</body>
+</html>
