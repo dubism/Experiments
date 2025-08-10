@@ -8,12 +8,12 @@
   :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --panel:#0a0a0a; }
   *{box-sizing:border-box} html,body{height:100%} body{margin:0;background:var(--bg);color:var(--ink);
     font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; user-select:none;}
-  /* Layout: video fixed top, palette fixed bottom, both always visible */
+  /* Fixed panes: video top, palette bottom */
   .pane{position:fixed;left:0;right:0}
   #videoPane{top:0;height:48vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;}
   #palettePane{bottom:0;height:48vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:1px solid var(--line);background:#000;}
   video{max-height:46vh;max-width:92vw;border-radius:8px;background:#000;display:block}
-  /* Always-visible top strip: algo tabs, freeze, control toggle, fps */
+  /* Always-visible top strip: tabs, freeze, controls, fps */
   .topBar{position:fixed;top:6px;left:8px;right:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;pointer-events:none}
   .group{display:flex;gap:6px;pointer-events:auto}
   .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);border-radius:7px;cursor:pointer}
@@ -22,7 +22,7 @@
   .btn.ghost{background:transparent}
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
   /* Control Center dropdown */
-  .ccWrap{position:fixed;top:44px;left:8px;right:8px;display:none}
+  .ccWrap{position:fixed;top:44px;left:8px;right:8px;display:none;z-index:3}
   .cc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
   .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
   label{color:#eee}
@@ -36,10 +36,10 @@
   .codes{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
   .code{padding:6px 8px;background:#0a0a0a;border:1px solid var(--line);border-radius:6px;color:var(--muted);
     font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  /* Freeze actions sheet */
+  /* Freeze actions bar */
   .freezeBar{position:fixed;bottom:52vh;left:50%;transform:translateX(-50%);
     display:none;gap:8px;backdrop-filter:blur(6px);background:rgba(0,0,0,.6);border:1px solid var(--line);
-    border-radius:10px;padding:8px}
+    border-radius:10px;padding:8px;z-index:4}
   .freezeBar .btn{white-space:nowrap}
   /* Tiny overlays */
   .overlay{position:fixed;right:8px;bottom:8px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -75,7 +75,7 @@
       <div class="row"><label>Process every N frames</label><span>
         <input type="range" id="throttle" min="1" max="5" value="2"><span id="throttleVal" class="small">2</span></span>
       </div>
-      <div class="hint">Open via HTTPS for camera + clipboard.</div>
+      <div class="hint">Tip: open via HTTPS (GitHub Pages) for camera + clipboard.</div>
     </div>
   </div>
 
@@ -103,17 +103,17 @@
   <div class="overlay small" id="overlayInfo"></div>
 
   <canvas id="off"></canvas>
-  <canvas id="capFrame"></canvas> <!-- holds frozen frame at processing size -->
+  <canvas id="capFrame"></canvas> <!-- frozen frame at processing size -->
 
 <script>
-/* ---------------- Worker with algorithms ---------------- */
+/* ---------- Worker: algorithms ---------- */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
   const {pixels,width,height,algo,k,stride=2} = e.data;
   const data = new Uint8ClampedArray(pixels);
   const samples = [];
   for(let y=0;y<height;y+=stride){
-    let row = y*width*4;
+    let row=y*width*4;
     for(let x=0;x<width;x+=stride){
       const i=row+x*4; samples.push(data[i],data[i+1],data[i+2]);
     }
@@ -187,7 +187,7 @@ function dedupeAndSort(rgbList,minDE=10){
 `], {type:'application/javascript'});
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
 
-/* ---------------- Elements ---------------- */
+/* ---------- Elements ---------- */
 const video = document.getElementById('video');
 const off = document.getElementById('off');
 const capFrame = document.getElementById('capFrame');
@@ -212,4 +212,305 @@ const unfreezeBtn = document.getElementById('unfreeze');
 
 const ccToggle = document.getElementById('ccToggle');
 const ccWrap = document.getElementById('ccWrap');
-const kRange = document.getElementBy
+const kRange = document.getElementById('k'); const kVal = document.getElementById('kVal');
+const sizeRange = document.getElementById('size'); const sizeVal = document.getElementById('sizeVal');
+const throttleRange = document.getElementById('throttle'); const throttleVal = document.getElementById('throttleVal');
+const modeChk = document.getElementById('mode');
+
+/* ---------- State ---------- */
+let algo = 'kmeans';
+let K = +kRange.value;
+let procWidth = +sizeRange.value;
+let throttleN = +throttleRange.value;
+let gradientMode = modeChk.checked;
+
+let frameCounter = 0, lastT = performance.now();
+let pending = false, every = 0;
+let running = true; // toggled by freeze
+
+let lastPalette = [];
+let lastHexes = [];
+let frozen = null; // {imageBitmap, palette:[rgb], hexes:[string], meta:{}}
+
+/* ---------- UI wiring ---------- */
+tabs.addEventListener('click', (e)=>{
+  const btn = e.target.closest('.tab');
+  if(!btn) return;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
+  algo = btn.dataset.algo;
+  algoName.textContent = btn.textContent + (algo==='kmeans'?' (LAB)':'');
+});
+kRange.addEventListener('input', ()=>{ K = +kRange.value; kVal.textContent = K; });
+sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.textContent = procWidth+' px'; });
+throttleRange.addEventListener('input', ()=>{ throttleN = +throttleRange.value; throttleVal.textContent = throttleN; });
+modeChk.addEventListener('change', ()=>{ gradientMode = modeChk.checked; renderPalette(lastPalette); });
+
+ccToggle.addEventListener('click', ()=>{
+  ccWrap.style.display = ccWrap.style.display ? '' : 'block';
+});
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') ccWrap.style.display=''; });
+
+freezeBtn.addEventListener('click', async ()=>{
+  if (!running) return; // already frozen
+  await freezeNow();
+});
+unfreezeBtn.addEventListener('click', ()=>{
+  frozen = null;
+  running = true;
+  freezeActions.style.display='none';
+  status('Live');
+});
+saveCompositeBtn.addEventListener('click', ()=> saveComposite());
+savePaletteBtn.addEventListener('click', ()=> savePaletteOnly());
+copyHexBtn.addEventListener('click', async ()=>{
+  if (!frozen) return;
+  const txt = frozen.hexes.join('\n');
+  try{
+    await navigator.clipboard.writeText(txt);
+    toast('HEX copied');
+  }catch(_){ toast('Cannot copy (permissions)'); }
+});
+
+/* ---------- Camera ---------- */
+(async function init(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
+    video.srcObject = stream;
+    await video.play();
+    status('Running…');
+    loop();
+  }catch(err){
+    status('Camera failed: '+err.message);
+  }
+})();
+
+/* ---------- Loop ---------- */
+function loop(){
+  requestAnimationFrame(loop);
+  if(video.readyState < 2) return;
+
+  // FPS (processing FPS)
+  const now = performance.now();
+  if (now - lastT >= 1000){
+    fpsEl.textContent = String(frameCounter);
+    frameCounter = 0; lastT = now;
+  }
+
+  const scale = procWidth / video.videoWidth;
+  const w = Math.max(2, Math.round(video.videoWidth*scale));
+  const h = Math.max(2, Math.round(video.videoHeight*scale));
+  off.width = w; off.height = h;
+  const ctx = off.getContext('2d', {willReadFrequently:true});
+  ctx.drawImage(video, 0, 0, w, h);
+  resEl.textContent = w + '×' + h;
+
+  if (!running) return; // paused on freeze
+
+  every = (every+1) % throttleN;
+  if (every!==0) return;
+
+  if (!pending){
+    pending = true;
+    const img = ctx.getImageData(0,0,w,h);
+    worker.postMessage({pixels:img.data.buffer, width:w, height:h, algo, k:K, stride:2}, [img.data.buffer]);
+  }
+}
+
+/* ---------- Worker response ---------- */
+worker.onmessage = (e)=>{
+  frameCounter++;
+  const buf = e.data.palette;
+  if (!buf){ pending=false; return; }
+  const arr = new Uint8Array(buf);
+  const cols = [];
+  for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
+  // enforce K length
+  while(cols.length < K) cols.push(cols[cols.length-1] || [128,128,128]);
+  lastPalette = cols.slice(0,K);
+  renderPalette(lastPalette);
+  pending = false;
+};
+
+/* ---------- Render palette ---------- */
+function toHex([r,g,b]){ return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+
+function renderPalette(palette){
+  if(!palette || !palette.length){
+    swatchesEl.innerHTML = ''; gradientEl.hidden = true; return;
+  }
+  lastHexes = palette.map(toHex);
+
+  // Discrete swatches (no borders inside)
+  swatchesEl.innerHTML = '';
+  for(const h of lastHexes){
+    const d = document.createElement('div');
+    d.className = 'swatch';
+    d.style.background = h;
+    swatchesEl.appendChild(d);
+  }
+
+  // Gradient
+  gradientEl.style.background = `linear-gradient(90deg, ${lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',')})`;
+
+  swatchesEl.hidden = gradientMode;
+  gradientEl.hidden = !gradientMode;
+
+  // HEX codes
+  codesEl.innerHTML = '';
+  for(const h of lastHexes){
+    const c = document.createElement('div');
+    c.className='code';
+    c.textContent = h.toUpperCase();
+    codesEl.appendChild(c);
+  }
+}
+
+/* ---------- Freeze & capture ---------- */
+async function freezeNow(){
+  // Store frozen frame at processing size
+  const w = off.width, h = off.height;
+  capFrame.width = w; capFrame.height = h;
+  const ctx = capFrame.getContext('2d');
+  ctx.drawImage(off, 0, 0);
+
+  const imageBitmap = await createImageBitmap(capFrame);
+  const palette = lastPalette.slice();
+  const hexes = palette.map(toHex);
+  frozen = {
+    imageBitmap,
+    palette,
+    hexes,
+    meta: {
+      algo: algoName.textContent,
+      K,
+      gradient: gradientMode ? 'On' : 'Off',
+      procWidth: procWidth,
+      throttle: throttleN,
+      res: w+'×'+h
+    }
+  };
+
+  running = false;
+  freezeActions.style.display = 'flex';
+  status('Frozen');
+}
+
+function saveComposite(){
+  if(!frozen) return;
+  // Layout: wide canvas. Left: camera (fit), Right: settings + hex list. Bottom: palette (swatches or gradient).
+  const pad = 24, gutter = 24;
+  const camW = 800, camH = Math.round(camW * (frozen.imageBitmap.height / frozen.imageBitmap.width));
+  const sideW = 420;
+  const paletteH = 180;
+  const W = pad + camW + gutter + sideW + pad;
+  const H = pad + Math.max(camH + gutter + paletteH, 520) + pad;
+
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+
+  // bg
+  g.fillStyle = '#000'; g.fillRect(0,0,W,H);
+
+  // Title
+  g.fillStyle = '#fff'; g.font = '600 18px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  g.fillText('Live Camera Palette — Capture', pad, pad+18);
+
+  // Camera frame
+  g.save();
+  g.translate(pad, pad+32);
+  // letterbox fit
+  const scale = Math.min(camW/frozen.imageBitmap.width, camH/frozen.imageBitmap.height);
+  const drawW = Math.round(frozen.imageBitmap.width*scale);
+  const drawH = Math.round(frozen.imageBitmap.height*scale);
+  const dx = Math.floor((camW-drawW)/2), dy = Math.floor((camH-drawH)/2);
+  // frame border
+  g.fillStyle = '#111'; g.fillRect(0,0,camW,camH);
+  g.drawImage(frozen.imageBitmap, dx, dy, drawW, drawH);
+  g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,camH-1);
+  g.restore();
+
+  // Palette block (full width under camera)
+  g.save();
+  g.translate(pad, pad+32+camH+gutter);
+  // either gradient or discrete rectangles
+  if (gradientMode){
+    // draw gradient
+    const grad = g.createLinearGradient(0,0,camW,0);
+    const hexes = frozen.hexes;
+    hexes.forEach((h,i)=> grad.addColorStop((i/(hexes.length-1)), h));
+    g.fillStyle = grad; g.fillRect(0,0,camW,paletteH);
+  }else{
+    const hexes = frozen.hexes;
+    const w = Math.ceil(camW/hexes.length);
+    for(let i=0;i<hexes.length;i++){
+      g.fillStyle = hexes[i]; g.fillRect(i*w,0,w,paletteH);
+    }
+  }
+  g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,paletteH-1);
+  g.restore();
+
+  // Right column: settings + HEX list
+  g.save();
+  g.translate(pad+camW+gutter, pad+32);
+  g.fillStyle = '#fff'; g.font = '600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+  g.fillText('Settings', 0, 0);
+  g.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = '#bdbdbd';
+  const lines = [
+    `Algo: ${frozen.meta.algo}`,
+    `K: ${frozen.meta.K}`,
+    `Gradient: ${frozen.meta.gradient}`,
+    `Proc width: ${frozen.meta.procWidth}px`,
+    `Throttle N: ${frozen.meta.throttle}`,
+    `Processed res: ${frozen.meta.res}`
+  ];
+  lines.forEach((t,i)=> g.fillText(t, 0, 22 + i*16));
+
+  g.fillStyle = '#fff'; g.font = '600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+  g.fillText('HEX', 0, 22 + lines.length*16 + 16);
+  g.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = '#bdbdbd';
+  const startY = 22 + lines.length*16 + 36;
+  frozen.hexes.forEach((h,i)=> g.fillText(h.toUpperCase(), 0, startY + i*16));
+  g.restore();
+
+  downloadCanvas(c, 'palette_composite.png');
+}
+
+function savePaletteOnly(){
+  if(!frozen) return;
+  // Square image with ONLY the generated palette (no borders)
+  const S = 1024;
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const g = c.getContext('2d');
+
+  if (gradientMode){
+    const grad = g.createLinearGradient(0,0,S,0);
+    frozen.hexes.forEach((h,i)=> grad.addColorStop((i/(frozen.hexes.length-1)), h));
+    g.fillStyle = grad; g.fillRect(0,0,S,S);
+  } else {
+    const n = frozen.hexes.length;
+    const w = Math.ceil(S / n);
+    for(let i=0;i<n;i++){ g.fillStyle = frozen.hexes[i]; g.fillRect(i*w,0,w,S); }
+  }
+  downloadCanvas(c, 'palette_square.png');
+}
+
+function downloadCanvas(canvas, filename){
+  canvas.toBlob((blob)=>{
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+}
+
+/* ---------- Helpers ---------- */
+function status(t){ statusEl.textContent = t; }
+
+function toast(t){
+  overlayInfo.textContent = t;
+  setTimeout(()=>{ overlayInfo.textContent=''; }, 1200);
+}
+</script>
+</body>
+</html>
