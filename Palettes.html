@@ -5,28 +5,29 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Live Camera Palette — Minimal</title>
 <style>
-  :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --panel:#0a0a0a; }
+  :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --panel:#0a0a0a; --zoom:1; }
   *{box-sizing:border-box} html,body{height:100%} body{margin:0;background:var(--bg);color:var(--ink);
     font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; user-select:none;}
   /* Fixed panes: video top, palette bottom */
   .pane{position:fixed;left:0;right:0}
-  #videoPane{top:0;height:48vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;}
+  #videoPane{top:0;height:48vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
   #palettePane{bottom:0;height:48vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:1px solid var(--line);background:#000;}
-  video{max-height:46vh;max-width:92vw;border-radius:8px;background:#000;display:block}
-  /* Always-visible top strip: tabs, freeze, controls, fps */
-  .topBar{position:fixed;top:6px;left:8px;right:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;pointer-events:none}
-  .group{display:flex;gap:6px;pointer-events:auto}
+  .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden}
+  video{max-height:46vh;max-width:92vw;border-radius:8px;background:#000;display:block;transform:scale(var(--zoom));transform-origin:center center}
+  /* Top UI (now visible) */
+  .topBar{position:fixed;top:6px;left:8px;right:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;z-index:1000}
+  .group{display:flex;gap:6px}
   .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);border-radius:7px;cursor:pointer}
   .tab.active{outline:2px solid #fff; outline-offset:1px}
   .btn{padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.ghost{background:transparent}
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
   /* Control Center dropdown */
-  .ccWrap{position:fixed;top:44px;left:8px;right:8px;display:none;z-index:3}
+  .ccWrap{position:fixed;top:44px;left:8px;right:8px;display:none;z-index:1100}
   .cc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
   .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
   label{color:#eee}
-  input[type="range"]{width:180px}
+  input[type="range"]{width:220px}
   .hint{color:var(--muted);font-size:12px}
   /* Palette area */
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
@@ -39,7 +40,7 @@
   /* Freeze actions bar */
   .freezeBar{position:fixed;bottom:52vh;left:50%;transform:translateX(-50%);
     display:none;gap:8px;backdrop-filter:blur(6px);background:rgba(0,0,0,.6);border:1px solid var(--line);
-    border-radius:10px;padding:8px;z-index:4}
+    border-radius:10px;padding:8px;z-index:1200}
   .freezeBar .btn{white-space:nowrap}
   /* Tiny overlays */
   .overlay{position:fixed;right:8px;bottom:8px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -73,14 +74,22 @@
         <input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span>
       </div>
       <div class="row"><label>Process every N frames</label><span>
-        <input type="range" id="throttle" min="1" max="5" value="2"><span id="throttleVal" class="small">2</span></span>
+        <!-- exponential steps up to ~150 -->
+        <input type="range" id="throttleIdx" min="0" max="10" value="3">
+        <span id="throttleVal" class="small">5</span></span>
       </div>
-      <div class="hint">Tip: open via HTTPS (GitHub Pages) for camera + clipboard.</div>
+      <div class="row"><label>Camera zoom</label><span>
+        <input type="range" id="zoom" min="1" max="3" step="0.05" value="1">
+        <span id="zoomVal" class="small">1.00×</span></span>
+      </div>
+      <div class="hint">Serve over HTTPS (GitHub Pages) for camera + clipboard.</div>
     </div>
   </div>
 
   <div id="videoPane" class="pane">
-    <video id="video" playsinline muted></video>
+    <div class="videoWrap">
+      <video id="video" playsinline muted></video>
+    </div>
   </div>
 
   <div id="palettePane" class="pane">
@@ -103,7 +112,7 @@
   <div class="overlay small" id="overlayInfo"></div>
 
   <canvas id="off"></canvas>
-  <canvas id="capFrame"></canvas> <!-- frozen frame at processing size -->
+  <canvas id="capFrame"></canvas>
 
 <script>
 /* ---------- Worker: algorithms ---------- */
@@ -214,23 +223,26 @@ const ccToggle = document.getElementById('ccToggle');
 const ccWrap = document.getElementById('ccWrap');
 const kRange = document.getElementById('k'); const kVal = document.getElementById('kVal');
 const sizeRange = document.getElementById('size'); const sizeVal = document.getElementById('sizeVal');
-const throttleRange = document.getElementById('throttle'); const throttleVal = document.getElementById('throttleVal');
+const throttleIdx = document.getElementById('throttleIdx'); const throttleVal = document.getElementById('throttleVal');
 const modeChk = document.getElementById('mode');
+const zoomSlider = document.getElementById('zoom'); const zoomVal = document.getElementById('zoomVal');
 
 /* ---------- State ---------- */
 let algo = 'kmeans';
 let K = +kRange.value;
 let procWidth = +sizeRange.value;
-let throttleN = +throttleRange.value;
+const throttleSteps = [1,2,3,5,8,13,21,34,55,89,144]; // exponential-ish up to ~150
+let throttleN = throttleSteps[+throttleIdx.value];
 let gradientMode = modeChk.checked;
+let uiZoom = +zoomSlider.value;
 
 let frameCounter = 0, lastT = performance.now();
 let pending = false, every = 0;
-let running = true; // toggled by freeze
+let running = true;
 
 let lastPalette = [];
 let lastHexes = [];
-let frozen = null; // {imageBitmap, palette:[rgb], hexes:[string], meta:{}}
+let frozen = null;
 
 /* ---------- UI wiring ---------- */
 tabs.addEventListener('click', (e)=>{
@@ -242,7 +254,10 @@ tabs.addEventListener('click', (e)=>{
 });
 kRange.addEventListener('input', ()=>{ K = +kRange.value; kVal.textContent = K; });
 sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.textContent = procWidth+' px'; });
-throttleRange.addEventListener('input', ()=>{ throttleN = +throttleRange.value; throttleVal.textContent = throttleN; });
+throttleIdx.addEventListener('input', ()=>{
+  throttleN = throttleSteps[+throttleIdx.value];
+  throttleVal.textContent = String(throttleN);
+});
 modeChk.addEventListener('change', ()=>{ gradientMode = modeChk.checked; renderPalette(lastPalette); });
 
 ccToggle.addEventListener('click', ()=>{
@@ -250,8 +265,14 @@ ccToggle.addEventListener('click', ()=>{
 });
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') ccWrap.style.display=''; });
 
+zoomSlider.addEventListener('input', ()=>{
+  uiZoom = +zoomSlider.value;
+  zoomVal.textContent = uiZoom.toFixed(2)+'×';
+  document.documentElement.style.setProperty('--zoom', uiZoom);
+});
+
 freezeBtn.addEventListener('click', async ()=>{
-  if (!running) return; // already frozen
+  if (!running) return;
   await freezeNow();
 });
 unfreezeBtn.addEventListener('click', ()=>{
@@ -268,7 +289,7 @@ copyHexBtn.addEventListener('click', async ()=>{
   try{
     await navigator.clipboard.writeText(txt);
     toast('HEX copied');
-  }catch(_){ toast('Cannot copy (permissions)'); }
+  }catch(_){ toast('Copy failed'); }
 });
 
 /* ---------- Camera ---------- */
@@ -304,7 +325,7 @@ function loop(){
   ctx.drawImage(video, 0, 0, w, h);
   resEl.textContent = w + '×' + h;
 
-  if (!running) return; // paused on freeze
+  if (!running) return;
 
   every = (every+1) % throttleN;
   if (every!==0) return;
@@ -324,7 +345,6 @@ worker.onmessage = (e)=>{
   const arr = new Uint8Array(buf);
   const cols = [];
   for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
-  // enforce K length
   while(cols.length < K) cols.push(cols[cols.length-1] || [128,128,128]);
   lastPalette = cols.slice(0,K);
   renderPalette(lastPalette);
@@ -340,7 +360,7 @@ function renderPalette(palette){
   }
   lastHexes = palette.map(toHex);
 
-  // Discrete swatches (no borders inside)
+  // Discrete swatches
   swatchesEl.innerHTML = '';
   for(const h of lastHexes){
     const d = document.createElement('div');
@@ -367,12 +387,11 @@ function renderPalette(palette){
 
 /* ---------- Freeze & capture ---------- */
 async function freezeNow(){
-  // Store frozen frame at processing size
+  // store frozen frame at processing size
   const w = off.width, h = off.height;
   capFrame.width = w; capFrame.height = h;
   const ctx = capFrame.getContext('2d');
   ctx.drawImage(off, 0, 0);
-
   const imageBitmap = await createImageBitmap(capFrame);
   const palette = lastPalette.slice();
   const hexes = palette.map(toHex);
@@ -386,10 +405,10 @@ async function freezeNow(){
       gradient: gradientMode ? 'On' : 'Off',
       procWidth: procWidth,
       throttle: throttleN,
-      res: w+'×'+h
+      res: w+'×'+h,
+      zoom: uiZoom.toFixed(2)+'×'
     }
   };
-
   running = false;
   freezeActions.style.display = 'flex';
   status('Frozen');
@@ -397,7 +416,6 @@ async function freezeNow(){
 
 function saveComposite(){
   if(!frozen) return;
-  // Layout: wide canvas. Left: camera (fit), Right: settings + hex list. Bottom: palette (swatches or gradient).
   const pad = 24, gutter = 24;
   const camW = 800, camH = Math.round(camW * (frozen.imageBitmap.height / frozen.imageBitmap.width));
   const sideW = 420;
@@ -408,50 +426,36 @@ function saveComposite(){
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d');
 
-  // bg
   g.fillStyle = '#000'; g.fillRect(0,0,W,H);
-
-  // Title
-  g.fillStyle = '#fff'; g.font = '600 18px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  g.fillStyle = '#fff'; g.font = '600 18px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
   g.fillText('Live Camera Palette — Capture', pad, pad+18);
 
-  // Camera frame
-  g.save();
-  g.translate(pad, pad+32);
-  // letterbox fit
+  // Camera
+  g.save(); g.translate(pad, pad+32);
   const scale = Math.min(camW/frozen.imageBitmap.width, camH/frozen.imageBitmap.height);
   const drawW = Math.round(frozen.imageBitmap.width*scale);
   const drawH = Math.round(frozen.imageBitmap.height*scale);
   const dx = Math.floor((camW-drawW)/2), dy = Math.floor((camH-drawH)/2);
-  // frame border
   g.fillStyle = '#111'; g.fillRect(0,0,camW,camH);
   g.drawImage(frozen.imageBitmap, dx, dy, drawW, drawH);
   g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,camH-1);
   g.restore();
 
-  // Palette block (full width under camera)
-  g.save();
-  g.translate(pad, pad+32+camH+gutter);
-  // either gradient or discrete rectangles
-  if (gradientMode){
-    // draw gradient
+  // Palette
+  g.save(); g.translate(pad, pad+32+camH+gutter);
+  if (modeChk.checked){
     const grad = g.createLinearGradient(0,0,camW,0);
-    const hexes = frozen.hexes;
-    hexes.forEach((h,i)=> grad.addColorStop((i/(hexes.length-1)), h));
+    frozen.hexes.forEach((h,i)=> grad.addColorStop((i/(frozen.hexes.length-1)), h));
     g.fillStyle = grad; g.fillRect(0,0,camW,paletteH);
-  }else{
-    const hexes = frozen.hexes;
-    const w = Math.ceil(camW/hexes.length);
-    for(let i=0;i<hexes.length;i++){
-      g.fillStyle = hexes[i]; g.fillRect(i*w,0,w,paletteH);
-    }
+  } else {
+    const n = frozen.hexes.length, w = Math.ceil(camW/n);
+    for(let i=0;i<n;i++){ g.fillStyle = frozen.hexes[i]; g.fillRect(i*w,0,w,paletteH); }
   }
   g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,paletteH-1);
   g.restore();
 
-  // Right column: settings + HEX list
-  g.save();
-  g.translate(pad+camW+gutter, pad+32);
+  // Right column: settings + HEX
+  g.save(); g.translate(pad+camW+gutter, pad+32);
   g.fillStyle = '#fff'; g.font = '600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
   g.fillText('Settings', 0, 0);
   g.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = '#bdbdbd';
@@ -460,11 +464,11 @@ function saveComposite(){
     `K: ${frozen.meta.K}`,
     `Gradient: ${frozen.meta.gradient}`,
     `Proc width: ${frozen.meta.procWidth}px`,
-    `Throttle N: ${frozen.meta.throttle}`,
-    `Processed res: ${frozen.meta.res}`
+    `Stride N: ${frozen.meta.throttle}`,
+    `Processed res: ${frozen.meta.res}`,
+    `UI Zoom: ${frozen.meta.zoom}`
   ];
   lines.forEach((t,i)=> g.fillText(t, 0, 22 + i*16));
-
   g.fillStyle = '#fff'; g.font = '600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
   g.fillText('HEX', 0, 22 + lines.length*16 + 16);
   g.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = '#bdbdbd';
@@ -477,18 +481,15 @@ function saveComposite(){
 
 function savePaletteOnly(){
   if(!frozen) return;
-  // Square image with ONLY the generated palette (no borders)
   const S = 1024;
   const c = document.createElement('canvas'); c.width = S; c.height = S;
   const g = c.getContext('2d');
-
-  if (gradientMode){
+  if (modeChk.checked){
     const grad = g.createLinearGradient(0,0,S,0);
     frozen.hexes.forEach((h,i)=> grad.addColorStop((i/(frozen.hexes.length-1)), h));
     g.fillStyle = grad; g.fillRect(0,0,S,S);
   } else {
-    const n = frozen.hexes.length;
-    const w = Math.ceil(S / n);
+    const n = frozen.hexes.length, w = Math.ceil(S/n);
     for(let i=0;i<n;i++){ g.fillStyle = frozen.hexes[i]; g.fillRect(i*w,0,w,S); }
   }
   downloadCanvas(c, 'palette_square.png');
@@ -506,11 +507,7 @@ function downloadCanvas(canvas, filename){
 
 /* ---------- Helpers ---------- */
 function status(t){ statusEl.textContent = t; }
-
-function toast(t){
-  overlayInfo.textContent = t;
-  setTimeout(()=>{ overlayInfo.textContent=''; }, 1200);
-}
+function toast(t){ overlayInfo.textContent = t; setTimeout(()=>{ overlayInfo.textContent=''; }, 1200); }
 </script>
 </body>
 </html>
