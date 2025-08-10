@@ -8,13 +8,17 @@
   :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --panel:#0a0a0a; --zoom:1; }
   *{box-sizing:border-box} html,body{height:100%} body{margin:0;background:var(--bg);color:var(--ink);
     font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; user-select:none;}
-  /* Three fixed bands so all are always visible */
+
+  /* Bands */
   #videoPane{position:fixed;left:0;right:0;top:0;height:42vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
-  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:0;border-bottom:1px solid var(--line);background:#000}
+  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-bottom:1px solid var(--line);background:#000}
   #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:90px;border-top:1px solid var(--line);background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
-  /* Camera */
+
+  /* Camera area with frozen overlay canvas */
   .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
   video{max-height:40vh;max-width:92vw;border-radius:8px;background:#000;display:block;transform:scale(var(--zoom));transform-origin:center center}
+  #frozenCanvas{position:absolute;inset:0;margin:auto;display:none;max-height:40vh;max-width:92vw;border-radius:8px}
+
   /* Palette */
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .swatches{flex:1;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -23,23 +27,30 @@
   .codes{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
   .code{padding:6px 8px;background:#0a0a0a;border:1px solid var(--line);border-radius:6px;color:var(--muted);
     font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
   /* Bottom controls */
   .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);border-radius:7px;cursor:pointer}
   .tab.active{outline:2px solid #fff; outline-offset:1px}
-  .btn{padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:#0d0d0d;color:#fff;cursor:pointer}
+  .btn{padding:6px 12px;border:1px solid var(--line);border-radius:7px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.ghost{background:transparent}
+  .btn.cta{background:#fff;color:#000;font-weight:800;border-color:#fff}
+  .btn[disabled]{opacity:.5;cursor:default}
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
   input[type="range"]{width:220px}
-  /* Controls Center overlay: only over lower part of palette, translucent */
+
+  /* Control Center overlay (on palette, translucent) */
   #ccWrap{position:absolute;left:10px;right:10px;bottom:10px;display:none;z-index:10}
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
   #cc .row{justify-content:space-between}
-  /* Freeze action strip lives in the bottom bar */
-  #freezeActions{display:none;gap:8px}
-  /* Hidden canvas */
-  canvas{display:none}
+
+  /* Save Modal (upper layer) */
+  #modalBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);display:none;z-index:1000}
+  #modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,92vw);background:#000;border:1px solid var(--line);
+         border-radius:12px;padding:14px;display:none;z-index:1001}
+  #modal h3{margin:0 0 8px 0;font-size:16px}
+  #modal .mrow{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 </style>
 </head>
 <body>
@@ -47,6 +58,7 @@
   <section id="videoPane">
     <div class="videoWrap">
       <video id="video" playsinline muted></video>
+      <canvas id="frozenCanvas"></canvas>
     </div>
   </section>
 
@@ -60,7 +72,7 @@
     <div id="gradient" class="gradient" hidden></div>
     <div id="codes" class="codes"></div>
 
-    <!-- Controls Center overlays the lower palette area -->
+    <!-- Control Center overlays lower palette area -->
     <div id="ccWrap">
       <div id="cc">
         <div class="row"><span>Colors (K)</span><span>
@@ -76,12 +88,12 @@
           <input type="range" id="throttleIdx" min="0" max="10" value="3">
           <span id="throttleVal" class="small">5</span></span>
         </div>
-        <div class="small">HTTPS required for camera/clipboard/sharing.</div>
+        <div class="small">Tip: use HTTPS for camera/clipboard/sharing.</div>
       </div>
     </div>
   </section>
 
-  <!-- CONTROLS BAR (bottom) -->
+  <!-- CONTROLS BAR -->
   <section id="controlsBar">
     <div class="row">
       <div class="group" id="tabs">
@@ -94,23 +106,28 @@
       </div>
     </div>
     <div class="row">
-      <div class="group" id="freezeActions">
-        <button class="btn" id="saveComposite">Save composite</button>
-        <button class="btn" id="savePalette">Save palette-only</button>
-        <button class="btn" id="copyHex">Copy HEX</button>
-        <button class="btn ghost" id="unfreeze">Unfreeze</button>
-      </div>
-      <div class="group" id="liveActions">
-        <button class="btn" id="freezeBtn">Freeze</button>
-        <button class="btn ghost" id="ccToggle">Controls</button>
-      </div>
-      <div class="group">
+      <div class="group" style="margin-left:auto">
         <span class="small">Zoom</span>
         <input type="range" id="zoom" min="1" max="10" step="0.01" value="1">
         <span id="zoomVal" class="small">1.00×</span>
+        <button class="btn ghost" id="ccToggle">Controls</button>
+        <button class="btn cta" id="freezeBtn">FREEZE</button>
       </div>
     </div>
   </section>
+
+  <!-- SAVE MODAL -->
+  <div id="modalBackdrop"></div>
+  <div id="modal">
+    <h3>Frozen capture</h3>
+    <div class="mrow">
+      <button class="btn" id="saveComposite">Save composite</button>
+      <button class="btn" id="savePalette">Save palette-only</button>
+      <button class="btn" id="copyHex">Copy HEX</button>
+      <button class="btn ghost" id="unfreeze">Unfreeze</button>
+    </div>
+    <div class="small" style="margin-top:8px">On mobile, choose <strong>Save Image</strong> in the share sheet to store in your gallery.</div>
+  </div>
 
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
@@ -197,8 +214,9 @@ function dedupeAndSort(rgbList,minDE=10){
 `], {type:'application/javascript'});
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
 
-/* ---------- Elements ---------- */
+/* ---------- Elements & state ---------- */
 const video = document.getElementById('video');
+const frozenCanvas = document.getElementById('frozenCanvas');
 const off = document.getElementById('off');
 const capFrame = document.getElementById('capFrame');
 
@@ -213,26 +231,26 @@ const gradientEl = document.getElementById('gradient');
 const codesEl = document.getElementById('codes');
 
 const freezeBtn = document.getElementById('freezeBtn');
-const freezeActions = document.getElementById('freezeActions');
-const liveActions = document.getElementById('liveActions');
-const saveCompositeBtn = document.getElementById('saveComposite');
-const savePaletteBtn = document.getElementById('savePalette');
-const copyHexBtn = document.getElementById('copyHex');
-const unfreezeBtn = document.getElementById('unfreeze');
-
 const ccToggle = document.getElementById('ccToggle');
 const ccWrap = document.getElementById('ccWrap');
+
 const kRange = document.getElementById('k'); const kVal = document.getElementById('kVal');
 const sizeRange = document.getElementById('size'); const sizeVal = document.getElementById('sizeVal');
 const throttleIdx = document.getElementById('throttleIdx'); const throttleVal = document.getElementById('throttleVal');
 const modeChk = document.getElementById('mode');
 const zoomSlider = document.getElementById('zoom'); const zoomVal = document.getElementById('zoomVal');
 
-/* ---------- State ---------- */
+const modalBackdrop = document.getElementById('modalBackdrop');
+const modal = document.getElementById('modal');
+const saveCompositeBtn = document.getElementById('saveComposite');
+const savePaletteBtn = document.getElementById('savePalette');
+const copyHexBtn = document.getElementById('copyHex');
+const unfreezeBtn = document.getElementById('unfreeze');
+
 let algo = 'kmeans';
 let K = +kRange.value;
 let procWidth = +sizeRange.value;
-const throttleSteps = [1,2,3,5,8,13,21,34,55,89,144]; // up to ~150
+const throttleSteps = [1,2,3,5,8,13,21,34,55,89,144];
 let throttleN = throttleSteps[+throttleIdx.value];
 let gradientMode = modeChk.checked;
 let uiZoom = +zoomSlider.value;
@@ -240,6 +258,7 @@ let uiZoom = +zoomSlider.value;
 let frameCounter = 0, lastT = performance.now();
 let pending = false, every = 0;
 let running = true;
+let sharingBusy = false;
 
 let lastPalette = [];
 let lastHexes = [];
@@ -247,24 +266,18 @@ let frozen = null;
 
 /* ---------- UI wiring ---------- */
 tabs.addEventListener('click', (e)=>{
-  const btn = e.target.closest('.tab');
-  if(!btn) return;
+  const btn = e.target.closest('.tab'); if(!btn) return;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
   algo = btn.dataset.algo;
   algoName.textContent = btn.textContent + (algo==='kmeans'?' (LAB)':'');
 });
 kRange.addEventListener('input', ()=>{ K = +kRange.value; kVal.textContent = K; });
 sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.textContent = procWidth+' px'; });
-throttleIdx.addEventListener('input', ()=>{
-  throttleN = throttleSteps[+throttleIdx.value];
-  throttleVal.textContent = String(throttleN);
-});
+throttleIdx.addEventListener('input', ()=>{ throttleN = throttleSteps[+throttleIdx.value]; throttleVal.textContent = String(throttleN); });
 modeChk.addEventListener('change', ()=>{ gradientMode = modeChk.checked; renderPalette(lastPalette); });
 
-ccToggle.addEventListener('click', ()=>{
-  ccWrap.style.display = ccWrap.style.display ? '' : 'block';
-});
-document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') ccWrap.style.display=''; });
+ccToggle.addEventListener('click', ()=>{ ccWrap.style.display = ccWrap.style.display ? '' : 'block'; });
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ ccWrap.style.display=''; hideModal(); } });
 
 zoomSlider.addEventListener('input', ()=>{
   uiZoom = +zoomSlider.value;
@@ -275,24 +288,14 @@ zoomSlider.addEventListener('input', ()=>{
 freezeBtn.addEventListener('click', async ()=>{
   if (!running) return;
   await freezeNow();
+  showModal();
 });
+
+modalBackdrop.addEventListener('click', hideModal);
 
 unfreezeBtn.addEventListener('click', ()=>{
-  frozen = null;
-  running = true;
-  freezeActions.style.display='none';
-  liveActions.style.display='flex';
-  status('Live');
-});
-
-saveCompositeBtn.addEventListener('click', async ()=> {
-  const blob = await makeCompositeBlob();
-  await shareOrOpen(blob, 'palette_composite.png');
-});
-
-savePaletteBtn.addEventListener('click', async ()=> {
-  const blob = await makePaletteBlob();
-  await shareOrOpen(blob, 'palette_square.png');
+  hideModal();
+  unfreeze();
 });
 
 copyHexBtn.addEventListener('click', async ()=>{
@@ -301,6 +304,28 @@ copyHexBtn.addEventListener('click', async ()=>{
     await navigator.clipboard.writeText(frozen.hexes.join('\n'));
     status('HEX copied');
   }catch(_){ status('Copy failed'); }
+});
+
+saveCompositeBtn.addEventListener('click', async ()=>{
+  if (sharingBusy) return;
+  sharingBusy = true; toggleModalButtons(true);
+  try{
+    const blob = await makeCompositeBlob();
+    await shareOrOpen(blob, 'palette_composite.png');
+  } finally {
+    toggleModalButtons(false); sharingBusy = false;
+  }
+});
+
+savePaletteBtn.addEventListener('click', async ()=>{
+  if (sharingBusy) return;
+  sharingBusy = true; toggleModalButtons(true);
+  try{
+    const blob = await makePaletteBlob();
+    await shareOrOpen(blob, 'palette_square.png');
+  } finally {
+    toggleModalButtons(false); sharingBusy = false;
+  }
 });
 
 /* ---------- Camera ---------- */
@@ -321,19 +346,21 @@ function loop(){
   requestAnimationFrame(loop);
   if(video.readyState < 2) return;
 
-  // FPS (processing FPS)
   const now = performance.now();
-  if (now - lastT >= 1000){
-    fpsEl.textContent = String(frameCounter);
-    frameCounter = 0; lastT = now;
-  }
+  if (now - lastT >= 1000){ fpsEl.textContent = String(frameCounter); frameCounter = 0; lastT = now; }
 
   const scale = procWidth / video.videoWidth;
   const w = Math.max(2, Math.round(video.videoWidth*scale));
   const h = Math.max(2, Math.round(video.videoHeight*scale));
   off.width = w; off.height = h;
   const ctx = off.getContext('2d', {willReadFrequently:true});
-  ctx.drawImage(video, 0, 0, w, h);
+
+  // If frozen, keep drawing the frozen frame to off (stable), else draw live video
+  if (running){
+    ctx.drawImage(video, 0, 0, w, h);
+  } else {
+    // keep off as captured; do nothing
+  }
   resEl.textContent = w + '×' + h;
 
   if (!running) return;
@@ -351,9 +378,7 @@ function loop(){
 /* ---------- Worker response ---------- */
 worker.onmessage = (e)=>{
   frameCounter++;
-  const buf = e.data.palette;
-  if (!buf){ pending=false; return; }
-  const arr = new Uint8Array(buf);
+  const arr = new Uint8Array(e.data.palette||[]);
   const cols = [];
   for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
   while(cols.length < K) cols.push(cols[cols.length-1] || [128,128,128]);
@@ -364,76 +389,65 @@ worker.onmessage = (e)=>{
 
 /* ---------- Render palette ---------- */
 function toHex([r,g,b]){ return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
-
 function renderPalette(palette){
-  if(!palette || !palette.length){
-    swatchesEl.innerHTML = ''; gradientEl.hidden = true; return;
-  }
+  if(!palette || !palette.length){ swatchesEl.innerHTML = ''; gradientEl.hidden = true; return; }
   lastHexes = palette.map(toHex);
-
-  // Swatches
   swatchesEl.innerHTML = '';
-  for(const h of lastHexes){
-    const d = document.createElement('div');
-    d.className = 'swatch';
-    d.style.background = h;
-    swatchesEl.appendChild(d);
-  }
-
-  // Gradient
+  for(const h of lastHexes){ const d = document.createElement('div'); d.className = 'swatch'; d.style.background = h; swatchesEl.appendChild(d); }
   gradientEl.style.background = `linear-gradient(90deg, ${lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',')})`;
-
-  // Toggle by mode
-  swatchesEl.hidden = modeChk.checked;
-  gradientEl.hidden = !modeChk.checked;
-
-  // HEX codes
-  codesEl.innerHTML = '';
-  for(const h of lastHexes){
-    const c = document.createElement('div');
-    c.className='code';
-    c.textContent = h.toUpperCase();
-    codesEl.appendChild(c);
-  }
+  swatchesEl.hidden = modeChk.checked; gradientEl.hidden = !modeChk.checked;
+  codesEl.innerHTML = ''; for(const h of lastHexes){ const c = document.createElement('div'); c.className='code'; c.textContent = h.toUpperCase(); codesEl.appendChild(c); }
 }
 
-/* ---------- Freeze & capture ---------- */
+/* ---------- Freeze / Unfreeze ---------- */
 async function freezeNow(){
-  // store frozen frame at processing size
+  // capture current processing frame into capFrame
   const w = off.width, h = off.height;
   capFrame.width = w; capFrame.height = h;
-  const ctx = capFrame.getContext('2d');
-  ctx.drawImage(off, 0, 0);
+  const cctx = capFrame.getContext('2d'); cctx.drawImage(off, 0, 0);
+
+  // also paint the *visible* frozenCanvas to show paused camera
+  const vRect = video.getBoundingClientRect();
+  frozenCanvas.width = video.videoWidth; frozenCanvas.height = video.videoHeight;
+  const fctx = frozenCanvas.getContext('2d');
+  fctx.drawImage(video, 0, 0);
+  frozenCanvas.style.display = 'block';
+  video.pause();
+
   const imageBitmap = await createImageBitmap(capFrame);
   const palette = lastPalette.slice();
   const hexes = palette.map(toHex);
   frozen = {
-    imageBitmap,
-    palette,
-    hexes,
+    imageBitmap, palette, hexes,
     meta: {
-      algo: algoName.textContent,
-      K,
-      gradient: modeChk.checked ? 'On' : 'Off',
-      procWidth: procWidth,
-      throttle: throttleN,
-      res: w+'×'+h,
-      zoom: uiZoom.toFixed(2)+'×'
+      algo: algoName.textContent, K, gradient: modeChk.checked ? 'On' : 'Off',
+      procWidth: procWidth, throttle: throttleN,
+      res: w+'×'+h, zoom: uiZoom.toFixed(2)+'×'
     }
   };
   running = false;
-  // switch bars
-  liveActions.style.display = 'none';
-  freezeActions.style.display = 'flex';
   status('Frozen');
 }
 
+function unfreeze(){
+  frozen = null; running = true; status('Live');
+  frozenCanvas.style.display = 'none';
+  video.play().catch(()=>{ /* ignore */ });
+}
+
+/* ---------- Modal ---------- */
+function showModal(){ modalBackdrop.style.display='block'; modal.style.display='block'; }
+function hideModal(){ modalBackdrop.style.display='none'; modal.style.display='none'; }
+function toggleModalButtons(disabled){
+  [saveCompositeBtn, savePaletteBtn, copyHexBtn, unfreezeBtn].forEach(b=>b.disabled = disabled);
+}
+
+/* ---------- Make images ---------- */
 async function makeCompositeBlob(){
   if(!frozen) return null;
   const pad = 24, gutter = 24;
   const camW = 800, camH = Math.round(camW * (frozen.imageBitmap.height / frozen.imageBitmap.width));
-  const sideW = 420;
-  const paletteH = 180;
+  const sideW = 420, paletteH = 180;
   const W = pad + camW + gutter + sideW + pad;
   const H = pad + Math.max(camH + gutter + paletteH, 520) + pad;
 
@@ -444,7 +458,6 @@ async function makeCompositeBlob(){
   g.fillStyle = '#fff'; g.font = '600 18px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
   g.fillText('Live Camera Palette — Capture', pad, pad+18);
 
-  // Camera
   g.save(); g.translate(pad, pad+32);
   const scale = Math.min(camW/frozen.imageBitmap.width, camH/frozen.imageBitmap.height);
   const drawW = Math.round(frozen.imageBitmap.width*scale);
@@ -455,7 +468,6 @@ async function makeCompositeBlob(){
   g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,camH-1);
   g.restore();
 
-  // Palette
   g.save(); g.translate(pad, pad+32+camH+gutter);
   if (modeChk.checked){
     const grad = g.createLinearGradient(0,0,camW,0);
@@ -468,7 +480,6 @@ async function makeCompositeBlob(){
   g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,paletteH-1);
   g.restore();
 
-  // Right column: settings + HEX
   g.save(); g.translate(pad+camW+gutter, pad+32);
   g.fillStyle = '#fff'; g.font = '600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
   g.fillText('Settings', 0, 0);
@@ -495,8 +506,7 @@ async function makeCompositeBlob(){
 
 async function makePaletteBlob(){
   if(!frozen) return null;
-  const S = 1024;
-  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const S = 1024; const c = document.createElement('canvas'); c.width = S; c.height = S;
   const g = c.getContext('2d');
   if (modeChk.checked){
     const grad = g.createLinearGradient(0,0,S,0);
@@ -509,27 +519,23 @@ async function makePaletteBlob(){
   return await new Promise(res=> c.toBlob(b=>res(b),'image/png'));
 }
 
-/* ---------- Share to gallery (best-effort) ---------- */
-/* Note: The web cannot write directly to the Photos/Gallery without user action.
-   We use the Web Share API with a PNG file; on iOS/Android the system sheet lets
-   the user pick “Save Image” which stores it in the gallery. Fallbacks provided. */
+/* ---------- Share / Save ---------- */
+/* Web cannot auto-save to Photos. Use Web Share (preferred) -> Save Image; fallback open tab -> long-press; fallback download. */
 async function shareOrOpen(blob, filename){
   if (!blob) return;
+  const file = new File([blob], filename, {type:'image/png'});
   try{
-    const file = new File([blob], filename, {type:'image/png'});
     if (navigator.canShare && navigator.canShare({ files:[file] })){
-      await navigator.share({ files:[file], title: 'Palette capture' });
-      status('Shared. Use “Save Image” to store in gallery.');
+      await navigator.share({ files:[file], title:'Palette capture' });
+      status('Shared — choose “Save Image” to store in gallery.');
       return;
     }
-  }catch(_){}
-  // Fallback 1: open in new tab for long-press “Save Image”
+  }catch(_){ /* fall through */ }
   const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank');
-  if (!win) {
-    // Fallback 2: download
-    const a = document.createElement('a');
-    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  const w = window.open(url, '_blank');
+  if (!w){
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
   }
   setTimeout(()=> URL.revokeObjectURL(url), 2000);
 }
