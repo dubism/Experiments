@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Cyber HUD Interface</title>
+    <title>Real HUD: Horizon & Compass</title>
     <style>
         :root {
-            --hud-color: #00ffff;
-            --hud-glow: 0 0 5px #00ffff, 0 0 10px #00ffff, 0 0 20px #00aaff, 0 0 30px #00aaff;
+            --hud-color: #00ffaa;
+            --hud-glow: 0 0 5px var(--hud-color), 0 0 10px var(--hud-color);
             --background-color: #020408;
-            --scanline-color: rgba(0, 255, 255, 0.05);
         }
 
         body, html {
@@ -31,11 +30,11 @@
             height: 100%;
             object-fit: cover;
             transform: translate(-50%, -50%) scaleX(-1);
-            opacity: 0.5;
+            opacity: 0.4;
             z-index: 1;
         }
 
-        #hud-overlay {
+        #hud-canvas {
             position: absolute;
             top: 0;
             left: 0;
@@ -44,294 +43,208 @@
             z-index: 2;
         }
         
-        #parametric-canvas {
+        #permission-prompt {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 3;
-            opacity: 0.6;
-        }
-
-        .hud-element {
-            position: absolute;
-            text-shadow: var(--hud-glow);
-            z-index: 4;
-        }
-
-        #status-text {
-            top: 20px;
-            left: 20px;
-            font-size: 14px;
-            text-transform: uppercase;
-        }
-
-        #sensor-readout {
-            bottom: 20px;
-            right: 20px;
-            font-size: 12px;
-            text-align: right;
-            white-space: pre;
-        }
-
-        #crosshair {
-            top: 50%;
-            left: 50%;
-            width: 50px;
-            height: 50px;
-            transform: translate(-50%, -50%);
-            border: 1px solid var(--hud-color);
-            border-radius: 50%;
-            box-shadow: var(--hud-glow);
-            animation: pulse 2s infinite ease-in-out;
-        }
-
-        #scanline {
-            position: absolute;
-            width: 100%;
-            height: 3px;
-            background: var(--hud-color);
-            box-shadow: var(--hud-glow);
-            animation: scan 5s linear infinite;
-            z-index: 5;
-        }
-        
-        .corner-bracket {
-            position: absolute;
-            width: 30px;
-            height: 30px;
-            border-color: var(--hud-color);
-            border-style: solid;
-        }
-
-        .top-left { top: 15px; left: 15px; border-width: 2px 0 0 2px; }
-        .top-right { top: 15px; right: 15px; border-width: 2px 2px 0 0; }
-        .bottom-left { bottom: 15px; left: 15px; border-width: 0 0 2px 2px; }
-        .bottom-right { bottom: 15px; right: 15px; border-width: 0 2px 2px 0; }
-
-        @keyframes scan {
-            0% { top: 0; }
-            100% { top: 100%; }
-        }
-
-        @keyframes pulse {
-            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-            50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.7; }
-            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-        }
-
-        body::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: repeating-linear-gradient(
-                0deg,
-                var(--scanline-color),
-                var(--scanline-color) 1px,
-                transparent 1px,
-                transparent 3px
-            );
-            pointer-events: none;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
             z-index: 10;
+            font-size: 1.5em;
+            cursor: pointer;
+            text-shadow: var(--hud-glow);
         }
     </style>
 </head>
 <body>
 
     <video id="camera-view" autoplay playsinline></video>
-    <canvas id="hud-overlay"></canvas>
-    <canvas id="parametric-canvas"></canvas>
-
-    <div id="status-text" class="hud-element">SYSTEM: ONLINE</div>
-    <div id="crosshair" class="hud-element"></div>
-    <div id="scanline"></div>
-
-    <div class="corner-bracket top-left"></div>
-    <div class="corner-bracket top-right"></div>
-    <div class="corner-bracket bottom-left"></div>
-    <div class="corner-bracket bottom-right"></div>
-
-    <div id="sensor-readout" class="hud-element">
-        ACCEL (X, Y, Z): ...
-        GYRO  (α, β, γ): ...
-        GEO   (LAT, LON): ...
+    <canvas id="hud-canvas"></canvas>
+    
+    <div id="permission-prompt">
+        TAP SCREEN TO<br>INITIALIZE SENSORS
     </div>
 
     <script>
+        // --- DOM Elements ---
         const video = document.getElementById('camera-view');
-        const hudCanvas = document.getElementById('hud-overlay');
-        const hudCtx = hudCanvas.getContext('2d');
-        const parametricCanvas = document.getElementById('parametric-canvas');
-        const pCtx = parametricCanvas.getContext('2d');
+        const canvas = document.getElementById('hud-canvas');
+        const ctx = canvas.getContext('2d');
+        const permissionPrompt = document.getElementById('permission-prompt');
 
-        const statusText = document.getElementById('status-text');
-        const sensorReadout = document.getElementById('sensor-readout');
-
-        let motion = { ax: 0, ay: 0, az: 0, alpha: 0, beta: 0, gamma: 0 };
-        let geo = { lat: 'N/A', lon: 'N/A' };
-        let detectedObjects = [];
-
+        // --- State Variables ---
+        let orientation = { alpha: 0, beta: 0, gamma: 0 }; // alpha: yaw, beta: pitch, gamma: roll
+        let sensorsActive = false;
+        
+        // --- Setup & Permissions ---
         function resizeCanvas() {
-            [hudCanvas, parametricCanvas].forEach(canvas => {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            });
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // 1. ACCESS CAMERA
-        async function setupCamera() {
+        async function init() {
+            // Request Camera
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' },
-                    audio: false
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 video.srcObject = stream;
-                statusText.textContent = 'SYSTEM: LIVE FEED ACTIVE';
             } catch (err) {
                 console.error("Camera access denied:", err);
-                statusText.textContent = `ERROR: CAM ACCESS DENIED`;
+                alert("Camera access is required for this experience.");
             }
-        }
 
-        // 2. ACCESS SENSORS
-        function setupSensors() {
-            // Motion Sensors (Accelerometer, Gyroscope)
-            if (window.DeviceMotionEvent) {
-                window.addEventListener('devicemotion', (event) => {
-                    motion.ax = event.accelerationIncludingGravity.x || 0;
-                    motion.ay = event.accelerationIncludingGravity.y || 0;
-                    motion.az = event.accelerationIncludingGravity.z || 0;
-                });
-            }
-            if (window.DeviceOrientationEvent) {
-                window.addEventListener('deviceorientation', (event) => {
-                    motion.alpha = event.alpha || 0;
-                    motion.beta = event.beta || 0;
-                    motion.gamma = event.gamma || 0;
-                });
+            // Request Motion Sensors
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // This is the modern way for iOS 13+
+                const permission = await DeviceOrientationEvent.requestPermission();
+                if (permission === 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    sensorsActive = true;
+                } else {
+                    alert("Sensor access is required for the HUD.");
+                    return;
+                }
+            } else {
+                // This is for other browsers and older iOS
+                window.addEventListener('deviceorientation', handleOrientation);
+                sensorsActive = true;
             }
             
-            // Geolocation
-            if(navigator.geolocation) {
-                navigator.geolocation.watchPosition((position) => {
-                    geo.lat = position.coords.latitude.toFixed(5);
-                    geo.lon = position.coords.longitude.toFixed(5);
-                }, (error) => {
-                    console.warn(`GEO ERROR(${error.code}): ${error.message}`);
-                    geo.lat = 'DENIED';
-                    geo.lon = 'DENIED';
-                }, {
-                    enableHighAccuracy: true,
-                    maximumAge: 10000,
-                    timeout: 5000
-                });
+            permissionPrompt.style.display = 'none'; // Hide the prompt
+            requestAnimationFrame(drawHUD); // Start the drawing loop
+        }
+
+        permissionPrompt.addEventListener('click', init, { once: true });
+        
+        function handleOrientation(event) {
+            orientation.alpha = event.alpha || 0;
+            orientation.beta = event.beta || 0;
+            orientation.gamma = event.gamma || 0;
+        }
+
+        // --- HUD Drawing ---
+        function drawHUD() {
+            if (!sensorsActive) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Shared styles
+            ctx.strokeStyle = 'var(--hud-color)';
+            ctx.fillStyle = 'var(--hud-color)';
+            ctx.shadowColor = 'var(--hud-color)';
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 2;
+
+            drawArtificialHorizon();
+            drawCompass();
+            drawDataReadout();
+            drawStaticElements();
+            
+            requestAnimationFrame(drawHUD);
+        }
+
+        function drawArtificialHorizon() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Convert degrees to radians for canvas functions
+            const roll = orientation.gamma * (Math.PI / 180);
+            const pitch = orientation.beta; // Pitch value directly affects vertical position
+            
+            // The pitch ladder moves up/down. Max movement capped at 90px.
+            const pitchOffset = Math.max(-90, Math.min(90, pitch)) * 2;
+            
+            ctx.save();
+            // Center the coordinate system and apply rotation and translation
+            ctx.translate(centerX, centerY);
+            ctx.rotate(roll);
+            ctx.translate(0, pitchOffset); // Apply pitch after roll
+
+            // Draw the horizon line
+            ctx.beginPath();
+            ctx.moveTo(-canvas.width, 0);
+            ctx.lineTo(canvas.width, 0);
+            ctx.stroke();
+            
+            // Draw pitch markers (simple lines for now)
+            ctx.lineWidth = 1;
+            for(let i = -4; i <= 4; i++) {
+                if (i === 0) continue;
+                const y = i * -40; // Pitch lines are 40px apart
+                ctx.beginPath();
+                ctx.moveTo(-40, y);
+                ctx.lineTo(40, y);
+                ctx.stroke();
             }
+
+            ctx.restore(); // Reset transformations
         }
         
-        // 3. SIMULATE IMAGE RECOGNITION
-        function simulateRecognition() {
-            // Randomly generate "detected" objects for visual effect
-            if (Math.random() > 0.95 && detectedObjects.length < 5) {
-                detectedObjects.push({
-                    x: Math.random() * hudCanvas.width,
-                    y: Math.random() * hudCanvas.height,
-                    w: 50 + Math.random() * 100,
-                    h: 50 + Math.random() * 100,
-                    life: 100,
-                    id: `OBJ_${(Math.random() * 1000).toFixed(0)}`
-                });
-            }
+        function drawCompass() {
+            const centerX = canvas.width / 2;
+            const heading = orientation.alpha; // 0-360 degrees
 
-            // Update and draw objects
-            hudCtx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
-            hudCtx.strokeStyle = 'var(--hud-color)';
-            hudCtx.fillStyle = 'var(--hud-color)';
-            hudCtx.shadowColor = 'var(--hud-color)';
-            hudCtx.shadowBlur = 10;
-            hudCtx.font = '10px "Courier New"';
-
-            for (let i = detectedObjects.length - 1; i >= 0; i--) {
-                let obj = detectedObjects[i];
-                obj.life--;
-                if (obj.life <= 0) {
-                    detectedObjects.splice(i, 1);
-                    continue;
-                }
+            ctx.save();
+            ctx.font = '16px "Courier New"';
+            ctx.textAlign = 'center';
+            
+            // Draw heading markers
+            for (let i = -4; i <= 4; i++) {
+                const angle = Math.round(heading) + (i * 20);
+                const xPos = centerX + (i * 80);
                 
-                hudCtx.globalAlpha = obj.life / 100;
-                hudCtx.strokeRect(obj.x, obj.y, obj.w, obj.h);
-                hudCtx.fillText(`[${obj.id}]`, obj.x + 5, obj.y + 15);
-                
-                // Draw connecting line to crosshair
-                hudCtx.beginPath();
-                hudCtx.moveTo(obj.x + obj.w / 2, obj.y + obj.h / 2);
-                hudCtx.lineTo(hudCanvas.width / 2, hudCanvas.height / 2);
-                hudCtx.lineWidth = 0.5;
-                hudCtx.stroke();
-            }
-            hudCtx.globalAlpha = 1;
-            hudCtx.lineWidth = 1;
-        }
+                let label;
+                let normalizedAngle = (angle % 360 + 360) % 360;
+                if (Math.abs(normalizedAngle - 0) < 10 || Math.abs(normalizedAngle - 360) < 10) label = 'N';
+                else if (Math.abs(normalizedAngle - 90) < 10) label = 'E';
+                else if (Math.abs(normalizedAngle - 180) < 10) label = 'S';
+                else if (Math.abs(normalizedAngle - 270) < 10) label = 'W';
+                else label = normalizedAngle;
 
-        // 4. GENERATE PARAMETRIC PATTERNS
-        let particles = [];
-        function updateParametric() {
-            pCtx.clearRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
-
-            // Create new particle based on motion
-            if (particles.length < 100) {
-                particles.push({
-                    x: pCtx.canvas.width / 2,
-                    y: pCtx.canvas.height / 2,
-                    vx: (motion.gamma / 90) * 5, // Use gyroscope for velocity
-                    vy: (motion.beta / 90) * 5,
-                    life: 50,
-                    hue: 180 // Cyan
-                });
+                ctx.fillText(label, xPos, 50);
             }
             
-            pCtx.shadowBlur = 15;
-
-            for (let i = particles.length - 1; i >= 0; i--) {
-                let p = particles[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.life -= 1;
-
-                if (p.life <= 0 || p.x < 0 || p.x > pCtx.canvas.width || p.y < 0 || p.y > pCtx.canvas.height) {
-                    particles.splice(i, 1);
-                    continue;
-                }
-                
-                pCtx.beginPath();
-                pCtx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${p.life / 50})`;
-                pCtx.shadowColor = `hsla(${p.hue}, 100%, 50%, 1)`;
-                pCtx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-                pCtx.fill();
-            }
-        }
-
-        // Main animation loop
-        function animate() {
-            // Update sensor readout
-            sensorReadout.textContent = `ACCEL (X, Y, Z): ${motion.ax.toFixed(2)}, ${motion.ay.toFixed(2)}, ${motion.az.toFixed(2)}\nGYRO  (α, β, γ): ${motion.alpha.toFixed(1)}, ${motion.beta.toFixed(1)}, ${motion.gamma.toFixed(1)}\nGEO   (LAT, LON): ${geo.lat}, ${geo.lon}`;
+            // Main heading indicator
+            ctx.beginPath();
+            ctx.moveTo(centerX, 60);
+            ctx.lineTo(centerX - 10, 70);
+            ctx.lineTo(centerX + 10, 70);
+            ctx.closePath();
+            ctx.fill();
             
-            simulateRecognition();
-            updateParametric();
-
-            requestAnimationFrame(animate);
+            ctx.restore();
+        }
+        
+        function drawDataReadout() {
+            ctx.font = '12px "Courier New"';
+            ctx.textAlign = 'left';
+            const x = 20;
+            const y = canvas.height - 50;
+            ctx.fillText(`HDG: ${orientation.alpha.toFixed(1)}°`, x, y);
+            ctx.fillText(`PCH: ${orientation.beta.toFixed(1)}°`, x, y + 15);
+            ctx.fillText(`RLL: ${orientation.gamma.toFixed(1)}°`, x, y + 30);
         }
 
-        // Initialization
-        setupCamera();
-        setupSensors();
-        animate();
+        function drawStaticElements() {
+            // Static aircraft symbol / crosshair
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(centerX - 50, centerY);
+            ctx.lineTo(centerX - 15, centerY);
+            ctx.moveTo(centerX + 15, centerY);
+            ctx.lineTo(centerX + 50, centerY);
+            ctx.moveTo(centerX, centerY - 10);
+            ctx.lineTo(centerX, centerY - 25);
+            ctx.stroke();
+        }
     </script>
 
 </body>
