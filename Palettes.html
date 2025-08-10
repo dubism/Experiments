@@ -3,21 +3,26 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Live Camera Palette — Minimal</title>
+<title>Live Camera Palette — Square Crop</title>
 <style>
-  :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --panel:#0a0a0a; --zoom:1; }
+  :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1; }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
   /* Bands */
-  #videoPane{position:fixed;left:0;right:0;top:0;height:42vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
-  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-bottom:1px solid var(--line);background:#000}
-  #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:96px;border-top:1px solid var(--line);background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+  #videoPane{position:fixed;left:0;right:0;top:0;height:42vh;display:flex;align-items:center;justify-content:center;
+    border-bottom:1px solid var(--line);background:#000;overflow:hidden}
+  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;
+    border-bottom:1px solid var(--line);background:#000}
+  #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:96px;border-top:1px solid var(--line);
+    background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
 
   /* Camera */
   .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
-  video{max-height:40vh;max-width:92vw;border-radius:8px;background:#000;display:block;transform:scale(var(--zoom));transform-origin:center center}
+  video{max-height:40vh;max-width:92vw;border-radius:8px;background:#000;display:block;
+        transform:scale(var(--zoom));transform-origin:center center}
   #frozenCanvas{position:absolute;inset:0;margin:auto;display:none;max-height:40vh;max-width:92vw;border-radius:8px}
 
   /* Palette */
@@ -25,14 +30,14 @@
   .swatches{flex:1;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .swatch{flex:1}
   .gradient{flex:1;border:1px solid var(--line);border-radius:8px}
-  .codes{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
-  .code{padding:6px 8px;background:#0a0a0a;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  /* No live hex list anymore */
+  .codes{display:none}
 
   /* Bottom controls */
   .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);border-radius:7px;cursor:pointer}
-  .tab.active{outline:2px solid #fff;outline-offset:1px}
+  .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:7px;cursor:pointer}
+  .tab.active{outline:2px solid #fff; outline-offset:1px}
   .btn{padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.ghost{background:transparent}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:16px;padding:10px 18px}
@@ -42,10 +47,11 @@
   /* Control Center (over lower palette) */
   #ccWrap{position:absolute;left:10px;right:10px;bottom:10px;display:none;z-index:10}
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
-  #cc .row{justify-content:space-between}
+  #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 
   /* Fullscreen Composite */
-  #compositeOverlay{position:fixed;inset:0;background:#000;display:none;z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:10px}
+  #compositeOverlay{position:fixed;inset:0;background:#000;display:none;z-index:1000;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:10px}
   #compositeCanvas{max-width:98vw;max-height:94vh;border:1px solid var(--line);border-radius:10px;background:#000}
   #unfreezeBtn{position:fixed;right:12px;bottom:12px}
 </style>
@@ -72,10 +78,9 @@
     <div id="ccWrap">
       <div id="cc">
         <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="5"><span id="kVal" class="small">5</span></span></div>
-        <div class="row"><span>Gradient mode</span><input type="checkbox" id="mode" checked></div>
+        <div class="row"><span>Gradient mode</span><input type="checkbox" id="mode"></div>
         <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
         <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleIdx" min="0" max="10" value="3"><span id="throttleVal" class="small">5</span></span></div>
-        <div class="small">HTTPS required for camera/clipboard.</div>
       </div>
     </div>
   </section>
@@ -108,7 +113,7 @@
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ---------- Worker (fixed rgb2xyz) ---------- */
+/* ---------- Worker (color algorithms) ---------- */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
   const {pixels,width,height,algo,k,stride=2,reqId} = e.data;
@@ -130,14 +135,12 @@ self.onmessage = (e)=> {
 };
 function rgb2xyz(r,g,b){
   r/=255; g/=255; b/=255;
-  r = r<=0.04045 ? r/12.92 : ((r+0.055)/1.055)**2.4;
-  g = g<=0.04045 ? g/12.92 : ((g+0.055)/1.055)**2.4;
-  b = b<=0.04045 ? b/12.92 : ((b+0.055)/1.055)**2.4;
-  return [
-    r*0.4124 + g*0.3576 + b*0.1805,
-    r*0.2126 + g*0.7152 + b*0.0722,
-    r*0.0193 + g*0.1192 + b*0.9505
-  ];
+  r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;
+  g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;
+  b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;
+  return [ r*0.4124 + g*0.3576 + b*0.1805,
+           r*0.2126 + g*0.7152 + b*0.0722,
+           r*0.0193 + g*0.1192 + b*0.9505 ];
 }
 function xyz2lab(x,y,z){
   const Xr=0.95047,Yr=1,Zr=1.08883;
@@ -195,8 +198,8 @@ function kmeansLAB(samples,k,maxIter=6){
   const pts=[];
   for(let i=0;i<samples.length;i+=3){
     const r=samples[i],g=samples[i+1],b=samples[i+2];
-    const [L,a,bb]=rgb2lab(r,g,b);
-    pts.push([L,a,bb,r,g,b]);
+    const L=rgb2lab(r,g,b);
+    pts.push([L[0],L[1],L[2],r,g,b]);
   }
   const centers=[]; centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
   while(centers.length<k){
@@ -262,7 +265,6 @@ const resEl = document.getElementById('res');
 
 const swatchesEl = document.getElementById('swatches');
 const gradientEl = document.getElementById('gradient');
-const codesEl = document.getElementById('codes');
 
 const ccToggle = document.getElementById('ccToggle');
 const ccWrap = document.getElementById('ccWrap');
@@ -289,13 +291,11 @@ let uiZoom = +zoomSlider.value;
 
 let frameCounter = 0, lastT = performance.now();
 let pending = false, every = 0;
-let running = true; // default: unfrozen
+let running = true; // firm: starts live
 
 let lastPalette = [];
 let lastHexes = [];
-let frozen = null;
 let reqSeq = 0;
-let freezeResolve = null;
 
 /* ---------- UI ---------- */
 tabs.addEventListener('click', (e)=>{
@@ -313,14 +313,16 @@ document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ ccWrap.style.d
 zoomSlider.addEventListener('input', ()=>{ uiZoom = +zoomSlider.value; zoomVal.textContent = uiZoom.toFixed(2)+'×'; document.documentElement.style.setProperty('--zoom', uiZoom); });
 freezeBtn.addEventListener('click', async ()=>{ if (running) await freezeNow(); });
 unfreezeBtn.addEventListener('click', ()=>{ unfreeze(); });
-window.addEventListener('resize', ()=>{ if (!running && frozen) renderCompositeFullscreen(); });
+window.addEventListener('resize', ()=>{ if (!running) renderCompositeFullscreen(); });
 
-/* ---------- Crop (matches CSS zoom) ---------- */
-function computeCrop(){
+/* ---------- Square crop (center) + zoom ---------- */
+function computeSquareCrop(){
   const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
+  if (!vw || !vh) return {sx:0,sy:0,sw:0,sh:0};
   const z = Math.max(1, uiZoom);
-  const sw = Math.round(vw / z);
-  const sh = Math.round(vh / z);
+  const base = Math.min(vw, vh);     // square side before zoom
+  const sw = Math.round(base / z);
+  const sh = sw;
   const sx = Math.floor((vw - sw)/2);
   const sy = Math.floor((vh - sh)/2);
   return {sx, sy, sw, sh};
@@ -347,13 +349,13 @@ function loop(){
   const now = performance.now();
   if (now - lastT >= 1000){ fpsEl.textContent = String(frameCounter); frameCounter = 0; lastT = now; }
 
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) return;
+  const {sx,sy,sw,sh} = computeSquareCrop();
+  if (!sw) return;
 
-  const {sx,sy,sw,sh} = computeCrop();
+  // downscale to processing width
   const scale = procWidth / sw;
   const w = Math.max(2, Math.round(sw * scale));
-  const h = Math.max(2, Math.round(sh * scale));
+  const h = w; // square
   off.width = w; off.height = h;
   const ctx = off.getContext('2d', {willReadFrequently:true});
 
@@ -361,8 +363,8 @@ function loop(){
   resEl.textContent = w + '×' + h;
 
   if (!running) return;
-  every = (every+1) % throttleN; if (every!==0) return;
 
+  every = (every+1) % throttleN; if (every!==0) return;
   if (!pending){
     pending = true;
     const img = ctx.getImageData(0,0,w,h);
@@ -377,125 +379,113 @@ worker.onmessage = (e)=>{
   const cols = [];
   for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
   while(cols.length < K) cols.push(cols[cols.length-1] || [128,128,128]);
-
   lastPalette = cols.slice(0,K);
   renderPalette(lastPalette);
   pending = false;
-
-  // Resolve freeze-compute, if any
-  if (freezeResolve){ const r = freezeResolve; freezeResolve = null; r(lastPalette); }
   frameCounter++;
 };
 
-/* ---------- Render palette (live) ---------- */
+/* ---------- Render palette (live, no hex list) ---------- */
 function toHex([r,g,b]){ return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 function renderPalette(palette){
-  if(!palette || !palette.length){ swatchesEl.innerHTML = ''; gradientEl.hidden = true; return; }
+  if(!palette || !palette.length){ swatchesEl.innerHTML=''; gradientEl.hidden=true; return; }
   lastHexes = palette.map(toHex);
 
   swatchesEl.innerHTML = '';
-  for(const h of lastHexes){ const d = document.createElement('div'); d.className = 'swatch'; d.style.background = h; swatchesEl.appendChild(d); }
+  for(const h of lastHexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); }
 
   gradientEl.style.background = `linear-gradient(90deg, ${lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',')})`;
-
   const gradientOn = modeChk.checked;
   swatchesEl.hidden = gradientOn;
   gradientEl.hidden = !gradientOn;
-
-  codesEl.innerHTML = '';
-  for(const h of lastHexes){ const c = document.createElement('div'); c.className='code'; c.textContent = h.toUpperCase(); codesEl.appendChild(c); }
 }
 
-/* ---------- Freeze → recompute on the exact zoom-crop ---------- */
+/* ---------- Freeze ---------- */
 async function freezeNow(){
-  running = false; // stop loop work
-  const {sx,sy,sw,sh} = computeCrop();
+  running = false;
 
-  // Build processing-sized capture of the crop
+  const {sx,sy,sw,sh} = computeSquareCrop();
+  // Build processing-sized capture of that crop (square)
   const scale = procWidth / sw;
   const w = Math.max(2, Math.round(sw * scale));
-  const h = Math.max(2, Math.round(sh * scale));
+  const h = w;
   capFrame.width = w; capFrame.height = h;
   capFrame.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
 
-  // Show the same cropped region under the video
+  // Show still (square crop) under the video
   frozenCanvas.width = sw; frozenCanvas.height = sh;
   frozenCanvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
   frozenCanvas.style.display = 'block';
   video.pause();
 
-  // Recompute palette for that exact frame (ensures consistency)
+  // Recompute palette exactly from this frame (ensures consistency)
   const imgs = capFrame.getContext('2d').getImageData(0,0,w,h);
   const reqId = ++reqSeq;
-  freezeResolve = (cols)=> finalizeFreeze(cols);
+  const p = new Promise(res=>{
+    const handler = (ev)=>{
+      const arr = new Uint8Array(ev.data.palette||[]);
+      const cols = [];
+      for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
+      while(cols.length < K) cols.push(cols[cols.length-1] || [128,128,128]);
+      worker.removeEventListener('message', handler);
+      res(cols);
+    };
+    worker.addEventListener('message', handler, {once:true});
+  });
   worker.postMessage({pixels:imgs.data.buffer, width:w, height:h, algo, k:K, stride:2, reqId}, [imgs.data.buffer]);
-}
+  const cols = await p;
 
-async function finalizeFreeze(cols){
-  const hexes = cols.map(toHex);
-  frozen = { imageCanvas: capFrame, hexes, cols };
-  status('Frozen');
-  await renderCompositeFullscreen();
+  await renderCompositeFullscreen(cols.map(toHex), w, h);
   compositeOverlay.style.display = 'flex';
 }
 
+/* ---------- Unfreeze ---------- */
 function unfreeze(){
-  compositeOverlay.style.display = 'none';
-  frozenCanvas.style.display = 'none';
+  compositeOverlay.style.display='none';
+  frozenCanvas.style.display='none';
   video.play().catch(()=>{});
-  frozen = null;
   running = true;
   status('Live');
 }
 
-/* ---------- Composite drawing (uses configured mode + HEX labels) ---------- */
-async function renderCompositeFullscreen(){
-  if (!frozen) return;
-  const gradientOn = modeChk.checked;
+/* ---------- Composite (1024 width, square cam + flat palette + hex) ---------- */
+async function renderCompositeFullscreen(hexes, frameW, frameH){
+  const CAM_W = 1024;                     // required high-res width
+  const CAM_H = 1024;                     // square
+  const PALETTE_H = 240;                  // flat rectangles
+  const LABEL_BAND = 20;
+  const PAD = 24, GUT = 24;
 
-  const deviceW = Math.min(window.innerWidth, 1600);
-  const camW = deviceW - 48;
-  const camH = Math.round(camW * (frozen.imageCanvas.height / frozen.imageCanvas.width));
-  const paletteH = 180, labelBand = 18;
-  const pad = 24, gutter = 24;
-
-  const width = pad + camW + pad;
-  const height = pad + camH + gutter + (paletteH + labelBand) + pad;
+  const width = PAD + CAM_W + PAD;
+  const height = PAD + CAM_H + GUT + (PALETTE_H + LABEL_BAND) + PAD;
 
   const c = compositeCanvas; c.width = width; c.height = height;
   const g = c.getContext('2d');
 
-  g.fillStyle = '#000'; g.fillRect(0,0,width,height);
+  g.fillStyle='#000'; g.fillRect(0,0,width,height);
 
-  // Camera (processed frame)
-  g.save(); g.translate(pad, pad);
-  g.fillStyle = '#111'; g.fillRect(0,0,camW,camH);
-  g.drawImage(frozen.imageCanvas, 0, 0, frozen.imageCanvas.width, frozen.imageCanvas.height,
-              Math.floor((camW - camW)/2), Math.floor((camH - camH)/2), camW, camH);
-  g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,camH-1);
+  // Upscale the processed square frame to 1024×1024
+  g.save(); g.translate(PAD, PAD);
+  g.fillStyle='#111'; g.fillRect(0,0,CAM_W,CAM_H);
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(capFrame, 0, 0, frameW, frameH, 0, 0, CAM_W, CAM_H);
+  g.strokeStyle='#222'; g.strokeRect(0.5,0.5,CAM_W-1,CAM_H-1);
   g.restore();
 
-  // Palette
-  g.save(); g.translate(pad, pad+camH+gutter);
-  const N = frozen.hexes.length;
-  if (gradientOn){
-    const grad = g.createLinearGradient(0,0,camW,0);
-    frozen.hexes.forEach((h,i)=> grad.addColorStop((i/(N-1)), h));
-    g.fillStyle = grad; g.fillRect(0,0,camW,paletteH);
-  } else {
-    const w = Math.ceil(camW/N);
-    for(let i=0;i<N;i++){ g.fillStyle = frozen.hexes[i]; g.fillRect(i*w,0,w,paletteH); }
-  }
-  g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,paletteH-1);
+  // Flat palette (ignore gradient setting here as requested)
+  g.save(); g.translate(PAD, PAD+CAM_H+GUT);
+  const N = hexes.length;
+  const w = Math.ceil(CAM_W/N);
+  for(let i=0;i<N;i++){ g.fillStyle = hexes[i]; g.fillRect(i*w,0,w,PALETTE_H); }
+  g.strokeStyle='#222'; g.strokeRect(0.5,0.5,CAM_W-1,PALETTE_H-1);
 
-  // HEX labels under palette
-  g.font = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-  g.fillStyle = '#bdbdbd'; g.textAlign = 'center'; g.textBaseline = 'top';
-  if (gradientOn){
-    for(let i=0;i<N;i++){ const x = Math.round((i/(N-1)) * camW); g.fillText(frozen.hexes[i].toUpperCase(), x, paletteH + 3); }
-  } else {
-    const w = Math.ceil(camW/N);
-    for(let i=0;i<N;i++){ const cx = Math.round(i*w + w/2); g.fillText(frozen.hexes[i].toUpperCase(), cx, paletteH + 3); }
+  // Tiny hex labels under
+  g.font='11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+  g.fillStyle='#bdbdbd'; g.textAlign='center'; g.textBaseline='top';
+  for(let i=0;i<N;i++){
+    const cx = Math.round(i*w + w/2);
+    g.fillText(hexes[i].toUpperCase(), cx, PALETTE_H + 3);
   }
   g.restore();
 }
