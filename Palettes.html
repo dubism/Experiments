@@ -3,436 +3,213 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Live Palette from Camera</title>
+<title>Live Camera Palette — Minimal</title>
 <style>
-  :root {
-    --bg:#0f1115; --panel:#151924; --ink:#e6e6ea; --muted:#9aa3b2; --accent:#6ea8fe; --border:#263047;
-  }
-  *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--ink); font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
-  header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; background:var(--panel); position:sticky; top:0; z-index:2; border-bottom:1px solid var(--border)}
-  header h1{font-size:16px; margin:0; font-weight:600}
-  .row{display:flex; gap:14px; padding:14px; flex-wrap:wrap}
-  .videoWrap{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px}
-  video{display:block; width:280px; height:auto; border-radius:8px; background:#000}
-  .meta{display:flex; gap:12px; color:var(--muted); margin-top:8px; font-variant-numeric:tabular-nums}
-  .controls{flex:1; min-width:280px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px}
-  .tabs{display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap}
-  .tab{padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:#101522; color:var(--ink); cursor:pointer}
-  .tab.active{outline:2px solid var(--accent); background:#0d1320}
-  .field{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px dashed #1e2536}
-  .field:last-child{border-bottom:0}
+  :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --panel:#0a0a0a; }
+  *{box-sizing:border-box} html,body{height:100%} body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; user-select:none;}
+  /* Layout: video fixed top, palette fixed bottom, both always visible */
+  .pane{position:fixed;left:0;right:0}
+  #videoPane{top:0;height:48vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;}
+  #palettePane{bottom:0;height:48vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:1px solid var(--line);background:#000;}
+  video{max-height:46vh;max-width:92vw;border-radius:8px;background:#000;display:block}
+  /* Always-visible top strip: algo tabs, freeze, control toggle, fps */
+  .topBar{position:fixed;top:6px;left:8px;right:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;pointer-events:none}
+  .group{display:flex;gap:6px;pointer-events:auto}
+  .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);border-radius:7px;cursor:pointer}
+  .tab.active{outline:2px solid #fff; outline-offset:1px}
+  .btn{padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:#0d0d0d;color:#fff;cursor:pointer}
+  .btn.ghost{background:transparent}
+  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
+  /* Control Center dropdown */
+  .ccWrap{position:fixed;top:44px;left:8px;right:8px;display:none}
+  .cc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  label{color:#eee}
   input[type="range"]{width:180px}
-  .paletteWrap{padding:14px; background:var(--panel); border:1px solid var(--border); border-radius:10px}
-  .paletteHeader{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px}
-  .swatches{display:flex; height:100px; border-radius:8px; overflow:hidden; border:1px solid var(--border)}
+  .hint{color:var(--muted);font-size:12px}
+  /* Palette area */
+  .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
+  .swatches{flex:1;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .swatch{flex:1}
-  .gradient{height:100px; border-radius:8px; border:1px solid var(--border)}
-  .codes{display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; margin-top:10px}
-  .code{padding:6px 8px; background:#0c111d; border:1px solid var(--border); border-radius:6px; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
-  .foot{padding:8px 14px; color:var(--muted)}
-  button, input, label{font:inherit; color:inherit}
-  .hint{color:var(--muted); font-size:12px}
+  .gradient{flex:1;border:1px solid var(--line);border-radius:8px}
+  .codes{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
+  .code{padding:6px 8px;background:#0a0a0a;border:1px solid var(--line);border-radius:6px;color:var(--muted);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  /* Freeze actions sheet */
+  .freezeBar{position:fixed;bottom:52vh;left:50%;transform:translateX(-50%);
+    display:none;gap:8px;backdrop-filter:blur(6px);background:rgba(0,0,0,.6);border:1px solid var(--line);
+    border-radius:10px;padding:8px}
+  .freezeBar .btn{white-space:nowrap}
+  /* Tiny overlays */
+  .overlay{position:fixed;right:8px;bottom:8px;color:var(--muted);font-variant-numeric:tabular-nums}
+  /* Hidden canvas */
+  canvas{display:none}
 </style>
 </head>
 <body>
-<header>
-  <h1>Live Camera Palette</h1>
-  <div class="meta">
-    <div>Algo: <strong id="algoName">K-Means (LAB)</strong></div>
-    <div>FPS: <strong id="fps">0</strong></div>
-    <div>Res: <strong id="res">–</strong></div>
-  </div>
-</header>
-
-<div class="row">
-  <section class="videoWrap">
-    <video id="video" playsinline muted></video>
-    <div class="meta">
-      <div>Camera</div>
-      <div id="camHint" class="hint">If camera doesn’t start, open via HTTPS (GitHub Pages).</div>
-    </div>
-  </section>
-
-  <section class="controls">
-    <div class="tabs" id="tabs">
-      <button class="tab active" data-algo="kmeans">K-Means (LAB)</button>
+  <div class="topBar">
+    <div class="group" id="tabs">
+      <button class="tab active" data-algo="kmeans">K-Means</button>
       <button class="tab" data-algo="hist">Histogram</button>
       <button class="tab" data-algo="mediancut">Median-cut</button>
     </div>
-    <div class="field">
-      <label for="k">Number of colors</label>
-      <div>
-        <input type="range" id="k" min="2" max="10" value="5">
-        <span id="kVal">5</span>
-      </div>
+    <div class="group">
+      <button class="btn" id="freezeBtn">Freeze</button>
+      <button class="btn ghost" id="ccToggle">Controls</button>
+      <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span></div>
     </div>
-    <div class="field">
-      <label for="mode">Render as gradient</label>
-      <input type="checkbox" id="mode" checked>
-    </div>
-    <div class="field">
-      <label for="size">Processing width</label>
-      <div>
-        <input type="range" id="size" min="120" max="320" value="240" step="20">
-        <span id="sizeVal">240 px</span>
-      </div>
-    </div>
-    <div class="field">
-      <label for="throttle">Process every N frames</label>
-      <div>
-        <input type="range" id="throttle" min="1" max="5" value="2">
-        <span id="throttleVal">2</span>
-      </div>
-    </div>
-  </section>
-</div>
-
-<section class="paletteWrap">
-  <div class="paletteHeader">
-    <div>Palette</div>
-    <div id="status" class="hint">Waiting for camera…</div>
   </div>
-  <div id="paletteArea">
-    <div id="gradient" class="gradient" hidden></div>
+
+  <div class="ccWrap" id="ccWrap">
+    <div class="cc">
+      <div class="row"><label>Colors (K)</label><span>
+        <input type="range" id="k" min="2" max="10" value="5"><span id="kVal" class="small">5</span></span>
+      </div>
+      <div class="row"><label>Gradient mode</label>
+        <input type="checkbox" id="mode" checked>
+      </div>
+      <div class="row"><label>Processing width</label><span>
+        <input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span>
+      </div>
+      <div class="row"><label>Process every N frames</label><span>
+        <input type="range" id="throttle" min="1" max="5" value="2"><span id="throttleVal" class="small">2</span></span>
+      </div>
+      <div class="hint">Open via HTTPS for camera + clipboard.</div>
+    </div>
+  </div>
+
+  <div id="videoPane" class="pane">
+    <video id="video" playsinline muted></video>
+  </div>
+
+  <div id="palettePane" class="pane">
+    <div class="title">
+      <div id="algoName" class="small">K-Means (LAB)</div>
+      <div id="status" class="small">Waiting for camera…</div>
+    </div>
     <div id="swatches" class="swatches"></div>
+    <div id="gradient" class="gradient" hidden></div>
+    <div id="codes" class="codes"></div>
   </div>
-  <div id="codes" class="codes"></div>
-</section>
 
-<canvas id="off" hidden></canvas>
+  <div id="freezeActions" class="freezeBar">
+    <button class="btn" id="saveComposite">Save composite</button>
+    <button class="btn" id="savePalette">Save palette-only</button>
+    <button class="btn" id="copyHex">Copy HEX</button>
+    <button class="btn ghost" id="unfreeze">Unfreeze</button>
+  </div>
 
-<div class="foot">No data leaves your browser.</div>
+  <div class="overlay small" id="overlayInfo"></div>
+
+  <canvas id="off"></canvas>
+  <canvas id="capFrame"></canvas> <!-- holds frozen frame at processing size -->
 
 <script>
-/* ---------- Inline Worker (palette algorithms) ---------- */
+/* ---------------- Worker with algorithms ---------------- */
 const workerBlob = new Blob([`
-  self.onmessage = (e)=> {
-    const {pixels, width, height, algo, k, stride=2} = e.data;
-    const data = new Uint8ClampedArray(pixels);
-    // Sample pixels with stride to reduce work
-    const samples = [];
-    for (let y=0; y<height; y+=stride){
-      let row = y*width*4;
-      for (let x=0; x<width; x+=stride){
-        const i = row + x*4;
-        samples.push(data[i], data[i+1], data[i+2]); // ignore alpha
-      }
-    }
-    let palette;
-    if (algo==='hist') palette = histPalette(samples, k);
-    else if (algo==='mediancut') palette = medianCutPalette(samples, k);
-    else palette = kmeansLAB(samples, k, 6); // iter cap
-    // Deduplicate near-duplicates by simple ΔE76 in LAB
-    palette = dedupeAndSort(palette, 10);
-    // Return as Uint8 array
-    const out = new Uint8Array(palette.flat());
-    self.postMessage({palette: out.buffer}, [out.buffer]);
-  };
-
-  function rgb2xyz(r,g,b){
-    // sRGB to XYZ (D65)
-    r/=255; g/=255; b/=255;
-    r = r<=0.04045 ? r/12.92 : Math.pow((r+0.055)/1.055,2.4);
-    g = g<=0.04045 ? g/12.92 : Math.pow((g+0.055)/1.055,2.4);
-    b = b<=0.04045 ? b/12.92 : Math.pow((b+0.055)/1.055,2.4);
-    const x = r*0.4124 + g*0.3576 + b*0.1805;
-    const y = r*0.2126 + g*0.7152 + b*0.0722;
-    const z = r*0.0193 + g*0.1192 + b*0.9505;
-    return [x, y, z];
-  }
-  function xyz2lab(x,y,z){
-    // D65 reference white
-    const Xr=0.95047, Yr=1.00000, Zr=1.08883;
-    let fx = f(x/Xr), fy = f(y/Yr), fz = f(z/Zr);
-    return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
-    function f(t){ return t>0.008856 ? Math.cbrt(t) : (7.787*t + 16/116); }
-  }
-  function rgb2lab(r,g,b){ const [x,y,z]=rgb2xyz(r,g,b); return xyz2lab(x,y,z); }
-  function dE76(L1,a1,b1,L2,a2,b2){
-    const dL=L1-L2, da=a1-a2, db=b1-b2;
-    return Math.hypot(dL,da,db);
-  }
-
-  function histPalette(samples, k){
-    // 8 bins per channel -> 512 bins
-    const bins = new Uint32Array(512);
-    for(let i=0;i<samples.length;i+=3){
-      const r=samples[i]>>5, g=samples[i+1]>>5, b=samples[i+2]>>5;
-      bins[(r<<6)|(g<<3)|b]++;
-    }
-    // pick top k bins; compute bin centers
-    const idx = [...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);
-    return idx.map(code=>{
-      const r = ((code>>6)&0x7), g=((code>>3)&0x7), b=(code&0x7);
-      return [ (r*32+16)|0, (g*32+16)|0, (b*32+16)|0 ];
-    });
-  }
-
-  function medianCutPalette(samples, k){
-    // Build list of colors
-    const colors = [];
-    for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
-    let boxes=[{colors, r:[255,0], g:[255,0], b:[255,0]}];
-    for(const box of boxes){
-      for(const c of box.colors){
-        if(c[0]<box.r[0]) box.r[0]=c[0]; if(c[0]>box.r[1]) box.r[1]=c[0];
-        if(c[1]<box.g[0]) box.g[0]=c[1]; if(c[1]>box.g[1]) box.g[1]=c[1];
-        if(c[2]<box.b[0]) box.b[0]=c[2]; if(c[2]>box.b[1]) box.b[1]=c[2];
-      }
-    }
-    while(boxes.length<k){
-      // pick the box with largest range
-      boxes.sort((A,B)=>range(B)-range(A));
-      const big=boxes.shift(); if(!big||big.colors.length<=1){break;}
-      const axis = largestAxis(big);
-      big.colors.sort((a,b)=>a[axis]-b[axis]);
-      const mid = big.colors.length>>1;
-      const left = {colors: big.colors.slice(0,mid), r:[255,0], g:[255,0], b:[255,0]};
-      const right= {colors: big.colors.slice(mid),  r:[255,0], g:[255,0], b:[255,0]};
-      for(const box of [left,right]){
-        for(const c of box.colors){
-          if(c[0]<box.r[0]) box.r[0]=c[0]; if(c[0]>box.r[1]) box.r[1]=c[0];
-          if(c[1]<box.g[0]) box.g[0]=c[1]; if(c[1]>box.g[1]) box.g[1]=c[1];
-          if(c[2]<box.b[0]) box.b[1]=Math.max(box.b[1],c[2]); // fix later
-          if(c[2]<box.b[0]) box.b[0]=c[2]; if(c[2]>box.b[1]) box.b[1]=c[2];
-        }
-      }
-      boxes.push(left,right);
-    }
-    // Average each box
-    return boxes.map(b=>{
-      let r=0,g=0,bl=0, n=b.colors.length||1;
-      for(const c of b.colors){ r+=c[0]; g+=c[1]; bl+=c[2]; }
-      return [ (r/n)|0, (g/n)|0, (bl/n)|0 ];
-    }).slice(0,k);
-    function range(b){ return Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]); }
-    function largestAxis(b){
-      const ranges=[b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]];
-      return ranges.indexOf(Math.max(...ranges));
+self.onmessage = (e)=> {
+  const {pixels,width,height,algo,k,stride=2} = e.data;
+  const data = new Uint8ClampedArray(pixels);
+  const samples = [];
+  for(let y=0;y<height;y+=stride){
+    let row = y*width*4;
+    for(let x=0;x<width;x+=stride){
+      const i=row+x*4; samples.push(data[i],data[i+1],data[i+2]);
     }
   }
-
-  function kmeansLAB(samples, k, maxIter=6){
-    // Convert to LAB and also keep RGB for output
-    const pts = [];
-    for(let i=0;i<samples.length;i+=3){
-      const r=samples[i], g=samples[i+1], b=samples[i+2];
-      const [L,a,bb]=rgb2lab(r,g,b);
-      pts.push([L,a,bb,r,g,b]);
-    }
-    // k-means++ init
-    const centers = [];
-    centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
-    while(centers.length<k){
-      const d2 = pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));
-      const sum = d2.reduce((a,b)=>a+b,0)||1;
-      let r = Math.random()*sum, i=0;
-      for(; i<d2.length-1 && (r-=d2[i])>0; i++);
-      centers.push(pts[i].slice(0,3));
-    }
-    const labels = new Uint16Array(pts.length);
-    for(let it=0; it<maxIter; it++){
-      // assign
-      for(let i=0;i<pts.length;i++){
-        let best=0, bestD=1e9;
-        for(let c=0;c<centers.length;c++){
-          const d = d2lab(pts[i], centers[c]);
-          if(d<bestD){bestD=d; best=c;}
-        }
-        labels[i]=best;
-      }
-      // update
-      const sums = Array.from({length:k},()=>[0,0,0,0]);
-      for(let i=0;i<pts.length;i++){
-        const c=labels[i]; const p=pts[i];
-        sums[c][0]+=p[0]; sums[c][1]+=p[1]; sums[c][2]+=p[2]; sums[c][3]++;
-      }
-      for(let c=0;c<k;c++){
-        if(sums[c][3]>0){
-          centers[c][0]=sums[c][0]/sums[c][3];
-          centers[c][1]=sums[c][1]/sums[c][3];
-          centers[c][2]=sums[c][2]/sums[c][3];
-        }
-      }
-    }
-    // compute RGB means per cluster
-    const acc = Array.from({length:k},()=>[0,0,0,0]);
-    for(let i=0;i<pts.length;i++){
-      const c=labels[i]; const p=pts[i];
-      acc[c][0]+=p[3]; acc[c][1]+=p[4]; acc[c][2]+=p[5]; acc[c][3]++;
-    }
-    const out=[];
-    for(let c=0;c<k;c++){
-      if(acc[c][3]>0) out.push([ (acc[c][0]/acc[c][3])|0, (acc[c][1]/acc[c][3])|0, (acc[c][2]/acc[c][3])|0 ]);
-    }
-    // if fewer than k (empty clusters), fill with nearest existing
-    while(out.length<k) out.push(out[out.length-1]||[128,128,128]);
-    return out.slice(0,k);
-
-    function d2lab(p,c){ const d0=p[0]-c[0], d1=p[1]-c[1], d2=p[2]-c[2]; return d0*d0+d1*d1+d2*d2; }
+  let palette;
+  if (algo==='hist') palette = histPalette(samples,k);
+  else if (algo==='mediancut') palette = medianCutPalette(samples,k);
+  else palette = kmeansLAB(samples,k,6);
+  palette = dedupeAndSort(palette,10);
+  const out = new Uint8Array(palette.flat());
+  self.postMessage({palette: out.buffer}, [out.buffer]);
+};
+function rgb2xyz(r,g,b){r/=255;g/=255;b/=255;
+  r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;
+  g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;
+  b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;
+  return [r*0.4124+g*0.3576+b*0.1805, r*0.2126+g*0.7152+b*0.0722, r*0.0193+g*0.1192+b*0.9505];}
+function xyz2lab(x,y,z){const Xr=0.95047,Yr=1,Zr=1.08883;
+  const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;
+  const fx=f(x/Xr), fy=f(y/Yr), fz=f(z/Zr);
+  return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];}
+function rgb2lab(r,g,b){const [x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
+function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db);}
+function histPalette(samples,k){const bins=new Uint32Array(512);
+  for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}
+  const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);
+  return idx.map(code=>{const r=(code>>6)&7,g=(code>>3)&7,b=code&7;return [r*32+16,g*32+16,b*32+16];});
+}
+function medianCutPalette(samples,k){
+  const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
+  let boxes=[{colors}]; const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];
+    for(const c of b.colors){ if(c[0]<b.r[0])b.r[0]=c[0]; if(c[0]>b.r[1])b.r[1]=c[0];
+      if(c[1]<b.g[0])b.g[0]=c[1]; if(c[1]>b.g[1])b.g[1]=c[1];
+      if(c[2]<b.b[0])b.b[0]=c[2]; if(c[2]>b.b[1])b.b[1]=c[2];}};
+  boxes.forEach(bounds);
+  const range=b=>Math.max(b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]);
+  const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]]; return rs.indexOf(Math.max(...rs));};
+  while(boxes.length<k){
+    boxes.sort((A,B)=>range(B)-range(A));
+    const big=boxes.shift(); if(!big||big.colors.length<=1) break;
+    const ax=axis(big); big.colors.sort((a,b)=>a[ax]-b[ax]); const mid=big.colors.length>>1;
+    const left={colors:big.colors.slice(0,mid)}, right={colors:big.colors.slice(mid)};
+    [left,right].forEach(bounds); boxes.push(left,right);
   }
-
-  function dedupeAndSort(rgbList, minDE=10){
-    // Convert to LAB, sort by lightness, remove near-duplicates
-    const labList = rgbList.map(([r,g,b])=>[...rgb2lab(r,g,b), r,g,b]);
-    labList.sort((a,b)=>a[0]-b[0]);
-    const kept=[];
-    for(const c of labList){
-      let ok=true;
-      for(const d of kept){
-        if(dE76(c[0],c[1],c[2], d[0],d[1],d[2])<minDE){ ok=false; break; }
-      }
-      if(ok) kept.push(c);
-    }
-    // back to RGB
-    return kept.map(c=>[c[3],c[4],c[5]]);
+  return boxes.map(b=>{let r=0,g=0,bl=0,n=b.colors.length||1;
+    for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}
+    return [r/n|0,g/n|0,bl/n|0];}).slice(0,k);
+}
+function kmeansLAB(samples,k,maxIter=6){
+  const pts=[]; for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2]; const [L,a,bb]=rgb2lab(r,g,b); pts.push([L,a,bb,r,g,b]);}
+  const centers=[]; centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
+  while(centers.length<k){ const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c)))); const sum=d2.reduce((a,b)=>a+b,0)||1;
+    let r=Math.random()*sum,i=0; for(;i<d2.length-1&&(r-=d2[i])>0;i++); centers.push(pts[i].slice(0,3));}
+  const labels=new Uint16Array(pts.length);
+  for(let it=0;it<maxIter;it++){
+    for(let i=0;i<pts.length;i++){let best=0,bd=1e9; for(let c=0;c<centers.length;c++){const d=d2lab(pts[i],centers[c]); if(d<bd){bd=d;best=c;}} labels[i]=best;}
+    const sums=Array.from({length:k},()=>[0,0,0,0]); for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i]; sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++; }
+    for(let c=0;c<k;c++) if(sums[c][3]>0){ centers[c][0]=sums[c][0]/sums[c][3]; centers[c][1]=sums[c][1]/sums[c][3]; centers[c][2]=sums[c][2]/sums[c][3]; }
   }
+  const acc=Array.from({length:k},()=>[0,0,0,0]);
+  for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i]; acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}
+  const out=[]; for(let c=0;c<k;c++) if(acc[c][3]>0) out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);
+  while(out.length<k) out.push(out[out.length-1]||[128,128,128]); return out.slice(0,k);
+  function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}
+}
+function dedupeAndSort(rgbList,minDE=10){
+  const labList=rgbList.map(([r,g,b])=>[...rgb2lab(r,g,b),r,g,b]); labList.sort((a,b)=>a[0]-b[0]);
+  const kept=[]; for(const c of labList){let ok=true; for(const d of kept){ if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;} } if(ok) kept.push(c); }
+  return kept.map(c=>[c[3],c[4],c[5]]);
+}
 `], {type:'application/javascript'});
-
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
 
-/* ---------- Elements ---------- */
+/* ---------------- Elements ---------------- */
 const video = document.getElementById('video');
 const off = document.getElementById('off');
-const fpsEl = document.getElementById('fps');
-const resEl = document.getElementById('res');
-const algoName = document.getElementById('algoName');
-const statusEl = document.getElementById('status');
+const capFrame = document.getElementById('capFrame');
 
 const tabs = document.getElementById('tabs');
-const kRange = document.getElementById('k'); const kVal = document.getElementById('kVal');
-const sizeRange = document.getElementById('size'); const sizeVal = document.getElementById('sizeVal');
-const throttleRange = document.getElementById('throttle'); const throttleVal = document.getElementById('throttleVal');
-const modeChk = document.getElementById('mode');
+const algoName = document.getElementById('algoName');
+const statusEl = document.getElementById('status');
+const fpsEl = document.getElementById('fps');
+const resEl = document.getElementById('res');
+const overlayInfo = document.getElementById('overlayInfo');
 
 const swatchesEl = document.getElementById('swatches');
 const gradientEl = document.getElementById('gradient');
 const codesEl = document.getElementById('codes');
 
-/* ---------- State ---------- */
-let algo = 'kmeans';
-let K = +kRange.value;
-let procWidth = +sizeRange.value;
-let throttleN = +throttleRange.value;
-let frameCount = 0, lastT = performance.now(), fps = 0;
-let pending = false;
-let every = 0;
-let lastPalette = [];
+const freezeBtn = document.getElementById('freezeBtn');
+const freezeActions = document.getElementById('freezeActions');
+const saveCompositeBtn = document.getElementById('saveComposite');
+const savePaletteBtn = document.getElementById('savePalette');
+const copyHexBtn = document.getElementById('copyHex');
+const unfreezeBtn = document.getElementById('unfreeze');
 
-/* ---------- UI wiring ---------- */
-tabs.addEventListener('click', (e)=>{
-  const btn = e.target.closest('.tab');
-  if(!btn) return;
-  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
-  algo = btn.dataset.algo;
-  algoName.textContent = btn.textContent;
-});
-kRange.addEventListener('input', ()=>{ K = +kRange.value; kVal.textContent = K; });
-sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.textContent = procWidth+' px'; });
-throttleRange.addEventListener('input', ()=>{ throttleN = +throttleRange.value; throttleVal.textContent = throttleN; });
-modeChk.addEventListener('change', renderPalette);
-
-/* ---------- Start camera ---------- */
-(async function init(){
-  try{
-    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
-    video.srcObject = stream;
-    await video.play();
-    statusEl.textContent = 'Running…';
-    loop();
-  }catch(err){
-    statusEl.textContent = 'Camera access failed: ' + err.message;
-  }
-})();
-
-/* ---------- Main loop ---------- */
-function loop(){
-  requestAnimationFrame(loop);
-  if(video.readyState < 2) return;
-  // Downsample draw
-  const scale = procWidth / video.videoWidth;
-  const w = Math.max(2, Math.round(video.videoWidth*scale));
-  const h = Math.max(2, Math.round(video.videoHeight*scale));
-  off.width = w; off.height = h;
-  const ctx = off.getContext('2d', {willReadFrequently:true});
-  ctx.drawImage(video, 0, 0, w, h);
-  resEl.textContent = w + '×' + h;
-
-  // Throttle processing
-  every = (every+1) % throttleN;
-  if (every!==0) { tickFPS(false); return; }
-
-  if (!pending){
-    pending = true;
-    const img = ctx.getImageData(0,0,w,h);
-    worker.postMessage({pixels:img.data.buffer, width:w, height:h, algo, k:K, stride:2}, [img.data.buffer]);
-    tickFPS(true);
-  } else {
-    tickFPS(false);
-  }
-}
-
-/* ---------- FPS ---------- */
-function tickFPS(processed){
-  frameCount += processed ? 1 : 0;
-  const now = performance.now();
-  if (now - lastT >= 1000){
-    fps = frameCount; frameCount = 0; lastT = now;
-    fpsEl.textContent = fps.toString();
-  }
-}
-
-/* ---------- Worker response ---------- */
-worker.onmessage = (e)=>{
-  const buf = e.data.palette;
-  if (!buf){ pending=false; return; }
-  const arr = new Uint8Array(buf);
-  const cols = [];
-  for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
-  // Ensure exactly K colors (pad or trim)
-  while(cols.length < K) cols.push(cols[cols.length-1] || [128,128,128]);
-  lastPalette = cols.slice(0,K);
-  renderPalette();
-  pending = false;
-};
-
-/* ---------- Render palette ---------- */
-function toHex([r,g,b]){
-  return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
-}
-function renderPalette(){
-  if(!lastPalette.length){
-    swatchesEl.innerHTML = '';
-    gradientEl.setAttribute('hidden','');
-    return;
-  }
-  const hexes = lastPalette.map(toHex);
-
-  // Discrete swatches
-  swatchesEl.innerHTML = '';
-  for(const h of hexes){
-    const d = document.createElement('div');
-    d.className = 'swatch';
-    d.style.background = h;
-    swatchesEl.appendChild(d);
-  }
-  // Gradient
-  gradientEl.style.background = `linear-gradient(90deg, ${hexes.map((c,i)=>`${c} ${i/(hexes.length-1)*100}%`).join(',')})`;
-
-  const gradientMode = modeChk.checked;
-  swatchesEl.hidden = gradientMode;
-  gradientEl.hidden = !gradientMode;
-
-  // Codes
-  codesEl.innerHTML = '';
-  for(const h of hexes){
-    const c = document.createElement('div');
-    c.className='code';
-    c.textContent = h.toUpperCase();
-    codesEl.appendChild(c);
-  }
-}
-</script>
-</body>
-</html>
+const ccToggle = document.getElementById('ccToggle');
+const ccWrap = document.getElementById('ccWrap');
+const kRange = document.getElementBy
