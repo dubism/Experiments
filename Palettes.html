@@ -6,17 +6,23 @@
 <title>Live Camera Palette — Minimal</title>
 <style>
   :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --panel:#0a0a0a; --zoom:1; }
-  *{box-sizing:border-box} html,body{height:100%} body{margin:0;background:var(--bg);color:var(--ink);
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
     font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; user-select:none;}
 
-  /* Bands */
-  #videoPane{position:fixed;left:0;right:0;top:0;height:42vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
-  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-bottom:1px solid var(--line);background:#000}
-  #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:90px;border-top:1px solid var(--line);background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+  /* Three fixed bands */
+  #videoPane{position:fixed;left:0;right:0;top:0;height:42vh;display:flex;align-items:center;justify-content:center;
+    border-bottom:1px solid var(--line);background:#000;overflow:hidden}
+  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;
+    border-bottom:1px solid var(--line);background:#000}
+  #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:90px;border-top:1px solid var(--line);
+    background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
 
   /* Camera area with frozen overlay canvas */
   .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
-  video{max-height:40vh;max-width:92vw;border-radius:8px;background:#000;display:block;transform:scale(var(--zoom));transform-origin:center center}
+  video{max-height:40vh;max-width:92vw;border-radius:8px;background:#000;display:block;
+    transform:scale(var(--zoom));transform-origin:center center}
   #frozenCanvas{position:absolute;inset:0;margin:auto;display:none;max-height:40vh;max-width:92vw;border-radius:8px}
 
   /* Palette */
@@ -36,7 +42,6 @@
   .btn{padding:6px 12px;border:1px solid var(--line);border-radius:7px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.ghost{background:transparent}
   .btn.cta{background:#fff;color:#000;font-weight:800;border-color:#fff}
-  .btn[disabled]{opacity:.5;cursor:default}
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
   input[type="range"]{width:220px}
 
@@ -45,12 +50,11 @@
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
   #cc .row{justify-content:space-between}
 
-  /* Save Modal (upper layer) */
-  #modalBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);display:none;z-index:1000}
-  #modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,92vw);background:#000;border:1px solid var(--line);
-         border-radius:12px;padding:14px;display:none;z-index:1001}
-  #modal h3{margin:0 0 8px 0;font-size:16px}
-  #modal .mrow{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  /* Fullscreen Composite (after freeze) */
+  #compositeOverlay{position:fixed;inset:0;background:#000;display:none;z-index:1000;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:10px}
+  #compositeCanvas{max-width:98vw;max-height:94vh;border:1px solid var(--line);border-radius:10px;background:#000}
+  #unfreezeBtn{position:fixed;right:12px;bottom:12px}
 </style>
 </head>
 <body>
@@ -66,7 +70,7 @@
   <section id="palettePane">
     <div class="title">
       <div id="algoName" class="small">K-Means (LAB)</div>
-      <div id="status" class="small">Waiting for camera…</div>
+      <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Waiting…</span></div>
     </div>
     <div id="swatches" class="swatches"></div>
     <div id="gradient" class="gradient" hidden></div>
@@ -88,7 +92,7 @@
           <input type="range" id="throttleIdx" min="0" max="10" value="3">
           <span id="throttleVal" class="small">5</span></span>
         </div>
-        <div class="small">Tip: use HTTPS for camera/clipboard/sharing.</div>
+        <div class="small">HTTPS required for camera/clipboard.</div>
       </div>
     </div>
   </section>
@@ -101,11 +105,6 @@
         <button class="tab" data-algo="hist">Histogram</button>
         <button class="tab" data-algo="mediancut">Median-cut</button>
       </div>
-      <div class="group">
-        <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span></div>
-      </div>
-    </div>
-    <div class="row">
       <div class="group" style="margin-left:auto">
         <span class="small">Zoom</span>
         <input type="range" id="zoom" min="1" max="10" step="0.01" value="1">
@@ -116,17 +115,10 @@
     </div>
   </section>
 
-  <!-- SAVE MODAL -->
-  <div id="modalBackdrop"></div>
-  <div id="modal">
-    <h3>Frozen capture</h3>
-    <div class="mrow">
-      <button class="btn" id="saveComposite">Save composite</button>
-      <button class="btn" id="savePalette">Save palette-only</button>
-      <button class="btn" id="copyHex">Copy HEX</button>
-      <button class="btn ghost" id="unfreeze">Unfreeze</button>
-    </div>
-    <div class="small" style="margin-top:8px">On mobile, choose <strong>Save Image</strong> in the share sheet to store in your gallery.</div>
+  <!-- FULLSCREEN COMPOSITE -->
+  <div id="compositeOverlay">
+    <canvas id="compositeCanvas"></canvas>
+    <button class="btn cta" id="unfreezeBtn">UNFREEZE</button>
   </div>
 
   <canvas id="off"></canvas>
@@ -157,12 +149,13 @@ function rgb2xyz(r,g,b){r/=255;g/=255;b/=255;
   r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;
   g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;
   b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;
-  return [r*0.4124+g*0.3576+b*0.1805, r*0.2126+g*0.7152+b*0.0722, r*0.0193+g*0.1192+b*0.9505];}
+  return [r*0.4124+g*0.3576*b?0:0 + b*0.1805, r*0.2126+g*0.7152+b*0.0722, r*0.0193+g*0.1192+b*0.9505];}
 function xyz2lab(x,y,z){const Xr=0.95047,Yr=1,Zr=1.08883;
   const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;
   const fx=f(x/Xr), fy=f(y/Yr), fz=f(z/Zr);
   return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];}
-function rgb2lab(r,g,b){const [x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
+function rgb2lab(r,g,b){const x=r/255, y=g/255, z=b/255; // quick path uses full func below:
+  const rgb=[r,g,b]; const _xyz=rgb2xyz(rgb[0],rgb[1],rgb[2]); return xyz2lab(_xyz[0],_xyz[1],_xyz[2]); }
 function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db);}
 function histPalette(samples,k){const bins=new Uint32Array(512);
   for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}
@@ -190,7 +183,7 @@ function medianCutPalette(samples,k){
     return [r/n|0,g/n|0,bl/n|0];}).slice(0,k);
 }
 function kmeansLAB(samples,k,maxIter=6){
-  const pts=[]; for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2]; const [L,a,bb]=rgb2lab(r,g,b); pts.push([L,a,bb,r,g,b]);}
+  const pts=[]; for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2]; const lab=rgb2lab(r,g,b); pts.push([lab[0],lab[1],lab[2],r,g,b]);}
   const centers=[]; centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
   while(centers.length<k){ const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c)))); const sum=d2.reduce((a,b)=>a+b,0)||1;
     let r=Math.random()*sum,i=0; for(;i<d2.length-1&&(r-=d2[i])>0;i++); centers.push(pts[i].slice(0,3));}
@@ -207,14 +200,14 @@ function kmeansLAB(samples,k,maxIter=6){
   function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}
 }
 function dedupeAndSort(rgbList,minDE=10){
-  const labList=rgbList.map(([r,g,b])=>[...rgb2lab(r,g,b),r,g,b]); labList.sort((a,b)=>a[0]-b[0]);
+  const labList=rgbList.map(([r,g,b])=>{const lab=rgb2lab(r,g,b);return [lab[0],lab[1],lab[2],r,g,b];}); labList.sort((a,b)=>a[0]-b[0]);
   const kept=[]; for(const c of labList){let ok=true; for(const d of kept){ if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;} } if(ok) kept.push(c); }
   return kept.map(c=>[c[3],c[4],c[5]]);
 }
 `], {type:'application/javascript'});
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
 
-/* ---------- Elements & state ---------- */
+/* ---------- Elements ---------- */
 const video = document.getElementById('video');
 const frozenCanvas = document.getElementById('frozenCanvas');
 const off = document.getElementById('off');
@@ -230,7 +223,6 @@ const swatchesEl = document.getElementById('swatches');
 const gradientEl = document.getElementById('gradient');
 const codesEl = document.getElementById('codes');
 
-const freezeBtn = document.getElementById('freezeBtn');
 const ccToggle = document.getElementById('ccToggle');
 const ccWrap = document.getElementById('ccWrap');
 
@@ -240,25 +232,23 @@ const throttleIdx = document.getElementById('throttleIdx'); const throttleVal = 
 const modeChk = document.getElementById('mode');
 const zoomSlider = document.getElementById('zoom'); const zoomVal = document.getElementById('zoomVal');
 
-const modalBackdrop = document.getElementById('modalBackdrop');
-const modal = document.getElementById('modal');
-const saveCompositeBtn = document.getElementById('saveComposite');
-const savePaletteBtn = document.getElementById('savePalette');
-const copyHexBtn = document.getElementById('copyHex');
-const unfreezeBtn = document.getElementById('unfreeze');
+const freezeBtn = document.getElementById('freezeBtn');
 
+const compositeOverlay = document.getElementById('compositeOverlay');
+const compositeCanvas = document.getElementById('compositeCanvas');
+const unfreezeBtn = document.getElementById('unfreezeBtn');
+
+/* ---------- State ---------- */
 let algo = 'kmeans';
 let K = +kRange.value;
 let procWidth = +sizeRange.value;
-const throttleSteps = [1,2,3,5,8,13,21,34,55,89,144];
+const throttleSteps = [1,2,3,5,8,13,21,34,55,89,144]; // up to ~150
 let throttleN = throttleSteps[+throttleIdx.value];
-let gradientMode = modeChk.checked;
 let uiZoom = +zoomSlider.value;
 
 let frameCounter = 0, lastT = performance.now();
 let pending = false, every = 0;
 let running = true;
-let sharingBusy = false;
 
 let lastPalette = [];
 let lastHexes = [];
@@ -274,10 +264,10 @@ tabs.addEventListener('click', (e)=>{
 kRange.addEventListener('input', ()=>{ K = +kRange.value; kVal.textContent = K; });
 sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.textContent = procWidth+' px'; });
 throttleIdx.addEventListener('input', ()=>{ throttleN = throttleSteps[+throttleIdx.value]; throttleVal.textContent = String(throttleN); });
-modeChk.addEventListener('change', ()=>{ gradientMode = modeChk.checked; renderPalette(lastPalette); });
+modeChk.addEventListener('change', ()=> renderPalette(lastPalette) );
 
 ccToggle.addEventListener('click', ()=>{ ccWrap.style.display = ccWrap.style.display ? '' : 'block'; });
-document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ ccWrap.style.display=''; hideModal(); } });
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ ccWrap.style.display=''; if (!running) unfreeze(); } });
 
 zoomSlider.addEventListener('input', ()=>{
   uiZoom = +zoomSlider.value;
@@ -285,48 +275,9 @@ zoomSlider.addEventListener('input', ()=>{
   document.documentElement.style.setProperty('--zoom', uiZoom);
 });
 
-freezeBtn.addEventListener('click', async ()=>{
-  if (!running) return;
-  await freezeNow();
-  showModal();
-});
-
-modalBackdrop.addEventListener('click', hideModal);
-
-unfreezeBtn.addEventListener('click', ()=>{
-  hideModal();
-  unfreeze();
-});
-
-copyHexBtn.addEventListener('click', async ()=>{
-  if (!frozen) return;
-  try{
-    await navigator.clipboard.writeText(frozen.hexes.join('\n'));
-    status('HEX copied');
-  }catch(_){ status('Copy failed'); }
-});
-
-saveCompositeBtn.addEventListener('click', async ()=>{
-  if (sharingBusy) return;
-  sharingBusy = true; toggleModalButtons(true);
-  try{
-    const blob = await makeCompositeBlob();
-    await shareOrOpen(blob, 'palette_composite.png');
-  } finally {
-    toggleModalButtons(false); sharingBusy = false;
-  }
-});
-
-savePaletteBtn.addEventListener('click', async ()=>{
-  if (sharingBusy) return;
-  sharingBusy = true; toggleModalButtons(true);
-  try{
-    const blob = await makePaletteBlob();
-    await shareOrOpen(blob, 'palette_square.png');
-  } finally {
-    toggleModalButtons(false); sharingBusy = false;
-  }
-});
+freezeBtn.addEventListener('click', async ()=>{ if (running) await freezeNow(); });
+unfreezeBtn.addEventListener('click', ()=>{ unfreeze(); });
+window.addEventListener('resize', ()=>{ if (!running && frozen) renderCompositeFullscreen(); });
 
 /* ---------- Camera ---------- */
 (async function init(){
@@ -355,11 +306,8 @@ function loop(){
   off.width = w; off.height = h;
   const ctx = off.getContext('2d', {willReadFrequently:true});
 
-  // If frozen, keep drawing the frozen frame to off (stable), else draw live video
   if (running){
     ctx.drawImage(video, 0, 0, w, h);
-  } else {
-    // keep off as captured; do nothing
   }
   resEl.textContent = w + '×' + h;
 
@@ -387,160 +335,137 @@ worker.onmessage = (e)=>{
   pending = false;
 };
 
-/* ---------- Render palette ---------- */
+/* ---------- Render palette (live) ---------- */
 function toHex([r,g,b]){ return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 function renderPalette(palette){
   if(!palette || !palette.length){ swatchesEl.innerHTML = ''; gradientEl.hidden = true; return; }
   lastHexes = palette.map(toHex);
+
+  // Discrete swatches
   swatchesEl.innerHTML = '';
-  for(const h of lastHexes){ const d = document.createElement('div'); d.className = 'swatch'; d.style.background = h; swatchesEl.appendChild(d); }
+  for(const h of lastHexes){
+    const d = document.createElement('div');
+    d.className = 'swatch';
+    d.style.background = h;
+    swatchesEl.appendChild(d);
+  }
+
+  // Gradient
   gradientEl.style.background = `linear-gradient(90deg, ${lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',')})`;
-  swatchesEl.hidden = modeChk.checked; gradientEl.hidden = !modeChk.checked;
-  codesEl.innerHTML = ''; for(const h of lastHexes){ const c = document.createElement('div'); c.className='code'; c.textContent = h.toUpperCase(); codesEl.appendChild(c); }
+
+  // Toggle
+  const gradientOn = modeChk.checked;
+  swatchesEl.hidden = gradientOn;
+  gradientEl.hidden = !gradientOn;
+
+  // HEX codes (live view)
+  codesEl.innerHTML = '';
+  for(const h of lastHexes){
+    const c = document.createElement('div');
+    c.className='code';
+    c.textContent = h.toUpperCase();
+    codesEl.appendChild(c);
+  }
 }
 
-/* ---------- Freeze / Unfreeze ---------- */
+/* ---------- Freeze → Fullscreen composite ---------- */
 async function freezeNow(){
-  // capture current processing frame into capFrame
+  // capture current processing frame
   const w = off.width, h = off.height;
   capFrame.width = w; capFrame.height = h;
   const cctx = capFrame.getContext('2d'); cctx.drawImage(off, 0, 0);
 
-  // also paint the *visible* frozenCanvas to show paused camera
-  const vRect = video.getBoundingClientRect();
+  // pause video + show frozen still
   frozenCanvas.width = video.videoWidth; frozenCanvas.height = video.videoHeight;
-  const fctx = frozenCanvas.getContext('2d');
-  fctx.drawImage(video, 0, 0);
+  const fctx = frozenCanvas.getContext('2d'); fctx.drawImage(video, 0, 0);
   frozenCanvas.style.display = 'block';
   video.pause();
 
   const imageBitmap = await createImageBitmap(capFrame);
-  const palette = lastPalette.slice();
-  const hexes = palette.map(toHex);
-  frozen = {
-    imageBitmap, palette, hexes,
-    meta: {
-      algo: algoName.textContent, K, gradient: modeChk.checked ? 'On' : 'Off',
-      procWidth: procWidth, throttle: throttleN,
-      res: w+'×'+h, zoom: uiZoom.toFixed(2)+'×'
-    }
-  };
+  frozen = { imageBitmap, palette: lastPalette.slice(), hexes: lastPalette.map(toHex) };
   running = false;
   status('Frozen');
+
+  await renderCompositeFullscreen();
+  compositeOverlay.style.display = 'flex';
 }
 
 function unfreeze(){
-  frozen = null; running = true; status('Live');
+  compositeOverlay.style.display = 'none';
   frozenCanvas.style.display = 'none';
-  video.play().catch(()=>{ /* ignore */ });
+  video.play().catch(()=>{});
+  frozen = null;
+  running = true;
+  status('Live');
 }
 
-/* ---------- Modal ---------- */
-function showModal(){ modalBackdrop.style.display='block'; modal.style.display='block'; }
-function hideModal(){ modalBackdrop.style.display='none'; modal.style.display='none'; }
-function toggleModalButtons(disabled){
-  [saveCompositeBtn, savePaletteBtn, copyHexBtn, unfreezeBtn].forEach(b=>b.disabled = disabled);
-}
+/* ---------- Composite drawing ---------- */
+async function renderCompositeFullscreen(){
+  if (!frozen) return;
+  const gradientOn = modeChk.checked;
 
-/* ---------- Make images ---------- */
-async function makeCompositeBlob(){
-  if(!frozen) return null;
+  const deviceW = Math.min(window.innerWidth, 1600);
+  const camW = deviceW - 48;                       // padding margin
+  const camH = Math.round(camW * (frozen.imageBitmap.height / frozen.imageBitmap.width));
+  const paletteH = 180;                            // color area
+  const labelBand = 18;                            // tiny hex under colors
   const pad = 24, gutter = 24;
-  const camW = 800, camH = Math.round(camW * (frozen.imageBitmap.height / frozen.imageBitmap.width));
-  const sideW = 420, paletteH = 180;
-  const W = pad + camW + gutter + sideW + pad;
-  const H = pad + Math.max(camH + gutter + paletteH, 520) + pad;
 
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const width = pad + camW + pad;
+  const height = pad + camH + gutter + (paletteH + labelBand) + pad;
+
+  const c = compositeCanvas;
+  c.width = width; c.height = height;
   const g = c.getContext('2d');
 
-  g.fillStyle = '#000'; g.fillRect(0,0,W,H);
-  g.fillStyle = '#fff'; g.font = '600 18px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
-  g.fillText('Live Camera Palette — Capture', pad, pad+18);
+  // BG
+  g.fillStyle = '#000'; g.fillRect(0,0,width,height);
 
-  g.save(); g.translate(pad, pad+32);
-  const scale = Math.min(camW/frozen.imageBitmap.width, camH/frozen.imageBitmap.height);
-  const drawW = Math.round(frozen.imageBitmap.width*scale);
-  const drawH = Math.round(frozen.imageBitmap.height*scale);
-  const dx = Math.floor((camW-drawW)/2), dy = Math.floor((camH-drawH)/2);
+  // Camera
+  g.save(); g.translate(pad, pad);
   g.fillStyle = '#111'; g.fillRect(0,0,camW,camH);
-  g.drawImage(frozen.imageBitmap, dx, dy, drawW, drawH);
+  const sc = Math.min(camW/frozen.imageBitmap.width, camH/frozen.imageBitmap.height);
+  const dw = Math.round(frozen.imageBitmap.width*sc);
+  const dh = Math.round(frozen.imageBitmap.height*sc);
+  const dx = Math.floor((camW-dw)/2), dy = Math.floor((camH-dh)/2);
+  g.drawImage(frozen.imageBitmap, dx, dy, dw, dh);
   g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,camH-1);
   g.restore();
 
-  g.save(); g.translate(pad, pad+32+camH+gutter);
-  if (modeChk.checked){
+  // Palette
+  g.save(); g.translate(pad, pad+camH+gutter);
+  const N = frozen.hexes.length;
+  if (gradientOn){
     const grad = g.createLinearGradient(0,0,camW,0);
-    frozen.hexes.forEach((h,i)=> grad.addColorStop((i/(frozen.hexes.length-1)), h));
+    frozen.hexes.forEach((h,i)=> grad.addColorStop((i/(N-1)), h));
     g.fillStyle = grad; g.fillRect(0,0,camW,paletteH);
   } else {
-    const n = frozen.hexes.length, w = Math.ceil(camW/n);
-    for(let i=0;i<n;i++){ g.fillStyle = frozen.hexes[i]; g.fillRect(i*w,0,w,paletteH); }
+    const w = Math.ceil(camW/N);
+    for(let i=0;i<N;i++){ g.fillStyle = frozen.hexes[i]; g.fillRect(i*w,0,w,paletteH); }
   }
   g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,paletteH-1);
-  g.restore();
 
-  g.save(); g.translate(pad+camW+gutter, pad+32);
-  g.fillStyle = '#fff'; g.font = '600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
-  g.fillText('Settings', 0, 0);
-  g.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = '#bdbdbd';
-  const lines = [
-    `Algo: ${frozen.meta.algo}`,
-    `K: ${frozen.meta.K}`,
-    `Gradient: ${frozen.meta.gradient}`,
-    `Proc width: ${frozen.meta.procWidth}px`,
-    `Stride N: ${frozen.meta.throttle}`,
-    `Processed res: ${frozen.meta.res}`,
-    `UI Zoom: ${frozen.meta.zoom}`
-  ];
-  lines.forEach((t,i)=> g.fillText(t, 0, 22 + i*16));
-  g.fillStyle = '#fff'; g.font = '600 14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
-  g.fillText('HEX', 0, 22 + lines.length*16 + 16);
-  g.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; g.fillStyle = '#bdbdbd';
-  const startY = 22 + lines.length*16 + 36;
-  frozen.hexes.forEach((h,i)=> g.fillText(h.toUpperCase(), 0, startY + i*16));
-  g.restore();
-
-  return await new Promise(res=> c.toBlob(b=>res(b),'image/png'));
-}
-
-async function makePaletteBlob(){
-  if(!frozen) return null;
-  const S = 1024; const c = document.createElement('canvas'); c.width = S; c.height = S;
-  const g = c.getContext('2d');
-  if (modeChk.checked){
-    const grad = g.createLinearGradient(0,0,S,0);
-    frozen.hexes.forEach((h,i)=> grad.addColorStop((i/(frozen.hexes.length-1)), h));
-    g.fillStyle = grad; g.fillRect(0,0,S,S);
-  } else {
-    const n = frozen.hexes.length, w = Math.ceil(S/n);
-    for(let i=0;i<n;i++){ g.fillStyle = frozen.hexes[i]; g.fillRect(i*w,0,w,S); }
-  }
-  return await new Promise(res=> c.toBlob(b=>res(b),'image/png'));
-}
-
-/* ---------- Share / Save ---------- */
-/* Web cannot auto-save to Photos. Use Web Share (preferred) -> Save Image; fallback open tab -> long-press; fallback download. */
-async function shareOrOpen(blob, filename){
-  if (!blob) return;
-  const file = new File([blob], filename, {type:'image/png'});
-  try{
-    if (navigator.canShare && navigator.canShare({ files:[file] })){
-      await navigator.share({ files:[file], title:'Palette capture' });
-      status('Shared — choose “Save Image” to store in gallery.');
-      return;
+  // Tiny hex labels below colors
+  g.font = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  g.fillStyle = '#bdbdbd';
+  g.textAlign = 'center';
+  g.textBaseline = 'top';
+  if (gradientOn){
+    for(let i=0;i<N;i++){
+      const x = Math.round((i/(N-1)) * camW);
+      g.fillText(frozen.hexes[i].toUpperCase(), x, paletteH + 3);
     }
-  }catch(_){ /* fall through */ }
-  const url = URL.createObjectURL(blob);
-  const w = window.open(url, '_blank');
-  if (!w){
-    const a = document.createElement('a'); a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
+  } else {
+    const w = Math.ceil(camW/N);
+    for(let i=0;i<N;i++){
+      const cx = Math.round(i*w + w/2);
+      g.fillText(frozen.hexes[i].toUpperCase(), cx, paletteH + 3);
+    }
   }
-  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+  g.restore();
 }
 
-/* ---------- Helpers ---------- */
+/* ---------- Worker plumbing ---------- */
 function status(t){ statusEl.textContent = t; }
 </script>
 </body>
