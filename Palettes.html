@@ -8,28 +8,14 @@
   :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --panel:#0a0a0a; --zoom:1; }
   *{box-sizing:border-box} html,body{height:100%} body{margin:0;background:var(--bg);color:var(--ink);
     font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; user-select:none;}
-  /* Fixed panes: video top, palette bottom */
-  .pane{position:fixed;left:0;right:0}
-  #videoPane{top:0;height:48vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
-  #palettePane{bottom:0;height:48vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:1px solid var(--line);background:#000;}
-  .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden}
-  video{max-height:46vh;max-width:92vw;border-radius:8px;background:#000;display:block;transform:scale(var(--zoom));transform-origin:center center}
-  /* Top UI (now visible) */
-  .topBar{position:fixed;top:6px;left:8px;right:8px;display:flex;gap:8px;align-items:center;justify-content:space-between;z-index:1000}
-  .group{display:flex;gap:6px}
-  .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);border-radius:7px;cursor:pointer}
-  .tab.active{outline:2px solid #fff; outline-offset:1px}
-  .btn{padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:#0d0d0d;color:#fff;cursor:pointer}
-  .btn.ghost{background:transparent}
-  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
-  /* Control Center dropdown */
-  .ccWrap{position:fixed;top:44px;left:8px;right:8px;display:none;z-index:1100}
-  .cc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
-  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  label{color:#eee}
-  input[type="range"]{width:220px}
-  .hint{color:var(--muted);font-size:12px}
-  /* Palette area */
+  /* Three fixed bands so all are always visible */
+  #videoPane{position:fixed;left:0;right:0;top:0;height:42vh;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
+  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:0;border-bottom:1px solid var(--line);background:#000}
+  #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:90px;border-top:1px solid var(--line);background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+  /* Camera */
+  .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+  video{max-height:40vh;max-width:92vw;border-radius:8px;background:#000;display:block;transform:scale(var(--zoom));transform-origin:center center}
+  /* Palette */
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .swatches{flex:1;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .swatch{flex:1}
@@ -37,62 +23,35 @@
   .codes{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
   .code{padding:6px 8px;background:#0a0a0a;border:1px solid var(--line);border-radius:6px;color:var(--muted);
     font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  /* Freeze actions bar */
-  .freezeBar{position:fixed;bottom:52vh;left:50%;transform:translateX(-50%);
-    display:none;gap:8px;backdrop-filter:blur(6px);background:rgba(0,0,0,.6);border:1px solid var(--line);
-    border-radius:10px;padding:8px;z-index:1200}
-  .freezeBar .btn{white-space:nowrap}
-  /* Tiny overlays */
-  .overlay{position:fixed;right:8px;bottom:8px;color:var(--muted);font-variant-numeric:tabular-nums}
+  /* Bottom controls */
+  .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);border-radius:7px;cursor:pointer}
+  .tab.active{outline:2px solid #fff; outline-offset:1px}
+  .btn{padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:#0d0d0d;color:#fff;cursor:pointer}
+  .btn.ghost{background:transparent}
+  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
+  input[type="range"]{width:220px}
+  /* Controls Center overlay: only over lower part of palette, translucent */
+  #ccWrap{position:absolute;left:10px;right:10px;bottom:10px;display:none;z-index:10}
+  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
+  #cc .row{justify-content:space-between}
+  /* Freeze action strip lives in the bottom bar */
+  #freezeActions{display:none;gap:8px}
   /* Hidden canvas */
   canvas{display:none}
 </style>
 </head>
 <body>
-  <div class="topBar">
-    <div class="group" id="tabs">
-      <button class="tab active" data-algo="kmeans">K-Means</button>
-      <button class="tab" data-algo="hist">Histogram</button>
-      <button class="tab" data-algo="mediancut">Median-cut</button>
-    </div>
-    <div class="group">
-      <button class="btn" id="freezeBtn">Freeze</button>
-      <button class="btn ghost" id="ccToggle">Controls</button>
-      <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span></div>
-    </div>
-  </div>
-
-  <div class="ccWrap" id="ccWrap">
-    <div class="cc">
-      <div class="row"><label>Colors (K)</label><span>
-        <input type="range" id="k" min="2" max="10" value="5"><span id="kVal" class="small">5</span></span>
-      </div>
-      <div class="row"><label>Gradient mode</label>
-        <input type="checkbox" id="mode" checked>
-      </div>
-      <div class="row"><label>Processing width</label><span>
-        <input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span>
-      </div>
-      <div class="row"><label>Process every N frames</label><span>
-        <!-- exponential steps up to ~150 -->
-        <input type="range" id="throttleIdx" min="0" max="10" value="3">
-        <span id="throttleVal" class="small">5</span></span>
-      </div>
-      <div class="row"><label>Camera zoom</label><span>
-        <input type="range" id="zoom" min="1" max="3" step="0.05" value="1">
-        <span id="zoomVal" class="small">1.00×</span></span>
-      </div>
-      <div class="hint">Serve over HTTPS (GitHub Pages) for camera + clipboard.</div>
-    </div>
-  </div>
-
-  <div id="videoPane" class="pane">
+  <!-- CAMERA -->
+  <section id="videoPane">
     <div class="videoWrap">
       <video id="video" playsinline muted></video>
     </div>
-  </div>
+  </section>
 
-  <div id="palettePane" class="pane">
+  <!-- PALETTE -->
+  <section id="palettePane">
     <div class="title">
       <div id="algoName" class="small">K-Means (LAB)</div>
       <div id="status" class="small">Waiting for camera…</div>
@@ -100,16 +59,58 @@
     <div id="swatches" class="swatches"></div>
     <div id="gradient" class="gradient" hidden></div>
     <div id="codes" class="codes"></div>
-  </div>
 
-  <div id="freezeActions" class="freezeBar">
-    <button class="btn" id="saveComposite">Save composite</button>
-    <button class="btn" id="savePalette">Save palette-only</button>
-    <button class="btn" id="copyHex">Copy HEX</button>
-    <button class="btn ghost" id="unfreeze">Unfreeze</button>
-  </div>
+    <!-- Controls Center overlays the lower palette area -->
+    <div id="ccWrap">
+      <div id="cc">
+        <div class="row"><span>Colors (K)</span><span>
+          <input type="range" id="k" min="2" max="10" value="5"><span id="kVal" class="small">5</span></span>
+        </div>
+        <div class="row"><span>Gradient mode</span>
+          <input type="checkbox" id="mode" checked>
+        </div>
+        <div class="row"><span>Processing width</span><span>
+          <input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span>
+        </div>
+        <div class="row"><span>Process every N frames</span><span>
+          <input type="range" id="throttleIdx" min="0" max="10" value="3">
+          <span id="throttleVal" class="small">5</span></span>
+        </div>
+        <div class="small">HTTPS required for camera/clipboard/sharing.</div>
+      </div>
+    </div>
+  </section>
 
-  <div class="overlay small" id="overlayInfo"></div>
+  <!-- CONTROLS BAR (bottom) -->
+  <section id="controlsBar">
+    <div class="row">
+      <div class="group" id="tabs">
+        <button class="tab active" data-algo="kmeans">K-Means</button>
+        <button class="tab" data-algo="hist">Histogram</button>
+        <button class="tab" data-algo="mediancut">Median-cut</button>
+      </div>
+      <div class="group">
+        <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="group" id="freezeActions">
+        <button class="btn" id="saveComposite">Save composite</button>
+        <button class="btn" id="savePalette">Save palette-only</button>
+        <button class="btn" id="copyHex">Copy HEX</button>
+        <button class="btn ghost" id="unfreeze">Unfreeze</button>
+      </div>
+      <div class="group" id="liveActions">
+        <button class="btn" id="freezeBtn">Freeze</button>
+        <button class="btn ghost" id="ccToggle">Controls</button>
+      </div>
+      <div class="group">
+        <span class="small">Zoom</span>
+        <input type="range" id="zoom" min="1" max="10" step="0.01" value="1">
+        <span id="zoomVal" class="small">1.00×</span>
+      </div>
+    </div>
+  </section>
 
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
@@ -206,7 +207,6 @@ const algoName = document.getElementById('algoName');
 const statusEl = document.getElementById('status');
 const fpsEl = document.getElementById('fps');
 const resEl = document.getElementById('res');
-const overlayInfo = document.getElementById('overlayInfo');
 
 const swatchesEl = document.getElementById('swatches');
 const gradientEl = document.getElementById('gradient');
@@ -214,6 +214,7 @@ const codesEl = document.getElementById('codes');
 
 const freezeBtn = document.getElementById('freezeBtn');
 const freezeActions = document.getElementById('freezeActions');
+const liveActions = document.getElementById('liveActions');
 const saveCompositeBtn = document.getElementById('saveComposite');
 const savePaletteBtn = document.getElementById('savePalette');
 const copyHexBtn = document.getElementById('copyHex');
@@ -231,7 +232,7 @@ const zoomSlider = document.getElementById('zoom'); const zoomVal = document.get
 let algo = 'kmeans';
 let K = +kRange.value;
 let procWidth = +sizeRange.value;
-const throttleSteps = [1,2,3,5,8,13,21,34,55,89,144]; // exponential-ish up to ~150
+const throttleSteps = [1,2,3,5,8,13,21,34,55,89,144]; // up to ~150
 let throttleN = throttleSteps[+throttleIdx.value];
 let gradientMode = modeChk.checked;
 let uiZoom = +zoomSlider.value;
@@ -275,21 +276,31 @@ freezeBtn.addEventListener('click', async ()=>{
   if (!running) return;
   await freezeNow();
 });
+
 unfreezeBtn.addEventListener('click', ()=>{
   frozen = null;
   running = true;
   freezeActions.style.display='none';
+  liveActions.style.display='flex';
   status('Live');
 });
-saveCompositeBtn.addEventListener('click', ()=> saveComposite());
-savePaletteBtn.addEventListener('click', ()=> savePaletteOnly());
+
+saveCompositeBtn.addEventListener('click', async ()=> {
+  const blob = await makeCompositeBlob();
+  await shareOrOpen(blob, 'palette_composite.png');
+});
+
+savePaletteBtn.addEventListener('click', async ()=> {
+  const blob = await makePaletteBlob();
+  await shareOrOpen(blob, 'palette_square.png');
+});
+
 copyHexBtn.addEventListener('click', async ()=>{
   if (!frozen) return;
-  const txt = frozen.hexes.join('\n');
   try{
-    await navigator.clipboard.writeText(txt);
-    toast('HEX copied');
-  }catch(_){ toast('Copy failed'); }
+    await navigator.clipboard.writeText(frozen.hexes.join('\n'));
+    status('HEX copied');
+  }catch(_){ status('Copy failed'); }
 });
 
 /* ---------- Camera ---------- */
@@ -360,7 +371,7 @@ function renderPalette(palette){
   }
   lastHexes = palette.map(toHex);
 
-  // Discrete swatches
+  // Swatches
   swatchesEl.innerHTML = '';
   for(const h of lastHexes){
     const d = document.createElement('div');
@@ -372,8 +383,9 @@ function renderPalette(palette){
   // Gradient
   gradientEl.style.background = `linear-gradient(90deg, ${lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',')})`;
 
-  swatchesEl.hidden = gradientMode;
-  gradientEl.hidden = !gradientMode;
+  // Toggle by mode
+  swatchesEl.hidden = modeChk.checked;
+  gradientEl.hidden = !modeChk.checked;
 
   // HEX codes
   codesEl.innerHTML = '';
@@ -402,7 +414,7 @@ async function freezeNow(){
     meta: {
       algo: algoName.textContent,
       K,
-      gradient: gradientMode ? 'On' : 'Off',
+      gradient: modeChk.checked ? 'On' : 'Off',
       procWidth: procWidth,
       throttle: throttleN,
       res: w+'×'+h,
@@ -410,12 +422,14 @@ async function freezeNow(){
     }
   };
   running = false;
+  // switch bars
+  liveActions.style.display = 'none';
   freezeActions.style.display = 'flex';
   status('Frozen');
 }
 
-function saveComposite(){
-  if(!frozen) return;
+async function makeCompositeBlob(){
+  if(!frozen) return null;
   const pad = 24, gutter = 24;
   const camW = 800, camH = Math.round(camW * (frozen.imageBitmap.height / frozen.imageBitmap.width));
   const sideW = 420;
@@ -476,11 +490,11 @@ function saveComposite(){
   frozen.hexes.forEach((h,i)=> g.fillText(h.toUpperCase(), 0, startY + i*16));
   g.restore();
 
-  downloadCanvas(c, 'palette_composite.png');
+  return await new Promise(res=> c.toBlob(b=>res(b),'image/png'));
 }
 
-function savePaletteOnly(){
-  if(!frozen) return;
+async function makePaletteBlob(){
+  if(!frozen) return null;
   const S = 1024;
   const c = document.createElement('canvas'); c.width = S; c.height = S;
   const g = c.getContext('2d');
@@ -492,22 +506,36 @@ function savePaletteOnly(){
     const n = frozen.hexes.length, w = Math.ceil(S/n);
     for(let i=0;i<n;i++){ g.fillStyle = frozen.hexes[i]; g.fillRect(i*w,0,w,S); }
   }
-  downloadCanvas(c, 'palette_square.png');
+  return await new Promise(res=> c.toBlob(b=>res(b),'image/png'));
 }
 
-function downloadCanvas(canvas, filename){
-  canvas.toBlob((blob)=>{
+/* ---------- Share to gallery (best-effort) ---------- */
+/* Note: The web cannot write directly to the Photos/Gallery without user action.
+   We use the Web Share API with a PNG file; on iOS/Android the system sheet lets
+   the user pick “Save Image” which stores it in the gallery. Fallbacks provided. */
+async function shareOrOpen(blob, filename){
+  if (!blob) return;
+  try{
+    const file = new File([blob], filename, {type:'image/png'});
+    if (navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file], title: 'Palette capture' });
+      status('Shared. Use “Save Image” to store in gallery.');
+      return;
+    }
+  }catch(_){}
+  // Fallback 1: open in new tab for long-press “Save Image”
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  if (!win) {
+    // Fallback 2: download
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
-  }, 'image/png');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  }
+  setTimeout(()=> URL.revokeObjectURL(url), 2000);
 }
 
 /* ---------- Helpers ---------- */
 function status(t){ statusEl.textContent = t; }
-function toast(t){ overlayInfo.textContent = t; setTimeout(()=>{ overlayInfo.textContent=''; }, 1200); }
 </script>
 </body>
 </html>
