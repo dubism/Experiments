@@ -30,7 +30,7 @@
   .swatches{flex:1;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .swatch{flex:1}
   .gradient{flex:1;border:1px solid var(--line);border-radius:8px}
-  /* No live hex list anymore */
+  /* No live hex list */
   .codes{display:none}
 
   /* Bottom controls */
@@ -49,9 +49,12 @@
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 
-  /* Fullscreen Composite */
-  #compositeOverlay{position:fixed;inset:0;background:#000;display:none;z-index:1000;
-    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:10px}
+  /* Fullscreen Composite — fixed: hidden by default, visible when .open */
+  #compositeOverlay{
+    position:fixed; inset:0; background:#000; z-index:1000;
+    display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px; padding:10px;
+  }
+  #compositeOverlay.open{ display:flex; }
   #compositeCanvas{max-width:98vw;max-height:94vh;border:1px solid var(--line);border-radius:10px;background:#000}
   #unfreezeBtn{position:fixed;right:12px;bottom:12px}
 </style>
@@ -77,10 +80,13 @@
 
     <div id="ccWrap">
       <div id="cc">
-        <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="5"><span id="kVal" class="small">5</span></span></div>
+        <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
         <div class="row"><span>Gradient mode</span><input type="checkbox" id="mode"></div>
         <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
-        <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleIdx" min="0" max="10" value="3"><span id="throttleVal" class="small">5</span></span></div>
+        <div class="row"><span>Process every N frames</span><span>
+          <input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span>
+        </div>
+        <div class="small">Drag throttle for 1–150 (log scale).</div>
       </div>
     </div>
   </section>
@@ -116,7 +122,7 @@
 /* ---------- Worker (color algorithms) ---------- */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
-  const {pixels,width,height,algo,k,stride=2,reqId} = e.data;
+  const {pixels,width,height,algo,k,stride=2} = e.data;
   const data = new Uint8ClampedArray(pixels);
   const samples = [];
   for(let y=0;y<height;y+=stride){
@@ -131,7 +137,7 @@ self.onmessage = (e)=> {
   else palette = kmeansLAB(samples,k,6);
   palette = dedupeAndSort(palette,10);
   const out = new Uint8Array(palette.flat());
-  self.postMessage({palette: out.buffer, reqId}, [out.buffer]);
+  self.postMessage({palette: out.buffer}, [out.buffer]);
 };
 function rgb2xyz(r,g,b){
   r/=255; g/=255; b/=255;
@@ -271,7 +277,7 @@ const ccWrap = document.getElementById('ccWrap');
 
 const kRange = document.getElementById('k'); const kVal = document.getElementById('kVal');
 const sizeRange = document.getElementById('size'); const sizeVal = document.getElementById('sizeVal');
-const throttleIdx = document.getElementById('throttleIdx'); const throttleVal = document.getElementById('throttleVal');
+const throttleLog = document.getElementById('throttleLog'); const throttleVal = document.getElementById('throttleVal');
 const modeChk = document.getElementById('mode');
 const zoomSlider = document.getElementById('zoom'); const zoomVal = document.getElementById('zoomVal');
 
@@ -283,19 +289,25 @@ const unfreezeBtn = document.getElementById('unfreezeBtn');
 
 /* ---------- State ---------- */
 let algo = 'kmeans';
-let K = +kRange.value;
-let procWidth = +sizeRange.value;
-const throttleSteps = [1,2,3,5,8,13,21,34,55,89,144];
-let throttleN = throttleSteps[+throttleIdx.value];
-let uiZoom = +zoomSlider.value;
+let K = +kRange.value;               // 3
+let procWidth = +sizeRange.value;    // 240
+let throttleN = 20;                  // default
+let uiZoom = +zoomSlider.value;      // 1
 
 let frameCounter = 0, lastT = performance.now();
 let pending = false, every = 0;
-let running = true; // firm: starts live
+let running = true; // starts live
 
 let lastPalette = [];
 let lastHexes = [];
-let reqSeq = 0;
+
+/* ---------- Throttle slider: log mapping 1..150 ---------- */
+const TH_MIN = 1, TH_MAX = 150;
+function nToSlider(n){ const t = Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN); return Math.round(t*100); }
+function sliderToN(v){ const n = Math.round(TH_MIN * Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))); return Math.max(TH_MIN, Math.min(TH_MAX, n)); }
+throttleLog.value = nToSlider(throttleN);
+throttleVal.textContent = String(throttleN);
+throttleLog.addEventListener('input', ()=>{ throttleN = sliderToN(+throttleLog.value); throttleVal.textContent = String(throttleN); });
 
 /* ---------- UI ---------- */
 tabs.addEventListener('click', (e)=>{
@@ -306,21 +318,21 @@ tabs.addEventListener('click', (e)=>{
 });
 kRange.addEventListener('input', ()=>{ K = +kRange.value; kVal.textContent = K; });
 sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.textContent = procWidth+' px'; });
-throttleIdx.addEventListener('input', ()=>{ throttleN = throttleSteps[+throttleIdx.value]; throttleVal.textContent = String(throttleN); });
+modeChk.checked = false; // gradient OFF by default
 modeChk.addEventListener('change', ()=> renderPalette(lastPalette) );
 ccToggle.addEventListener('click', ()=>{ ccWrap.style.display = ccWrap.style.display ? '' : 'block'; });
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ ccWrap.style.display=''; if (!running) unfreeze(); } });
 zoomSlider.addEventListener('input', ()=>{ uiZoom = +zoomSlider.value; zoomVal.textContent = uiZoom.toFixed(2)+'×'; document.documentElement.style.setProperty('--zoom', uiZoom); });
 freezeBtn.addEventListener('click', async ()=>{ if (running) await freezeNow(); });
 unfreezeBtn.addEventListener('click', ()=>{ unfreeze(); });
-window.addEventListener('resize', ()=>{ if (!running) renderCompositeFullscreen(); });
+window.addEventListener('resize', ()=>{ if (!running) renderCompositeFullscreen(lastHexes, capFrame.width, capFrame.height, modeChk.checked); });
 
 /* ---------- Square crop (center) + zoom ---------- */
 function computeSquareCrop(){
   const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
   if (!vw || !vh) return {sx:0,sy:0,sw:0,sh:0};
   const z = Math.max(1, uiZoom);
-  const base = Math.min(vw, vh);     // square side before zoom
+  const base = Math.min(vw, vh);
   const sw = Math.round(base / z);
   const sh = sw;
   const sx = Math.floor((vw - sw)/2);
@@ -352,10 +364,10 @@ function loop(){
   const {sx,sy,sw,sh} = computeSquareCrop();
   if (!sw) return;
 
-  // downscale to processing width
+  // downscale to processing width (square)
   const scale = procWidth / sw;
   const w = Math.max(2, Math.round(sw * scale));
-  const h = w; // square
+  const h = w;
   off.width = w; off.height = h;
   const ctx = off.getContext('2d', {willReadFrequently:true});
 
@@ -368,8 +380,7 @@ function loop(){
   if (!pending){
     pending = true;
     const img = ctx.getImageData(0,0,w,h);
-    const reqId = ++reqSeq;
-    worker.postMessage({pixels:img.data.buffer, width:w, height:h, algo, k:K, stride:2, reqId}, [img.data.buffer]);
+    worker.postMessage({pixels:img.data.buffer, width:w, height:h, algo, k:K, stride:2}, [img.data.buffer]);
   }
 }
 
@@ -405,55 +416,51 @@ async function freezeNow(){
   running = false;
 
   const {sx,sy,sw,sh} = computeSquareCrop();
-  // Build processing-sized capture of that crop (square)
+  // processing-sized square capture of that crop
   const scale = procWidth / sw;
   const w = Math.max(2, Math.round(sw * scale));
   const h = w;
   capFrame.width = w; capFrame.height = h;
   capFrame.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
 
-  // Show still (square crop) under the video
+  // show still (square crop) under the video
   frozenCanvas.width = sw; frozenCanvas.height = sh;
   frozenCanvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
   frozenCanvas.style.display = 'block';
   video.pause();
 
-  // Recompute palette exactly from this frame (ensures consistency)
+  // recompute palette from this exact frame
   const imgs = capFrame.getContext('2d').getImageData(0,0,w,h);
-  const reqId = ++reqSeq;
-  const p = new Promise(res=>{
+  const cols = await new Promise(res=>{
     const handler = (ev)=>{
       const arr = new Uint8Array(ev.data.palette||[]);
-      const cols = [];
-      for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
-      while(cols.length < K) cols.push(cols[cols.length-1] || [128,128,128]);
+      const out=[]; for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
+      while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
       worker.removeEventListener('message', handler);
-      res(cols);
+      res(out.slice(0,K));
     };
     worker.addEventListener('message', handler, {once:true});
+    worker.postMessage({pixels:imgs.data.buffer, width:w, height:h, algo, k:K, stride:2}, [imgs.data.buffer]);
   });
-  worker.postMessage({pixels:imgs.data.buffer, width:w, height:h, algo, k:K, stride:2, reqId}, [imgs.data.buffer]);
-  const cols = await p;
+  const hexes = cols.map(toHex);
 
-  await renderCompositeFullscreen(cols.map(toHex), w, h);
-  compositeOverlay.style.display = 'flex';
+  await renderCompositeFullscreen(hexes, w, h, modeChk.checked);
+  compositeOverlay.classList.add('open');
 }
 
 /* ---------- Unfreeze ---------- */
 function unfreeze(){
-  compositeOverlay.style.display='none';
+  compositeOverlay.classList.remove('open');
   frozenCanvas.style.display='none';
   video.play().catch(()=>{});
   running = true;
   status('Live');
 }
 
-/* ---------- Composite (1024 width, square cam + flat palette + hex) ---------- */
-async function renderCompositeFullscreen(hexes, frameW, frameH){
-  const CAM_W = 1024;                     // required high-res width
-  const CAM_H = 1024;                     // square
-  const PALETTE_H = 240;                  // flat rectangles
-  const LABEL_BAND = 20;
+/* ---------- Composite (1024 width, square cam + palette + hex; respects Gradient toggle) ---------- */
+async function renderCompositeFullscreen(hexes, frameW, frameH, gradientOn){
+  const CAM_W = 1024, CAM_H = 1024;
+  const PALETTE_H = 240, LABEL_BAND = 20;
   const PAD = 24, GUT = 24;
 
   const width = PAD + CAM_W + PAD;
@@ -464,28 +471,35 @@ async function renderCompositeFullscreen(hexes, frameW, frameH){
 
   g.fillStyle='#000'; g.fillRect(0,0,width,height);
 
-  // Upscale the processed square frame to 1024×1024
+  // camera (upscale to 1024x1024)
   g.save(); g.translate(PAD, PAD);
   g.fillStyle='#111'; g.fillRect(0,0,CAM_W,CAM_H);
-  g.imageSmoothingEnabled = true;
-  g.imageSmoothingQuality = 'high';
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
   g.drawImage(capFrame, 0, 0, frameW, frameH, 0, 0, CAM_W, CAM_H);
   g.strokeStyle='#222'; g.strokeRect(0.5,0.5,CAM_W-1,CAM_H-1);
   g.restore();
 
-  // Flat palette (ignore gradient setting here as requested)
+  // palette (as configured)
   g.save(); g.translate(PAD, PAD+CAM_H+GUT);
   const N = hexes.length;
-  const w = Math.ceil(CAM_W/N);
-  for(let i=0;i<N;i++){ g.fillStyle = hexes[i]; g.fillRect(i*w,0,w,PALETTE_H); }
+  if (gradientOn){
+    const grad = g.createLinearGradient(0,0,CAM_W,0);
+    hexes.forEach((h,i)=> grad.addColorStop((i/(N-1)), h));
+    g.fillStyle = grad; g.fillRect(0,0,CAM_W,PALETTE_H);
+  } else {
+    const w = Math.ceil(CAM_W/N);
+    for(let i=0;i<N;i++){ g.fillStyle = hexes[i]; g.fillRect(i*w,0,w,PALETTE_H); }
+  }
   g.strokeStyle='#222'; g.strokeRect(0.5,0.5,CAM_W-1,PALETTE_H-1);
 
-  // Tiny hex labels under
+  // HEX labels under palette
   g.font='11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
   g.fillStyle='#bdbdbd'; g.textAlign='center'; g.textBaseline='top';
-  for(let i=0;i<N;i++){
-    const cx = Math.round(i*w + w/2);
-    g.fillText(hexes[i].toUpperCase(), cx, PALETTE_H + 3);
+  if (gradientOn){
+    for(let i=0;i<N;i++){ const x = Math.round((i/(N-1)) * CAM_W); g.fillText(hexes[i].toUpperCase(), x, PALETTE_H + 3); }
+  } else {
+    const w = Math.ceil(CAM_W/N);
+    for(let i=0;i<N;i++){ const cx = Math.round(i*w + w/2); g.fillText(hexes[i].toUpperCase(), cx, PALETTE_H + 3); }
   }
   g.restore();
 }
