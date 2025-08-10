@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Experiments — Auto Index</title>
+  <style>
+    :root{--bg:#0f1117;--panel:#141a25;--ink:#e7e9ee;--muted:#9aa3b2;--border:#22304a;--accent:#4cc9f0;}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    header{padding:.9rem 1rem;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+    header h1{margin:0;font-size:16px}
+    main{max-width:960px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    input[type="search"]{flex:1;min-width:220px;background:#0c111a;border:1px solid var(--border);border-radius:8px;padding:.5rem .7rem;color:var(--ink)}
+    button{appearance:none;border:1px solid var(--border);background:#182234;color:var(--ink);padding:.5rem .75rem;border-radius:8px;cursor:pointer;font-weight:600}
+    button.primary{background:#1f2b42}
+    .list{margin-top:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+    section.grp{border-top:1px solid var(--border);padding:8px 12px}
+    section.grp:first-child{border-top:0}
+    .grp h2{font-size:12px;color:var(--muted);margin:.2rem 0 .4rem 0}
+    ul{list-style:none;margin:0;padding:0}
+    li{display:flex;justify-content:space-between;gap:12px;padding:8px 6px;border-top:1px dashed #1f2a44}
+    li:first-child{border-top:0}
+    a{color:#a8c7ff;text-decoration:none}
+    a:hover{text-decoration:underline}
+    .pill{font-size:11px;color:var(--muted)}
+    footer{color:var(--muted);text-align:center;padding:16px}
+    .error{color:#ffb4b4}
+    .empty{color:#ffa94d}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🧪 Experiments — Auto Index</h1>
+  </header>
+  <main>
+    <div class="row">
+      <input id="q" type="search" placeholder="Filter by name… (e.g., cam, red, demo)" />
+      <button id="refresh" title="Re-fetch from GitHub">Refresh</button>
+      <span id="status" class="pill">Loading…</span>
+    </div>
+    <div id="list" class="list" role="navigation" aria-label="Experiments list"></div>
+    <p class="empty" id="empty" hidden>No HTML files found.</p>
+    <p class="error" id="error" hidden></p>
+  </main>
+  <footer>Auto-generated from <code>dubism/Experiments</code> (GitHub Pages). No manual edits required.</footer>
+
+<script>
+(() => {
+  const USER = "dubism";
+  const REPO = "Experiments";
+  const PAGES_BASE = `https://${USER}.github.io/${REPO}/`;
+
+  const listEl = document.getElementById('list');
+  const statusEl = document.getElementById('status');
+  const emptyEl = document.getElementById('empty');
+  const errorEl = document.getElementById('error');
+  const qEl = document.getElementById('q');
+  const refreshBtn = document.getElementById('refresh');
+
+  let allItems = []; // {path, name, href, folder}
+
+  function prettyName(filename){
+    return filename.replace(/\.html?$/i,'').replace(/[-_]+/g,' ').replace(/\b\w/g, m=>m.toUpperCase());
+  }
+  function folderOf(path){
+    const i = path.lastIndexOf('/');
+    return i === -1 ? '' : path.substring(0,i);
+  }
+  function render(items){
+    listEl.innerHTML = '';
+    emptyEl.hidden = items.length !== 0;
+    if(items.length === 0) return;
+
+    // group by folder
+    const groups = new Map();
+    for(const it of items){
+      const key = folderOf(it.path);
+      if(!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(it);
+    }
+
+    for(const [folder, arr] of [...groups.entries()].sort((a,b)=> a[0].localeCompare(b[0]))){
+      arr.sort((a,b)=> a.name.localeCompare(b.name));
+      const sec = document.createElement('section');
+      sec.className = 'grp';
+      const h2 = document.createElement('h2');
+      h2.textContent = folder ? `/${folder}` : '/';
+      sec.appendChild(h2);
+      const ul = document.createElement('ul');
+      for(const it of arr){
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = it.href;
+        a.textContent = prettyName(it.name);
+        a.target = '_self';
+        const small = document.createElement('span');
+        small.className = 'pill';
+        small.textContent = it.path;
+        li.appendChild(a);
+        li.appendChild(small);
+        ul.appendChild(li);
+      }
+      sec.appendChild(ul);
+      listEl.appendChild(sec);
+    }
+  }
+
+  function applyFilter(){
+    const q = qEl.value.trim().toLowerCase();
+    if(!q){ render(allItems); return; }
+    const filtered = allItems.filter(it => it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q));
+    render(filtered);
+  }
+
+  async function fetchTree(){
+    statusEl.textContent = 'Loading…';
+    errorEl.hidden = true;
+    emptyEl.hidden = true;
+    try{
+      // Use the Git Data API to get a recursive file tree at HEAD (default branch)
+      const url = `https://api.github.com/repos/${USER}/${REPO}/git/trees/HEAD?recursive=1`;
+      const res = await fetch(url, { headers: { 'Accept':'application/vnd.github+json' } });
+      if(!res.ok){
+        throw new Error(`GitHub API ${res.status} — rate limit?`);
+      }
+      const data = await res.json();
+      const tree = Array.isArray(data.tree) ? data.tree : [];
+
+      allItems = tree
+        .filter(n => n.type === 'blob' && /\.html?$/i.test(n.path))
+        .filter(n => !/\/?index\.html?$/i.test(n.path)) // exclude index itself
+        .map(n => ({
+          path: n.path,
+          name: n.path.split('/').pop(),
+          href: PAGES_BASE + n.path
+        }));
+
+      render(allItems);
+      statusEl.textContent = `Found ${allItems.length} file(s)`;
+      applyFilter();
+    }catch(err){
+      console.error(err);
+      statusEl.textContent = 'Error';
+      errorEl.hidden = false;
+      errorEl.textContent = 'Could not list repo files. GitHub API rate limit or network error. Try Refresh in ~1 minute.';
+    }
+  }
+
+  qEl.addEventListener('input', applyFilter);
+  refreshBtn.addEventListener('click', fetchTree);
+
+  // Kick off
+  fetchTree();
+})();
+</script>
+</body>
+</html>
