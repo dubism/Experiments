@@ -16,7 +16,7 @@
     border-bottom:1px solid var(--line);background:#000;overflow:hidden}
   #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;
     border-bottom:1px solid var(--line);background:#000}
-  #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:90px;border-top:1px solid var(--line);
+  #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:96px;border-top:1px solid var(--line);
     background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
 
   /* Camera area with frozen overlay canvas */
@@ -39,9 +39,9 @@
   .group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);border-radius:7px;cursor:pointer}
   .tab.active{outline:2px solid #fff; outline-offset:1px}
-  .btn{padding:6px 12px;border:1px solid var(--line);border-radius:7px;background:#0d0d0d;color:#fff;cursor:pointer}
+  .btn{padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.ghost{background:transparent}
-  .btn.cta{background:#fff;color:#000;font-weight:800;border-color:#fff}
+  .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:16px;padding:10px 18px}
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
   input[type="range"]{width:220px}
 
@@ -145,63 +145,119 @@ self.onmessage = (e)=> {
   const out = new Uint8Array(palette.flat());
   self.postMessage({palette: out.buffer}, [out.buffer]);
 };
-function rgb2xyz(r,g,b){r/=255;g/=255;b/=255;
+function rgb2xyz(r,g,b){
+  r/=255; g/=255; b/=255;
   r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;
   g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;
   b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;
-  return [r*0.4124+g*0.3576*b?0:0 + b*0.1805, r*0.2126+g*0.7152+b*0.0722, r*0.0193+g*0.1192+b*0.9505];}
-function xyz2lab(x,y,z){const Xr=0.95047,Yr=1,Zr=1.08883;
+  return [
+    r*0.4124 + g*0.3576 + b*0.1805,
+    r*0.2126 + g*0.7152 + b*0.0722,
+    r*0.0193 + g*0.1192 + b*0.9505
+  ];
+}
+function xyz2lab(x,y,z){
+  const Xr=0.95047,Yr=1,Zr=1.08883;
   const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;
   const fx=f(x/Xr), fy=f(y/Yr), fz=f(z/Zr);
-  return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];}
-function rgb2lab(r,g,b){const x=r/255, y=g/255, z=b/255; // quick path uses full func below:
-  const rgb=[r,g,b]; const _xyz=rgb2xyz(rgb[0],rgb[1],rgb[2]); return xyz2lab(_xyz[0],_xyz[1],_xyz[2]); }
+  return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
+}
+function rgb2lab(r,g,b){const [x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
 function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db);}
-function histPalette(samples,k){const bins=new Uint32Array(512);
-  for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}
+function histPalette(samples,k){
+  const bins=new Uint32Array(512);
+  for(let i=0;i<samples.length;i+=3){
+    const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;
+    bins[(r<<6)|(g<<3)|b]++;
+  }
   const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);
-  return idx.map(code=>{const r=(code>>6)&7,g=(code>>3)&7,b=code&7;return [r*32+16,g*32+16,b*32+16];});
+  return idx.map(code=>{
+    const r=(code>>6)&7,g=(code>>3)&7,b=code&7;
+    return [r*32+16,g*32+16,b*32+16];
+  });
 }
 function medianCutPalette(samples,k){
   const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
-  let boxes=[{colors}]; const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];
-    for(const c of b.colors){ if(c[0]<b.r[0])b.r[0]=c[0]; if(c[0]>b.r[1])b.r[1]=c[0];
+  let boxes=[{colors}];
+  const bounds=b=>{
+    b.r=[255,0]; b.g=[255,0]; b.b=[255,0];
+    for(const c of b.colors){
+      if(c[0]<b.r[0])b.r[0]=c[0]; if(c[0]>b.r[1])b.r[1]=c[0];
       if(c[1]<b.g[0])b.g[0]=c[1]; if(c[1]>b.g[1])b.g[1]=c[1];
-      if(c[2]<b.b[0])b.b[0]=c[2]; if(c[2]>b.b[1])b.b[1]=c[2];}};
+      if(c[2]<b.b[0])b.b[0]=c[2]; if(c[2]>b.b[1])b.b[1]=c[2];
+    }
+  };
   boxes.forEach(bounds);
   const range=b=>Math.max(b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]);
-  const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]]; return rs.indexOf(Math.max(...rs));};
+  const axis=b=>{
+    const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];
+    return rs.indexOf(Math.max(...rs));
+  };
   while(boxes.length<k){
     boxes.sort((A,B)=>range(B)-range(A));
     const big=boxes.shift(); if(!big||big.colors.length<=1) break;
-    const ax=axis(big); big.colors.sort((a,b)=>a[ax]-b[ax]); const mid=big.colors.length>>1;
+    const ax=axis(big);
+    big.colors.sort((a,b)=>a[ax]-b[ax]);
+    const mid=big.colors.length>>1;
     const left={colors:big.colors.slice(0,mid)}, right={colors:big.colors.slice(mid)};
     [left,right].forEach(bounds); boxes.push(left,right);
   }
-  return boxes.map(b=>{let r=0,g=0,bl=0,n=b.colors.length||1;
+  return boxes.map(b=>{
+    let r=0,g=0,bl=0,n=b.colors.length||1;
     for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}
-    return [r/n|0,g/n|0,bl/n|0];}).slice(0,k);
+    return [r/n|0,g/n|0,bl/n|0];
+  }).slice(0,k);
 }
 function kmeansLAB(samples,k,maxIter=6){
-  const pts=[]; for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2]; const lab=rgb2lab(r,g,b); pts.push([lab[0],lab[1],lab[2],r,g,b]);}
+  const pts=[];
+  for(let i=0;i<samples.length;i+=3){
+    const r=samples[i],g=samples[i+1],b=samples[i+2];
+    const [L,a,bb]=rgb2lab(r,g,b);
+    pts.push([L,a,bb,r,g,b]);
+  }
   const centers=[]; centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
-  while(centers.length<k){ const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c)))); const sum=d2.reduce((a,b)=>a+b,0)||1;
-    let r=Math.random()*sum,i=0; for(;i<d2.length-1&&(r-=d2[i])>0;i++); centers.push(pts[i].slice(0,3));}
+  while(centers.length<k){
+    const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));
+    const sum=d2.reduce((a,b)=>a+b,0)||1;
+    let r=Math.random()*sum,i=0; for(;i<d2.length-1&&(r-=d2[i])>0;i++); centers.push(pts[i].slice(0,3));
+  }
   const labels=new Uint16Array(pts.length);
   for(let it=0;it<maxIter;it++){
-    for(let i=0;i<pts.length;i++){let best=0,bd=1e9; for(let c=0;c<centers.length;c++){const d=d2lab(pts[i],centers[c]); if(d<bd){bd=d;best=c;}} labels[i]=best;}
-    const sums=Array.from({length:k},()=>[0,0,0,0]); for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i]; sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++; }
-    for(let c=0;c<k;c++) if(sums[c][3]>0){ centers[c][0]=sums[c][0]/sums[c][3]; centers[c][1]=sums[c][1]/sums[c][3]; centers[c][2]=sums[c][2]/sums[c][3]; }
+    for(let i=0;i<pts.length;i++){
+      let best=0,bd=1e9;
+      for(let c=0;c<centers.length;c++){
+        const d=d2lab(pts[i],centers[c]); if(d<bd){bd=d;best=c;}
+      }
+      labels[i]=best;
+    }
+    const sums=Array.from({length:k},()=>[0,0,0,0]);
+    for(let i=0;i<pts.length;i++){
+      const c=labels[i],p=pts[i];
+      sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;
+    }
+    for(let c=0;c<k;c++) if(sums[c][3]>0){
+      centers[c][0]=sums[c][0]/sums[c][3];
+      centers[c][1]=sums[c][1]/sums[c][3];
+      centers[c][2]=sums[c][2]/sums[c][3];
+    }
   }
   const acc=Array.from({length:k},()=>[0,0,0,0]);
-  for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i]; acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}
-  const out=[]; for(let c=0;c<k;c++) if(acc[c][3]>0) out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);
-  while(out.length<k) out.push(out[out.length-1]||[128,128,128]); return out.slice(0,k);
+  for(let i=0;i<pts.length;i++){
+    const c=labels[i],p=pts[i];
+    acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;
+  }
+  const out=[]; for(let c=0;c<k;c++) if(acc[c][3]>0)
+    out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);
+  while(out.length<k) out.push(out[out.length-1]||[128,128,128]);
+  return out.slice(0,k);
   function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}
 }
 function dedupeAndSort(rgbList,minDE=10){
-  const labList=rgbList.map(([r,g,b])=>{const lab=rgb2lab(r,g,b);return [lab[0],lab[1],lab[2],r,g,b];}); labList.sort((a,b)=>a[0]-b[0]);
-  const kept=[]; for(const c of labList){let ok=true; for(const d of kept){ if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;} } if(ok) kept.push(c); }
+  const labList=rgbList.map(([r,g,b])=>[...rgb2lab(r,g,b),r,g,b]); labList.sort((a,b)=>a[0]-b[0]);
+  const kept=[]; for(const c of labList){
+    let ok=true; for(const d of kept){ if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;} }
+    if(ok) kept.push(c);
+  }
   return kept.map(c=>[c[3],c[4],c[5]]);
 }
 `], {type:'application/javascript'});
@@ -248,7 +304,7 @@ let uiZoom = +zoomSlider.value;
 
 let frameCounter = 0, lastT = performance.now();
 let pending = false, every = 0;
-let running = true;
+let running = true; // default: unfrozen
 
 let lastPalette = [];
 let lastHexes = [];
@@ -279,6 +335,19 @@ freezeBtn.addEventListener('click', async ()=>{ if (running) await freezeNow(); 
 unfreezeBtn.addEventListener('click', ()=>{ unfreeze(); });
 window.addEventListener('resize', ()=>{ if (!running && frozen) renderCompositeFullscreen(); });
 
+/* ---------- Helpers: compute zoom crop ---------- */
+function computeCrop(){
+  const vw = video.videoWidth || 0;
+  const vh = video.videoHeight || 0;
+  if (vw===0 || vh===0) return {sx:0,sy:0,sw:0,sh:0};
+  const z = Math.max(1, uiZoom);
+  const sw = Math.round(vw / z);
+  const sh = Math.round(vh / z);
+  const sx = Math.floor((vw - sw)/2);
+  const sy = Math.floor((vh - sh)/2);
+  return {sx, sy, sw, sh};
+}
+
 /* ---------- Camera ---------- */
 (async function init(){
   try{
@@ -300,14 +369,21 @@ function loop(){
   const now = performance.now();
   if (now - lastT >= 1000){ fpsEl.textContent = String(frameCounter); frameCounter = 0; lastT = now; }
 
-  const scale = procWidth / video.videoWidth;
-  const w = Math.max(2, Math.round(video.videoWidth*scale));
-  const h = Math.max(2, Math.round(video.videoHeight*scale));
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+
+  // Processing canvas size (downscaled)
+  const scale = procWidth / (vw / Math.max(1, uiZoom)); // reflect zoom crop width
+  const crop = computeCrop();
+
+  const w = Math.max(2, Math.round((crop.sw) * scale));
+  const h = Math.max(2, Math.round((crop.sh) * scale));
   off.width = w; off.height = h;
   const ctx = off.getContext('2d', {willReadFrequently:true});
 
   if (running){
-    ctx.drawImage(video, 0, 0, w, h);
+    // Draw ONLY the cropped zoomed area into processing canvas
+    ctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, w, h);
   }
   resEl.textContent = w + '×' + h;
 
@@ -370,14 +446,18 @@ function renderPalette(palette){
 
 /* ---------- Freeze → Fullscreen composite ---------- */
 async function freezeNow(){
-  // capture current processing frame
-  const w = off.width, h = off.height;
-  capFrame.width = w; capFrame.height = h;
+  // Use zoom crop for capture
+  const crop = computeCrop();
+  const w = Math.max(2, Math.round(procWidth)); // processing width target (not used here directly)
+  // Capture the zoomed crop at processing scale using off (already cropped), just copy it:
+  const offW = off.width, offH = off.height;
+  capFrame.width = offW; capFrame.height = offH;
   const cctx = capFrame.getContext('2d'); cctx.drawImage(off, 0, 0);
 
-  // pause video + show frozen still
-  frozenCanvas.width = video.videoWidth; frozenCanvas.height = video.videoHeight;
-  const fctx = frozenCanvas.getContext('2d'); fctx.drawImage(video, 0, 0);
+  // Pause video + show frozen still (also cropped)
+  frozenCanvas.width = crop.sw; frozenCanvas.height = crop.sh;
+  const fctx = frozenCanvas.getContext('2d');
+  fctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.sw, crop.sh);
   frozenCanvas.style.display = 'block';
   video.pause();
 
@@ -421,7 +501,7 @@ async function renderCompositeFullscreen(){
   // BG
   g.fillStyle = '#000'; g.fillRect(0,0,width,height);
 
-  // Camera
+  // Camera (zoom-cropped frame already in frozen.imageBitmap)
   g.save(); g.translate(pad, pad);
   g.fillStyle = '#111'; g.fillRect(0,0,camW,camH);
   const sc = Math.min(camW/frozen.imageBitmap.width, camH/frozen.imageBitmap.height);
@@ -445,7 +525,7 @@ async function renderCompositeFullscreen(){
   }
   g.strokeStyle = '#222'; g.strokeRect(0.5,0.5,camW-1,paletteH-1);
 
-  // Tiny hex labels below colors
+  // Tiny hex labels under palette (like requested)
   g.font = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
   g.fillStyle = '#bdbdbd';
   g.textAlign = 'center';
@@ -465,7 +545,7 @@ async function renderCompositeFullscreen(){
   g.restore();
 }
 
-/* ---------- Worker plumbing ---------- */
+/* ---------- Status ---------- */
 function status(t){ statusEl.textContent = t; }
 </script>
 </body>
