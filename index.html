@@ -5,51 +5,153 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Experiments — Auto Index</title>
 <style>
-  body{margin:0;background:#0f1117;color:#e7e9ee;font:14px system-ui,sans-serif}
-  header{padding:.9rem 1rem;background:#141a25;border-bottom:1px solid #22304a;position:sticky;top:0}
-  h1{margin:0;font-size:16px}
-  main{max-width:960px;margin:auto;padding:16px}
-  input[type=search]{flex:1;min-width:220px;background:#0c111a;border:1px solid #22304a;
-    border-radius:8px;padding:.5rem .7rem;color:#e7e9ee}
-  button{border:1px solid #22304a;background:#182234;color:#e7e9ee;
-    padding:.5rem .75rem;border-radius:8px;cursor:pointer;font-weight:600}
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .list{margin-top:12px;border:1px solid #22304a;border-radius:10px;overflow:hidden}
-  section.grp{border-top:1px solid #22304a;padding:8px 12px}
-  section.grp:first-child{border-top:0}
-  h2{font-size:12px;color:#9aa3b2;margin:.2rem 0 .4rem}
-  ul{list-style:none;margin:0;padding:0}
-  li{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:12px;
-    padding:8px 6px;border-top:1px dashed #1f2a44}
-  li:first-child{border-top:0}
-  a{color:#a8c7ff;text-decoration:none}
-  a:hover{text-decoration:underline}
-  .pill{font-size:11px;color:#9aa3b2}
-  .ago{font-size:11px;padding:.1rem .4rem;border-radius:999px;border:1px solid #22304a}
-  .green{color:#22da6e;border-color:rgba(34,218,110,.35)}
-  .yellow{color:#ffd166;border-color:rgba(255,209,102,.35)}
-  .orange{color:#ff9f6e;border-color:rgba(255,159,110,.35)}
-  .red{color:#ff6b6b;border-color:rgba(255,107,107,.35)}
-  footer{color:#9aa3b2;text-align:center;padding:16px}
-  .status{font-size:11px;color:#9aa3b2}
+  :root{
+    --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb; --line:#1a1d24; --card:#0f1117; --card2:#10131a;
+    --ok:#27ff88; --ok-ink:#082012;
+    --mid:#4aa3ff; --mid-ink:#081422;
+    --old:#b7bdc7; --old-ink:#0f1013;
+    --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 0 0 1px #1a2130, 0 8px 24px rgba(0,0,0,.45);
+    --shadow-hover: 0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 18px 36px rgba(0,0,0,.6);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{position:sticky;top:0;z-index:10;background:linear-gradient(#10131a,#0c0f15);border-bottom:1px solid #1c2537}
+  .wrap{max-width:1100px;margin:0 auto;padding:14px 16px}
+  h1{margin:0;font-size:16px;letter-spacing:.3px}
+  main{max-width:1100px;margin:0 auto;padding:18px 16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=search]{
+    flex:1;min-width:240px;background:#0b0f16;border:1px solid #1e293e;border-radius:12px;
+    padding:.65rem .85rem;color:var(--ink);outline:none;
+    transition:border-color .2s ease, background .2s ease, box-shadow .25s ease;
+    box-shadow:0 0 0 0 rgba(74,163,255,.0);
+  }
+  input[type=search]::placeholder{color:#8e97a6}
+  input[type=search]:focus{border-color:#2b3f65;background:#0d1220;box-shadow:0 0 0 6px rgba(74,163,255,.06)}
+  button{
+    border:1px solid #25324a;background:#131a26;color:var(--ink);
+    padding:.6rem .85rem;border-radius:12px;cursor:pointer;font-weight:650;letter-spacing:.2px;
+    transition:transform .15s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+    box-shadow:var(--shadow);
+  }
+  button:hover{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#31456b;background:#141e2c}
+  .status{font-size:12px;color:var(--muted)}
+
+  /* Section (folder) headers */
+  .grp{margin-top:18px}
+  .grp h2{
+    display:flex;align-items:center;gap:8px;
+    font-size:12px;color:#9aa3b2;margin:8px 2px 10px;
+    letter-spacing:.25px;text-transform:none
+  }
+  .grp h2 .folder-ic{opacity:.8}
+  .cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+    gap:12px;
+  }
+
+  /* Card (full-clickable anchor) */
+  .card{
+    display:block; text-decoration:none; color:inherit;
+    background:linear-gradient(180deg,var(--card),var(--card2));
+    border:1px solid #1a2130; border-radius:var(--radius);
+    padding:12px 12px 10px;
+    box-shadow:var(--shadow);
+    transition: transform .18s ease, box-shadow .22s ease, border-color .2s ease, background .25s ease;
+    position:relative; overflow:hidden;
+  }
+  .card:before{ /* subtle corner vignette */
+    content:""; position:absolute; inset:-1px; border-radius:var(--radius);
+    background:radial-gradient(120px 80px at 0% 0%, rgba(74,163,255,.08), transparent 60%),
+               radial-gradient(160px 100px at 100% 0%, rgba(39,255,136,.05), transparent 60%);
+    pointer-events:none;
+  }
+  .card:hover, .card:focus-visible{
+    transform:translateY(-2px);
+    box-shadow:var(--shadow-hover);
+    border-color:#2a3755;
+    outline:none;
+  }
+
+  .card .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .ic{
+    width:22px;height:22px;flex:0 0 22px;display:grid;place-items:center;
+    background:#0c1119;border:1px solid #1f2a42;border-radius:9px;
+  }
+  .name{
+    font-weight:700;letter-spacing:.2px;line-height:1.25;font-size:14px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .path{
+    font-size:11px;color:#97a1b1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+
+  .meta{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px
+  }
+  .ago{
+    font-size:11px; font-weight:700; letter-spacing:.3px;
+    padding:.25rem .5rem; border-radius:999px;
+    display:inline-flex; align-items:center; gap:6px;
+    transition: background .25s ease, color .25s ease, border-color .25s ease;
+    border:1px solid transparent;
+  }
+  .ago.ok{ background:color-mix(in oklab, var(--ok) 14%, transparent); color:var(--ok); border-color:color-mix(in oklab,var(--ok) 25%, transparent)}
+  .ago.mid{ background:color-mix(in oklab, var(--mid) 14%, transparent); color:var(--mid); border-color:color-mix(in oklab,var(--mid) 22%, transparent)}
+  .ago.old{ background:color-mix(in oklab, var(--old) 16%, transparent); color:var(--old); border-color:color-mix(in oklab,var(--old) 28%, transparent)}
+  .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.9}
+
+  .go{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:11px;color:#cfd5df;opacity:.85
+  }
+  .go svg{opacity:.9;transition:transform .18s ease}
+  .card:hover .go svg{transform:translateX(2px)}
+
+  /* Footer */
+  footer{color:#9aa3b2;text-align:center;padding:18px 16px;border-top:1px solid #161b25}
+
+  /* Motion preference */
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important}
+  }
 </style>
 </head>
 <body>
-<header><h1>🧪 Experiments — Auto Index</h1></header>
+<header>
+  <div class="wrap">
+    <h1>🧪 Experiments — Auto Index</h1>
+    <div class="row" style="margin-top:10px">
+      <input id="q" type="search" placeholder="Filter by name or path…">
+      <button id="refresh" aria-label="Refresh list">
+        <span style="display:inline-flex;gap:8px;align-items:center">
+          <!-- refresh icon -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M20 4v6h-6" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Refresh
+        </span>
+      </button>
+      <span id="status" class="status">Loading…</span>
+    </div>
+  </div>
+</header>
+
 <main>
-<div class="row">
-  <input id="q" type="search" placeholder="Filter by name…">
-  <button id="refresh">Refresh</button>
-  <span id="status" class="status">Loading…</span>
-</div>
-<div id="list" class="list"></div>
+  <div id="list"></div>
 </main>
+
 <footer>Generated from <code>dubism/Experiments</code> via GitHub API</footer>
 
 <script>
 const USER = "dubism";
 const REPO = "Experiments";
 const BASE = `https://${USER}.github.io/${REPO}/`;
+
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('list');
 const qEl = document.getElementById('q');
@@ -59,56 +161,108 @@ qEl.oninput = applyFilter;
 let allItems = [];
 
 function folderOf(path){let i=path.lastIndexOf('/');return i===-1?"":path.slice(0,i);}
+function fileIcon(){return `
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.3" />
+    <path d="M13 3v5h5" stroke="#9fb3d6" stroke-width="1.3"/>
+  </svg>`;}
+function folderIcon(){return `
+  <svg class="folder-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3 8h7l2 2h9v9H3z" stroke="#8ea2c6" stroke-width="1.3"/>
+  </svg>`;}
+function arrowIcon(){return `
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M7 17l7-7M10 7h7v7" stroke="#cdd7e6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;}
+
 function prettyName(name){return name.replace(/\.html?$/i,'').replace(/[-_]+/g,' ')
   .replace(/\b\w/g,m=>m.toUpperCase());}
 function isoLocal(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
 function timeAgo(d){
-  let diff = (Date.now()-d.getTime())/1000;
-  if(diff<60) return {t:`${Math.floor(diff)}s ago`,c:'green'};
-  diff/=60; if(diff<60) return {t:`${Math.floor(diff)}m ago`,c: diff<10?'green':'yellow'};
-  diff/=60; if(diff<24) return {t:`${Math.floor(diff)}h ago`,c: diff<6?'yellow':'orange'};
-  diff/=24; if(diff<30) return {t:`${Math.floor(diff)}d ago`,c: diff<7?'orange':'red'};
-  diff/=30; if(diff<12) return {t:`${Math.floor(diff)}mo ago`,c:'red'};
-  return {t:`${Math.floor(diff/12)}y ago`,c:'red'};
+  let diff=(Date.now()-d.getTime())/1000;
+  if(diff<60) return {t:`${Math.floor(diff)}s ago`,c:'ok'};
+  diff/=60; if(diff<60) return {t:`${Math.floor(diff)}m ago`,c: diff<20?'ok':'mid'};
+  diff/=60; if(diff<24) return {t:`${Math.floor(diff)}h ago`,c:'mid'};
+  diff/=24; if(diff<30) return {t:`${Math.floor(diff)}d ago`,c:'old'};
+  diff/=30; if(diff<12) return {t:`${Math.floor(diff)}mo ago`,c:'old'};
+  return {t:`${Math.floor(diff/12)}y ago`,c:'old'};
 }
 
 function render(items){
   listEl.innerHTML="";
   const groups=new Map();
   items.forEach(it=>{
-    let key=folderOf(it.path);
+    const key=folderOf(it.path);
     if(!groups.has(key)) groups.set(key,[]);
     groups.get(key).push(it);
   });
+
   [...groups.entries()].sort().forEach(([folder,arr])=>{
     arr.sort((a,b)=>a.name.localeCompare(b.name));
-    const sec=document.createElement('section');
-    sec.className='grp';
+
+    const section=document.createElement('section');
+    section.className='grp';
+
     const h2=document.createElement('h2');
-    h2.textContent=folder?`/${folder}`:"/";
-    sec.appendChild(h2);
-    const ul=document.createElement('ul');
+    h2.innerHTML = `${folderIcon()} ${folder?`/${folder}`:"/"}`
+    section.appendChild(h2);
+
+    const grid=document.createElement('div');
+    grid.className='cards';
+
     arr.forEach(it=>{
-      const li=document.createElement('li');
       const a=document.createElement('a');
-      a.href=it.href; a.textContent=prettyName(it.name);
-      const meta=document.createElement('span');
-      meta.className='pill'; meta.textContent=it.path;
+      a.className='card';
+      a.href=it.href;
+
+      const top=document.createElement('div');
+      top.className='top';
+
+      const ic=document.createElement('div');
+      ic.className='ic';
+      ic.innerHTML=fileIcon();
+
+      const textWrap=document.createElement('div');
+      const nm=document.createElement('div');
+      nm.className='name';
+      nm.textContent=prettyName(it.name);
+
+      const pt=document.createElement('div');
+      pt.className='path';
+      pt.textContent=it.path;
+
+      textWrap.append(nm,pt);
+      top.append(ic,textWrap);
+
+      const meta=document.createElement('div');
+      meta.className='meta';
+
       const when=document.createElement('span');
       when.className='ago';
+      when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
+
       if(it.updatedAt){
         const d=new Date(it.updatedAt);
         const ag=timeAgo(d);
-        when.textContent=ag.t; when.classList.add(ag.c);
+        when.classList.add(ag.c);
+        when.querySelector('.t').textContent = ag.t;
         when.title=`Last updated: ${isoLocal(d)}`;
-      } else {
-        when.textContent="—";
+      }else{
+        when.classList.add('old');
       }
-      li.append(a,meta,when);
-      ul.appendChild(li);
+
+      const go=document.createElement('span');
+      go.className='go';
+      go.innerHTML=`Open ${arrowIcon()}`;
+
+      meta.append(when,go);
+
+      a.append(top,meta);
+      grid.appendChild(a);
     });
-    sec.appendChild(ul);
-    listEl.appendChild(sec);
+
+    section.appendChild(grid);
+    listEl.appendChild(section);
   });
 }
 
@@ -123,7 +277,8 @@ async function fetchTree(){
     const r=await fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/HEAD?recursive=1`);
     if(!r.ok) throw new Error();
     const data=await r.json();
-    allItems=data.tree.filter(n=>n.type==="blob" && /\.html?$/i.test(n.path) && !/index\.html?$/i.test(n.path))
+    allItems=data.tree
+      .filter(n=>n.type==="blob" && /\.html?$/i.test(n.path) && !/index\.html?$/i.test(n.path))
       .map(n=>({path:n.path,name:n.path.split('/').pop(),href:BASE+n.path,updatedAt:null}));
     render(allItems);
     statusEl.textContent=`Found ${allItems.length} file(s), fetching dates…`;
@@ -136,7 +291,7 @@ async function fetchTree(){
 }
 
 async function fetchDates(){
-  let i=0, max=4; // concurrency
+  let i=0, max=4; // concurrency unchanged
   async function worker(){
     while(i<allItems.length){
       const idx=i++;
