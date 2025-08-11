@@ -7,7 +7,8 @@
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
-    --controlsH:92px; /* JS updates */
+    --controlsH:120px;          /* JS updates */
+    --ctaW:clamp(220px,60vw,320px);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -21,40 +22,47 @@
     padding:10px 12px calc(14px + var(--controlsH) + env(safe-area-inset-bottom));
     background:#000;border-bottom:1px solid var(--line)
   }
+
+  /* Controls bar: 2-row grid; Controls spans both rows on the right */
   #controlsBar{
-    position:fixed;left:0;right:0;bottom:0;
-    border-top:1px solid var(--line);background:#000;
+    position:fixed;left:0;right:0;bottom:0;background:#000;border-top:1px solid var(--line);
     padding:10px 12px calc(8px + env(safe-area-inset-bottom));
   }
+  #bar{
+    display:grid;grid-template-columns: 1fr auto;grid-template-rows:auto auto;gap:10px 12px;align-items:center
+  }
+  /* Row/col placement */
+  .tabs{grid-column:1;grid-row:1;display:flex;gap:8px;flex-wrap:wrap}
+  .zoomArea{grid-column:1;grid-row:2}
+  #controlsBtn{grid-column:2;grid-row:1 / span 2;align-self:stretch;display:flex;align-items:center;justify-content:center}
 
   /* Camera */
   .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
   video{max-height:40vh;max-width:92vw;border-radius:12px;background:#000;display:block;transform:scale(var(--zoom));transform-origin:center}
   #frozenCanvas{position:absolute;inset:0;margin:auto;display:none;max-height:40vh;max-width:92vw;border-radius:12px}
 
-  /* Palette title */
+  /* Palette */
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
-
-  /* Palette containers (responsive height via JS) */
   .stack{display:flex;flex-direction:column;gap:10px;min-height:0;flex:1}
   .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px}
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
 
-  /* Control Center overlay (lifted above bottom bar) */
-  #ccWrap{position:absolute;left:12px;right:12px;bottom:calc(12px + var(--controlsH) + env(safe-area-inset-bottom));display:none;z-index:10}
-  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
-  #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
-
-  /* Bottom single row: tabs | zoom | controls + FREEZE */
-  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .tabs{display:flex;gap:8px;flex-wrap:wrap}
-  .flex{flex:1 1 220px;min-width:160px}
-
+  /* Buttons */
   .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer;white-space:nowrap}
   .tab.active{outline:2px solid #fff;outline-offset:1px}
+  .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
+  .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
+  /* Wide, centered FREEZE */
+  #freezeBtn{grid-column:1;grid-row:2;justify-self:center;width:var(--ctaW);padding:14px 22px}
+  /* Controls button with chevron */
+  #controlsBtn{position:relative;padding:14px 22px;border-radius:14px}
+  #controlsBtn::after{
+    content:""; width:10px; height:10px; border-right:2px solid #aaa; border-bottom:2px solid #aaa;
+    transform:rotate(-45deg); display:block; position:absolute; right:16px;
+  }
+  #controlsBtn.open::after{ transform:rotate(135deg); } /* point up when open */
 
   /* Zoom: thick with – / + */
   .zoomWrap{display:flex;align-items:center;gap:10px;width:100%}
@@ -65,14 +73,18 @@
   input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border:none;border-radius:50%;background:#fff;cursor:pointer}
   input[type="range"].zoom::-moz-range-track{height:14px;border-radius:999px;background:#2b2b2b}
 
-  .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
-  .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px;padding:14px 22px}
+  /* Control Center overlay (lifted above bottom bar) */
+  #ccWrap{position:absolute;left:12px;right:12px;bottom:calc(12px + var(--controlsH) + env(safe-area-inset-bottom));display:none;z-index:10}
+  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
+  #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
 
   /* Composite overlay */
-  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:10px}
+  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:10px}
   #compositeOverlay.open{display:flex}
-  #compositeCanvas{max-width:98vw;max-height:94vh;background:#000;border:none}
-  #unfreezeBtn{position:fixed;right:12px;bottom:12px}
+  #compositeCanvas{max-width:98vw;max-height:86vh;background:#000;border:none}
+  /* Centered UNFREEZE with same width as FREEZE */
+  #unfreezeBtn{width:var(--ctaW);align-self:center}
 </style>
 </head>
 <body>
@@ -95,7 +107,7 @@
       <div id="gradient" class="gradient" hidden></div>
     </div>
 
-    <!-- Controls overlay -->
+    <!-- Control center -->
     <div id="ccWrap">
       <div id="cc">
         <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
@@ -109,16 +121,16 @@
     </div>
   </section>
 
-  <!-- CONTROLS BAR: tabs | zoom | controls + FREEZE -->
+  <!-- CONTROLS BAR (2 rows) -->
   <section id="controlsBar">
-    <div class="bar" id="bar">
+    <div id="bar">
       <div class="tabs" id="tabs">
         <button class="tab active" data-algo="kmeans">K-Means</button>
         <button class="tab" data-algo="hist">Histogram</button>
         <button class="tab" data-algo="mediancut">Median-cut</button>
       </div>
 
-      <div class="flex">
+      <div class="zoomArea">
         <div class="zoomWrap">
           <button class="zbtn" id="zoomMinus" aria-label="Zoom out">−</button>
           <input type="range" id="zoom" class="zoom" min="1" max="10" step="0.01" value="1">
@@ -126,7 +138,7 @@
         </div>
       </div>
 
-      <button class="btn" id="ccToggle">Controls</button>
+      <button class="btn" id="controlsBtn">Controls</button>
       <button class="btn cta" id="freezeBtn">FREEZE</button>
     </div>
   </section>
@@ -142,9 +154,9 @@
 
 <script>
 /* ---------- Measure bottom height for safe padding ---------- */
-const controlsBar = document.getElementById('bar');
+const bar = document.getElementById('bar');
 function updateControlsH(){
-  const h = controlsBar.getBoundingClientRect().height;
+  const h = bar.getBoundingClientRect().height;
   document.documentElement.style.setProperty('--controlsH', Math.round(h) + 'px');
 }
 addEventListener('load', updateControlsH);
@@ -304,9 +316,8 @@ const resEl = document.getElementById('res');
 const swatchesEl = document.getElementById('swatches');
 const gradientEl = document.getElementById('gradient');
 
-const ccToggle = document.getElementById('ccToggle');
+const controlsBtn = document.getElementById('controlsBtn');
 const ccWrap = document.getElementById('ccWrap');
-
 const kRange = document.getElementById('k'); const kVal = document.getElementById('kVal');
 const sizeRange = document.getElementById('size'); const sizeVal = document.getElementById('sizeVal');
 const throttleLog = document.getElementById('throttleLog'); const throttleVal = document.getElementById('throttleVal');
@@ -340,6 +351,8 @@ let lastHexes = [];
 const TH_MIN=1, TH_MAX=150;
 function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100); }
 function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN * Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
+
+/* ---------- UI ---------- */
 throttleLog.value = nToSlider(throttleN);
 throttleVal.textContent = String(throttleN);
 throttleLog.addEventListener('input', ()=>{ throttleN = sliderToN(+throttleLog.value); throttleVal.textContent = String(throttleN); });
@@ -354,18 +367,36 @@ sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.
 rectChk.addEventListener('change', ()=> forceRender());
 gradChk.addEventListener('change', ()=> forceRender());
 
-ccToggle.addEventListener('click', ()=>{ ccWrap.style.display = ccWrap.style.display ? '' : 'block'; });
-document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ ccWrap.style.display=''; if (!running) unfreeze(); } });
-
 function setZoom(v){ uiZoom = Math.max(1, Math.min(10, v)); zoomSlider.value = uiZoom; document.documentElement.style.setProperty('--zoom', uiZoom); }
 zoomSlider.addEventListener('input', ()=> setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click', ()=> setZoom(+zoomSlider.value - 0.25));
 zoomPlus .addEventListener('click', ()=> setZoom(+zoomSlider.value + 0.25));
 
+/* Controls button toggles center; chevron rotates; tap outside closes */
+controlsBtn.addEventListener('click', (e)=>{
+  e.stopPropagation();
+  const open = ccWrap.style.display === 'block';
+  ccWrap.style.display = open ? '' : 'block';
+  controlsBtn.classList.toggle('open', !open);
+});
+document.addEventListener('click', (e)=>{
+  if (ccWrap.style.display === 'block'){
+    const inside = ccWrap.contains(e.target) || controlsBtn.contains(e.target);
+    if (!inside){ ccWrap.style.display=''; controlsBtn.classList.remove('open'); }
+  }
+});
+
 freezeBtn.addEventListener('click', async ()=>{ if (running) await freezeNow(); });
 unfreezeBtn.addEventListener('click', ()=> unfreeze());
 
-window.addEventListener('resize', ()=>{ updateControlsH(); if (!running) renderCompositeFullscreen(lastHexes, capFrame.width, capFrame.height, rectChk.checked, gradChk.checked); });
+/* ---------- Measure bottom height ---------- */
+function updateControlsH(){
+  const h = document.getElementById('bar').getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--controlsH', Math.round(h) + 'px');
+}
+addEventListener('load', updateControlsH);
+addEventListener('resize', updateControlsH);
+addEventListener('orientationchange', updateControlsH);
 
 /* ---------- Crop (square + zoom) ---------- */
 function computeSquareCrop(){
@@ -388,7 +419,7 @@ function computeSquareCrop(){
   }catch(err){ status('Camera failed: '+err.message); }
 })();
 
-/* ---------- Main loop ---------- */
+/* ---------- Loop ---------- */
 function loop(){
   requestAnimationFrame(loop);
   if(video.readyState < 2) return;
@@ -398,7 +429,6 @@ function loop(){
 
   const {sx,sy,sw,sh} = computeSquareCrop(); if (!sw) return;
 
-  // downscale to processing width
   const scale = procWidth / sw, w = Math.max(2, Math.round(sw * scale)), h = w;
   off.width = w; off.height = h;
   const ctx = off.getContext('2d', {willReadFrequently:true});
@@ -424,16 +454,14 @@ worker.onmessage = (e)=>{
   pending = false; frameCounter++;
 };
 
-/* ---------- Render palette (handles toggles + responsive heights) ---------- */
+/* ---------- Render palette ---------- */
 function toHex([r,g,b]){ return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 function forceRender(){ renderPalette(lastPalette); }
 
 function renderPalette(palette){
-  const stack = document.querySelector('.stack');
   if(!palette || !palette.length){ swatchesEl.innerHTML=''; gradientEl.hidden=true; return; }
   lastHexes = palette.map(toHex);
 
-  // reset backgrounds to avoid “stuck” feel after toggle cycles
   gradientEl.style.background = '';
   swatchesEl.style.display = 'none';
   gradientEl.hidden = true;
@@ -441,38 +469,20 @@ function renderPalette(palette){
   const wantRects = rectChk.checked;
   const wantGrad  = gradChk.checked;
 
-  // Rectangles
   swatchesEl.innerHTML = '';
   if (wantRects){
     swatchesEl.style.display = 'flex';
     for(const h of lastHexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); }
   }
-
-  // Gradient
   if (wantGrad){
     gradientEl.hidden = false;
     const stops = lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',');
     gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
   }
-
-  // Responsive vertical usage
-  if (wantRects && wantGrad){
-    swatchesEl.style.minHeight = '60px';
-    gradientEl.style.minHeight = '60px';
-    swatchesEl.style.flex = '1';
-    gradientEl.style.flex = '1';
-  } else if (wantRects){
-    swatchesEl.style.flex = '1';
-    gradientEl.style.flex = '0';
-  } else if (wantGrad){
-    gradientEl.style.flex = '1';
-    swatchesEl.style.flex = '0';
-  } else {
-    // nothing chosen: default to rectangles ON
-    rectChk.checked = true;
-    swatchesEl.style.display = 'flex';
-    swatchesEl.style.flex = '1';
-  }
+  if (wantRects && wantGrad){ swatchesEl.style.flex='1'; gradientEl.style.flex='1'; }
+  else if (wantRects){ swatchesEl.style.flex='1'; gradientEl.style.flex='0'; }
+  else if (wantGrad){ gradientEl.style.flex='1'; swatchesEl.style.flex='0'; }
+  else { rectChk.checked = true; swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
 }
 
 /* ---------- Freeze / Unfreeze ---------- */
@@ -502,7 +512,7 @@ async function freezeNow(){
   });
   const hexes = cols.map(toHex);
 
-  await renderCompositeFullscreen(hexes, w, h, rectChk.checked, gradChk.checked);
+  renderCompositeFullscreen(hexes, w, h, rectChk.checked, gradChk.checked);
   compositeOverlay.classList.add('open');
 }
 function unfreeze(){
@@ -512,7 +522,7 @@ function unfreeze(){
   running = true; status('Live');
 }
 
-/* ---------- Composite (1024 width; respects toggles; borderless; larger HEX) ---------- */
+/* ---------- Composite (1024 width) ---------- */
 function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   const CAM_W=1024, CAM_H=1024, RECT_H=showRects?240:0, GRAD_H=showGrad?120:0, LABEL=showRects?26:0, PAD=24, GUT=24;
   const W = PAD+CAM_W+PAD;
@@ -521,14 +531,11 @@ function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   const c = compositeCanvas; c.width=W; c.height=H;
   const g = c.getContext('2d');
   g.fillStyle='#000'; g.fillRect(0,0,W,H);
-
-  // camera
   g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
   g.drawImage(capFrame, 0,0,frameW,frameH, PAD, PAD, CAM_W, CAM_H);
 
   let y = PAD+CAM_H; if (showRects||showGrad) y+=GUT;
 
-  // rectangles + HEX
   if (showRects){
     const N=hexes.length, w=Math.ceil(CAM_W/N);
     for(let i=0;i<N;i++){ g.fillStyle=hexes[i]; g.fillRect(PAD+i*w, y, w, RECT_H); }
@@ -537,7 +544,6 @@ function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
     for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+4); }
     y += RECT_H+LABEL;
   }
-  // gradient
   if (showGrad){
     if (showRects) y += GUT;
     const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0);
