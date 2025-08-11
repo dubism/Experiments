@@ -14,8 +14,8 @@
   /* Bands */
   #videoPane{position:fixed;left:0;right:0;top:0;height:42vh;display:flex;align-items:center;justify-content:center;
     border-bottom:1px solid var(--line);background:#000;overflow:hidden}
-  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:8px;padding:10px;
-    border-bottom:1px solid var(--line);background:#000}
+  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:10px;
+    padding:10px 10px 18px;border-bottom:1px solid var(--line);background:#000}
   #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:96px;border-top:1px solid var(--line);
     background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
 
@@ -27,35 +27,46 @@
 
   /* Palette */
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
-  .swatches{flex:1;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .swatches,.gradient{flex:1;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .swatches{display:flex}
   .swatch{flex:1}
-  .gradient{flex:1;border:1px solid var(--line);border-radius:8px}
-  /* No live hex list */
+  .gradient{display:block; height:46%}
+
+  /* Live hex list is removed */
   .codes{display:none}
 
   /* Bottom controls */
   .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .tab{padding:6px 10px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:7px;cursor:pointer}
+  .tab{padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:10px;cursor:pointer}
   .tab.active{outline:2px solid #fff; outline-offset:1px}
-  .btn{padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#0d0d0d;color:#fff;cursor:pointer}
+  .btn{padding:10px 16px;border:1px solid var(--line);border-radius:10px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.ghost{background:transparent}
-  .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:16px;padding:10px 18px}
+  .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px;padding:12px 20px}
+
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
-  input[type="range"]{width:220px}
+
+  /* Thick zoom slider lane with –/+ */
+  .zoomWrap{flex:1;display:flex;align-items:center;gap:10px;min-width:160px}
+  .zoomBtn{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;line-height:0;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  input[type="range"].zoom{appearance:none;-webkit-appearance:none; width:100%; height:12px; border-radius:999px; background:#1a1a1a; outline:none}
+  input[type="range"].zoom::-webkit-slider-thumb{appearance:none;-webkit-appearance:none; width:28px; height:28px; border-radius:50%; background:#fff; border:none; cursor:pointer; margin-top:-8px}
+  input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:#fff;border:none;cursor:pointer}
+  input[type="range"].zoom::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:#2b2b2b}
+  input[type="range"].zoom::-moz-range-track{height:12px;border-radius:999px;background:#2b2b2b}
 
   /* Control Center (over lower palette) */
   #ccWrap{position:absolute;left:10px;right:10px;bottom:10px;display:none;z-index:10}
-  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:10px}
+  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:12px}
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 
-  /* Fullscreen Composite — fixed: hidden by default, visible when .open */
+  /* Fullscreen Composite — hidden by default; shown when .open */
   #compositeOverlay{
     position:fixed; inset:0; background:#000; z-index:1000;
     display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px; padding:10px;
   }
   #compositeOverlay.open{ display:flex; }
-  #compositeCanvas{max-width:98vw;max-height:94vh;border:1px solid var(--line);border-radius:10px;background:#000}
+  #compositeCanvas{max-width:98vw;max-height:94vh; background:#000; border:none}
   #unfreezeBtn{position:fixed;right:12px;bottom:12px}
 </style>
 </head>
@@ -78,15 +89,16 @@
     <div id="gradient" class="gradient" hidden></div>
     <div id="codes" class="codes"></div>
 
+    <!-- Controls overlay -->
     <div id="ccWrap">
       <div id="cc">
         <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
-        <div class="row"><span>Gradient mode</span><input type="checkbox" id="mode"></div>
+        <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
+        <div class="row"><span>Show gradient</span><input type="checkbox" id="grad"></div>
         <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
         <div class="row"><span>Process every N frames</span><span>
           <input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span>
         </div>
-        <div class="small">Drag throttle for 1–150 (log scale).</div>
       </div>
     </div>
   </section>
@@ -99,10 +111,14 @@
         <button class="tab" data-algo="hist">Histogram</button>
         <button class="tab" data-algo="mediancut">Median-cut</button>
       </div>
-      <div class="group" style="margin-left:auto">
-        <span class="small">Zoom</span>
-        <input type="range" id="zoom" min="1" max="10" step="0.01" value="1">
-        <span id="zoomVal" class="small">1.00×</span>
+
+      <div class="zoomWrap">
+        <button class="zoomBtn" id="zoomMinus" aria-label="Zoom out">−</button>
+        <input type="range" id="zoom" class="zoom" min="1" max="10" step="0.01" value="1">
+        <button class="zoomBtn" id="zoomPlus" aria-label="Zoom in">+</button>
+      </div>
+
+      <div class="group">
         <button class="btn ghost" id="ccToggle">Controls</button>
         <button class="btn cta" id="freezeBtn">FREEZE</button>
       </div>
@@ -278,8 +294,11 @@ const ccWrap = document.getElementById('ccWrap');
 const kRange = document.getElementById('k'); const kVal = document.getElementById('kVal');
 const sizeRange = document.getElementById('size'); const sizeVal = document.getElementById('sizeVal');
 const throttleLog = document.getElementById('throttleLog'); const throttleVal = document.getElementById('throttleVal');
-const modeChk = document.getElementById('mode');
-const zoomSlider = document.getElementById('zoom'); const zoomVal = document.getElementById('zoomVal');
+const rectChk = document.getElementById('rects');
+const gradChk = document.getElementById('grad');
+const zoomSlider = document.getElementById('zoom');
+const zoomMinus = document.getElementById('zoomMinus');
+const zoomPlus  = document.getElementById('zoomPlus');
 
 const freezeBtn = document.getElementById('freezeBtn');
 
@@ -314,18 +333,28 @@ tabs.addEventListener('click', (e)=>{
   const btn = e.target.closest('.tab'); if(!btn) return;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
   algo = btn.dataset.algo;
-  algoName.textContent = btn.textContent + (algo==='kmeans'?' (LAB)':'');
+  algoName.textContent = btn.textContent;
 });
 kRange.addEventListener('input', ()=>{ K = +kRange.value; kVal.textContent = K; });
 sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.textContent = procWidth+' px'; });
-modeChk.checked = false; // gradient OFF by default
-modeChk.addEventListener('change', ()=> renderPalette(lastPalette) );
+rectChk.addEventListener('change', ()=> renderPalette(lastPalette) );
+gradChk.addEventListener('change', ()=> renderPalette(lastPalette) );
+
 ccToggle.addEventListener('click', ()=>{ ccWrap.style.display = ccWrap.style.display ? '' : 'block'; });
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ ccWrap.style.display=''; if (!running) unfreeze(); } });
-zoomSlider.addEventListener('input', ()=>{ uiZoom = +zoomSlider.value; zoomVal.textContent = uiZoom.toFixed(2)+'×'; document.documentElement.style.setProperty('--zoom', uiZoom); });
+
+function setZoom(v){
+  uiZoom = Math.max(1, Math.min(10, v));
+  zoomSlider.value = uiZoom;
+  document.documentElement.style.setProperty('--zoom', uiZoom);
+}
+zoomSlider.addEventListener('input', ()=> setZoom(+zoomSlider.value));
+zoomMinus.addEventListener('click', ()=> setZoom(+zoomSlider.value - 0.25));
+zoomPlus .addEventListener('click', ()=> setZoom(+zoomSlider.value + 0.25));
+
 freezeBtn.addEventListener('click', async ()=>{ if (running) await freezeNow(); });
 unfreezeBtn.addEventListener('click', ()=>{ unfreeze(); });
-window.addEventListener('resize', ()=>{ if (!running) renderCompositeFullscreen(lastHexes, capFrame.width, capFrame.height, modeChk.checked); });
+window.addEventListener('resize', ()=>{ if (!running) renderCompositeFullscreen(lastHexes, capFrame.width, capFrame.height, rectChk.checked, gradChk.checked); });
 
 /* ---------- Square crop (center) + zoom ---------- */
 function computeSquareCrop(){
@@ -346,7 +375,7 @@ function computeSquareCrop(){
     const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
     video.srcObject = stream;
     await video.play();
-    status('Running…');
+    status('Live');
     loop();
   }catch(err){
     status('Camera failed: '+err.message);
@@ -396,19 +425,28 @@ worker.onmessage = (e)=>{
   frameCounter++;
 };
 
-/* ---------- Render palette (live, no hex list) ---------- */
+/* ---------- Render palette (live) ---------- */
 function toHex([r,g,b]){ return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 function renderPalette(palette){
   if(!palette || !palette.length){ swatchesEl.innerHTML=''; gradientEl.hidden=true; return; }
   lastHexes = palette.map(toHex);
 
+  // rectangles
   swatchesEl.innerHTML = '';
-  for(const h of lastHexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); }
+  if (rectChk.checked){
+    swatchesEl.style.display = 'flex';
+    for(const h of lastHexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); }
+  }else{
+    swatchesEl.style.display = 'none';
+  }
 
-  gradientEl.style.background = `linear-gradient(90deg, ${lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',')})`;
-  const gradientOn = modeChk.checked;
-  swatchesEl.hidden = gradientOn;
-  gradientEl.hidden = !gradientOn;
+  // gradient
+  if (gradChk.checked){
+    gradientEl.hidden = false;
+    gradientEl.style.background = `linear-gradient(90deg, ${lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',')})`;
+  }else{
+    gradientEl.hidden = true;
+  }
 }
 
 /* ---------- Freeze ---------- */
@@ -444,7 +482,7 @@ async function freezeNow(){
   });
   const hexes = cols.map(toHex);
 
-  await renderCompositeFullscreen(hexes, w, h, modeChk.checked);
+  await renderCompositeFullscreen(hexes, w, h, rectChk.checked, gradChk.checked);
   compositeOverlay.classList.add('open');
 }
 
@@ -457,51 +495,56 @@ function unfreeze(){
   status('Live');
 }
 
-/* ---------- Composite (1024 width, square cam + palette + hex; respects Gradient toggle) ---------- */
-async function renderCompositeFullscreen(hexes, frameW, frameH, gradientOn){
+/* ---------- Composite (1024 width, square cam; respects toggles; borderless; larger HEX) ---------- */
+async function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   const CAM_W = 1024, CAM_H = 1024;
-  const PALETTE_H = 240, LABEL_BAND = 20;
+  const RECT_H = showRects ? 240 : 0;
+  const GRAD_H = showGrad ? 120 : 0;
+  const LABEL_BAND = showRects ? 26 : 0;
   const PAD = 24, GUT = 24;
 
   const width = PAD + CAM_W + PAD;
-  const height = PAD + CAM_H + GUT + (PALETTE_H + LABEL_BAND) + PAD;
+  const height = PAD + CAM_H + (showRects||showGrad ? GUT : 0) + RECT_H + LABEL_BAND + (showGrad?GUT:0) + GRAD_H + PAD;
 
   const c = compositeCanvas; c.width = width; c.height = height;
   const g = c.getContext('2d');
 
   g.fillStyle='#000'; g.fillRect(0,0,width,height);
 
-  // camera (upscale to 1024x1024)
+  // camera (upscale to 1024x1024) — borderless
   g.save(); g.translate(PAD, PAD);
-  g.fillStyle='#111'; g.fillRect(0,0,CAM_W,CAM_H);
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
   g.drawImage(capFrame, 0, 0, frameW, frameH, 0, 0, CAM_W, CAM_H);
-  g.strokeStyle='#222'; g.strokeRect(0.5,0.5,CAM_W-1,CAM_H-1);
   g.restore();
 
-  // palette (as configured)
-  g.save(); g.translate(PAD, PAD+CAM_H+GUT);
-  const N = hexes.length;
-  if (gradientOn){
+  let y = PAD + CAM_H;
+
+  if (showRects || showGrad) y += GUT;
+
+  // rectangles + hex labels
+  if (showRects){
+    g.save(); g.translate(PAD, y);
+    const N = hexes.length;
+    const w = Math.ceil(CAM_W/N);
+    for(let i=0;i<N;i++){ g.fillStyle = hexes[i]; g.fillRect(i*w,0,w,RECT_H); }
+    // larger hex labels
+    g.font='15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
+    for(let i=0;i<N;i++){ const cx = Math.round(i*w + w/2); g.fillText(hexes[i].toUpperCase(), cx, RECT_H + 4); }
+    g.restore();
+    y += RECT_H + LABEL_BAND;
+  }
+
+  // gradient strip (no labels)
+  if (showGrad){
+    if (showRects) y += GUT;
+    g.save(); g.translate(PAD, y);
     const grad = g.createLinearGradient(0,0,CAM_W,0);
+    const N = hexes.length;
     hexes.forEach((h,i)=> grad.addColorStop((i/(N-1)), h));
-    g.fillStyle = grad; g.fillRect(0,0,CAM_W,PALETTE_H);
-  } else {
-    const w = Math.ceil(CAM_W/N);
-    for(let i=0;i<N;i++){ g.fillStyle = hexes[i]; g.fillRect(i*w,0,w,PALETTE_H); }
+    g.fillStyle = grad; g.fillRect(0,0,CAM_W,GRAD_H);
+    g.restore();
   }
-  g.strokeStyle='#222'; g.strokeRect(0.5,0.5,CAM_W-1,PALETTE_H-1);
-
-  // HEX labels under palette
-  g.font='11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
-  g.fillStyle='#bdbdbd'; g.textAlign='center'; g.textBaseline='top';
-  if (gradientOn){
-    for(let i=0;i<N;i++){ const x = Math.round((i/(N-1)) * CAM_W); g.fillText(hexes[i].toUpperCase(), x, PALETTE_H + 3); }
-  } else {
-    const w = Math.ceil(CAM_W/N);
-    for(let i=0;i<N;i++){ const cx = Math.round(i*w + w/2); g.fillText(hexes[i].toUpperCase(), cx, PALETTE_H + 3); }
-  }
-  g.restore();
 }
 
 /* ---------- Status ---------- */
