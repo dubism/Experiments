@@ -5,68 +5,89 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Live Camera Palette — Square Crop</title>
 <style>
-  :root { --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1; }
+  :root{
+    --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222;
+    --zoom:1;
+    --controlsH:100px; /* measured in JS; fallback */
+  }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--ink);
        font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
   /* Bands */
-  #videoPane{position:fixed;left:0;right:0;top:0;height:42vh;display:flex;align-items:center;justify-content:center;
-    border-bottom:1px solid var(--line);background:#000;overflow:hidden}
-  #palettePane{position:fixed;left:0;right:0;top:42vh;height:42vh;display:flex;flex-direction:column;gap:10px;
-    padding:10px 10px 18px;border-bottom:1px solid var(--line);background:#000}
-  #controlsBar{position:fixed;left:0;right:0;bottom:0;height:16vh;min-height:96px;border-top:1px solid var(--line);
-    background:#000;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+  #videoPane{
+    position:fixed;left:0;right:0;top:0;height:42vh;
+    display:flex;align-items:center;justify-content:center;
+    border-bottom:1px solid var(--line);background:#000;overflow:hidden
+  }
+  /* Extra bottom padding so palette never visually collides with bottom bar */
+  #palettePane{
+    position:fixed;left:0;right:0;top:42vh;height:42vh;
+    display:flex;flex-direction:column;gap:10px;
+    padding:10px 10px calc(20px + var(--controlsH) + env(safe-area-inset-bottom));
+    border-bottom:1px solid var(--line);background:#000
+  }
+  #controlsBar{
+    position:fixed;left:0;right:0;bottom:0;min-height:96px;
+    border-top:1px solid var(--line);background:#000;
+    padding:8px 10px 8px calc(10px + env(safe-area-inset-left));
+    display:flex;flex-direction:column;gap:10px
+  }
 
   /* Camera */
   .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
-  video{max-height:40vh;max-width:92vw;border-radius:8px;background:#000;display:block;
-        transform:scale(var(--zoom));transform-origin:center center}
+  video{
+    max-height:40vh;max-width:92vw;border-radius:8px;background:#000;display:block;
+    transform:scale(var(--zoom));transform-origin:center center
+  }
   #frozenCanvas{position:absolute;inset:0;margin:auto;display:none;max-height:40vh;max-width:92vw;border-radius:8px}
 
   /* Palette */
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
-  .swatches,.gradient{flex:1;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .swatches,.gradient{flex:1;border:1px solid var(--line);border-radius:12px;overflow:hidden}
   .swatches{display:flex}
   .swatch{flex:1}
-  .gradient{display:block; height:46%}
+  .gradient{display:block;height:46%}
+  .codes{display:none} /* no live hex list */
 
-  /* Live hex list is removed */
-  .codes{display:none}
-
-  /* Bottom controls */
-  .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .tab{padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:10px;cursor:pointer}
+  /* Controls bar */
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .right{display:flex;align-items:center;gap:8px}
+  .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer}
   .tab.active{outline:2px solid #fff; outline-offset:1px}
-  .btn{padding:10px 16px;border:1px solid var(--line);border-radius:10px;background:#0d0d0d;color:#fff;cursor:pointer}
+  .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.ghost{background:transparent}
-  .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px;padding:12px 20px}
+  .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px;padding:14px 22px}
 
-  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
-
-  /* Thick zoom slider lane with –/+ */
+  /* Thick zoom slider with –/+ */
   .zoomWrap{flex:1;display:flex;align-items:center;gap:10px;min-width:160px}
-  .zoomBtn{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;line-height:0;display:flex;align-items:center;justify-content:center;cursor:pointer}
-  input[type="range"].zoom{appearance:none;-webkit-appearance:none; width:100%; height:12px; border-radius:999px; background:#1a1a1a; outline:none}
-  input[type="range"].zoom::-webkit-slider-thumb{appearance:none;-webkit-appearance:none; width:28px; height:28px; border-radius:50%; background:#fff; border:none; cursor:pointer; margin-top:-8px}
-  input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:#fff;border:none;cursor:pointer}
-  input[type="range"].zoom::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:#2b2b2b}
-  input[type="range"].zoom::-moz-range-track{height:12px;border-radius:999px;background:#2b2b2b}
+  .zoomBtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);
+           background:#121212;color:#fff;font-size:22px;line-height:0;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  input[type="range"].zoom{appearance:none;-webkit-appearance:none;width:100%;height:14px;border-radius:999px;background:#1a1a1a;outline:none}
+  input[type="range"].zoom::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;border:none;cursor:pointer;margin-top:-7px}
+  input[type="range"].zoom::-webkit-slider-runnable-track{height:14px;border-radius:999px;background:#2b2b2b}
+  input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border:none;border-radius:50%;background:#fff;cursor:pointer}
+  input[type="range"].zoom::-moz-range-track{height:14px;border-radius:999px;background:#2b2b2b}
 
-  /* Control Center (over lower palette) */
-  #ccWrap{position:absolute;left:10px;right:10px;bottom:10px;display:none;z-index:10}
+  /* Control Center (overlay lifted above controls bar) */
+  #ccWrap{
+    position:absolute;left:10px;right:10px;
+    bottom:calc(10px + var(--controlsH) + env(safe-area-inset-bottom));
+    display:none;z-index:10
+  }
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:12px}
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
 
   /* Fullscreen Composite — hidden by default; shown when .open */
   #compositeOverlay{
-    position:fixed; inset:0; background:#000; z-index:1000;
-    display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px; padding:10px;
+    position:fixed;inset:0;background:#000;z-index:1000;
+    display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:10px
   }
-  #compositeOverlay.open{ display:flex; }
-  #compositeCanvas{max-width:98vw;max-height:94vh; background:#000; border:none}
+  #compositeOverlay.open{display:flex}
+  #compositeCanvas{max-width:98vw;max-height:94vh;background:#000;border:none}
   #unfreezeBtn{position:fixed;right:12px;bottom:12px}
 </style>
 </head>
@@ -105,20 +126,22 @@
 
   <!-- CONTROLS BAR -->
   <section id="controlsBar">
+    <!-- Row 1: Zoom (top) -->
     <div class="row">
-      <div class="group" id="tabs">
-        <button class="tab active" data-algo="kmeans">K-Means</button>
-        <button class="tab" data-algo="hist">Histogram</button>
-        <button class="tab" data-algo="mediancut">Median-cut</button>
-      </div>
-
       <div class="zoomWrap">
         <button class="zoomBtn" id="zoomMinus" aria-label="Zoom out">−</button>
         <input type="range" id="zoom" class="zoom" min="1" max="10" step="0.01" value="1">
         <button class="zoomBtn" id="zoomPlus" aria-label="Zoom in">+</button>
       </div>
-
-      <div class="group">
+    </div>
+    <!-- Row 2: Tabs left, Controls + Freeze right -->
+    <div class="row">
+      <div class="left" id="tabs">
+        <button class="tab active" data-algo="kmeans">K-Means</button>
+        <button class="tab" data-algo="hist">Histogram</button>
+        <button class="tab" data-algo="mediancut">Median-cut</button>
+      </div>
+      <div class="right">
         <button class="btn ghost" id="ccToggle">Controls</button>
         <button class="btn cta" id="freezeBtn">FREEZE</button>
       </div>
@@ -135,6 +158,16 @@
   <canvas id="capFrame"></canvas>
 
 <script>
+/* ---------- Measure controls bar and lift palette/overlay accordingly ---------- */
+const controlsBar = document.getElementById('controlsBar');
+function updateControlsH(){
+  const h = controlsBar.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--controlsH', Math.round(h) + 'px');
+}
+addEventListener('load', updateControlsH);
+addEventListener('resize', updateControlsH);
+addEventListener('orientationchange', updateControlsH);
+
 /* ---------- Worker (color algorithms) ---------- */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
@@ -333,7 +366,7 @@ tabs.addEventListener('click', (e)=>{
   const btn = e.target.closest('.tab'); if(!btn) return;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
   algo = btn.dataset.algo;
-  algoName.textContent = btn.textContent;
+  algoName.textContent = btn.textContent + (algo==='kmeans'?' (LAB)':'');
 });
 kRange.addEventListener('input', ()=>{ K = +kRange.value; kVal.textContent = K; });
 sizeRange.addEventListener('input', ()=>{ procWidth = +sizeRange.value; sizeVal.textContent = procWidth+' px'; });
@@ -376,6 +409,7 @@ function computeSquareCrop(){
     video.srcObject = stream;
     await video.play();
     status('Live');
+    updateControlsH();
     loop();
   }catch(err){
     status('Camera failed: '+err.message);
@@ -518,7 +552,6 @@ async function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showG
   g.restore();
 
   let y = PAD + CAM_H;
-
   if (showRects || showGrad) y += GUT;
 
   // rectangles + hex labels
@@ -527,7 +560,6 @@ async function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showG
     const N = hexes.length;
     const w = Math.ceil(CAM_W/N);
     for(let i=0;i<N;i++){ g.fillStyle = hexes[i]; g.fillRect(i*w,0,w,RECT_H); }
-    // larger hex labels
     g.font='15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
     g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
     for(let i=0;i<N;i++){ const cx = Math.round(i*w + w/2); g.fillText(hexes[i].toUpperCase(), cx, RECT_H + 4); }
