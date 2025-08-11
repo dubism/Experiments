@@ -3,24 +3,23 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Live Camera Palette — Square Crop</title>
+<title>Live Camera Palette — Stable Freeze</title>
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
-    --controlsH:120px;                 /* updated in JS */
-    --ctaW:clamp(220px,60vw,340px);    /* FREEZE / UNFREEZE width */
+    --controlsH:120px;
+    --ctaW:clamp(220px,60vw,340px);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* Top camera band */
+  /* Camera band (square) */
   #videoPane{
     position:fixed;left:0;right:0;top:0;height:42vh;
     display:flex;align-items:center;justify-content:center;
     border-bottom:1px solid var(--line);background:#000;overflow:hidden
   }
-  /* Square camera wrapper — always square */
   .videoWrap{
     position:relative; display:flex; align-items:center; justify-content:center;
     width:min(92vw,40vh); aspect-ratio:1/1; max-height:40vh; border-radius:12px;
@@ -42,23 +41,22 @@
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
-  /* Chevron opener in palette */
+  /* Chevron opener */
   #openHint{
-    position:absolute;top:8px;right:8px;
-    width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,0.08);
-    display:flex;align-items:center;justify-content:center;border:1px solid var(--line);pointer-events:none
+    position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;
+    background:rgba(255,255,255,0.08);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;pointer-events:none
   }
   #openHint::after{
     content:""; width:12px; height:12px; border-right:2px solid #bbb; border-bottom:2px solid #bbb;
     transform:rotate(-45deg); display:block
   }
 
-  /* Controls bar: two rows, zoom full width, freeze centered */
+  /* Bottom bar */
   #controlsBar{position:fixed;left:0;right:0;bottom:0;background:#000;border-top:1px solid var(--line);padding:10px 12px calc(8px + env(safe-area-inset-bottom))}
   #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto auto;gap:10px}
   .zoomArea{grid-row:1}
   #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaW);padding:14px 22px}
-  /* Zoom: full width */
   .zoomWrap{display:flex;align-items:center;gap:12px;width:100%}
   .zbtn{flex:none;width:42px;height:42px;aspect-ratio:1/1;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
   input[type="range"].zoom{appearance:none;-webkit-appearance:none;width:100%;height:16px;border-radius:999px;background:#1a1a1a;outline:none}
@@ -67,11 +65,10 @@
   input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border:none;border-radius:50%;background:#fff;cursor:pointer}
   input[type="range"].zoom::-moz-range-track{height:16px;border-radius:999px;background:#2b2b2b}
 
-  /* Buttons */
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* Control Center overlay (opens from palette; tap outside closes) */
+  /* Control Center */
   #ccWrap{position:absolute;left:12px;right:12px;bottom:calc(12px + var(--controlsH) + env(safe-area-inset-bottom));display:none;z-index:10}
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -137,7 +134,6 @@
           <button class="zbtn" id="zoomPlus" aria-label="Zoom in">+</button>
         </div>
       </div>
-
       <button class="btn cta" id="freezeBtn">FREEZE</button>
     </div>
   </section>
@@ -152,17 +148,21 @@
   <canvas id="capFrame"></canvas>
 
 <script>
-/* measure bottom height for safe padding */
+/* ---------- layout sizing ---------- */
 const bar = document.getElementById('bar');
-function updateControlsH(){ document.documentElement.style.setProperty('--controlsH', Math.round(bar.getBoundingClientRect().height) + 'px'); }
+function updateControlsH(){
+  document.documentElement.style.setProperty('--controlsH',
+    Math.round(bar.getBoundingClientRect().height) + 'px'
+  );
+}
 addEventListener('load', updateControlsH);
 addEventListener('resize', updateControlsH);
 addEventListener('orientationchange', updateControlsH);
 
-/* worker for color extraction */
+/* ---------- worker with jobId echo ---------- */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
-  const {pixels,width,height,algo,k,stride=2} = e.data;
+  const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
   const data = new Uint8ClampedArray(pixels);
   const samples = [];
   for(let y=0;y<height;y+=stride){
@@ -177,20 +177,127 @@ self.onmessage = (e)=> {
   else palette = kmeansLAB(samples,k,6);
   palette = dedupeAndSort(palette,10);
   const out = new Uint8Array(palette.flat());
-  self.postMessage({palette: out.buffer}, [out.buffer]);
+  self.postMessage({palette: out.buffer, jobId}, [out.buffer]);
 };
-function rgb2xyz(r,g,b){r/=255;g/=255;b/=255;r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;return[ r*0.4124+g*0.3576+b*0.1805, r*0.2126+g*0.7152+b*0.0722, r*0.0193+g*0.1192+b*0.9505];}
-function xyz2lab(x,y,z){const Xr=0.95047,Yr=1,Zr=1.08883;const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;const fx=f(x/Xr),fy=f(y/Yr),fz=f(z/Zr);return[116*fy-16,500*(fx-fy),200*(fy-fz)];}
-function rgb2lab(r,g,b){const[x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
+function rgb2xyz(r,g,b){
+  r/=255; g/=255; b/=255;
+  r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;
+  g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;
+  b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;
+  return [ r*0.4124 + g*0.3576 + b*0.1805,
+           r*0.2126 + g*0.7152 + b*0.0722,
+           r*0.0193 + g*0.1192 + b*0.9505 ];
+}
+function xyz2lab(x,y,z){
+  const Xr=0.95047,Yr=1,Zr=1.08883;
+  const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;
+  const fx=f(x/Xr), fy=f(y/Yr), fz=f(z/Zr);
+  return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
+}
+function rgb2lab(r,g,b){const [x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
 function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db);}
-function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);return idx.map(code=>{const r=(code>>6)&7,g=(code>>3)&7,b=code&7;return[r*32+16,g*32+16,b*32+16];});}
-function medianCutPalette(samples,k){const colors=[];for(let i=0;i<samples.length;i+=3)colors.push([samples[i],samples[i+1],samples[i+2]]);let boxes=[{colors}];const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};boxes.forEach(bounds);const range=b=>Math.max(b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]);const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};while(boxes.length<k){boxes.sort((A,B)=>range(B)-range(A));const big=boxes.shift();if(!big||big.colors.length<=1)break;const ax=axis(big);big.colors.sort((a,b)=>a[ax]-b[ax]);const mid=big.colors.length>>1;const left={colors:big.colors.slice(0,mid)},right={colors:big.colors.slice(mid)};[left,right].forEach(bounds);boxes.push(left,right);}return boxes.map(b=>{let r=0,g=0,bl=0,n=b.colors.length||1;for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}return[r/n|0,g/n|0,bl/n|0];}).slice(0,k);}
-function kmeansLAB(samples,k,maxIter=6){const pts=[];for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2];const L=rgb2lab(r,g,b);pts.push([L[0],L[1],L[2],r,g,b]);}const centers=[];centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));while(centers.length<k){const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));const sum=d2.reduce((a,b)=>a+b,0)||1;let r=Math.random()*sum,i=0;for(;i<d2.length-1&&(r-=d2[i])>0)i++;centers.push(pts[i].slice(0,3));}const labels=new Uint16Array(pts.length);for(let it=0;it<maxIter;it++){for(let i=0;i<pts.length;i++){let best=0,bd=1e9;for(let c=0;c<centers.length;c++){const d=d2lab(pts[i],centers[c]);if(d<bd){bd=d;best=c;}}labels[i]=best;}const sums=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;}for(let c=0;c<k;c++)if(sums[c][3]>0){centers[c][0]=sums[c][0]/sums[c][3];centers[c][1]=sums[c][1]/sums[c][3];centers[c][2]=sums[c][2]/sums[c][3];}}const acc=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}const out=[];for(let c=0;c<k;c++)if(acc[c][3]>0)out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);while(out.length<k)out.push(out[out.length-1]||[128,128,128]);return out.slice(0,k);function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}}
-function dedupeAndSort(rgbList,minDE=10){const labList=rgbList.map(([r,g,b])=>{const L=rgb2lab(r,g,b);return[L[0],L[1],L[2],r,g,b];});labList.sort((a,b)=>a[0]-b[0]);const kept=[];for(const c of labList){let ok=true;for(const d of kept){if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;}}if(ok)kept.push(c);}return kept.map(c=>[c[3],c[4],c[5]]);}
-`],{type:'application/javascript'});
-const worker = new Worker(URL.createObjectURL(workerBlob),{type:'module'});
+function histPalette(samples,k){
+  const bins=new Uint32Array(512);
+  for(let i=0;i<samples.length;i+=3){
+    const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;
+    bins[(r<<6)|(g<<3)|b]++;
+  }
+  const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);
+  return idx.map(code=>{
+    const r=(code>>6)&7,g=(code>>3)&7,b=code&7;
+    return [r*32+16,g*32+16,b*32+16];
+  });
+}
+function medianCutPalette(samples,k){
+  const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
+  let boxes=[{colors}];
+  const bounds=b=>{
+    b.r=[255,0]; b.g=[255,0]; b.b=[255,0];
+    for(const c of b.colors){
+      if(c[0]<b.r[0])b.r[0]=c[0]; if(c[0]>b.r[1])b.r[1]=c[0];
+      if(c[1]<b.g[0])b.g[0]=c[1]; if(c[1]>b.g[1])b.g[1]=c[1];
+      if(c[2]<b.b[0])b.b[0]=c[2]; if(c[2]>b.b[1])b.b[1]=c[2];
+    }
+  };
+  boxes.forEach(bounds);
+  const range=b=>Math.max(b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]);
+  const axis=b=>{
+    const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];
+    return rs.indexOf(Math.max(...rs));
+  };
+  while(boxes.length<k){
+    boxes.sort((A,B)=>range(B)-range(A));
+    const big=boxes.shift(); if(!big||big.colors.length<=1) break;
+    const ax=axis(big);
+    big.colors.sort((a,b)=>a[ax]-b[ax]);
+    const mid=big.colors.length>>1;
+    const left={colors:big.colors.slice(0,mid)}, right={colors:big.colors.slice(mid)};
+    [left,right].forEach(bounds); boxes.push(left,right);
+  }
+  return boxes.map(b=>{
+    let r=0,g=0,bl=0,n=b.colors.length||1;
+    for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}
+    return [r/n|0,g/n|0,bl/n|0];
+  }).slice(0,k);
+}
+function kmeansLAB(samples,k,maxIter=6){
+  const pts=[];
+  for(let i=0;i<samples.length;i+=3){
+    const r=samples[i],g=samples[i+1],b=samples[i+2];
+    const L=rgb2lab(r,g,b);
+    pts.push([L[0],L[1],L[2],r,g,b]);
+  }
+  const centers=[]; centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
+  while(centers.length<k){
+    const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));
+    const sum=d2.reduce((a,b)=>a+b,0)||1;
+    let r=Math.random()*sum,i=0; for(;i<d2.length-1&&(r-=d2[i])>0;i++); centers.push(pts[i].slice(0,3));
+  }
+  const labels=new Uint16Array(pts.length);
+  for(let it=0;it<maxIter;it++){
+    for(let i=0;i<pts.length;i++){
+      let best=0,bd=1e9;
+      for(let c=0;c<centers.length;c++){
+        const d=d2lab(pts[i],centers[c]); if(d<bd){bd=d;best=c;}
+      }
+      labels[i]=best;
+    }
+    const sums=Array.from({length:k},()=>[0,0,0,0]);
+    for(let i=0;i<pts.length;i++){
+      const c=labels[i],p=pts[i];
+      sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;
+    }
+    for(let c=0;c<k;c++) if(sums[c][3]>0){
+      centers[c][0]=sums[c][0]/sums[c][3];
+      centers[c][1]=sums[c][1]/sums[c][3];
+      centers[c][2]=sums[c][2]/sums[c][3];
+    }
+  }
+  const acc=Array.from({length:k},()=>[0,0,0,0]);
+  for(let i=0;i<pts.length;i++){
+    const c=labels[i],p=pts[i];
+    acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;
+  }
+  const out=[]; for(let c=0;c<k;c++) if(acc[c][3]>0)
+    out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);
+  while(out.length<k) out.push(out[out.length-1]||[128,128,128]);
+  return out.slice(0,k);
+  function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}
+}
+function dedupeAndSort(rgbList,minDE=10){
+  const labList=rgbList.map(([r,g,b])=>{const L=rgb2lab(r,g,b);return [L[0],L[1],L[2],r,g,b];});
+  labList.sort((a,b)=>a[0]-b[0]);
+  const kept=[];
+  for(const c of labList){
+    let ok=true; for(const d of kept){ if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;} }
+    if(ok) kept.push(c);
+  }
+  return kept.map(c=>[c[3],c[4],c[5]]);
+}
+`], {type:'application/javascript'});
+const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
 
-/* elements */
+/* ---------- elements ---------- */
 const video=document.getElementById('video');
 const frozenCanvas=document.getElementById('frozenCanvas');
 const off=document.getElementById('off');
@@ -219,35 +326,62 @@ const compositeCanvas=document.getElementById('compositeCanvas');
 const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
 
-/* state */
+/* ---------- state ---------- */
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
 let frameCounter=0,lastT=performance.now(),pending=false,every=0,running=true,hasPalette=false;
 let lastPalette=[], lastHexes=[];
 
-/* helpers */
-function updateControlsH(){ document.documentElement.style.setProperty('--controlsH', Math.round(document.getElementById('bar').getBoundingClientRect().height) + 'px'); }
-addEventListener('load', updateControlsH); addEventListener('resize', updateControlsH); addEventListener('orientationchange', updateControlsH);
-
+/* ---------- helpers ---------- */
+function updateControlsH(){
+  document.documentElement.style.setProperty('--controlsH',
+    Math.round(document.getElementById('bar').getBoundingClientRect().height) + 'px'
+  );
+}
 const TH_MIN=1, TH_MAX=150;
 function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100); }
 function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
+function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+function status(t){ statusEl.textContent=t; }
+
+async function ensureCameraPlaying(){
+  try {
+    await video.play(); status('Live'); return;
+  } catch(e){
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
+      video.srcObject = stream;
+      await video.play();
+      status('Live');
+    }catch(err){
+      status('Camera restart failed: '+err.message);
+    }
+  }
+}
+
+/* ---------- UI wiring ---------- */
+addEventListener('load', updateControlsH);
+addEventListener('resize', updateControlsH);
+addEventListener('orientationchange', updateControlsH);
+
 throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN);
 throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
 
-/* controls open/close (palette tap opens; tap outside closes) */
 paletteClickable.addEventListener('click', (e)=>{ e.stopPropagation(); ccWrap.style.display='block'; });
-document.addEventListener('click',(e)=>{ if(ccWrap.style.display==='block' && !ccWrap.contains(e.target)){ ccWrap.style.display=''; }});
+document.addEventListener('click',(e)=>{
+  // don't collapse CC while composite overlay is open
+  if (compositeOverlay.classList.contains('open')) return;
+  if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display='';
+});
 
-/* tabs inside CC */
 tabs.addEventListener('click',(e)=>{
   const b=e.target.closest('.tab'); if(!b) return;
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));
   algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':'');
 });
-kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; forceRender();});
+kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value; sizeVal.textContent=procWidth+' px';});
-rectChk.addEventListener('change',()=>forceRender());
-gradChk.addEventListener('change',()=>forceRender());
+rectChk.addEventListener('change',()=>renderPalette(lastPalette));
+gradChk.addEventListener('change',()=>renderPalette(lastPalette));
 
 function setZoom(v){ uiZoom=Math.max(1,Math.min(10,v)); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
 zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
@@ -257,14 +391,14 @@ zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 freezeBtn.addEventListener('click',async()=>{ if(running) await freezeNow(); });
 unfreezeBtn.addEventListener('click',()=>unfreeze());
 
-/* crop (square + zoom) */
+/* ---------- crop (square + zoom) ---------- */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
   return {sx,sy,sw,sh};
 }
 
-/* camera init */
+/* ---------- camera init ---------- */
 (async function init(){
   try{
     const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
@@ -272,45 +406,50 @@ function computeSquareCrop(){
   }catch(err){ status('Camera failed: '+err.message); }
 })();
 
-/* loop */
+/* ---------- live worker handler (jobId === 'live') ---------- */
+worker.onmessage = (e)=>{
+  const {jobId} = e.data || {};
+  if (jobId !== 'live') return; // ignore freeze results
+  const arr = new Uint8Array(e.data.palette||[]);
+  const cols=[]; for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
+  while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
+  lastPalette = cols.slice(0,K); hasPalette = true;
+  renderPalette(lastPalette);
+  pending=false; frameCounter++;
+};
+
+/* ---------- RAF loop ---------- */
 function loop(){
   requestAnimationFrame(loop);
   if(video.readyState<2) return;
-  const now=performance.now(); if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
+  // hard gate: skip processing while frozen
+  if(!running) return;
+
+  const now=performance.now();
+  if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
+
   const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
 
   const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
   off.width=w; off.height=h;
   const ctx=off.getContext('2d',{willReadFrequently:true});
-  if(running){ ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h); }
+  ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
   resEl.textContent=w+'×'+h;
 
-  if(!running) return;
   every=(every+1)%throttleN; if(every!==0) return;
   if(!pending){
     pending=true;
     const img=ctx.getImageData(0,0,w,h);
-    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2},[img.data.buffer]);
+    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
   }
 }
 
-/* worker response */
-worker.onmessage=(e)=>{
-  const arr=new Uint8Array(e.data.palette||[]), cols=[];
-  for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
-  while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
-  lastPalette=cols.slice(0,K); hasPalette=true; renderPalette(lastPalette);
-  pending=false; frameCounter++;
-};
-
-/* palette render (no empty boxes; one fills all) */
-function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
-function forceRender(){ renderPalette(lastPalette); }
+/* ---------- palette render ---------- */
 function renderPalette(palette){
   if(!hasPalette || !palette || !palette.length){ swatchesEl.style.display='none'; gradientEl.hidden=true; return; }
-  lastHexes=palette.map(toHex);
-
+  const hexes = palette.map(toHex);
   const wantRects=rectChk.checked, wantGrad=gradChk.checked;
+
   // reset
   swatchesEl.style.display='none'; gradientEl.hidden=true; gradientEl.style.background=''; swatchesEl.innerHTML='';
 
@@ -326,17 +465,18 @@ function renderPalette(palette){
   }
 
   if(rectChk.checked){
-    for(const h of lastHexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); }
+    for(const h of hexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); }
   }
   if(gradChk.checked){
-    const stops = lastHexes.map((c,i)=>`${c} ${(i/(lastHexes.length-1))*100}%`).join(',');
+    const stops = hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',');
     gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
   }
 }
 
-/* freeze/unfreeze */
+/* ---------- freeze / unfreeze with per-job listener ---------- */
 async function freezeNow(){
-  running=false;
+  running=false; pending=false; every=0;
+
   const {sx,sy,sw,sh}=computeSquareCrop();
   const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
   capFrame.width=w; capFrame.height=h;
@@ -347,46 +487,63 @@ async function freezeNow(){
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
   fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
-  frozenCanvas.style.display='block'; video.pause();
+  frozenCanvas.style.display='block';
+  video.pause();
 
-  // recompute palette from this exact frame
+  // recompute palette for THIS frame only (unique jobId)
+  const freezeId = 'freeze:' + Math.random().toString(36).slice(2);
   const imgs=capFrame.getContext('2d').getImageData(0,0,w,h);
-  const cols=await new Promise(res=>{
-    const handler=(ev)=>{ const arr=new Uint8Array(ev.data.palette||[]); const out=[]; for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
-      while(out.length<K) out.push(out[out.length-1]||[128,128,128]); worker.removeEventListener('message',handler); res(out.slice(0,K)); };
-    worker.addEventListener('message',handler,{once:true});
-    worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2},[imgs.data.buffer]);
+
+  const cols = await new Promise((resolve)=>{
+    const handler = (ev)=>{
+      const {jobId} = ev.data || {};
+      if (jobId !== freezeId) return;
+      const arr=new Uint8Array(ev.data.palette||[]), out=[];
+      for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
+      while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
+      worker.removeEventListener('message', handler);
+      resolve(out.slice(0,K));
+    };
+    worker.addEventListener('message', handler);
+    worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId}, [imgs.data.buffer]);
   });
-  const hexes=cols.map(toHex);
+
+  const hexes = cols.map(toHex);
   renderCompositeFullscreen(hexes,w,h,rectChk.checked,gradChk.checked);
   compositeOverlay.classList.add('open');
 }
-function unfreeze(){ compositeOverlay.classList.remove('open'); frozenCanvas.style.display='none'; video.play().catch(()=>{}); running=true; status('Live'); }
 
-/* composite (1024) */
+function unfreeze(){
+  compositeOverlay.classList.remove('open');
+  frozenCanvas.style.display='none';
+  running=true; pending=false; every=0;
+  ensureCameraPlaying();
+}
+
+/* ---------- composite (1024) ---------- */
 function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   const CAM_W=1024, CAM_H=1024, RECT_H=showRects?240:0, GRAD_H=showGrad?120:0, LABEL=showRects?26:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
-  const c=compositeCanvas; c.width=W; c.height=H; const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
+  const c=compositeCanvas; c.width=W; c.height=H;
+  const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
   g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
   g.drawImage(capFrame,0,0,frameW,frameH,PAD,PAD,CAM_W,CAM_H);
   let y=PAD+CAM_H; if(showRects||showGrad) y+=GUT;
   if(showRects){
     const N=hexes.length, w=Math.ceil(CAM_W/N);
     for(let i=0;i<N;i++){ g.fillStyle=hexes[i]; g.fillRect(PAD+i*w,y,w,RECT_H); }
-    g.font='15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
+    g.font='15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
     for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+4); }
     y+=RECT_H+LABEL;
   }
   if(showGrad){
     if(showRects) y+=GUT;
-    const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0); const N=hexes.length; hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
+    const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0);
+    const N=hexes.length; hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
     g.fillStyle=grad; g.fillRect(PAD,y,CAM_W,GRAD_H);
   }
 }
-
-/* status */
-function status(t){ statusEl.textContent=t; }
 </script>
 </body>
 </html>
