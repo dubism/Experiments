@@ -415,7 +415,7 @@ function step(dt){
         if(Math.random()<fert) born=true;
       }
       if(a && n===4){
-        const res=0.15*params.lifeResilience*(0.6+0.8*nut);
+        const res=0.5*params.lifeResilience*(0.6+0.8*nut);
         if(Math.random()<res) survive=true;
       }
       let dead=false;
@@ -457,7 +457,7 @@ function step(dt){
               const id=ny*COLS+nx; if(!stoneFlag[id]) poisonWave[id]=Math.max(poisonWave[id],r);
             }
           } else if (t===2){
-            boostFlash[j]=240; nutWave[j]=Math.max(nutWave[j],10); radialBurst(xx,yy,32,true,0);
+            boostFlash[j]=160; nutWave[j]=Math.max(nutWave[j],10); radialBurst(xx,yy,32,true,0);
             const R=4,R2=R*R;
             for(let iy=yy-R; iy<=yy+R; iy++){
               if(iy<0||iy>=ROWS) continue;
