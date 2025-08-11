@@ -3,16 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-<title>Grid · Visual Density Palette + Safe Zone</title>
+<title>Grid · Density Dropdown + Even Picker + Icons</title>
 <style>
   :root{
     --bg:#0b0c0e;
     --grid-dim:#0e1217;
     --grid-bright:#141a23;
-    --stone:#8a93a0;
-    --life:#bfe2ff;
-    --boost:#fff176;
-    --nut:#ff9a3c;
   }
   html,body{height:100%}
   body{margin:0;background:var(--bg);overflow:hidden}
@@ -25,701 +21,730 @@
 <div id="sab" aria-hidden="true"></div>
 
 <script>
-(() => {
-  const cv = document.getElementById('cv');
-  const ctx = cv.getContext('2d', { alpha:false, desynchronized:true });
-  const DPR = Math.max(1, Math.min(devicePixelRatio||1, 2));
-  const sabProbe = document.getElementById('sab');
+(()=>{
+// ===== canvas/setup =====
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d',{alpha:false,desynchronized:true});
+const DPR=Math.max(1,Math.min(devicePixelRatio||1,2));
+const sabProbe=document.getElementById('sab');
 
-  let W=0,H=0,CELL=0,COLS=0,ROWS=0,N=0;
+let W=0,H=0,CELL=0,COLS=0,ROWS=0,N=0;
 
-  // ---- visual density choices (in CSS px per cell)
-  const DENSITY_CHOICES = [2,3,4,6,8,12,16];
-  let cellCssPx = DENSITY_CHOICES[0];
+// Densities (CSS px per cell)
+const DENSITY_CHOICES=[2,3,4,6,8,12,16];
+let cellCssPx=DENSITY_CHOICES[0];
 
-  function applyGrid(){
-    W=Math.floor(innerWidth*DPR); H=Math.floor(innerHeight*DPR);
-    cv.width=W; cv.height=H; cv.style.width='100vw'; cv.style.height='100vh';
-    CELL = Math.max(2, Math.round(cellCssPx*DPR));
-    COLS=(W/CELL)|0; ROWS=(H/CELL)|0; N=COLS*ROWS;
-    alloc(); buildGridPattern(); computeUI();
+// world params (brush & life tuned via picker)
+const params={
+  lifeFertility:1.2,
+  lifeResilience:0.3,
+  lifeSpread:1.4,
+  lifeMortality:0.5,
+  brushRadius:1.1,
+  stoneFormSec:2.0,
+  wallBombPct:0.08,
+  wallBoostPct:0.08
+};
+const WALL_TOXICITY=0.25;
+let brushMode='seed'; // 'seed' | 'barrier' | 'nutrient' | 'erase'
+
+// ===== state arrays =====
+let alive,nextAlive,blink,field,hueX,hueY;
+let forming,stoneProg,stoneJit,stoneFlag,stoneHP,wallType;
+let nutrient,nutBoost,nutFlash;
+let poisonWave,nextPoisonWave,nutWave,nextNutWave;
+let boostFlash,eraseGlow;
+const emitters=[];
+
+function alloc(){
+  alive=new Uint8Array(N); nextAlive=new Uint8Array(N); blink=new Float32Array(N);
+  field=new Float32Array(N); hueX=new Float32Array(N); hueY=new Float32Array(N);
+  forming=new Uint8Array(N); stoneProg=new Float32Array(N); stoneJit=new Float32Array(N);
+  stoneFlag=new Uint8Array(N); stoneHP=new Float32Array(N); wallType=new Uint8Array(N);
+  nutrient=new Float32Array(N); nutBoost=new Uint8Array(N); nutFlash=new Float32Array(N);
+  poisonWave=new Uint8Array(N); nextPoisonWave=new Uint8Array(N);
+  nutWave=new Uint8Array(N); nextNutWave=new Uint8Array(N);
+  boostFlash=new Float32Array(N); eraseGlow=new Float32Array(N);
+  emitters.length=0;
+}
+
+// grid pattern
+let gridPattern=null, GRID_DIM=null;
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function buildGridPattern(){
+  const s=CELL, p=document.createElement('canvas'); p.width=p.height=2*s;
+  const g=p.getContext('2d');
+  GRID_DIM=cssVar('--grid-dim'); const bright=cssVar('--grid-bright');
+  g.fillStyle=GRID_DIM; g.fillRect(0,0,2*s,2*s);
+  g.fillStyle=bright; g.fillRect(0,0,s,s); g.fillRect(s,s,s,s);
+  gridPattern=ctx.createPattern(p,'repeat');
+}
+
+function applyGrid(){
+  W=Math.floor(innerWidth*DPR); H=Math.floor(innerHeight*DPR);
+  cv.width=W; cv.height=H; cv.style.width='100vw'; cv.style.height='100vh';
+  CELL=Math.max(2, Math.round(cellCssPx*DPR));
+  COLS=(W/CELL)|0; ROWS=(H/CELL)|0; N=COLS*ROWS;
+  alloc(); buildGridPattern(); computeUI();
+}
+
+// ===== UI layout (density dropdown + picker) =====
+// physical sizes (CSS px → device px)
+const PICKER_PX = 120;     // keep approx same physical height across densities
+const UI_SPACER_PX = 12;   // gap between dropdown and picker
+const DENS_HEADER_PX = 36; // header row height
+const DENS_PANEL_PX  = 160;// panel height when opened
+
+let reservedBottomRows=0;
+
+let densHeaderY0=0,densHeaderY1=0;
+let densPanelY0=0,densPanelY1=0, densOpen=false;
+
+let pickY0=0,pickY1=0;
+let pickLifeEnd=0,pickWallEnd=0,pickNutrEnd=0,pickEraseEnd=0;
+
+// strict no-draw: from densHeaderY0 downward
+let noDrawBorderPxTop=0;
+
+function safeBottomCssPx(){ return sabProbe.getBoundingClientRect().height||0; }
+
+function rowsFromPx(px){ return Math.max(2, Math.ceil((px*DPR)/CELL)); }
+
+function computeUI(){
+  const inset=safeBottomCssPx();
+  reservedBottomRows = Math.ceil(((inset+24)*DPR)/Math.max(1,CELL));
+
+  // Compute picker rows by physical height
+  const PICK_ROWS = rowsFromPx(PICKER_PX);
+  const HEADER_ROWS= rowsFromPx(DENS_HEADER_PX);
+  const PANEL_ROWS = densOpen ? rowsFromPx(DENS_PANEL_PX) : 0;
+  const SPACER_ROWS= rowsFromPx(UI_SPACER_PX);
+
+  // Bottom-up placement
+  pickY1=ROWS-1-reservedBottomRows;
+  pickY0=Math.max(0, pickY1 - PICK_ROWS + 1);
+
+  const spacerY1=Math.max(0, pickY0 - 1);
+  const spacerY0=Math.max(0, spacerY1 - SPACER_ROWS + 1);
+
+  densPanelY1=Math.max(0, spacerY0 - 1);
+  densPanelY0= densOpen ? Math.max(0, densPanelY1 - PANEL_ROWS + 1) : densPanelY1+1;
+
+  densHeaderY1 = densOpen ? Math.max(0, densPanelY0 - 1) : Math.max(0, spacerY0 - 1);
+  densHeaderY0 = Math.max(0, densHeaderY1 - HEADER_ROWS + 1);
+
+  noDrawBorderPxTop = densHeaderY0*CELL;
+
+  // Picker horizontal partitions (Life big, Wall big, Nutr small, Erase small; small = 1/3 big)
+  // Use units: big=3, small=1 → total 8 units
+  const totalUnits=8;
+  const lifeUnits=3, wallUnits=3, nutrUnits=1, eraseUnits=1;
+  const unitCols = Math.max(1, Math.floor(COLS/totalUnits));
+  pickLifeEnd  = lifeUnits*unitCols;
+  pickWallEnd  = pickLifeEnd + wallUnits*unitCols;
+  pickNutrEnd  = pickWallEnd + nutrUnits*unitCols;
+  pickEraseEnd = COLS; // fill remainder
+}
+
+// ===== Picker mapping =====
+function lerp(a,b,t){return a*(1-t)+b*t;}
+const lerp2=(a,b,k)=>[ lerp(a[0],b[0],k), lerp(a[1],b[1],k) ];
+function wallMixFrom(t){
+  if(t<=0.5){const k=t/0.5; return lerp2([0.30,0.00],[0.15,0.15],k);}
+  if(t<=0.85){const k=(t-0.5)/0.35; return lerp2([0.15,0.15],[0.00,0.30],k);}
+  const k=(t-0.85)/0.15; return lerp2([0.00,0.30],[0.00,0.00],k);
+}
+
+let picking=null, lastPick=null, nowTS=performance.now();
+function applyPick(px,py){
+  const cx=(px/CELL)|0;
+  let readout=[], t=0;
+
+  if (cx < pickLifeEnd){
+    brushMode='seed';
+    t = Math.min(1, Math.max(0, cx/Math.max(1,pickLifeEnd-1)));
+    params.lifeFertility=lerp(0.6,3.0,t);
+    params.lifeResilience=lerp(0.0,1.0,t);
+    params.lifeSpread=lerp(0.8,2.5,t);
+    params.lifeMortality=lerp(0.70,0.12,t);
+    readout=[`LIFE`];
+  } else if (cx < pickWallEnd){
+    brushMode='barrier';
+    t = Math.min(1, Math.max(0, (cx-pickLifeEnd)/Math.max(1,(pickWallEnd-pickLifeEnd-1))));
+    const [bomb,boost]=wallMixFrom(t);
+    params.wallBombPct=bomb; params.wallBoostPct=boost;
+    readout=[`WALLS`];
+  } else if (cx < pickNutrEnd){
+    brushMode='nutrient'; readout=[`NUTRITION`];
+  } else {
+    brushMode='erase'; readout=[`ERASE`];
   }
+  picking={x:px,y:py,readout,mode:brushMode,t};
+  lastPick={x:px, until:nowTS+700, readout};
+}
 
-  // ---- parameters (set by picker)
-  const params = {
-    lifeFertility: 1.2,
-    lifeResilience: 0.3,
-    lifeSpread: 1.4,
-    lifeMortality: 0.5,
-    brushRadius: 1.1,
-    stoneFormSec: 2.0,
-    wallBombPct: 0.08,
-    wallBoostPct: 0.08
-  };
-  const WALL_TOXICITY = 0.25;
-  let brushMode='seed';
+// ===== Strict input routing (no draw below header) =====
+function isInNoDrawZonePx(py){ return py>=noDrawBorderPxTop; }
+function inHeader(row){ return row>=densHeaderY0 && row<=densHeaderY1; }
+function inPanel(row){ return densOpen && row>=densPanelY0 && row<=densPanelY1; }
+function inPicker(row){ return row>=pickY0 && row<=pickY1; }
 
-  // ---- state
-  let alive,nextAlive,blink,field,hueX,hueY;
-  let forming,stoneProg,stoneJit,stoneFlag,stoneHP,wallType;
-  let nutrient,nutBoost,nutFlash;
-  let poisonWave,nextPoisonWave,nutWave,nextNutWave;
-  let boostFlash,eraseGlow;
-  const emitters=[];
+const touches=new Map();
+function normTouches(e){
+  const r=cv.getBoundingClientRect(); const out=[];
+  const list=(e.changedTouches||[]);
+  for(let i=0;i<list.length;i++){
+    const t=list[i]; out.push({id:t.identifier,x:(t.clientX-r.left)*DPR,y:(t.clientY-r.top)*DPR});
+  } return out;
+}
 
-  function alloc(){
-    alive=new Uint8Array(N); nextAlive=new Uint8Array(N); blink=new Float32Array(N);
-    field=new Float32Array(N); hueX=new Float32Array(N); hueY=new Float32Array(N);
-    forming=new Uint8Array(N); stoneProg=new Float32Array(N); stoneJit=new Float32Array(N);
-    stoneFlag=new Uint8Array(N); stoneHP=new Float32Array(N); wallType=new Uint8Array(N);
-    nutrient=new Float32Array(N); nutBoost=new Uint8Array(N); nutFlash=new Float32Array(N);
-    poisonWave=new Uint8Array(N); nextPoisonWave=new Uint8Array(N);
-    nutWave=new Uint8Array(N); nextNutWave=new Uint8Array(N);
-    boostFlash=new Float32Array(N); eraseGlow=new Float32Array(N);
-    emitters.length=0;
+function onStart(e){
+  e.preventDefault();
+  for(const t of normTouches(e)){
+    const row=(t.y/CELL)|0;
+    const c={id:t.id,lastX:t.x,lastY:t.y,ui:null};
+    if (isInNoDrawZonePx(t.y)){
+      if (inHeader(row)){ c.ui='header'; toggleDensityOpen(); }
+      else if (inPanel(row)){ c.ui='panel'; chooseDensityAt(t.x,t.y); }
+      else if (inPicker(row)){ c.ui='picker'; applyPick(t.x,t.y); }
+      else c.ui='blocked';
+    } else {
+      c.ui='draw'; deposit(t.x,t.y,0,0,true);
+    }
+    touches.set(t.id,c);
   }
-
-  // ---- grid pattern
-  let gridPattern=null, GRID_DIM=null;
-  function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
-  function buildGridPattern(){
-    const s=CELL, p=document.createElement('canvas'); p.width=p.height=2*s;
-    const g=p.getContext('2d');
-    GRID_DIM = cssVar('--grid-dim');
-    const bright = cssVar('--grid-bright');
-    g.fillStyle=GRID_DIM; g.fillRect(0,0,2*s,2*s);
-    g.fillStyle=bright; g.fillRect(0,0,s,s); g.fillRect(s,s,s,s);
-    gridPattern=ctx.createPattern(p,'repeat');
+}
+function onMove(e){
+  e.preventDefault();
+  for(const t of normTouches(e)){
+    const prev=touches.get(t.id); if(!prev) continue;
+    const row=(t.y/CELL)|0;
+    if (isInNoDrawZonePx(t.y)){
+      if (inPanel(row)){ prev.ui='panel'; chooseDensityAt(t.x,t.y); continue; }
+      if (inPicker(row)){ prev.ui='picker'; applyPick(t.x,t.y); continue; }
+      prev.ui='blocked'; continue;
+    }
+    if (prev.ui!=='draw') continue;
+    const vx=t.x-prev.lastX, vy=t.y-prev.lastY; deposit(t.x,t.y,vx,vy,false);
+    prev.lastX=t.x; prev.lastY=t.y;
   }
+}
+function onEnd(e){ for(const t of normTouches(e)) touches.delete(t.id); picking=null; }
 
-  // ---- layout: density palette (top of UI), spacer, picker (bottom)
-  let reservedBottomRows=0;
-  let PICK_ROWS=18, pickY0=0, pickY1=0, pickXLife=0, pickXWall=0, pickXNutr=0, pickXErase=0;
+cv.addEventListener('touchstart',onStart,{passive:false});
+cv.addEventListener('touchmove', onMove ,{passive:false});
+cv.addEventListener('touchend',  onEnd  ,{passive:false});
+cv.addEventListener('touchcancel',onEnd ,{passive:false});
 
-  let DENS_ROWS=8, densY0=0, densY1=0;
-  let UI_SPACER_ROWS=3; // gap between density palette and picker
-
-  // strict no-draw border: top of the density palette
-  let noDrawBorderPxTop = 0;
-
-  // density button geometry (computed each layout)
-  const densButtons=[]; // {x0,x1,y0,y1,val}
-
-  function safeBottomCssPx(){ return sabProbe.getBoundingClientRect().height || 0; }
-
-  function computeUI(){
-    const insetPx = safeBottomCssPx();
-    reservedBottomRows = Math.ceil(((insetPx + 24) * DPR) / Math.max(1,CELL));
-
-    PICK_ROWS = Math.max(16, Math.min(28, Math.round(ROWS*0.18)));
-    DENS_ROWS = 8;
-    UI_SPACER_ROWS = 3;
-
-    pickY1 = ROWS - 1 - reservedBottomRows;
-    pickY0 = Math.max(0, pickY1 - PICK_ROWS + 1);
-
-    const spacerY1 = Math.max(0, pickY0 - 2);
-    const spacerY0 = Math.max(0, spacerY1 - UI_SPACER_ROWS + 1);
-
-    densY1 = Math.max(0, spacerY0 - 2);
-    densY0 = Math.max(0, densY1 - DENS_ROWS + 1);
-
-    pickXLife  = Math.round(COLS*0.45);
-    pickXWall  = Math.round(COLS*0.90);
-    pickXNutr  = Math.round(COLS*0.96);
-    pickXErase = COLS;
-
-    // strict no-brush from density top downward
-    noDrawBorderPxTop = densY0*CELL;
-
-    // compute density buttons across width with margins
-    densButtons.length=0;
-    const count = DENSITY_CHOICES.length;
-    const padCols = Math.max(2, Math.floor(COLS*0.02));
-    const avail = COLS - padCols*2;
-    const gapCols = Math.max(2, Math.floor(avail*0.01));
-    const btnCols = Math.floor((avail - gapCols*(count-1))/count);
-    let x = padCols;
-    for(let i=0;i<count;i++){
-      densButtons.push({
-        x0: x, x1: x+btnCols-1,
-        y0: densY0, y1: densY1,
-        val: DENSITY_CHOICES[i]
-      });
-      x += btnCols + gapCols;
+// ===== Density dropdown logic =====
+let densHoverIdx=-1;
+function toggleDensityOpen(){ densOpen=!densOpen; computeUI(); }
+function densitiesLayout(){ // return array of row rects (for selection)
+  if(!densOpen) return [];
+  const rows = densPanelY1-densPanelY0+1;
+  const items = DENSITY_CHOICES.length;
+  const per = Math.max(2, Math.floor(rows/items));
+  const out=[];
+  let y=densPanelY0;
+  for(let i=0;i<items;i++){
+    const y0=y, y1=Math.min(densPanelY1, y+per-1);
+    out.push({y0,y1,val:DENSITY_CHOICES[i]});
+    y=y1+1;
+  }
+  return out;
+}
+function chooseDensityAt(px,py){
+  const cy=(py/CELL)|0; const items=densitiesLayout();
+  for(const it of items){
+    if(cy>=it.y0 && cy<=it.y1){
+      if (cellCssPx!==it.val){ cellCssPx=it.val; applyGrid(); }
+      densHoverIdx=DENSITY_CHOICES.indexOf(it.val);
+      return;
     }
   }
+}
 
-  // ---- picker helpers
-  function lerp(a,b,t){ return a*(1-t)+b*t; }
-  const lerp2=(a,b,k)=>[ lerp(a[0],b[0],k), lerp(a[1],b[1],k) ];
-  function wallMixFrom(t){
-    if (t<=0.5){ const k=t/0.5;  return lerp2([0.30,0.00],[0.15,0.15],k); }
-    if (t<=0.85){ const k=(t-0.5)/0.35; return lerp2([0.15,0.15],[0.00,0.30],k); }
-    const k=(t-0.85)/0.15; return lerp2([0.00,0.30],[0.00,0.00],k);
+// ===== Emitters / physics (unchanged core) =====
+function addEmitter(px,py,ang,energy,burst,canSpawn,colorMode){
+  const mult=params.lifeSpread;
+  for(let k=0;k<(burst||1);k++){
+    const jitter=ang+(Math.random()-0.5)*0.5;
+    const spd=(12+28*Math.min(1,energy)+Math.random()*6)*mult;
+    const ttl=(900+1200*energy+Math.random()*400)/(1/Math.max(0.6,Math.min(2.5,mult)));
+    emitters.push({x:px/CELL,y:py/CELL,dx:Math.cos(jitter)*spd,dy:Math.sin(jitter)*spd,ttl,canSpawn:!!canSpawn,colorMode:colorMode||0});
   }
-
-  let picking=null;          // current finger pick
-  let lastPick=null;         // sticky feedback
-  let sliderTip=null;        // reused as info bubble for density
-  let nowTS=performance.now();
-
-  function applyPick(px,py){
-    const cx=(px/CELL)|0;
-    const lifeRegion = (cx < pickXLife);
-    const wallRegion = (cx >= pickXLife && cx < pickXWall);
-    const nutrRegion = (cx >= pickXWall && cx < pickXNutr);
-    const eraseRegion= (cx >= pickXNutr);
-
-    let readout=[], t=0;
-    if (lifeRegion){
-      brushMode='seed';
-      t = Math.min(1, Math.max(0, cx/Math.max(1,(pickXLife-1))));
-      params.lifeFertility = lerp(0.6, 3.0, t);
-      params.lifeResilience= lerp(0.0, 1.0, t);
-      params.lifeSpread    = lerp(0.8, 2.5, t);
-      params.lifeMortality = lerp(0.70,0.12, t);
-      readout=[`LIFE`,`Fert ${params.lifeFertility.toFixed(2)}×`,`Res ${params.lifeResilience.toFixed(2)}`,`Spr ${params.lifeSpread.toFixed(2)}×`,`Mort ${params.lifeMortality.toFixed(2)}`];
-    } else if (wallRegion){
-      brushMode='barrier';
-      t = Math.min(1, Math.max(0, (cx-pickXLife)/Math.max(1,(pickXWall-pickXLife-1))));
-      const [bomb,boost] = wallMixFrom(t);
-      params.wallBombPct  = bomb;
-      params.wallBoostPct = boost;
-      readout=[`WALLS`,`Poison ${(bomb*100).toFixed(0)}%`,`Nutr ${(boost*100).toFixed(0)}%`,`None ${(Math.max(0,1-bomb-boost)*100).toFixed(0)}%`];
-    } else if (nutrRegion){
-      brushMode='nutrient'; readout=[`NUTRITION`];
-    } else if (eraseRegion){
-      brushMode='erase'; readout=[`ERASE`];
-    }
-    picking={x:px,y:py,readout,mode:brushMode,t};
-    lastPick = { x:px, until: nowTS + 700, readout };
+  if(emitters.length>1600) emitters.splice(0, emitters.length-1600);
+}
+function radialBurst(cx,cy,rays,canSpawn=true,colorMode=0){
+  const cxp=cx*CELL + CELL*0.5, cyp=cy*CELL + CELL*0.5;
+  const r=rays||28;
+  for(let i=0;i<r;i++){ const a=(i/r)*Math.PI*2; addEmitter(cxp,cyp,a,1,1,canSpawn,colorMode); }
+}
+function stepEmitters(dt){
+  for(let i=emitters.length-1;i>=0;i--){
+    const e=emitters[i]; e.ttl-=dt; if(e.ttl<=0){emitters.splice(i,1); continue;}
+    const s=dt/1000; e.x+=e.dx*s; e.y+=e.dy*s;
+    const ix=e.x|0, iy=e.y|0; if(ix<0||iy<0||ix>=COLS||iy>=ROWS){ emitters.splice(i,1); continue; }
+    const id=iy*COLS+ix;
+    if (stoneFlag[id]){
+      const damp=-0.6;
+      if(Math.abs(e.dx)>Math.abs(e.dy)){ e.dx*=damp; e.dy*=0.35; } else { e.dy*=damp; e.dx*=0.35; }
+    } else if (e.canSpawn){ alive[id]=1; blink[id]=1.0; }
+    if (e.colorMode===2){ eraseGlow[id]=Math.max(eraseGlow[id],1.0); }
   }
+}
 
-  // ---- touch routing (strict no-draw from densY0 downward)
-  const touches=new Map();
-  function normTouches(e){
-    const r=cv.getBoundingClientRect(); const out=[];
-    const list=(e.changedTouches||[]);
-    for(let i=0;i<list.length;i++){
-      const t=list[i]; out.push({id:t.identifier, x:(t.clientX-r.left)*DPR, y:(t.clientY-r.top)*DPR});
-    } return out;
+function deposit(px,py,vx,vy,initial){
+  if(isInNoDrawZonePx(py)) return;
+  const sp=Math.hypot(vx,vy);
+  const baseR=2.2*CELL*params.brushRadius;
+  const r=baseR+Math.min(7*CELL*params.brushRadius, sp*1.0);
+  const r2=r*r; const cx=(px/CELL)|0, cy=(py/CELL)|0; const rad=Math.ceil(r/CELL);
+  const dirAng=Math.atan2(vy, vx||1e-6);
+  if((initial || sp>0.6*CELL)){
+    if(brushMode==='seed') addEmitter(px,py,dirAng,Math.min(1,sp/(2.0*CELL)),1,true,0);
+    if(brushMode==='erase')addEmitter(px,py,dirAng,Math.min(1,sp/(2.0*CELL)),2,false,2);
   }
-  function isInNoDrawZonePx(py){ return py >= noDrawBorderPxTop; }
-  function inRectCell(xc,yc,btn){ return xc>=btn.x0 && xc<=btn.x1 && yc>=btn.y0 && yc<=btn.y1; }
+  for(let yy=cy-rad; yy<=cy+rad; yy++){
+    if(yy<0||yy>=ROWS) continue;
+    if (yy*CELL + CELL*0.5 >= noDrawBorderPxTop) continue;
+    for(let xx=cx-rad; xx<=cx+rad; xx++){
+      if(xx<0||xx>=COLS) continue;
+      const gx=xx*CELL + CELL*0.5, gy=yy*CELL + CELL*0.5;
+      const dx=gx-px, dy=gy-py; const d2=dx*dx+dy*dy; if(d2>r2) continue;
+      const i=yy*COLS+xx;
+      const sigma=r*0.5; const fall=Math.exp(-d2/(2*sigma*sigma));
+      const amp=fall*(1+Math.min(1, sp/(1.6*CELL)));
 
-  function onStart(e){
-    e.preventDefault();
-    for(const t of normTouches(e)){
-      const c={id:t.id,lastX:t.x,lastY:t.y,ui:null};
-      const row=(t.y/CELL)|0;
-
-      if (isInNoDrawZonePx(t.y)){
-        // density palette gets priority
-        const cx=(t.x/CELL)|0, cy=row;
-        let hit=null;
-        for(const b of densButtons){ if(inRectCell(cx,cy,b)){ hit=b; break; } }
-        if (hit){ c.ui='density'; setDensity(hit.val, t.x, t.y); touches.set(t.id,c); continue; }
-
-        // picker
-        if (row>=pickY0 && row<=pickY1){ c.ui='picker'; applyPick(t.x,t.y); touches.set(t.id,c); continue; }
-
-        c.ui='blocked'; touches.set(t.id,c); continue;
-      }
-
-      // drawing zone
-      c.ui='draw'; deposit(t.x,t.y,0,0,true); touches.set(t.id,c);
-    }
-  }
-  function onMove(e){
-    e.preventDefault();
-    for(const t of normTouches(e)){
-      const prev=touches.get(t.id); if(!prev) continue;
-      const row=(t.y/CELL)|0;
-      if (isInNoDrawZonePx(t.y)){
-        const cx=(t.x/CELL)|0, cy=row;
-        if (prev.ui==='density' || densButtons.some(b=>inRectCell(cx,cy,b))){
-          prev.ui='density'; const b = densButtons.find(bb=>inRectCell(cx,cy,bb)); if (b) setDensity(b.val, t.x, t.y); continue;
+      if (brushMode==='seed'){
+        field[i]=Math.max(field[i], amp*0.9);
+        const ang=Math.atan2(dy,dx); hueX[i]+=Math.cos(ang)*amp; hueY[i]+=Math.sin(ang)*amp;
+        if(!alive[i] && Math.random()<amp*0.9){ alive[i]=1; blink[i]=1.0; }
+      } else if (brushMode==='barrier'){
+        if(!stoneFlag[i]){
+          if(!forming[i]){
+            forming[i]=1; stoneJit[i]=0.9+Math.random()*0.2;
+            const r1=Math.random(); wallType[i]=0;
+            if(r1<params.wallBombPct) wallType[i]=1; else if(r1<params.wallBombPct+params.wallBoostPct) wallType[i]=2;
+          }
+          stoneProg[i]=Math.min(1, stoneProg[i]+amp*0.05);
         }
-        if (prev.ui==='picker' || (row>=pickY0 && row<=pickY1)){ prev.ui='picker'; applyPick(t.x,t.y); continue; }
-        prev.ui='blocked'; continue;
+        nutrient[i]=0; if(nutBoost[i]){nutBoost[i]=0;nutFlash[i]=0;}
+      } else if (brushMode==='nutrient'){
+        nutrient[i]=Math.min(1, nutrient[i]+amp*0.9);
+      } else {
+        alive[i]=0; nextAlive[i]=0; blink[i]=0;
+        nutrient[i]=0; nutBoost[i]=0; nutFlash[i]=0;
+        poisonWave[i]=0; nutWave[i]=0;
+        forming[i]=0; stoneFlag[i]=0; stoneHP[i]=0; stoneProg[i]=0; wallType[i]=0;
+        eraseGlow[i]=Math.max(eraseGlow[i],0.2+0.8*amp);
       }
-      if (prev.ui!=='draw') continue;
-      const vx=t.x-prev.lastX, vy=t.y-prev.lastY;
-      deposit(t.x,t.y,vx,vy,false); prev.lastX=t.x; prev.lastY=t.y;
     }
   }
-  function onEnd(e){
-    for(const t of normTouches(e)) touches.delete(t.id);
-    picking=null; // keep lastPick visible
-    sliderTip=null;
-  }
-  cv.addEventListener('touchstart', onStart, {passive:false});
-  cv.addEventListener('touchmove',  onMove,  {passive:false});
-  cv.addEventListener('touchend',   onEnd,   {passive:false});
-  cv.addEventListener('touchcancel',onEnd,   {passive:false});
+}
 
-  // ---- density palette logic
-  function setDensity(val, px, py){
-    if (val!==cellCssPx){
-      cellCssPx = val;
-      applyGrid();
-    }
-    sliderTip = {x:px, y:py, text:`Density: ${cellCssPx}px`};
+// ===== sim =====
+let acc=0,lastT=performance.now();
+function step(dt){
+  acc+=dt; if(acc<80) return; const tick=acc; acc=0;
+
+  const seedFade=Math.exp(-tick/180);
+  for(let i=0;i<N;i++){
+    field[i]*=seedFade; hueX[i]*=seedFade; hueY[i]*=seedFade;
+    blink[i]*=Math.exp(-tick/90);
+    if(nutFlash[i]>0)   nutFlash[i]=Math.max(0,nutFlash[i]-tick);
+    if(boostFlash[i]>0) boostFlash[i]=Math.max(0,boostFlash[i]-tick);
+    if(eraseGlow[i]>0)  eraseGlow[i]*=Math.exp(-tick/200);
   }
 
-  // ---- emitters / deposit (unchanged except hard no-draw)
-  function addEmitter(px,py,ang,energy,burst,canSpawn,colorMode){
-    const mult = params.lifeSpread;
-    for(let k=0;k<(burst||1);k++){
-      const jitter = ang + (Math.random()-0.5)*0.5;
-      const spd = (12 + 28*Math.min(1, energy) + Math.random()*6) * mult;
-      const ttl = (900 + 1200*energy + Math.random()*400) / (1/Math.max(0.6, Math.min(2.5,mult)));
-      emitters.push({x:px/CELL, y:py/CELL, dx:Math.cos(jitter)*spd, dy:Math.sin(jitter)*spd, ttl, canSpawn:!!canSpawn, colorMode:colorMode||0});
-    }
-    if (emitters.length>1600) emitters.splice(0, emitters.length-1600);
-  }
-  function radialBurst(cx,cy, rays, canSpawn=true, colorMode=0){
-    const centerX=cx*CELL + CELL*0.5, centerY=cy*CELL + CELL*0.5;
-    const r = rays||28;
-    for (let i=0;i<r;i++){
-      const ang=(i/r)*Math.PI*2;
-      addEmitter(centerX, centerY, ang, 1, 1, canSpawn, colorMode);
+  for(let i=0;i<N;i++){
+    if(forming[i] && !stoneFlag[i]){
+      stoneProg[i]+=(1/(params.stoneFormSec*1000))*(stoneJit[i]||1)*tick;
+      if(stoneProg[i]>=1){ stoneProg[i]=1; forming[i]=0; stoneFlag[i]=1; stoneHP[i]=1; }
     }
   }
-  function stepEmitters(dt){
-    for(let i=emitters.length-1;i>=0;i--){
-      const e=emitters[i]; e.ttl-=dt; if(e.ttl<=0){emitters.splice(i,1); continue;}
-      const step=dt/1000; e.x+=e.dx*step; e.y+=e.dy*step;
-      const ix=e.x|0, iy=e.y|0;
-      if(ix<0||iy<0||ix>=COLS||iy>=ROWS){ emitters.splice(i,1); continue; }
-      const id=iy*COLS+ix;
-      if (stoneFlag[id]){
-        const damp=-0.6;
-        if (Math.abs(e.dx)>Math.abs(e.dy)) { e.dx*=damp; e.dy*=0.35; }
-        else { e.dy*=damp; e.dx*=0.35; }
-      } else if (e.canSpawn){
-        alive[id]=1; blink[id]=1.0;
+
+  stepEmitters(tick);
+
+  nextPoisonWave.fill(0); nextNutWave.fill(0);
+  for(let y=0;y<ROWS;y++){
+    for(let x=0;x<COLS;x++){
+      const i=y*COLS+x;
+      const pS=poisonWave[i]; if(pS>0){
+        const s=pS-1;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          if(!dx&&!dy)continue; const xx=x+dx,yy=y+dy;
+          if(xx<0||yy<0||xx>=COLS||yy>=ROWS)continue;
+          const j=yy*COLS+xx; if(stoneFlag[j])continue;
+          if(nextPoisonWave[j]<s) nextPoisonWave[j]=s;
+        }
       }
-      if (e.colorMode===2){ eraseGlow[id] = Math.max(eraseGlow[id], 1.0); }
+      const nS=nutWave[i]; if(nS>0){
+        const s=nS-1;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          if(!dx&&!dy)continue; const xx=x+dx,yy=y+dy;
+          if(xx<0||yy<0||xx>=COLS||yy>=ROWS)continue;
+          const j=yy*COLS+xx; if(stoneFlag[j])continue;
+          if(nextNutWave[j]<s) nextNutWave[j]=s;
+        }
+      }
     }
   }
+  for(let i=0;i<N;i++){
+    poisonWave[i]=Math.max(0, Math.max(poisonWave[i]-1, nextPoisonWave[i]));
+    nutWave[i]=Math.max(0, Math.max(nutWave[i]-1, nextNutWave[i]));
+    if(nutWave[i]>0) nutrient[i]=Math.min(1, nutrient[i]+0.25);
+  }
 
-  function deposit(px,py,vx,vy,initial){
-    if (isInNoDrawZonePx(py)) return;
-
-    const sp=Math.hypot(vx,vy);
-    const baseR=2.2*CELL*params.brushRadius;
-    const r=baseR + Math.min(7*CELL*params.brushRadius, sp*1.0);
-    const r2=r*r; const cx=(px/CELL)|0, cy=(py/CELL)|0; const rad=Math.ceil(r/CELL);
-    const dirAng=Math.atan2(vy, vx||1e-6);
-
-    if ((initial || sp>0.6*CELL)){
-      if (brushMode==='seed')   addEmitter(px,py,dirAng, Math.min(1, sp/(2.0*CELL)), 1, true, 0);
-      if (brushMode==='erase')  addEmitter(px,py,dirAng, Math.min(1, sp/(2.0*CELL)), 2, false, 2);
+  for(let y=0;y<ROWS;y++){
+    for(let x=0;x<COLS;x++){
+      const i=y*COLS+x; if(stoneFlag[i]){ nextAlive[i]=0; continue; }
+      const a=alive[i];
+      let n=0,nearBarrier=false;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        if(!dx&&!dy)continue; const xx=x+dx,yy=y+dy;
+        if(xx<0||yy<0||xx>=COLS||yy>=ROWS)continue;
+        const j=yy*COLS+xx; const isB=stoneFlag[j]||forming[j];
+        n+=alive[j]*(isB?0.25:1.0); if(isB) nearBarrier=true;
+      }
+      const nut=nutrient[i], waveP=poisonWave[i];
+      let born=(!a)&&(n===3);
+      let survive=(a)&&(n===2||n===3);
+      if(!a && n===2){
+        const fert=0.08*(Math.max(0,params.lifeFertility-1))*(0.6+0.8*nut);
+        if(Math.random()<fert) born=true;
+      }
+      if(a && n===4){
+        const res=0.15*params.lifeResilience*(0.6+0.8*nut);
+        if(Math.random()<res) survive=true;
+      }
+      let dead=false;
+      if(a && nearBarrier){
+        const p=WALL_TOXICITY*(0.8-0.5*nut); if(Math.random()<p) dead=true;
+      }
+      if(a && !dead && waveP>0) dead=true;
+      if(a && !dead){
+        const m=params.lifeMortality*0.16; if(Math.random()<m) dead=true;
+      }
+      nextAlive[i]= dead?0:(born?1:(survive?1:0));
+      if(nextAlive[i]){
+        blink[i]=1.0;
+        if(nutrient[i]>0) nutrient[i]=Math.max(0, nutrient[i]-0.10);
+        if(nutBoost[i]){ nutBoost[i]=0; nutFlash[i]=240; radialBurst(x,y,32,true,0); }
+      }
     }
+  }
+  {const t=alive; alive=nextAlive; nextAlive=t;}
 
-    for(let yy=cy-rad; yy<=cy+rad; yy++){
-      if(yy<0||yy>=ROWS) continue;
-      if (yy*CELL + CELL*0.5 >= noDrawBorderPxTop) continue;
-      for(let xx=cx-rad; xx<=cx+rad; xx++){
-        if(xx<0||xx>=COLS) continue;
-        const gx=xx*CELL + CELL*0.5, gy=yy*CELL + CELL*0.5;
-        const dx=gx-px, dy=gy-py; const d2=dx*dx+dy*dy; if(d2>r2) continue;
-        const i=yy*COLS+xx;
-
-        const sigma=r*0.5; const fall=Math.exp(-d2/(2*sigma*sigma));
-        const amp = fall * (1 + Math.min(1, sp/(1.6*CELL)));
-
-        if (brushMode==='seed'){
-          field[i] = Math.max(field[i], amp*0.9);
-          const ang=Math.atan2(dy,dx); hueX[i]+=Math.cos(ang)*amp; hueY[i]+=Math.sin(ang)*amp;
-          if (!alive[i] && Math.random()<amp*0.9) { alive[i]=1; blink[i]=1.0; }
-        } else if (brushMode==='barrier'){
-          if (!stoneFlag[i]){
-            if (!forming[i]){
-              forming[i]=1;
-              stoneJit[i] = 0.9 + Math.random()*0.2;
-              const r1 = Math.random();
-              wallType[i] = 0;
-              if (r1 < params.wallBombPct) wallType[i]=1;
-              else if (r1 < params.wallBombPct + params.wallBoostPct) wallType[i]=2;
+  const eatBase=0.06*params.lifeSpread*(1+0.6*Math.random());
+  for(let y=0;y<ROWS;y++){
+    for(let x=0;x<COLS;x++){
+      const i=y*COLS+x; if(!alive[i]) continue;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        if(!dx&&!dy)continue; const xx=x+dx,yy=y+dy;
+        if(xx<0||yy<0||xx>=COLS||yy>=ROWS)continue;
+        const j=yy*COLS+xx; if(!stoneFlag[j]) continue;
+        stoneHP[j]-=eatBase;
+        if(stoneHP[j]<=0){
+          const t=wallType[j];
+          stoneFlag[j]=0; stoneHP[j]=0; stoneProg[j]=0; forming[j]=0;
+          if(t===1){
+            boostFlash[j]=240; poisonWave[j]=Math.max(poisonWave[j],10);
+            const r=8;
+            for(let ddy=-1;ddy<=1;ddy++)for(let ddx=-1;ddx<=1;ddx++){
+              if(!ddx&&!ddy)continue; const nx=xx+ddx, ny=yy+ddy;
+              if(nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
+              const id=ny*COLS+nx; if(!stoneFlag[id]) poisonWave[id]=Math.max(poisonWave[id],r);
             }
-            stoneProg[i] = Math.min(1, stoneProg[i] + amp*0.05);
-          }
-          nutrient[i] = 0; if (nutBoost[i]) { nutBoost[i]=0; nutFlash[i]=0; }
-        } else if (brushMode==='nutrient'){
-          nutrient[i] = Math.min(1, nutrient[i] + amp*0.9);
-        } else { // ERASE
-          alive[i]=0; nextAlive[i]=0; blink[i]=0;
-          nutrient[i]=0; nutBoost[i]=0; nutFlash[i]=0;
-          poisonWave[i]=0; nutWave[i]=0;
-          forming[i]=0; stoneFlag[i]=0; stoneHP[i]=0; stoneProg[i]=0; wallType[i]=0;
-          eraseGlow[i] = Math.max(eraseGlow[i], 0.2 + 0.8*amp);
-        }
-      }
-    }
-  }
-
-  // ---- simulation
-  let acc=0, lastT=performance.now();
-  function step(dt){
-    acc+=dt; if(acc<80) return; const tick=acc; acc=0;
-
-    const seedFade = Math.exp(-tick/180);
-    for(let i=0;i<N;i++){
-      field[i]*=seedFade; hueX[i]*=seedFade; hueY[i]*=seedFade;
-      blink[i]*=Math.exp(-tick/90);
-      if (nutFlash[i]>0)   { nutFlash[i]=Math.max(0, nutFlash[i]-tick); }
-      if (boostFlash[i]>0) { boostFlash[i]=Math.max(0, boostFlash[i]-tick); }
-      if (eraseGlow[i]>0)  { eraseGlow[i]*=Math.exp(-tick/200); }
-    }
-
-    for(let i=0;i<N;i++){
-      if (forming[i] && !stoneFlag[i]) {
-        stoneProg[i] += (1/(params.stoneFormSec*1000))*(stoneJit[i]||1)*tick;
-        if (stoneProg[i] >= 1) { stoneProg[i]=1; forming[i]=0; stoneFlag[i]=1; stoneHP[i]=1; }
-      }
-    }
-
-    stepEmitters(tick);
-
-    nextPoisonWave.fill(0); nextNutWave.fill(0);
-    for(let y=0;y<ROWS;y++){
-      for(let x=0;x<COLS;x++){
-        const i=y*COLS+x;
-        const pS=poisonWave[i];
-        if (pS>0){
-          const s = pS-1;
-          for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-            if(!dx && !dy) continue;
-            const xx=x+dx, yy=y+dy; if(xx<0||yy<0||xx>=COLS||yy>=ROWS) continue;
-            const j=yy*COLS+xx; if (stoneFlag[j]) continue;
-            if (nextPoisonWave[j] < s) nextPoisonWave[j]=s;
-          }
-        }
-        const nS=nutWave[i];
-        if (nS>0){
-          const s = nS-1;
-          for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-            if(!dx && !dy) continue;
-            const xx=x+dx, yy=y+dy; if(xx<0||yy<0||xx>=COLS||yy>=ROWS) continue;
-            const j=yy*COLS+xx; if (stoneFlag[j]) continue;
-            if (nextNutWave[j] < s) nextNutWave[j]=s;
-          }
-        }
-      }
-    }
-    for(let i=0;i<N;i++){
-      poisonWave[i] = Math.max(0, Math.max(poisonWave[i]-1, nextPoisonWave[i]));
-      nutWave[i]    = Math.max(0, Math.max(nutWave[i]-1,    nextNutWave[i]));
-      if (nutWave[i]>0) nutrient[i] = Math.min(1, nutrient[i] + 0.25);
-    }
-
-    for(let y=0;y<ROWS;y++){
-      for(let x=0;x<COLS;x++){
-        const i=y*COLS+x;
-        if (stoneFlag[i]) { nextAlive[i]=0; continue; }
-
-        const a=alive[i];
-        let n=0, nearBarrier=false;
-        for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-          if(!dx && !dy) continue;
-          const xx=x+dx, yy=y+dy; if(xx<0||yy<0||xx>=COLS||yy>=ROWS) continue;
-          const j=yy*COLS+xx;
-          const isBarrier = stoneFlag[j] || forming[j];
-          const w = isBarrier ? 0.25 : 1.0;
-          n += alive[j]*w;
-          if (isBarrier) nearBarrier=true;
-        }
-
-        const nut = nutrient[i];
-        const wavePoison = poisonWave[i];
-
-        let born   = (!a) && (n===3);
-        let survive=  (a)  && (n===2 || n===3);
-
-        if (!a && n===2){
-          const fertKick = 0.08*(Math.max(0, params.lifeFertility-1))*(0.6+0.8*nut);
-          if (Math.random()<fertKick) born = true;
-        }
-        if (a && n===4){
-          const resKick = 0.15*params.lifeResilience*(0.6+0.8*nut);
-          if (Math.random()<resKick) survive = true;
-        }
-
-        let dead=false;
-        if (a && nearBarrier){
-          const p = WALL_TOXICITY * (0.8 - 0.5*nut);
-          if (Math.random() < p) dead = true;
-        }
-        if (a && !dead && wavePoison>0){ dead = true; }
-        if (a && !dead){
-          const m = params.lifeMortality * 0.16;
-          if (Math.random() < m) dead = true;
-        }
-
-        nextAlive[i] = dead ? 0 : (born ? 1 : (survive ? 1 : 0));
-        if (nextAlive[i]) {
-          blink[i]=1.0;
-          if (nutrient[i] > 0){ nutrient[i] = Math.max(0, nutrient[i] - 0.10); }
-          if (nutBoost[i]){ nutBoost[i]=0; nutFlash[i]=240; radialBurst(x,y,32,true,0); }
-        }
-      }
-    }
-    { const t=alive; alive=nextAlive; nextAlive=t; }
-
-    const eatBase = 0.06 * params.lifeSpread * (1 + 0.6*Math.random());
-    for(let y=0;y<ROWS;y++){
-      for(let x=0;x<COLS;x++){
-        const i=y*COLS+x; if (!alive[i]) continue;
-        for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-          if(!dx&&!dy) continue;
-          const xx=x+dx, yy=y+dy; if(xx<0||yy<0||xx>=COLS||yy>=ROWS) continue;
-          const j=yy*COLS+xx; if (!stoneFlag[j]) continue;
-          stoneHP[j] -= eatBase;
-          if (stoneHP[j] <= 0){
-            const t=wallType[j];
-            stoneFlag[j]=0; stoneHP[j]=0; stoneProg[j]=0; forming[j]=0;
-            if (t===1){
-              boostFlash[j]=240; poisonWave[j]=Math.max(poisonWave[j],10);
-              const r=8;
-              for(let ddy=-1;ddy<=1;ddy++) for(let ddx=-1;ddx<=1;ddx++){
-                if(!ddx&&!ddy)continue; const nx=xx+ddx, ny=yy+ddy;
-                if(nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
-                const id=ny*COLS+nx; if (!stoneFlag[id]) poisonWave[id]=Math.max(poisonWave[id],r);
+          } else if (t===2){
+            boostFlash[j]=240; nutWave[j]=Math.max(nutWave[j],10); radialBurst(xx,yy,32,true,0);
+            const R=4,R2=R*R;
+            for(let iy=yy-R; iy<=yy+R; iy++){
+              if(iy<0||iy>=ROWS) continue;
+              for(let ix=xx-R; ix<=xx+R; ix++){
+                if(ix<0||ix>=COLS) continue;
+                const dx2=ix-xx,dy2=iy-yy; if(dx2*dx2+dy2*dy2>R2) continue;
+                const id=iy*COLS+ix;
+                if(stoneFlag[id]||forming[id]){ stoneFlag[id]=0; forming[id]=0; stoneHP[id]=0; stoneProg[id]=0; wallType[id]=0; nutrient[id]=Math.min(1,nutrient[id]+1); }
               }
-            } else if (t===2){
-              boostFlash[j]=240; nutWave[j]=Math.max(nutWave[j],10); radialBurst(xx,yy,32,true,0);
-              const R=4,R2=R*R;
-              for(let iy=yy-R; iy<=yy+R; iy++){
-                if(iy<0||iy>=ROWS) continue;
-                for(let ix=xx-R; ix<=xx+R; ix++){
-                  if(ix<0||ix>=COLS) continue;
-                  const dx2=ix-xx, dy2=iy-yy; if(dx2*dx2+dy2*dy2>R2) continue;
-                  const id=iy*COLS+ix;
-                  if(stoneFlag[id]||forming[id]){ stoneFlag[id]=0; forming[id]=0; stoneHP[id]=0; stoneProg[id]=0; wallType[id]=0; nutrient[id]=Math.min(1,nutrient[id]+1); }
-                }
-              }
-            } else {
-              boostFlash[j]=160; radialBurst(xx,yy,20,true,0);
             }
-            wallType[j]=0;
+          } else {
+            boostFlash[j]=160; radialBurst(xx,yy,20,true,0);
           }
+          wallType[j]=0;
         }
       }
     }
   }
+}
 
-  // ---- render
-  function fillCell(ix,iy){ ctx.fillRect(ix*CELL+1, iy*CELL+1, CELL-2, CELL-2); }
+// ===== render =====
+function fillCell(ix,iy){ ctx.fillRect(ix*CELL+1, iy*CELL+1, CELL-2, CELL-2); }
 
-  function render(){
-    // grid
-    ctx.fillStyle = gridPattern ? gridPattern : (GRID_DIM || '#0e1217');
-    ctx.fillRect(0,0,W,H);
+function render(){
+  // grid
+  ctx.fillStyle = gridPattern ? gridPattern : (GRID_DIM || '#0e1217');
+  ctx.fillRect(0,0,W,H);
 
-    // world
-    for(let y=0;y<ROWS;y++){
-      const yOff=y*COLS;
-      for(let x=0;x<COLS;x++){
-        const i=yOff+x;
-
-        if (boostFlash[i]>0 || nutFlash[i]>0){ ctx.fillStyle='#fff176'; fillCell(x,y); continue; }
-        if (stoneFlag[i]){ ctx.fillStyle='#8a93a0'; fillCell(x,y); continue; }
-        const prog = stoneProg[i];
-        if (prog>0){ ctx.fillStyle='hsl(210,0%,60%)'; ctx.globalAlpha=Math.min(1,0.15+0.85*prog); fillCell(x,y); ctx.globalAlpha=1; }
-        if (poisonWave[i]>0){ ctx.globalAlpha=Math.min(0.45,0.06*poisonWave[i]); ctx.fillStyle='hsl(320,90%,50%)'; fillCell(x,y); ctx.globalAlpha=1; }
-        const nut=nutrient[i];
-        if (nut>0.02){ ctx.globalAlpha=Math.min(0.35,nut*0.35); ctx.fillStyle='#ff9a3c'; fillCell(x,y); ctx.globalAlpha=1; }
-        if (nutWave[i]>0){ ctx.globalAlpha=Math.min(0.35,0.05*nutWave[i]); ctx.fillStyle='#ff9a3c'; fillCell(x,y); ctx.globalAlpha=1; }
-        const f=field[i], a=alive[i];
-        if (f>0.02 || a){
-          const hx=hueX[i], hy=hueY[i];
-          const H=(hx||hy)?(Math.atan2(hy,hx)*180/Math.PI+360)%360:200;
-          const S=Math.min(100,60+Math.max(0,f)*40);
-          const L=(18+(a?28:12)+Math.max(0,f)*60);
-          ctx.fillStyle=`hsl(${H},${S}%,${Math.min(74,L)}%)`;
-          fillCell(x,y);
-        }
-        const b=blink[i]; if (b>0.02){ ctx.globalAlpha=Math.min(0.22,b*0.22); ctx.fillStyle='#bfe2ff'; fillCell(x,y); ctx.globalAlpha=1; }
-        const eg=eraseGlow[i]; if (eg>0.01){ ctx.globalAlpha=Math.min(0.45, eg*0.45); ctx.fillStyle='hsl(0,80%,80%)'; fillCell(x,y); ctx.globalAlpha=1; }
+  // world
+  for(let y=0;y<ROWS;y++){
+    const off=y*COLS;
+    for(let x=0;x<COLS;x++){
+      const i=off+x;
+      if(boostFlash[i]>0 || nutFlash[i]>0){ ctx.fillStyle='#fff176'; fillCell(x,y); continue; }
+      if(stoneFlag[i]){ ctx.fillStyle='#8a93a0'; fillCell(x,y); continue; }
+      const prog=stoneProg[i];
+      if(prog>0){ ctx.fillStyle='hsl(210,0%,60%)'; ctx.globalAlpha=Math.min(1,0.15+0.85*prog); fillCell(x,y); ctx.globalAlpha=1; }
+      if(poisonWave[i]>0){ ctx.globalAlpha=Math.min(0.45,0.06*poisonWave[i]); ctx.fillStyle='hsl(320,90%,50%)'; fillCell(x,y); ctx.globalAlpha=1; }
+      const nut=nutrient[i];
+      if(nut>0.02){ ctx.globalAlpha=Math.min(0.35,nut*0.35); ctx.fillStyle='#ff9a3c'; fillCell(x,y); ctx.globalAlpha=1; }
+      if(nutWave[i]>0){ ctx.globalAlpha=Math.min(0.35,0.05*nutWave[i]); ctx.fillStyle='#ff9a3c'; fillCell(x,y); ctx.globalAlpha=1; }
+      const f=field[i], a=alive[i];
+      if(f>0.02 || a){
+        const hx=hueX[i], hy=hueY[i];
+        const H=(hx||hy)?(Math.atan2(hy,hx)*180/Math.PI+360)%360:200;
+        const S=Math.min(100,60+Math.max(0,f)*40);
+        const L=(18+(a?28:12)+Math.max(0,f)*60);
+        ctx.fillStyle=`hsl(${H},${S}%,${Math.min(74,L)}%)`;
+        fillCell(x,y);
       }
-    }
-
-    // density palette (buttons)
-    drawDensityPalette();
-
-    // strict no-draw border (top of density palette)
-    ctx.globalAlpha=0.9;
-    ctx.fillStyle='rgba(255,255,255,0.25)';
-    ctx.fillRect(0, Math.max(0, noDrawBorderPxTop|0), W, Math.max(1, Math.floor(DPR)));
-    ctx.globalAlpha=1;
-
-    // picker
-    drawPicker();
-
-    // preview ring (topmost)
-    drawPreviewSpot();
-
-    // sticky pick indicator + info bubble for density
-    if (picking) drawPickIndicator(picking.x, picking.readout);
-    else if (lastPick && nowTS < lastPick.until) drawPickIndicator(lastPick.x, lastPick.readout);
-    if (sliderTip) drawInfo(sliderTip.x, densY0*CELL, [sliderTip.text], true);
-  }
-
-  // ---- density palette draw
-  function drawDensityPalette(){
-    for(const b of densButtons){
-      // button background
-      for(let y=b.y0;y<=b.y1;y++){
-        for(let x=b.x0;x<=b.x1;x++){
-          ctx.fillStyle='hsl(220,10%,32%)'; fillCell(x,y);
-        }
-      }
-      // miniature grid preview (actual px size)
-      const pxSize = Math.round(b.val * DPR);
-      const wpx = (b.x1-b.x0+1)*CELL, hpx=(b.y1-b.y0+1)*CELL;
-      const cols = Math.max(1, Math.floor(wpx/pxSize));
-      const rows = Math.max(1, Math.floor(hpx/pxSize));
-      const x0px = b.x0*CELL, y0px=b.y0*CELL;
-
-      for(let r=0;r<rows;r++){
-        for(let c=0;c<cols;c++){
-          const on = ((r+c)&1)===0;
-          ctx.fillStyle = on ? 'hsl(210,12%,46%)' : 'hsl(210,14%,38%)';
-          ctx.fillRect(x0px + c*pxSize + 1, y0px + r*pxSize + 1, Math.max(1,pxSize-2), Math.max(1,pxSize-2));
-        }
-      }
-
-      // selection outline
-      if (b.val===cellCssPx){
-        ctx.globalAlpha=1;
-        ctx.strokeStyle='rgba(255,255,255,0.9)';
-        ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
-        ctx.strokeRect(b.x0*CELL, b.y0*CELL, (b.x1-b.x0+1)*CELL, (b.y1-b.y0+1)*CELL);
-      }
+      const b=blink[i]; if(b>0.02){ ctx.globalAlpha=Math.min(0.22,b*0.22); ctx.fillStyle='#bfe2ff'; fillCell(x,y); ctx.globalAlpha=1; }
+      const eg=eraseGlow[i]; if(eg>0.01){ ctx.globalAlpha=Math.min(0.45, eg*0.45); ctx.fillStyle='hsl(0,80%,80%)'; fillCell(x,y); ctx.globalAlpha=1; }
     }
   }
 
-  // ---- picker draw
-  function drawPicker(){
-    const lifeEnd=pickXLife, wallEnd=pickXWall;
-    for(let y=pickY0;y<=pickY1;y++){
-      const r01=(y-pickY0)/Math.max(1,PICK_ROWS-1);
-      for(let x=0;x<lifeEnd;x++){
-        const t=x/Math.max(1,lifeEnd-1);
-        const H=195+15*t, S=20+70*t, L=28+20*(1-Math.abs(r01-0.5)*2);
-        ctx.fillStyle=`hsl(${H}, ${S}%, ${L}%)`; fillCell(x,y);
+  // density dropdown (header + optional panel)
+  drawDensityHeader();
+  if(densOpen) drawDensityPanel();
+
+  // strict no-draw border at header top
+  ctx.globalAlpha=0.9; ctx.fillStyle='rgba(255,255,255,0.25)';
+  ctx.fillRect(0, Math.max(0, noDrawBorderPxTop|0), W, Math.max(1, Math.floor(DPR)));
+  ctx.globalAlpha=1;
+
+  // picker bars + white icons over them
+  drawPicker();
+
+  // topmost brush preview ring
+  drawPreviewSpot();
+
+  // sticky pick indicator label
+  if (picking) drawPickIndicator(picking.x, picking.readout);
+  else if (lastPick && nowTS<lastPick.until) drawPickIndicator(lastPick.x, lastPick.readout);
+}
+
+function drawDensityHeader(){
+  // header background
+  for(let y=densHeaderY0;y<=densHeaderY1;y++){
+    for(let x=0;x<COLS;x++){ ctx.fillStyle='hsl(220,12%,28%)'; fillCell(x,y); }
+  }
+  // left mini grid icon
+  const cx = Math.max(2, Math.floor(COLS*0.02));
+  drawMiniGridIcon((cx*CELL)|0, (Math.floor((densHeaderY0+densHeaderY1)/2)*CELL)|0, Math.max(8,Math.floor(CELL*3)), true);
+
+  // chevron on right
+  const rx = Math.floor(COLS*0.95); const cy = Math.floor((densHeaderY0+densHeaderY1)/2);
+  ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
+  ctx.beginPath();
+  if(!densOpen){ // down
+    ctx.moveTo(rx*CELL - CELL*2, cy*CELL - CELL*1.2);
+    ctx.lineTo(rx*CELL,           cy*CELL + CELL*1.2);
+    ctx.lineTo(rx*CELL + CELL*2,  cy*CELL - CELL*1.2);
+  }else{ // up
+    ctx.moveTo(rx*CELL - CELL*2, cy*CELL + CELL*1.2);
+    ctx.lineTo(rx*CELL,           cy*CELL - CELL*1.2);
+    ctx.lineTo(rx*CELL + CELL*2,  cy*CELL + CELL*1.2);
+  }
+  ctx.stroke();
+
+  // current density label bar
+  const labelW = Math.min(W*0.35, 160*DPR), labelH = Math.max(CELL*1.6, 16);
+  const lx = Math.min(W - labelW - 6, Math.max(6, W*0.5 - labelW*0.5));
+  const ly = (densHeaderY0*CELL) + Math.max(2, (densHeaderY1-densHeaderY0)*CELL*0.2);
+  ctx.fillStyle='rgba(15,20,32,0.92)'; ctx.fillRect(lx,ly,labelW,labelH);
+  ctx.fillStyle='rgba(200,210,255,0.9)'; ctx.fillRect(lx,ly, Math.min(labelW*0.4,70), labelH);
+}
+
+function drawDensityPanel(){
+  // background
+  for(let y=densPanelY0;y<=densPanelY1;y++){
+    for(let x=0;x<COLS;x++){ ctx.fillStyle='hsl(220,12%,20%)'; fillCell(x,y); }
+  }
+  const items=densitiesLayout();
+  for(let i=0;i<items.length;i++){
+    const it=items[i];
+    // button bg
+    for(let y=it.y0;y<=it.y1;y++){
+      for(let x=1;x<COLS-1;x++){ ctx.fillStyle=(i===densHoverIdx)?'hsl(220,14%,30%)':'hsl(220,12%,24%)'; fillCell(x,y); }
+    }
+    // preview miniature grid using actual device px size
+    const pxSize=Math.round(it.val*DPR);
+    const wpx=(COLS-4)*CELL, hpx=(it.y1-it.y0+1)*CELL;
+    const cols=Math.max(1,Math.floor(wpx/pxSize));
+    const rows=Math.max(1,Math.floor(hpx/pxSize));
+    const x0px=2*CELL, y0px=it.y0*CELL;
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        const on=((r+c)&1)===0;
+        ctx.fillStyle= on?'hsl(210,12%,46%)':'hsl(210,14%,38%)';
+        ctx.fillRect(x0px + c*pxSize + 1, y0px + r*pxSize + 1, Math.max(1,pxSize-2), Math.max(1,pxSize-2));
       }
     }
-    for(let y=pickY0;y<=pickY1;y++){
-      for(let x=lifeEnd;x<wallEnd;x++){
-        const t=(x-lifeEnd)/Math.max(1,wallEnd-lifeEnd-1);
-        let col;
-        if(t<0.5){ const k=t/0.5; col=mixHSL([320,90,50],[220,10,55],k); }
-        else if(t<0.85){ const k=(t-0.5)/0.35; col=mixHSL([220,10,55],[150,65,50],k); }
-        else { const k=(t-0.85)/0.15; col=mixHSL([150,65,50],[210,4,40],k); }
-        ctx.fillStyle=`hsl(${col[0]}, ${col[1]}%, ${col[2]}%)`; fillCell(x,y);
-      }
+    if (it.val===cellCssPx){
+      ctx.strokeStyle='rgba(255,255,255,0.9)';
+      ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
+      ctx.strokeRect(1*CELL, it.y0*CELL, (COLS-2)*CELL, (it.y1-it.y0+1)*CELL);
     }
-    for(let y=pickY0;y<=pickY1;y++){
-      for(let x=wallEnd;x<pickXNutr;x++){
-        const t=(x-wallEnd)/Math.max(1,pickXNutr-wallEnd-1);
-        const H=36+6*Math.sin((t*2-1)*2.4), S=85, L=45+12*(1-Math.abs((y-pickY0)/(PICK_ROWS-1)-0.5)*2);
-        ctx.fillStyle=`hsl(${H}, ${S}%, ${L}%)`; fillCell(x,y);
-      }
-    }
-    for(let y=pickY0;y<=pickY1;y++){
-      for(let x=pickXNutr;x<pickXErase;x++){
-        const rX=(x-pickXNutr)/Math.max(1,pickXErase-pickXNutr-1);
-        const rY=(y-pickY0)/Math.max(1,PICK_ROWS-1);
-        ctx.fillStyle=`hsl(6,85%,${48+10*(1-Math.abs(rY-0.5)*2)}%)`; fillCell(x,y);
-        if(Math.abs(rX-rY)<0.08 || Math.abs(rX-(1-rY))<0.08){ ctx.fillStyle='hsl(0,100%,38%)'; fillCell(x,y); }
-      }
-    }
-    ctx.globalAlpha=0.28; ctx.fillStyle='hsl(220,10%,35%)'; ctx.fillRect(0,(pickY0*CELL)|0, W, 1); ctx.globalAlpha=1;
   }
-  function mixHSL(a,b,k){ return [(a[0]*(1-k)+b[0]*k+360)%360, a[1]*(1-k)+b[1]*k, a[2]*(1-k)+b[2]*k]; }
+}
 
-  // ---- preview spot + indicators
-  function drawPreviewSpot(){
-    const cx = picking ? Math.min(COLS-1, Math.max(0, (picking.x/CELL)|0))
-      : (brushMode==='seed' ? (pickXLife>>1)
-        : brushMode==='barrier' ? ((pickXLife + pickXWall)>>1)
-        : brushMode==='nutrient' ? ((pickXWall + pickXNutr)>>1)
-        : ((pickXNutr + pickXErase)>>1));
-
-    const py = Math.max(0, noDrawBorderPxTop - Math.round(8*DPR));
-    const px = cx*CELL + CELL*0.5;
-    const r = 2.6*CELL*params.brushRadius;
-
-    ctx.globalAlpha=1;
-    ctx.strokeStyle='rgba(255,255,255,0.95)';
-    ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
-    ctx.beginPath(); ctx.arc(px,py, r, 0, Math.PI*2); ctx.stroke();
-
-    const cy = (py/CELL)|0; const radCells=Math.max(2, Math.ceil(r/CELL));
-    for(let yy=cy-radCells; yy<=cy+radCells; yy++){
-      if(yy<0||yy>=ROWS) continue;
-      for(let xx=cx-radCells; xx<=cx+radCells; xx++){
-        if(xx<0||xx>=COLS) continue;
-        const gx=xx*CELL + CELL*0.5, gy=yy*CELL + CELL*0.5;
-        const d2=(gx-px)*(gx-px)+(gy-py)*(gy-py); if(d2>r*r) continue;
-        if (brushMode==='seed') ctx.fillStyle='hsl(200,60%,58%)';
-        else if (brushMode==='barrier'){
-          const bomb=params.wallBombPct, boost=params.wallBoostPct;
-          if (bomb>boost && bomb>0) ctx.fillStyle='hsl(320,90%,60%)';
-          else if (boost>bomb && boost>0) ctx.fillStyle='hsl(150,60%,50%)';
-          else ctx.fillStyle='#8a93a0';
-        } else if (brushMode==='nutrient') ctx.fillStyle='#ff9a3c';
-        else ctx.fillStyle='hsl(6,85%,62%)';
-        fillCell(xx,yy);
-      }
+// Picker drawing with icons
+function drawPicker(){
+  // Life (left big)
+  for(let y=pickY0;y<=pickY1;y++){
+    const r01=(y-pickY0)/Math.max(1,(pickY1-pickY0));
+    for(let x=0;x<pickLifeEnd;x++){
+      const t=x/Math.max(1,pickLifeEnd-1);
+      const H=195+15*t, S=20+70*t, L=28+20*(1-Math.abs(r01-0.5)*2);
+      ctx.fillStyle=`hsl(${H},${S}%,${L}%)`; fillCell(x,y);
     }
-
-    if (brushMode==='erase'){
-      ctx.strokeStyle='rgba(210,40,40,0.95)';
-      ctx.lineWidth=Math.max(1,Math.floor(CELL*0.9));
-      const d=r*0.8;
-      ctx.beginPath(); ctx.moveTo(px-d,py-d); ctx.lineTo(px+d,py+d); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(px+d,py-d); ctx.lineTo(px-d,py+d); ctx.stroke();
+  }
+  // Wall (next big)
+  for(let y=pickY0;y<=pickY1;y++){
+    for(let x=pickLifeEnd;x<pickWallEnd;x++){
+      const t=(x-pickLifeEnd)/Math.max(1,(pickWallEnd-pickLifeEnd-1));
+      let col; if(t<0.5){const k=t/0.5; col=mixHSL([320,90,50],[220,10,55],k);}
+      else if(t<0.85){const k=(t-0.5)/0.35; col=mixHSL([220,10,55],[150,65,50],k);}
+      else {const k=(t-0.85)/0.15; col=mixHSL([150,65,50],[210,4,40],k);}
+      ctx.fillStyle=`hsl(${col[0]},${col[1]}%,${col[2]}%)`; fillCell(x,y);
+    }
+  }
+  // Nutrient (small)
+  for(let y=pickY0;y<=pickY1;y++){
+    for(let x=pickWallEnd;x<pickNutrEnd;x++){
+      const r01=(y-pickY0)/Math.max(1,(pickY1-pickY0));
+      ctx.fillStyle=`hsl(${36},85%,${45+12*(1-Math.abs(r01-0.5)*2)}%)`; fillCell(x,y);
+    }
+  }
+  // Erase (small)
+  for(let y=pickY0;y<=pickY1;y++){
+    for(let x=pickNutrEnd;x<pickEraseEnd;x++){
+      const r01=(y-pickY0)/Math.max(1,(pickY1-pickY0));
+      ctx.fillStyle=`hsl(6,85%,${48+10*(1-Math.abs(r01-0.5)*2)}%)`; fillCell(x,y);
     }
   }
 
-  function drawPickIndicator(px, readout){
-    const cx=(px/CELL)|0;
-    ctx.globalAlpha=0.8; ctx.fillStyle='rgba(255,255,255,0.65)';
-    ctx.fillRect(cx*CELL, pickY0*CELL, Math.max(2,Math.floor(CELL*0.35)), (PICK_ROWS)*CELL);
-    ctx.globalAlpha=1;
+  // top border line of picker
+  ctx.globalAlpha=0.28; ctx.fillStyle='hsl(220,10%,35%)';
+  ctx.fillRect(0,(pickY0*CELL)|0, W, 1); ctx.globalAlpha=1;
 
-    const label = readout[0] || '';
-    const barW = Math.min(W*0.6, Math.max(120, label.length*10))*0.6;
-    const bx = Math.min(W-barW-8, Math.max(8, px - barW/2));
-    const by = (pickY0*CELL) - Math.max(18, CELL*2) - 6;
-    ctx.fillStyle='rgba(15,20,32,0.92)'; ctx.fillRect(bx, by, barW, Math.max(16, CELL*1.8));
-    ctx.fillStyle='rgba(200,210,255,0.9)'; ctx.fillRect(bx, by, Math.min(barW, barW*0.35), Math.max(16, CELL*1.8));
+  // White grid icons over areas (centered)
+  drawBrushIcons();
+}
+
+function mixHSL(a,b,k){ return [(a[0]*(1-k)+b[0]*k+360)%360, a[1]*(1-k)+b[1]*k, a[2]*(1-k)+b[2]*k]; }
+
+// Simple glyphs
+function drawBrushIcons(){
+  const cy = Math.floor((pickY0+pickY1)/2)*CELL + CELL*0.5;
+  // Life icon: small plus/grid spark
+  drawMiniGridIcon(Math.floor((pickLifeEnd*CELL)*0.5), cy, Math.max(8,Math.floor(CELL*3)), false);
+
+  // Wall icon: small white rounded rectangle / brick
+  drawBrickIcon(Math.floor(( (pickLifeEnd+pickWallEnd)*CELL )*0.5), cy, Math.max(10,Math.floor(CELL*3.5)));
+
+  // Nutrient icon: three dots
+  drawDotsIcon(Math.floor(( (pickWallEnd+pickNutrEnd)*CELL )*0.5), cy, Math.max(8,Math.floor(CELL*3)));
+
+  // Erase icon: red tiny grid cross
+  drawRedXIcon(Math.floor(( (pickNutrEnd+pickEraseEnd)*CELL )*0.5), cy, Math.max(8,Math.floor(CELL*3)));
+}
+
+function drawMiniGridIcon(cx,cy,sz,withBorder){
+  const s=Math.max(2,Math.floor(sz/4));
+  const w=s*3, h=s*3;
+  const x=cx - w/2, y=cy - h/2;
+  for(let r=0;r<3;r++){
+    for(let c=0;c<3;c++){
+      const on=((r===1)||(c===1)); // plus shape
+      ctx.fillStyle= on?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.22)';
+      ctx.fillRect(x + c*s + 1, y + r*s + 1, Math.max(1,s-2), Math.max(1,s-2));
+    }
   }
-
-  function drawInfo(px,py,lines,above){
-    const w = Math.max(120, lines.join(' ').length*6);
-    const h = Math.max(16, CELL*1.5);
-    const x = Math.min(W-w-8, Math.max(8, px - w/2));
-    const y = (above? (py - h - 8) : (py + 8));
-    ctx.fillStyle='rgba(15,20,32,0.92)'; ctx.fillRect(x, y, w, h);
-    ctx.fillStyle='rgba(200,210,255,0.9)'; ctx.fillRect(x, y, Math.min(70,w*0.4), h);
-    ctx.fillStyle='#cfd7ff'; ctx.fillRect(x+8, y+Math.floor(h*0.35), w-16, Math.max(3, CELL*0.6));
+  if (withBorder){
+    ctx.strokeStyle='rgba(255,255,255,0.9)';
+    ctx.lineWidth=Math.max(1,Math.floor(CELL*0.5));
+    ctx.strokeRect(x, y, w, h);
   }
+}
+function drawBrickIcon(cx,cy,sz){
+  const w=sz*1.6, h=sz;
+  const x=cx-w/2, y=cy-h/2;
+  ctx.strokeStyle='rgba(255,255,255,0.9)';
+  ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
+  ctx.strokeRect(x,y,w,h);
+  // inner mortar lines
+  ctx.beginPath();
+  ctx.moveTo(x, y+h/2); ctx.lineTo(x+w, y+h/2);
+  ctx.moveTo(x+w/3, y); ctx.lineTo(x+w/3, y+h/2);
+  ctx.moveTo(x+(2*w/3), y+h/2); ctx.lineTo(x+(2*w/3), y+h);
+  ctx.stroke();
+}
+function drawDotsIcon(cx,cy,sz){
+  const r=Math.max(1,Math.floor(sz*0.18));
+  ctx.fillStyle='rgba(255,255,255,0.92)';
+  ctx.beginPath(); ctx.arc(cx - sz*0.35, cy, r, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + sz*0.35, cy, r, 0, Math.PI*2); ctx.fill();
+}
+function drawRedXIcon(cx,cy,sz){
+  ctx.strokeStyle='rgba(220,60,60,0.95)';
+  ctx.lineWidth=Math.max(1,Math.floor(sz*0.18));
+  const d=sz*0.6;
+  ctx.beginPath(); ctx.moveTo(cx-d,cy-d); ctx.lineTo(cx+d,cy+d); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx+d,cy-d); ctx.lineTo(cx-d,cy+d); ctx.stroke();
+}
 
-  function tick(now){
-    const dt=Math.min(50, now-lastT); lastT=now; nowTS=now;
-    step(dt); render(); requestAnimationFrame(tick);
-  }
+// Preview ring (topmost)
+function drawPreviewSpot(){
+  const cx = picking ? Math.min(COLS-1, Math.max(0,(picking.x/CELL)|0))
+    : (brushMode==='seed' ? Math.floor(pickLifeEnd/2)
+      : brushMode==='barrier' ? Math.floor((pickLifeEnd+pickWallEnd)/2)
+      : brushMode==='nutrient' ? Math.floor((pickWallEnd+pickNutrEnd)/2)
+      : Math.floor((pickNutrEnd+pickEraseEnd)/2));
+  const py = Math.max(0, noDrawBorderPxTop - Math.round(8*DPR));
+  const px = cx*CELL + CELL*0.5;
+  const r = 2.6*CELL*params.brushRadius;
 
-  applyGrid();
-  addEventListener('resize', ()=>{ applyGrid(); }, {passive:true});
-  cv.addEventListener('gesturestart', e=>e.preventDefault(), {passive:false});
-  requestAnimationFrame(tick);
+  ctx.globalAlpha=1;
+  ctx.strokeStyle='rgba(255,255,255,0.95)';
+  ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
+  ctx.beginPath(); ctx.arc(px,py, r, 0, Math.PI*2); ctx.stroke();
+}
+
+// pick indicator chip (very light)
+function drawPickIndicator(px, readout){
+  const label = readout[0]||'';
+  const w = Math.min(W*0.5, Math.max(120, label.length*10))*0.55;
+  const x = Math.min(W-w-8, Math.max(8, px - w/2));
+  const y = (pickY0*CELL) - Math.max(18, CELL*2) - 6;
+  const h = Math.max(16, CELL*1.6);
+  ctx.fillStyle='rgba(15,20,32,0.92)'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle='rgba(200,210,255,0.9)'; ctx.fillRect(x,y, Math.min(70,w*0.4), h);
+}
+
+// ===== loop =====
+function tick(now){
+  const dt=Math.min(50, now-lastT); lastT=now; nowTS=now;
+  step(dt); render(); requestAnimationFrame(tick);
+}
+
+// ===== init =====
+applyGrid();
+addEventListener('resize', ()=>{ applyGrid(); }, {passive:true});
+cv.addEventListener('gesturestart', e=>e.preventDefault(), {passive:false});
+requestAnimationFrame(tick);
+
 })();
 </script>
 </body>
