@@ -4,58 +4,45 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Live Camera Palette — Stable Freeze + Immediate Palettes</title>
-
-<!-- cache bust + iOS robustness -->
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<!-- v: ls-03 -->
-
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
     --controlsH:120px;
-    --sq:100vw;                 /* updated by JS */
-    --colLeftW:var(--sq);       /* landscape left column width = square */
+    --sq:100vw;           /* updated live by JS */
+    --colLeftW:var(--sq); /* used in landscape */
     --ctaW:clamp(220px,60vw,340px);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* ===== LAYERING to keep buttons working ===== */
-  #videoPane{z-index:1}
-  #palettePane{z-index:10}
-  #controlsBar{z-index:30}
-  #ccWrap{z-index:40}
-
-  /* ===== CAMERA (square) ===== */
+  /* ===== CAMERA (square, true edge-to-edge) ===== */
   #videoPane{
     position:fixed;left:0;right:0;top:0;height:var(--sq);
     display:flex;align-items:center;justify-content:center;
     border-bottom:1px solid var(--line);background:#000;overflow:hidden
   }
   body.land #videoPane{
-    left:0; top:0; bottom:0; right:auto;
-    width:var(--colLeftW); height:100vh;             /* fill full height */
-    border-bottom:none; border-right:1px solid var(--line);
+    right:auto;bottom:0;top:0;left:0;width:var(--colLeftW);height:auto;
+    border-bottom:none;border-right:1px solid var(--line);
   }
-
   .videoWrap{
-    position:relative;display:flex;align-items:center;justify-content:center;
-    width:var(--sq); height:var(--sq);               /* enforce square */
-    border-radius:0; overflow:hidden; background:#000
+    position:relative;
+    width:var(--sq); height:var(--sq);          /* ensure real square */
+    display:flex;align-items:center;justify-content:center;
+    border-radius:0;overflow:hidden;background:#000
   }
-  body.land .videoWrap{
-    width:var(--colLeftW); height:var(--colLeftW);   /* square = short side */
-    max-height:100vh; max-width:100vh;
+  body.land .videoWrap{ width:var(--colLeftW); height:var(--sq); }
+  /* make video truly cover the square */
+  video{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:cover; display:block;
+    transform:scale(var(--zoom)); transform-origin:center
   }
-
-  video{width:100%;height:100%;object-fit:cover;display:block;transform:scale(var(--zoom));transform-origin:center}
   #frozenCanvas{position:absolute;inset:0;width:100%;height:100%;display:none}
 
-  /* ===== RIGHT/UNDER CONTENT ===== */
+  /* ===== PALETTE (right/under content area) ===== */
   #palettePane{
     position:fixed;left:0;right:0;top:var(--sq);bottom:var(--controlsH);
     display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;
@@ -63,8 +50,8 @@
   }
   body.land #palettePane{
     left:calc(var(--colLeftW)); right:0; top:0; bottom:var(--controlsH);
+    border-bottom:1px solid var(--line);
   }
-
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
   .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px}
@@ -74,7 +61,7 @@
   #openHint{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;pointer-events:none}
   #openHint::after{content:"";width:12px;height:12px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;transform:rotate(-45deg);display:block}
 
-  /* ===== BOTTOM CONTROLS (right column in landscape) ===== */
+  /* ===== BOTTOM CONTROLS ===== */
   #controlsBar{
     position:fixed;left:0;right:0;bottom:0;background:#000;border-top:1px solid var(--line);
     padding:10px 12px calc(8px + env(safe-area-inset-bottom))
@@ -94,8 +81,10 @@
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* ===== CONTROL CENTER ===== */
-  #ccWrap{position:fixed;left:12px;right:12px;bottom:calc(var(--controlsH) + 8px);display:none}
+  /* ===== CONTROL CENTER (stays inside the content column) ===== */
+  #ccWrap{
+    position:fixed;left:12px;right:12px;bottom:calc(var(--controlsH) + 8px);display:none;z-index:20
+  }
   body.land #ccWrap{left:calc(var(--colLeftW) + 12px);right:12px}
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -111,7 +100,12 @@
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
   #unfreezeBtn{width:var(--ctaW);align-self:center}
 
-  .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
+  /* Tiny hint */
+  .smallhint{
+    font-size:12px; color:#9aa0a6;
+    margin-top:6px; text-align:center;
+    user-select:none;
+  }
 </style>
 </head>
 <body>
@@ -172,45 +166,35 @@
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ---------- orientation & sizing (iOS‑robust) ---------- */
-function isLandscape() {
-  if (window.matchMedia && window.matchMedia("(orientation: landscape)").matches) return true;
-  if (screen && typeof screen.orientation?.type === "string") return screen.orientation.type.startsWith("landscape");
-  return window.innerWidth > window.innerHeight;
-}
+/* ---------- orientation & layout sizing ---------- */
 function applyOrientationClass(){
-  const land = isLandscape();
+  const land = window.innerWidth > window.innerHeight;
   document.body.classList.toggle('land', land);
   document.body.classList.toggle('port', !land);
 }
-function viewportShortSide() {
-  const vv = window.visualViewport;
-  const w = Math.round((vv?.width ?? window.innerWidth));
-  const h = Math.round((vv?.height ?? window.innerHeight));
-  return Math.max(1, Math.min(w, h));
-}
 function setSquareToViewportEdge(){
-  const s = viewportShortSide();                    // short side = square
+  const land = window.innerWidth > window.innerHeight;
+  const s = land ? Math.max(1, Math.round(window.innerHeight))
+                 : Math.max(1, Math.round(window.innerWidth));
   document.documentElement.style.setProperty('--sq', s + 'px');
   document.documentElement.style.setProperty('--colLeftW', s + 'px');
   updateControlsH();
 }
-const reflow = () => { applyOrientationClass(); setSquareToViewportEdge(); };
-addEventListener('load', reflow, {once:true});
-addEventListener('resize', reflow);
-addEventListener('orientationchange', reflow);
-addEventListener('pageshow', reflow);
-addEventListener('visibilitychange', ()=>{ if(!document.hidden) reflow(); });
+addEventListener('load', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
+addEventListener('resize', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
+addEventListener('orientationchange', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
 
-/* Measure bottom bar */
+/* Measure the REAL bottom bar (includes safe area, paddings). */
 const controlsBar = document.getElementById('controlsBar');
 function updateControlsH(){
   const h = Math.round(controlsBar.getBoundingClientRect().height);
   document.documentElement.style.setProperty('--controlsH', h + 'px');
 }
-new ResizeObserver(updateControlsH).observe(controlsBar);
+/* Keep --controlsH live even if the bar reflows. */
+const ro = new ResizeObserver(() => updateControlsH());
+ro.observe(controlsBar);
 
-/* ---------- worker ---------- */
+/* ---------- worker with jobId ---------- */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
   const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
@@ -244,7 +228,7 @@ function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<sa
 function medianCutPalette(samples,k){
   const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
   let boxes=[{colors}];
-  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
+  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];}};
   boxes.forEach(bounds);
   const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
   const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
@@ -307,6 +291,7 @@ function dedupeAndSort(rgbList,minDE=10){
 }
 `], {type:'application/javascript'});
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
+worker.addEventListener('error', e=>console.log('Worker error:', e.message));
 
 /* ---------- elements ---------- */
 const video=document.getElementById('video');
@@ -336,8 +321,8 @@ const lpHint=document.getElementById('lpHint');
 
 /* ---------- state ---------- */
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
-let frameCounter=0,lastT=performance.now(),pending=false, running=false;
-let throttleCountdown=1;
+let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
+let throttleCountdown=1; // process first frame immediately
 let lastPalette=[];
 
 /* ---------- helpers ---------- */
@@ -346,9 +331,12 @@ function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_M
 function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
 function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 function status(t){ statusEl.textContent=t; }
-function updateLpHint(){ const touch=('ontouchstart'in window)|| (navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
+function updateLpHint(){
+  const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
+  lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
+}
 
-/* ---------- camera ---------- */
+/* ---------- camera (auto, robust) ---------- */
 async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
 async function startCamera(){
   try{
@@ -358,23 +346,40 @@ async function startCamera(){
     video.srcObject=stream;
     await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
 
-    try { await video.play(); }
-    catch{ status('Tap to start camera'); const once=()=>{ if(!compositeOverlay.classList.contains('open')) video.play().catch(()=>{}); document.removeEventListener('click',once,true); }; document.addEventListener('click',once,true); return; }
+    try {
+      await video.play();
+    } catch(playErr) {
+      console.error("Autoplay was blocked:", playErr);
+      status('Tap to start camera');
+      const resumeOnce = () => {
+        if (!compositeOverlay.classList.contains('open')) {
+          video.play().catch(err => console.error('Resume play failed:', err));
+        }
+        document.removeEventListener('click', resumeOnce, true);
+      };
+      document.addEventListener('click', resumeOnce, true);
+      return;
+    }
 
     status('Live');
     running=true; pending=false; throttleCountdown=1;
-    reflow();
-    renderPalette([]); 
+    setSquareToViewportEdge();
+    renderPalette([]); // initial empty
     loop();
   } catch(err) {
-    status(err?.name==='NotAllowedError'?'Camera permission denied.':(err?.message||'Camera failed'));
-    console.error(err);
+    let msg = 'Camera failed';
+    if (err && err.name === 'NotAllowedError') msg = 'Camera permission denied.';
+    else if (err && err.message) msg = err.message;
+    status(msg);
+    console.error("Camera start error:", err);
   }
 }
-startCamera().catch(console.error);
+startCamera().catch(err => console.error(err));
 
 /* ---------- UI ---------- */
 addEventListener('load', ()=>{ updateControlsH(); throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN); });
+addEventListener('resize', updateControlsH);
+addEventListener('orientationchange', updateControlsH);
 paletteClickable.addEventListener('click',(e)=>{ e.stopPropagation(); ccWrap.style.display='block'; });
 document.addEventListener('click',(e)=>{ if (compositeOverlay.classList.contains('open')) return; if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display=''; });
 
@@ -390,7 +395,11 @@ zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-freezeBtn.addEventListener('click',async()=>{ if(running) await freezeNow(); });
+/* Freeze: allow in landscape regardless of running; ignore if overlay open */
+freezeBtn.addEventListener('click',async()=>{
+  if (compositeOverlay.classList.contains('open')) return;
+  await freezeNow();
+});
 unfreezeBtn.addEventListener('click',()=>unfreeze());
 
 /* ---------- crop ---------- */
@@ -400,7 +409,7 @@ function computeSquareCrop(){
   return {sx,sy,sw,sh};
 }
 
-/* ---------- live handler ---------- */
+/* ---------- live handler (jobId==='live') ---------- */
 worker.onmessage = (e)=>{
   const {jobId, error} = e.data || {};
   if (jobId !== 'live') return;
@@ -408,16 +417,16 @@ worker.onmessage = (e)=>{
   const arr = new Uint8Array(e.data.palette||[]);
   const cols=[]; for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
   while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
-  lastPalette = cols.slice(0,K);
+  lastPalette = cols.slice(0,K); hasPalette = true;
   renderPalette(lastPalette);
   pending=false; frameCounter++;
 };
 
-/* ---------- RAF loop ---------- */
-let lastT=performance.now();
+/* ---------- RAF loop (countdown throttle; first frame immediate) ---------- */
 function loop(){
   requestAnimationFrame(loop);
-  if(video.readyState<2 || video.paused || !running) return;
+  if(video.readyState<2 || video.paused) return;
+  if(!running) return;
 
   const now=performance.now();
   if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
@@ -444,6 +453,7 @@ function renderPalette(palette){
   if(!palette || !palette.length){
     swatchesEl.style.display='flex'; swatchesEl.innerHTML=`<div class="swatch" style="background:#111"></div>`.repeat(K);
     gradientEl.hidden=true; gradientEl.style.background='';
+    hasPalette = false;
     return;
   }
   const hexes = palette.map(toHex);
@@ -468,13 +478,14 @@ async function freezeNow(){
   running=false; pending=false; throttleCountdown=1;
 
   const {sx,sy,sw,sh}=computeSquareCrop();
+  if (!sw) return;
 
-  /* low-res capture for palette */
+  /* Low-res capture (for palette): */
   const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
   capFrame.width=w; capFrame.height=h;
   const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
 
-  /* UI preview freeze */
+  /* UI-res freeze preview: */
   const wrap=document.querySelector('.videoWrap');
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
@@ -482,26 +493,28 @@ async function freezeNow(){
   frozenCanvas.style.display='block';
   await video.pause();
 
-  /* hi-res crop for composite */
+  /* Hi-res capture for composite (native crop): */
   const hiCap=document.createElement('canvas');
   hiCap.width=sw; hiCap.height=sh;
-  hiCap.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
+  const hiCtx=hiCap.getContext('2d');
+  hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
 
   compositeImg.src = '';
   compositeOverlay.classList.add('open');
   updateLpHint();
 
-  /* palette compute with timeout fallback */
+  /* Compute palette (with timeout fallback) */
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
   const imgs=capCtx.getImageData(0,0,w,h);
+
   const cols = await new Promise((resolve)=>{
     let settled=false;
-    const to=setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[[0,0,0]]); } },2000);
+    const to = setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[ [0,0,0] ]); } }, 2000);
     const handler=(ev)=>{
       const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
       worker.removeEventListener('message',handler); if(settled) return;
       settled=true; clearTimeout(to);
-      if(error){ resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
+      if(error){ console.log('Worker freeze error:', error); resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
       const arr=new Uint8Array(ev.data.palette||[]), out=[];
       for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
       while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
@@ -515,6 +528,7 @@ async function freezeNow(){
   renderPalette(cols);
 
   const hexes = cols.map(toHex);
+  /* keep camera size; double palette + labels */
   renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
 
   compositeImg.src = compositeCanvas.toDataURL('image/png');
@@ -526,53 +540,43 @@ function unfreeze(){
   frozenCanvas.style.display='none';
   running=true; pending=false; throttleCountdown=1;
   updateLpHint();
-  video.play().catch(()=>{});
+  video.play().catch(err => console.error("Unfreeze play failed:", err));
 }
 
-/* ---------- composite draw (everything ×2) ---------- */
+/* ---------- composite draw (camera same size; palette 2×) ---------- */
 function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
-  const CAM_W=2048, CAM_H=2048;          /* 2× camera */
-  const RECT_H=480;                       /* 2× rectangles */
-  const GRAD_H=240;                       /* 2× gradient */
-  const LABEL=52;                         /* 2× label band */
-  const PAD=48, GUT=48;                   /* 2× paddings */
-
-  const c=compositeCanvas;
-  const W=PAD+CAM_W+PAD;
-  const H=PAD+CAM_H+(showRects||showGrad?GUT:0)+ (showRects?RECT_H+LABEL:0) + (showRects&&showGrad?GUT:0) + (showGrad?GRAD_H:0) + PAD;
-  c.width=W; c.height=H;
-
-  const g=c.getContext('2d');
-  g.fillStyle='#000'; g.fillRect(0,0,W,H);
+  const CAM_W=2048, CAM_H=2048;        /* unchanged camera size */
+  const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24; /* doubled */
+  const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
+  const c=compositeCanvas; c.width=W; c.height=H;
+  const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
   g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
 
-  /* camera tile */
-  g.drawImage(hiCapCanvas,0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
+  /* draw hi-res camera */
+  g.drawImage(hiCapCanvas, 0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
 
   let y=PAD+CAM_H; if(showRects||showGrad) y+=GUT;
-
   if(showRects){
     const N=hexes.length, w=Math.ceil(CAM_W/N);
     for(let i=0;i<N;i++){ g.fillStyle=hexes[i]; g.fillRect(PAD+i*w,y,w,RECT_H); }
-
-    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';   /* 2× font */
+    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; /* doubled from 15px */
     g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
     for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+8); }
     y+=RECT_H+LABEL;
   }
-
   if(showGrad){
     if(showRects) y+=GUT;
     const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0);
-    const N=hexes.length;
-    if (N>1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
+    const N=hexes.length; 
+    if (N > 1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
     else grad.addColorStop(0, hexes[0]);
     g.fillStyle=grad; g.fillRect(PAD,y,CAM_W,GRAD_H);
   }
 }
 
-/* overlay hint observe */
-new MutationObserver(updateLpHint).observe(compositeOverlay,{attributes:true,attributeFilter:['class']});
+/* ---------- observe overlay state for hint ---------- */
+const obs = new MutationObserver(updateLpHint);
+obs.observe(compositeOverlay, { attributes:true, attributeFilter:['class'] });
 document.addEventListener('DOMContentLoaded', updateLpHint);
 </script>
 </body>
