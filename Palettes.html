@@ -66,9 +66,6 @@
   #compositeOverlay.open{display:flex}
   #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
-  .actions{display:flex;gap:14px}
-  .iconbtn{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#101010;border:1px solid #2a2a2a;color:#fff;cursor:pointer;touch-action:manipulation}
-  .iconbtn svg{width:26px;height:26px;display:block}
   #unfreezeBtn{width:var(--ctaW);align-self:center}
 
   /* Tiny hint */
@@ -129,15 +126,7 @@
   <div id="compositeOverlay">
     <canvas id="compositeCanvas"></canvas>
     <img id="compositeImg" alt="Composite preview"/>
-    <div class="actions">
-      <button class="iconbtn" id="shareBtn" type="button" title="Share">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 16V3"/><path d="M7 8l5-5 5 5"/></svg>
-      </button>
-      <button class="iconbtn" id="saveBtn" type="button" title="Save image">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><rect x="4" y="19" width="16" height="2" rx="1"/></svg>
-      </button>
-    </div>
-    <div id="lpHint" class="smallhint" hidden>Long‑press the image to save.</div>
+    <div id="lpHint" class="smallhint">Long‑press the image to save.</div>
     <button class="btn cta" id="unfreezeBtn" type="button">UNFREEZE</button>
   </div>
 
@@ -291,7 +280,7 @@ const freezeBtn=document.getElementById('freezeBtn');
 const compositeOverlay=document.getElementById('compositeOverlay');
 const compositeCanvas=document.getElementById('compositeCanvas');
 const compositeImg=document.getElementById('compositeImg');
-const shareBtn=document.getElementById('shareBtn'); const saveBtn=document.getElementById('saveBtn'); const unfreezeBtn=document.getElementById('unfreezeBtn');
+const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
 const lpHint=document.getElementById('lpHint');
 
@@ -300,11 +289,6 @@ let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, ui
 let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
 let throttleCountdown=1; // process first frame immediately
 let lastPalette=[];
-let compositeBlob=null, compositeURL='', compositeName='palette-composite.png';
-let isSharing = false; // guard re-entrancy
-
-// Gate share by default
-shareBtn.disabled = true;
 
 /* ---------- helpers ---------- */
 const TH_MIN=1, TH_MAX=150;
@@ -470,7 +454,6 @@ async function freezeNow(){
 
   compositeImg.src = '';
   compositeOverlay.classList.add('open');
-  shareBtn.disabled = true; // gate until blob ready
   updateLpHint();
 
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
@@ -498,12 +481,10 @@ async function freezeNow(){
   
   const hexes = cols.map(toHex);
   renderCompositeFullscreen(hexes,w,h,rectChk.checked,gradChk.checked);
-  compositeBlob = await new Promise(res=>compositeCanvas.toBlob(res,'image/png',1));
-  if (compositeURL) URL.revokeObjectURL(compositeURL);
-  compositeURL = URL.createObjectURL(compositeBlob);
-  compositeImg.src = compositeURL;
 
-  shareBtn.disabled = false; // image is ready to share
+  // Preview image (no share/save): inline data URL
+  compositeImg.src = compositeCanvas.toDataURL('image/png');
+
   updateLpHint();
 }
 
@@ -511,7 +492,6 @@ function unfreeze(){
   compositeOverlay.classList.remove('open');
   frozenCanvas.style.display='none';
   running=true; pending=false; throttleCountdown=1;
-  shareBtn.disabled = true; // sharing not valid in live mode
   updateLpHint();
   video.play().catch(err => console.error("Unfreeze play failed:", err));
 }
@@ -542,44 +522,6 @@ function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
     g.fillStyle=grad; g.fillRect(PAD,y,CAM_W,GRAD_H);
   }
 }
-
-/* ---------- share & save (robust, debounced) ---------- */
-shareBtn.addEventListener('click', async ()=>{
-  if (isSharing || !compositeBlob) return;
-  isSharing = true;
-  shareBtn.disabled = true;
-
-  try {
-    const file = new File([compositeBlob], compositeName, {type:'image/png'});
-
-    let canFileShare = false;
-    try {
-      canFileShare = !!navigator.canShare && navigator.canShare({ files: [file] });
-    } catch (_) {
-      canFileShare = false;
-    }
-
-    if (canFileShare && navigator.share) {
-      await navigator.share({ files: [file], title:'Palette Composite' });
-    } else {
-      // Avoid navigator.share({url}) with blob URLs; use download as reliable fallback.
-      saveBtn.click();
-    }
-  } catch (err) {
-    console.error('Share failed or was cancelled:', err);
-  } finally {
-    setTimeout(() => {
-      isSharing = false;
-      // Re-enable only if overlay is still open and blob exists
-      shareBtn.disabled = !compositeBlob || !compositeOverlay.classList.contains('open');
-    }, 300);
-  }
-});
-
-saveBtn.addEventListener('click', ()=>{
-  if (!compositeBlob) return;
-  const a=document.createElement('a'); a.href=compositeURL; a.download=compositeName; document.body.appendChild(a); a.click(); a.remove();
-});
 
 /* ---------- observe overlay state for hint ---------- */
 const obs = new MutationObserver(updateLpHint);
