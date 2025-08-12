@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Live Camera Palette — Stable + Robust Camera</title>
+<title>Live Camera Palette — Camera Gate</title>
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
@@ -12,7 +12,7 @@
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
+  body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
   /* Camera band (square) */
   #videoPane{
@@ -41,6 +41,7 @@
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
+
   /* Open-controls chevron */
   #openHint{
     position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;
@@ -90,6 +91,16 @@
   }
   .iconbtn svg{width:26px;height:26px;display:block}
   #unfreezeBtn{width:var(--ctaW);align-self:center}
+
+  /* ===== Gate overlay ===== */
+  #gate{
+    position:fixed;inset:0;display:flex;flex-direction:column;gap:16px;
+    align-items:center;justify-content:center;background:#000;z-index:2000;padding:24px
+  }
+  #gate .h{font-size:18px;color:#ddd}
+  #gate .msg{color:#9a9a9a;text-align:center;max-width:28rem}
+  #gateBtn{padding:14px 22px;font-weight:900;background:#fff;color:#000;border-radius:14px;border:none}
+  #gateErr{color:#f66;font-size:12px;min-height:1.2em;text-align:center}
 </style>
 </head>
 <body>
@@ -167,12 +178,20 @@
     <button class="btn cta" id="unfreezeBtn">UNFREEZE</button>
   </div>
 
+  <!-- ===== Start Gate ===== -->
+  <div id="gate">
+    <div class="h">Enable Camera</div>
+    <div class="msg">This tool needs camera access. Tap the button and allow access in the system prompt.</div>
+    <button id="gateBtn">ENABLE CAMERA</button>
+    <div id="gateErr"></div>
+  </div>
+
   <!-- offscreen working canvases -->
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ====== sizing ====== */
+/* ===== sizing ===== */
 const bar = document.getElementById('bar');
 function updateControlsH(){
   document.documentElement.style.setProperty('--controlsH',
@@ -183,7 +202,7 @@ addEventListener('load', updateControlsH);
 addEventListener('resize', updateControlsH);
 addEventListener('orientationchange', updateControlsH);
 
-/* ====== worker with jobId ====== */
+/* ===== worker with jobId ===== */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
   const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
@@ -209,12 +228,12 @@ function rgb2lab(r,g,b){const[x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
 function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db);}
 function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);return idx.map(code=>{const r=(code>>6)&7,g=(code>>3)&7,b=code&7;return[r*32+16,g*32+16,b*32+16];});}
 function medianCutPalette(samples,k){const colors=[];for(let i=0;i<samples.length;i+=3)colors.push([samples[i],samples[i+1],samples[i+2]]);let boxes=[{colors}];const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};boxes.forEach(bounds);const range=b=>Math.max(b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]);const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};while(boxes.length<k){boxes.sort((A,B)=>range(B)-range(A));const big=boxes.shift();if(!big||big.colors.length<=1)break;const ax=axis(big);big.colors.sort((a,b)=>a[ax]-b[ax]);const mid=big.colors.length>>1;const left={colors:big.colors.slice(0,mid)},right={colors:big.colors.slice(mid)};[left,right].forEach(bounds);boxes.push(left,right);}return boxes.map(b=>{let r=0,g=0,bl=0,n=b.colors.length||1;for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}return[r/n|0,g/n|0,bl/n|0];}).slice(0,k);}
-function kmeansLAB(samples,k,maxIter=6){const pts=[];for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2];const L=rgb2lab(r,g,b);pts.push([L[0],L[1],L[2],r,g,b]);}const centers=[];centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));while(centers.length<k){const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));const sum=d2.reduce((a,b)=>a+b,0)||1;let r=Math.random()*sum,i=0;for(;i<d2.length-1&&(r-=d2[i])>0)i++;centers.push(pts[i].slice(0,3));}const labels=new Uint16Array(pts.length);for(let it=0;it<maxIter;it++){for(let i=0;i<pts.length;i++){let best=0,bd=1e9;for(let c=0;c<centers.length;c++){const d=d2lab(pts[i],centers[c]);if(d<bd){bd=d;best=c;}}labels[i]=best;}const sums=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;}for(let c=0;c<k;c++)if(sums[c][3]>0){centers[c][0]=sums[c][0]/sums[c][3];centers[c][1]=sums[c][1]/sums[c][3];centers[c][2]=sums[c][2]/sums[c][3];}}const acc=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}const out=[];for(let c=0;c<k;c++)if(acc[c][3]>0)out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);while(out.length<k)out.push(out[out.length-1]||[128,128,128]);return out.slice(0,k);function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}}
+function kmeansLAB(samples,k,maxIter=6){const pts=[];for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2];const L=rgb2lab(r,g,b);pts.push([L[0],L[1],L[2],r,g,b]);}const centers=[];centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));while(centers.length<k){const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));const sum=d2.reduce((a,b)=>a+b,0)||1;let r=Math.random()*sum,i=0;for(;i<d2.length-1&&(r-=d2[i])>0)i++;centers.push(pts[i].slice(0,3));}const labels=new Uint16Array(pts.length);for(let it=0;it<maxIter;it++){for(let i=0;i<pts.length;i++){let best=0,bd=1e9;for(let c=0;c<centers.length;c++){const d=d2lab(pts[i],centers[c]);if(d<bd){bd=d;best=c;}}labels[i]=best;}const sums=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;}for(let c=0;c<k;c++)if(sums[c][3]>0){centers[c][0]=sums[c][0]/sums[c][3];centers[c][1]=sums[c][1]/sums[c][3];centers[c][2]=sums[c][2]/sums[c][3];}}const acc=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}const out=[];for(let c=0;c<k)c in acc && acc[c][3]>0 && out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);while(out.length<k)out.push(out[out.length-1]||[128,128,128]);return out.slice(0,k);function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}}
 function dedupeAndSort(rgbList,minDE=10){const labList=rgbList.map(([r,g,b])=>{const L=rgb2lab(r,g,b);return[L[0],L[1],L[2],r,g,b];});labList.sort((a,b)=>a[0]-b[0]);const kept=[];for(const c of labList){let ok=true;for(const d of kept){if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;}}if(ok)kept.push(c);}return kept.map(c=>[c[3],c[4],c[5]]);}
 `], {type:'application/javascript'});
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
 
-/* ====== elements ====== */
+/* elements */
 const video=document.getElementById('video');
 const frozenCanvas=document.getElementById('frozenCanvas');
 const off=document.getElementById('off');
@@ -246,29 +265,78 @@ const saveBtn=document.getElementById('saveBtn');
 const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
 
-/* ====== state ====== */
+const gate=document.getElementById('gate');
+const gateBtn=document.getElementById('gateBtn');
+const gateErr=document.getElementById('gateErr');
+
+/* state */
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
 let frameCounter=0,lastT=performance.now(),pending=false,every=0,running=true,hasPalette=false;
 let lastPalette=[];
 let compositeBlob=null, compositeURL='', compositeName='palette-composite.png';
 
-/* ====== helpers ====== */
-function updateControlsH(){
-  document.documentElement.style.setProperty('--controlsH',
-    Math.round(document.getElementById('bar').getBoundingClientRect().height) + 'px'
-  );
-}
+/* helpers */
+function updateControlsH(){ document.documentElement.style.setProperty('--controlsH', Math.round(document.getElementById('bar').getBoundingClientRect().height) + 'px'); }
 const TH_MIN=1, TH_MAX=150;
 function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100); }
 function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
 function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 function status(t){ statusEl.textContent=t; }
+
+/* camera bootstrap (robust, gated) */
+async function getStream() {
+  const tryEnv = { video: { facingMode: { ideal: 'environment' } }, audio: false };
+  const tryUser = { video: { facingMode: { ideal: 'user' } }, audio: false };
+  try { return await navigator.mediaDevices.getUserMedia(tryEnv); }
+  catch (_) { return await navigator.mediaDevices.getUserMedia(tryUser); }
+}
+async function startCamera() {
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    const msg='Needs HTTPS (or localhost).';
+    status(msg); gateErr.textContent=msg; return;
+  }
+  try {
+    const stream = await getStream();
+    video.setAttribute('playsinline',''); video.setAttribute('autoplay','');
+    video.muted = true; video.srcObject = stream;
+
+    await new Promise(res => {
+      if (video.readyState >= 1) res();
+      else video.addEventListener('loadedmetadata', res, { once: true });
+    });
+    await video.play();
+
+    status('Live');
+    gate.style.display='none';
+    updateControlsH();
+    running = true; pending = false; every = 0;
+    loop();
+  } catch (err) {
+    console.error(err);
+    status('Camera failed');
+    gateErr.textContent = err && err.message ? err.message : 'Failed to start camera';
+    gate.style.display='flex';
+  }
+}
+function armUserGestureStart(){
+  // Always keep this as a fallback, not conditional
+  gateBtn.addEventListener('click', () => startCamera(), { once:true });
+  // Also allow tapping anywhere on the gate
+  gate.addEventListener('click', (e)=>{ if(e.target===gate) startCamera(); }, { once:true });
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && running) ensureCameraPlaying();
+});
 async function ensureCameraPlaying(){
   try { await video.play(); status('Live'); }
   catch(e){ await startCamera(); }
 }
 
-/* ====== controls & UI ====== */
+/* Kick bootstrap: show gate immediately, user must tap */
+gate.style.display='flex';
+armUserGestureStart();
+
+/* controls */
 addEventListener('load', updateControlsH);
 addEventListener('resize', updateControlsH);
 addEventListener('orientationchange', updateControlsH);
@@ -299,59 +367,14 @@ zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 freezeBtn.addEventListener('click',async()=>{ if(running) await freezeNow(); });
 unfreezeBtn.addEventListener('click',()=>unfreeze());
 
-/* ====== square crop ====== */
+/* crop */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
   return {sx,sy,sw,sh};
 }
 
-/* ====== camera bootstrap (robust) ====== */
-async function getStream() {
-  const tryEnv = { video: { facingMode: { ideal: 'environment' } }, audio: false };
-  const tryUser = { video: { facingMode: { ideal: 'user' } }, audio: false };
-  try { return await navigator.mediaDevices.getUserMedia(tryEnv); }
-  catch (_) { return await navigator.mediaDevices.getUserMedia(tryUser); }
-}
-async function startCamera() {
-  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-    status('Needs HTTPS (or localhost).'); return;
-  }
-  try {
-    const stream = await getStream();
-    video.setAttribute('playsinline', '');
-    video.setAttribute('autoplay', '');
-    video.muted = true;
-    video.srcObject = stream;
-
-    await new Promise(res => {
-      if (video.readyState >= 1) res();
-      else video.addEventListener('loadedmetadata', res, { once: true });
-    });
-
-    await video.play(); // after metadata for Safari
-    status('Live');
-    updateControlsH();
-    running = true;
-    pending = false;
-    every = 0;
-    loop();
-  } catch (err) {
-    status('Camera failed: ' + err.message);
-  }
-}
-function armUserGestureStart() {
-  const kick = () => { startCamera(); document.removeEventListener('click', kick); };
-  document.addEventListener('click', kick, { once: true });
-}
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && running) ensureCameraPlaying();
-});
-startCamera().then(() => {
-  if (video.readyState < 2) armUserGestureStart();
-}).catch(() => armUserGestureStart());
-
-/* ====== live worker handler (jobId==='live') ====== */
+/* live handler (jobId==='live') */
 worker.onmessage = (e)=>{
   const {jobId} = e.data || {};
   if (jobId !== 'live') return;
@@ -363,8 +386,7 @@ worker.onmessage = (e)=>{
   pending=false; frameCounter++;
 };
 
-/* ====== RAF loop ====== */
-let hasPalette=false;
+/* RAF loop */
 function loop(){
   requestAnimationFrame(loop);
   if(video.readyState<2) return;
@@ -389,7 +411,7 @@ function loop(){
   }
 }
 
-/* ====== palette render ====== */
+/* palette render */
 function renderPalette(palette){
   if(!hasPalette || !palette || !palette.length){ swatchesEl.style.display='none'; gradientEl.hidden=true; return; }
   const hexes = palette.map(toHex);
@@ -417,7 +439,7 @@ function renderPalette(palette){
   }
 }
 
-/* ====== freeze / unfreeze + composite image ====== */
+/* freeze / unfreeze + composite image */
 async function freezeNow(){
   running=false; pending=false; every=0;
 
@@ -449,11 +471,9 @@ async function freezeNow(){
     worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
   });
 
-  // high-res composite to canvas
   const hexes = cols.map(toHex);
   renderCompositeFullscreen(hexes,w,h,rectChk.checked,gradChk.checked);
 
-  // canvas -> Blob -> URL -> <img>
   compositeBlob = await new Promise(res=>compositeCanvas.toBlob(res,'image/png',1));
   if (compositeURL) URL.revokeObjectURL(compositeURL);
   compositeURL = URL.createObjectURL(compositeBlob);
@@ -461,7 +481,6 @@ async function freezeNow(){
 
   compositeOverlay.classList.add('open');
 }
-
 function unfreeze(){
   compositeOverlay.classList.remove('open');
   frozenCanvas.style.display='none';
@@ -469,7 +488,7 @@ function unfreeze(){
   ensureCameraPlaying();
 }
 
-/* Composite draw (1024px square + palette/gradient) */
+/* composite draw */
 function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   const CAM_W=1024, CAM_H=1024, RECT_H=showRects?240:0, GRAD_H=showGrad?120:0, LABEL=showRects?26:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
@@ -494,7 +513,7 @@ function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   }
 }
 
-/* Share & Save */
+/* share & save */
 shareBtn.addEventListener('click', async ()=>{
   if (!compositeBlob) return;
   const file = new File([compositeBlob], compositeName, {type:'image/png'});
