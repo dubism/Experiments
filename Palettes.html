@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Live Camera Palette — Shareable Composite</title>
+<title>Live Camera Palette — Stable + Robust Camera</title>
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
@@ -41,7 +41,6 @@
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
-
   /* Open-controls chevron */
   #openHint{
     position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;
@@ -69,7 +68,7 @@
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* Control Center overlay */
+  /* Control Center */
   #ccWrap{position:absolute;left:12px;right:12px;bottom:calc(12px + var(--controlsH) + env(safe-area-inset-bottom));display:none;z-index:10}
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -78,10 +77,10 @@
   .tab.active{outline:2px solid #fff;outline-offset:1px}
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
 
-  /* Composite overlay (now shows an <img>) */
+  /* Composite overlay (shows <img>) */
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
-  #compositeCanvas{display:none} /* still used to render source */
+  #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px}
   .actions{display:flex;gap:14px}
   .iconbtn{
@@ -149,19 +148,15 @@
 
   <!-- COMPOSITE OVERLAY -->
   <div id="compositeOverlay">
-    <!-- hidden canvas is still rendered for high quality -->
     <canvas id="compositeCanvas"></canvas>
-    <!-- real image to save/share -->
     <img id="compositeImg" alt="Composite preview"/>
     <div class="actions">
-      <!-- Share -->
       <button class="iconbtn" id="shareBtn" title="Share">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/>
           <path d="M12 16V3"/><path d="M7 8l5-5 5 5"/>
         </svg>
       </button>
-      <!-- Save/Download -->
       <button class="iconbtn" id="saveBtn" title="Save image">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/>
@@ -270,15 +265,10 @@ function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0'
 function status(t){ statusEl.textContent=t; }
 async function ensureCameraPlaying(){
   try { await video.play(); status('Live'); }
-  catch(e){
-    try{
-      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
-      video.srcObject=stream; await video.play(); status('Live');
-    }catch(err){ status('Camera restart failed: '+err.message); }
-  }
+  catch(e){ await startCamera(); }
 }
 
-/* ====== UI ====== */
+/* ====== controls & UI ====== */
 addEventListener('load', updateControlsH);
 addEventListener('resize', updateControlsH);
 addEventListener('orientationchange', updateControlsH);
@@ -309,20 +299,57 @@ zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 freezeBtn.addEventListener('click',async()=>{ if(running) await freezeNow(); });
 unfreezeBtn.addEventListener('click',()=>unfreeze());
 
-/* ====== crop ====== */
+/* ====== square crop ====== */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
   return {sx,sy,sw,sh};
 }
 
-/* ====== camera init ====== */
-(async function init(){
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
-    video.srcObject=stream; await video.play(); status('Live'); updateControlsH(); loop();
-  }catch(err){ status('Camera failed: '+err.message); }
-})();
+/* ====== camera bootstrap (robust) ====== */
+async function getStream() {
+  const tryEnv = { video: { facingMode: { ideal: 'environment' } }, audio: false };
+  const tryUser = { video: { facingMode: { ideal: 'user' } }, audio: false };
+  try { return await navigator.mediaDevices.getUserMedia(tryEnv); }
+  catch (_) { return await navigator.mediaDevices.getUserMedia(tryUser); }
+}
+async function startCamera() {
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    status('Needs HTTPS (or localhost).'); return;
+  }
+  try {
+    const stream = await getStream();
+    video.setAttribute('playsinline', '');
+    video.setAttribute('autoplay', '');
+    video.muted = true;
+    video.srcObject = stream;
+
+    await new Promise(res => {
+      if (video.readyState >= 1) res();
+      else video.addEventListener('loadedmetadata', res, { once: true });
+    });
+
+    await video.play(); // after metadata for Safari
+    status('Live');
+    updateControlsH();
+    running = true;
+    pending = false;
+    every = 0;
+    loop();
+  } catch (err) {
+    status('Camera failed: ' + err.message);
+  }
+}
+function armUserGestureStart() {
+  const kick = () => { startCamera(); document.removeEventListener('click', kick); };
+  document.addEventListener('click', kick, { once: true });
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && running) ensureCameraPlaying();
+});
+startCamera().then(() => {
+  if (video.readyState < 2) armUserGestureStart();
+}).catch(() => armUserGestureStart());
 
 /* ====== live worker handler (jobId==='live') ====== */
 worker.onmessage = (e)=>{
@@ -390,7 +417,7 @@ function renderPalette(palette){
   }
 }
 
-/* ====== freeze / unfreeze + composite as image ====== */
+/* ====== freeze / unfreeze + composite image ====== */
 async function freezeNow(){
   running=false; pending=false; every=0;
 
@@ -407,7 +434,7 @@ async function freezeNow(){
   frozenCanvas.style.display='block';
   video.pause();
 
-  // get palette for this exact frame (unique job)
+  // palette for this exact frame (unique job)
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
   const imgs=capFrame.getContext('2d').getImageData(0,0,w,h);
   const cols = await new Promise((resolve)=>{
@@ -422,11 +449,11 @@ async function freezeNow(){
     worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
   });
 
-  // draw high-res composite to canvas
+  // high-res composite to canvas
   const hexes = cols.map(toHex);
   renderCompositeFullscreen(hexes,w,h,rectChk.checked,gradChk.checked);
 
-  // turn canvas -> Blob -> object URL -> <img>
+  // canvas -> Blob -> URL -> <img>
   compositeBlob = await new Promise(res=>compositeCanvas.toBlob(res,'image/png',1));
   if (compositeURL) URL.revokeObjectURL(compositeURL);
   compositeURL = URL.createObjectURL(compositeBlob);
@@ -442,7 +469,7 @@ function unfreeze(){
   ensureCameraPlaying();
 }
 
-/* Composite draw (kept same) */
+/* Composite draw (1024px square + palette/gradient) */
 function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   const CAM_W=1024, CAM_H=1024, RECT_H=showRects?240:0, GRAD_H=showGrad?120:0, LABEL=showRects?26:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
@@ -467,31 +494,23 @@ function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   }
 }
 
-/* ====== Share & Save ====== */
+/* Share & Save */
 shareBtn.addEventListener('click', async ()=>{
   if (!compositeBlob) return;
   const file = new File([compositeBlob], compositeName, {type:'image/png'});
   if (navigator.canShare && navigator.canShare({files:[file]})) {
-    try {
-      await navigator.share({files:[file], title:'Palette Composite', text:''});
-    } catch(_) { /* user cancelled; ignore */ }
+    try { await navigator.share({files:[file], title:'Palette Composite'}); } catch(_) {}
   } else if (navigator.share) {
-    // Fallback: share a URL (will open image in a new tab on some browsers)
-    try { await navigator.share({title:'Palette Composite', url: compositeURL}); } catch(_){}
+    try { await navigator.share({title:'Palette Composite', url: compositeURL}); } catch(_) {}
   } else {
-    // Last resort: open image in a new tab so user can long-press/save
     window.open(compositeURL, '_blank');
   }
 });
-
 saveBtn.addEventListener('click', ()=>{
   if (!compositeBlob) return;
   const a=document.createElement('a');
-  a.href = compositeURL;
-  a.download = compositeName;   // iOS: often opens share sheet to "Save to Files"
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  a.href = compositeURL; a.download = compositeName;
+  document.body.appendChild(a); a.click(); a.remove();
 });
 </script>
 </body>
