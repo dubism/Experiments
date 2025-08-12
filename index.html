@@ -1,123 +1,131 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Experiments — Auto Index</title>
 <style>
   :root{
-    --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb; --line:#1a1d24; --card:#0f1117; --card2:#10131a;
-    --ok:#27ff88; --ok-ink:#082012;
-    --mid:#4aa3ff; --mid-ink:#081422;
-    --old:#b7bdc7; --old-ink:#0f1013;
+    /* Base */
+    --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
+    --card:#0f1117; --card2:#10131a; --line:#1a2130;
     --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 0 0 1px #1a2130, 0 8px 24px rgba(0,0,0,.45);
     --shadow-hover: 0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 18px 36px rgba(0,0,0,.6);
     --radius:14px;
+
+    /* Sensitive time palette (fresh cool → warm → neutral grey) */
+    --t0:#9FFFCB;   /* <1m (soft mint) */
+    --t1:#84F0E6;   /* 1–5m (seafoam) */
+    --t2:#6DDCFF;   /* 5–15m (calm cyan) */
+    --t3:#57B9FF;   /* 15–30m (sky blue) */
+    --t4:#4A97FF;   /* 30–60m (dusty blue) */
+    --t5:#788DFF;   /* 1–2h (blue‑violet) */
+    --t6:#9A86FF;   /* 2–4h (periwinkle) */
+    --t7:#C287FF;   /* 4–8h (soft lavender) */
+    --t8:#E590FF;   /* 8–16h (orchid) */
+    --t9:#FF9FBD;   /* 16–24h (muted rose) */
+    --t10:#B6B6B6;  /* >24h (warm grey) */
   }
+
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+
   header{position:sticky;top:0;z-index:10;background:linear-gradient(#10131a,#0c0f15);border-bottom:1px solid #1c2537}
   .wrap{max-width:1100px;margin:0 auto;padding:14px 16px}
   h1{margin:0;font-size:16px;letter-spacing:.3px}
   main{max-width:1100px;margin:0 auto;padding:18px 16px}
+
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   input[type=search]{
     flex:1;min-width:240px;background:#0b0f16;border:1px solid #1e293e;border-radius:12px;
     padding:.65rem .85rem;color:var(--ink);outline:none;
-    transition:border-color .2s ease, background .2s ease, box-shadow .25s ease;
+    transition:border-color .2s, background .2s, box-shadow .25s;
     box-shadow:0 0 0 0 rgba(74,163,255,.0);
   }
   input[type=search]::placeholder{color:#8e97a6}
   input[type=search]:focus{border-color:#2b3f65;background:#0d1220;box-shadow:0 0 0 6px rgba(74,163,255,.06)}
+
   button{
     border:1px solid #25324a;background:#131a26;color:var(--ink);
     padding:.6rem .85rem;border-radius:12px;cursor:pointer;font-weight:650;letter-spacing:.2px;
-    transition:transform .15s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+    transition:transform .15s, box-shadow .2s, border-color .2s, background .2s;
     box-shadow:var(--shadow);
   }
   button:hover{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#31456b;background:#141e2c}
   .status{font-size:12px;color:var(--muted)}
 
-  /* Section (folder) headers */
   .grp{margin-top:18px}
   .grp h2{
     display:flex;align-items:center;gap:8px;
-    font-size:12px;color:#9aa3b2;margin:8px 2px 10px;
-    letter-spacing:.25px;text-transform:none
+    font-size:12px;color:#9aa3b2;margin:8px 2px 10px;letter-spacing:.25px
   }
-  .grp h2 .folder-ic{opacity:.8}
+  .grp h2 .folder-ic{opacity:.85}
+
   .cards{
     display:grid;
     grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
     gap:12px;
   }
 
-  /* Card (full-clickable anchor) */
+  /* Card */
   .card{
-    display:block; text-decoration:none; color:inherit;
+    display:block;text-decoration:none;color:inherit;
     background:linear-gradient(180deg,var(--card),var(--card2));
-    border:1px solid #1a2130; border-radius:var(--radius);
+    border:1px solid var(--line);border-radius:var(--radius);
     padding:12px 12px 10px;
     box-shadow:var(--shadow);
-    transition: transform .18s ease, box-shadow .22s ease, border-color .2s ease, background .25s ease;
-    position:relative; overflow:hidden;
+    transition:transform .18s, box-shadow .22s, border-color .2s, background .25s;
+    position:relative;overflow:hidden;
   }
-  .card:before{ /* subtle corner vignette */
-    content:""; position:absolute; inset:-1px; border-radius:var(--radius);
+  .card:before{
+    content:"";position:absolute;inset:-1px;border-radius:var(--radius);
     background:radial-gradient(120px 80px at 0% 0%, rgba(74,163,255,.08), transparent 60%),
                radial-gradient(160px 100px at 100% 0%, rgba(39,255,136,.05), transparent 60%);
     pointer-events:none;
   }
-  .card:hover, .card:focus-visible{
-    transform:translateY(-2px);
-    box-shadow:var(--shadow-hover);
-    border-color:#2a3755;
-    outline:none;
-  }
+  .card:hover,.card:focus-visible{transform:translateY(-2px);box-shadow:var(--shadow-hover);border-color:#2a3755;outline:none}
 
-  .card .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
   .ic{
     width:22px;height:22px;flex:0 0 22px;display:grid;place-items:center;
     background:#0c1119;border:1px solid #1f2a42;border-radius:9px;
   }
-  .name{
-    font-weight:700;letter-spacing:.2px;line-height:1.25;font-size:14px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .path{
-    font-size:11px;color:#97a1b1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
+  .name{font-weight:700;letter-spacing:.2px;line-height:1.25;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .path{font-size:11px;color:#97a1b1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-  .meta{
-    display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px
-  }
+  .meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+
+  /* Time badge base */
   .ago{
-    font-size:11px; font-weight:700; letter-spacing:.3px;
-    padding:.25rem .5rem; border-radius:999px;
-    display:inline-flex; align-items:center; gap:6px;
-    transition: background .25s ease, color .25s ease, border-color .25s ease;
-    border:1px solid transparent;
-  }
-  .ago.ok{ background:color-mix(in oklab, var(--ok) 14%, transparent); color:var(--ok); border-color:color-mix(in oklab,var(--ok) 25%, transparent)}
-  .ago.mid{ background:color-mix(in oklab, var(--mid) 14%, transparent); color:var(--mid); border-color:color-mix(in oklab,var(--mid) 22%, transparent)}
-  .ago.old{ background:color-mix(in oklab, var(--old) 16%, transparent); color:var(--old); border-color:color-mix(in oklab,var(--old) 28%, transparent)}
-  .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.9}
-
-  .go{
+    font-size:11px;font-weight:700;letter-spacing:.3px;
+    padding:.25rem .55rem;border-radius:999px;
     display:inline-flex;align-items:center;gap:6px;
-    font-size:11px;color:#cfd5df;opacity:.85
+    border:1px solid transparent;
+    transition:background .25s,color .25s,border-color .25s;
   }
-  .go svg{opacity:.9;transition:transform .18s ease}
+  .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.95}
+
+  /* Time badge variants (text uses the solid hex; background tints at ~16%) */
+  .ago.t0  {color:var(--t0);  background:color-mix(in oklab,var(--t0) 16%, transparent);  border-color:color-mix(in oklab,var(--t0) 26%, transparent)}
+  .ago.t1  {color:var(--t1);  background:color-mix(in oklab,var(--t1) 16%, transparent);  border-color:color-mix(in oklab,var(--t1) 26%, transparent)}
+  .ago.t2  {color:var(--t2);  background:color-mix(in oklab,var(--t2) 16%, transparent);  border-color:color-mix(in oklab,var(--t2) 26%, transparent)}
+  .ago.t3  {color:var(--t3);  background:color-mix(in oklab,var(--t3) 16%, transparent);  border-color:color-mix(in oklab,var(--t3) 26%, transparent)}
+  .ago.t4  {color:var(--t4);  background:color-mix(in oklab,var(--t4) 16%, transparent);  border-color:color-mix(in oklab,var(--t4) 26%, transparent)}
+  .ago.t5  {color:var(--t5);  background:color-mix(in oklab,var(--t5) 16%, transparent);  border-color:color-mix(in oklab,var(--t5) 26%, transparent)}
+  .ago.t6  {color:var(--t6);  background:color-mix(in oklab,var(--t6) 16%, transparent);  border-color:color-mix(in oklab,var(--t6) 26%, transparent)}
+  .ago.t7  {color:var(--t7);  background:color-mix(in oklab,var(--t7) 16%, transparent);  border-color:color-mix(in oklab,var(--t7) 26%, transparent)}
+  .ago.t8  {color:var(--t8);  background:color-mix(in oklab,var(--t8) 16%, transparent);  border-color:color-mix(in oklab,var(--t8) 26%, transparent)}
+  .ago.t9  {color:var(--t9);  background:color-mix(in oklab,var(--t9) 16%, transparent);  border-color:color-mix(in oklab,var(--t9) 26%, transparent)}
+  .ago.t10 {color:var(--t10); background:color-mix(in oklab,var(--t10) 16%, transparent); border-color:color-mix(in oklab,var(--t10) 28%, transparent)}
+
+  .go{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#cfd5df;opacity:.85}
+  .go svg{opacity:.9;transition:transform .18s}
   .card:hover .go svg{transform:translateX(2px)}
 
-  /* Footer */
   footer{color:#9aa3b2;text-align:center;padding:18px 16px;border-top:1px solid #161b25}
 
-  /* Motion preference */
-  @media (prefers-reduced-motion: reduce){
-    *{transition:none !important}
-  }
+  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
 </style>
 </head>
 <body>
@@ -125,10 +133,9 @@
   <div class="wrap">
     <h1>🧪 Experiments — Auto Index</h1>
     <div class="row" style="margin-top:10px">
-      <input id="q" type="search" placeholder="Filter by name or path…">
+      <input id="q" type="search" placeholder="Filter by name or path…" />
       <button id="refresh" aria-label="Refresh list">
         <span style="display:inline-flex;gap:8px;align-items:center">
-          <!-- refresh icon -->
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round"/>
             <path d="M20 4v6h-6" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -160,7 +167,7 @@ qEl.oninput = applyFilter;
 
 let allItems = [];
 
-function folderOf(path){let i=path.lastIndexOf('/');return i===-1?"":path.slice(0,i);}
+function folderOf(path){const i=path.lastIndexOf('/');return i===-1?"":path.slice(0,i);}
 function fileIcon(){return `
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.3" />
@@ -175,24 +182,43 @@ function arrowIcon(){return `
     <path d="M7 17l7-7M10 7h7v7" stroke="#cdd7e6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;}
 
-function prettyName(name){return name.replace(/\.html?$/i,'').replace(/[-_]+/g,' ')
-  .replace(/\b\w/g,m=>m.toUpperCase());}
-function isoLocal(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
-function timeAgo(d){
-  let diff=(Date.now()-d.getTime())/1000;
-  if(diff<60) return {t:`${Math.floor(diff)}s ago`,c:'ok'};
-  diff/=60; if(diff<60) return {t:`${Math.floor(diff)}m ago`,c: diff<20?'ok':'mid'};
-  diff/=60; if(diff<24) return {t:`${Math.floor(diff)}h ago`,c:'mid'};
-  diff/=24; if(diff<30) return {t:`${Math.floor(diff)}d ago`,c:'old'};
-  diff/=30; if(diff<12) return {t:`${Math.floor(diff)}mo ago`,c:'old'};
-  return {t:`${Math.floor(diff/12)}y ago`,c:'old'};
+function prettyName(name){return name.replace(/\.html?$/i,'').replace(/[-_]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase());}
+function isoLocal(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ` +
+         `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+/* Sensitive bucket mapping:
+   t0:<1m, t1:1–5m, t2:5–15m, t3:15–30m, t4:30–60m,
+   t5:1–2h, t6:2–4h, t7:4–8h, t8:8–16h, t9:16–24h, t10:>24h */
+function timeAgoClassAndText(d){
+  let secs = Math.max(0,(Date.now()-d.getTime())/1000);
+
+  if(secs < 60){
+    return {cls:'t0', text:`${Math.floor(secs)}s ago`};
+  }
+  let mins = secs/60;
+  if(mins < 5)   return {cls:'t1', text:`${Math.floor(mins)}m ago`};
+  if(mins < 15)  return {cls:'t2', text:`${Math.floor(mins)}m ago`};
+  if(mins < 30)  return {cls:'t3', text:`${Math.floor(mins)}m ago`};
+  if(mins < 60)  return {cls:'t4', text:`${Math.floor(mins)}m ago`};
+
+  let hours = mins/60;
+  if(hours < 2)   return {cls:'t5', text:`${Math.floor(hours)}h ago`};
+  if(hours < 4)   return {cls:'t6', text:`${Math.floor(hours)}h ago`};
+  if(hours < 8)   return {cls:'t7', text:`${Math.floor(hours)}h ago`};
+  if(hours < 16)  return {cls:'t8', text:`${Math.floor(hours)}h ago`};
+  if(hours < 24)  return {cls:'t9', text:`${Math.floor(hours)}h ago`};
+
+  let days = hours/24;
+  return {cls:'t10', text: days < 365 ? `${Math.floor(days)}d ago` : `${Math.floor(days/365)}y ago`};
 }
 
 function render(items){
-  listEl.innerHTML="";
-  const groups=new Map();
+  listEl.innerHTML = "";
+  const groups = new Map();
   items.forEach(it=>{
-    const key=folderOf(it.path);
+    const key = folderOf(it.path);
     if(!groups.has(key)) groups.set(key,[]);
     groups.get(key).push(it);
   });
@@ -200,64 +226,63 @@ function render(items){
   [...groups.entries()].sort().forEach(([folder,arr])=>{
     arr.sort((a,b)=>a.name.localeCompare(b.name));
 
-    const section=document.createElement('section');
-    section.className='grp';
+    const section = document.createElement('section');
+    section.className = 'grp';
 
-    const h2=document.createElement('h2');
-    h2.innerHTML = `${folderIcon()} ${folder?`/${folder}`:"/"}`
+    const h2 = document.createElement('h2');
+    h2.innerHTML = `${folderIcon()} ${folder?`/${folder}`:"/"}`;
     section.appendChild(h2);
 
-    const grid=document.createElement('div');
-    grid.className='cards';
+    const grid = document.createElement('div');
+    grid.className = 'cards';
 
     arr.forEach(it=>{
-      const a=document.createElement('a');
-      a.className='card';
-      a.href=it.href;
+      const a = document.createElement('a');
+      a.className = 'card';
+      a.href = it.href;
 
-      const top=document.createElement('div');
-      top.className='top';
+      const top = document.createElement('div');
+      top.className = 'top';
 
-      const ic=document.createElement('div');
-      ic.className='ic';
-      ic.innerHTML=fileIcon();
+      const ic = document.createElement('div');
+      ic.className = 'ic';
+      ic.innerHTML = fileIcon();
 
-      const textWrap=document.createElement('div');
-      const nm=document.createElement('div');
-      nm.className='name';
-      nm.textContent=prettyName(it.name);
+      const textWrap = document.createElement('div');
+      const nm = document.createElement('div');
+      nm.className = 'name';
+      nm.textContent = prettyName(it.name);
 
-      const pt=document.createElement('div');
-      pt.className='path';
-      pt.textContent=it.path;
+      const pt = document.createElement('div');
+      pt.className = 'path';
+      pt.textContent = it.path;
 
-      textWrap.append(nm,pt);
-      top.append(ic,textWrap);
+      textWrap.append(nm, pt);
+      top.append(ic, textWrap);
 
-      const meta=document.createElement('div');
-      meta.className='meta';
+      const meta = document.createElement('div');
+      meta.className = 'meta';
 
-      const when=document.createElement('span');
-      when.className='ago';
+      const when = document.createElement('span');
+      when.className = 'ago';
       when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
 
       if(it.updatedAt){
-        const d=new Date(it.updatedAt);
-        const ag=timeAgo(d);
-        when.classList.add(ag.c);
-        when.querySelector('.t').textContent = ag.t;
-        when.title=`Last updated: ${isoLocal(d)}`;
-      }else{
-        when.classList.add('old');
+        const d = new Date(it.updatedAt);
+        const ag = timeAgoClassAndText(d);
+        when.classList.add(ag.cls);
+        when.querySelector('.t').textContent = ag.text;
+        when.title = `Last updated: ${isoLocal(d)}`;
+      } else {
+        when.classList.add('t10');
       }
 
-      const go=document.createElement('span');
-      go.className='go';
-      go.innerHTML=`Open ${arrowIcon()}`;
+      const go = document.createElement('span');
+      go.className = 'go';
+      go.innerHTML = `Open ${arrowIcon()}`;
 
-      meta.append(when,go);
-
-      a.append(top,meta);
+      meta.append(when, go);
+      a.append(top, meta);
       grid.appendChild(a);
     });
 
@@ -267,44 +292,46 @@ function render(items){
 }
 
 function applyFilter(){
-  const q=qEl.value.trim().toLowerCase();
-  render(!q?allItems:allItems.filter(it=>it.name.toLowerCase().includes(q)||it.path.toLowerCase().includes(q)));
+  const q = qEl.value.trim().toLowerCase();
+  render(!q ? allItems : allItems.filter(it =>
+    it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
+  ));
 }
 
 async function fetchTree(){
-  statusEl.textContent="Loading…";
+  statusEl.textContent = "Loading…";
   try{
-    const r=await fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/HEAD?recursive=1`);
+    const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/HEAD?recursive=1`);
     if(!r.ok) throw new Error();
-    const data=await r.json();
-    allItems=data.tree
-      .filter(n=>n.type==="blob" && /\.html?$/i.test(n.path) && !/index\.html?$/i.test(n.path))
-      .map(n=>({path:n.path,name:n.path.split('/').pop(),href:BASE+n.path,updatedAt:null}));
+    const data = await r.json();
+    allItems = data.tree
+      .filter(n => n.type==="blob" && /\.html?$/i.test(n.path) && !/index\.html?$/i.test(n.path))
+      .map(n => ({ path:n.path, name:n.path.split('/').pop(), href:BASE+n.path, updatedAt:null }));
     render(allItems);
-    statusEl.textContent=`Found ${allItems.length} file(s), fetching dates…`;
+    statusEl.textContent = `Found ${allItems.length} file(s), fetching dates…`;
     await fetchDates();
     render(allItems);
-    statusEl.textContent=`Found ${allItems.length} file(s)`;
+    statusEl.textContent = `Found ${allItems.length} file(s)`;
   }catch(e){
-    statusEl.textContent="Error fetching data";
+    statusEl.textContent = "Error fetching data";
   }
 }
 
 async function fetchDates(){
-  let i=0, max=4; // concurrency unchanged
+  let i = 0, max = 4; // concurrency unchanged
   async function worker(){
-    while(i<allItems.length){
-      const idx=i++;
+    while(i < allItems.length){
+      const idx = i++;
       try{
-        const r=await fetch(`https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(allItems[idx].path)}&per_page=1`);
+        const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(allItems[idx].path)}&per_page=1`);
         if(r.ok){
-          const c=await r.json();
-          allItems[idx].updatedAt=c[0]?.commit?.committer?.date||null;
+          const c = await r.json();
+          allItems[idx].updatedAt = c[0]?.commit?.committer?.date || null;
         }
-      }catch(e){}
+      }catch(_){}
     }
   }
-  await Promise.all(Array.from({length:max},worker));
+  await Promise.all(Array.from({length:max}, worker));
 }
 
 fetchTree();
