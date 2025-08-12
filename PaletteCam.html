@@ -8,24 +8,38 @@
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
     --controlsH:120px;
-    --sq:100vw;
+    --sq:100vw;           /* updated live by JS */
+    --colLeftW:var(--sq); /* used in landscape */
     --ctaW:clamp(220px,60vw,340px);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* CAMERA (edge-to-edge square) */
-  #videoPane{position:fixed;left:0;right:0;top:0;height:var(--sq);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
+  /* ===== CAMERA (square) ===== */
+  #videoPane{
+    position:fixed;left:0;right:0;top:0;height:var(--sq);
+    display:flex;align-items:center;justify-content:center;
+    border-bottom:1px solid var(--line);background:#000;overflow:hidden
+  }
+  body.land #videoPane{
+    right:auto;bottom:0;top:0;left:0;width:var(--colLeftW);height:auto;
+    border-bottom:none;border-right:1px solid var(--line);
+  }
   .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:var(--sq);max-height:var(--sq);aspect-ratio:1/1;border-radius:0;overflow:hidden;background:#000}
+  body.land .videoWrap{width:var(--colLeftW);max-height:100vh}
   video{width:100%;height:100%;object-fit:cover;display:block;transform:scale(var(--zoom));transform-origin:center}
   #frozenCanvas{position:absolute;inset:0;width:100%;height:100%;display:none}
 
-  /* PALETTE (now inset from bottom by --controlsH, no fixed height calc) */
+  /* ===== PALETTE (right/under content area) ===== */
   #palettePane{
     position:fixed;left:0;right:0;top:var(--sq);bottom:var(--controlsH);
     display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;
     background:#000;border-bottom:1px solid var(--line)
+  }
+  body.land #palettePane{
+    left:calc(var(--colLeftW)); right:0; top:0; bottom:var(--controlsH);
+    border-bottom:1px solid var(--line);
   }
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
@@ -36,8 +50,12 @@
   #openHint{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;pointer-events:none}
   #openHint::after{content:"";width:12px;height:12px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;transform:rotate(-45deg);display:block}
 
-  /* BOTTOM CONTROLS */
-  #controlsBar{position:fixed;left:0;right:0;bottom:0;background:#000;border-top:1px solid var(--line);padding:10px 12px calc(8px + env(safe-area-inset-bottom))}
+  /* ===== BOTTOM CONTROLS ===== */
+  #controlsBar{
+    position:fixed;left:0;right:0;bottom:0;background:#000;border-top:1px solid var(--line);
+    padding:10px 12px calc(8px + env(safe-area-inset-bottom))
+  }
+  body.land #controlsBar{left:calc(var(--colLeftW)); right:0}
   #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto auto;gap:10px}
   .zoomArea{grid-row:1}
   #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaW);padding:14px 22px}
@@ -52,8 +70,11 @@
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* CONTROL CENTER */
-  #ccWrap{position:fixed;left:12px;right:12px;bottom:calc(var(--controlsH) + 8px);display:none;z-index:20}
+  /* ===== CONTROL CENTER (stays inside the content column) ===== */
+  #ccWrap{
+    position:fixed;left:12px;right:12px;bottom:calc(var(--controlsH) + 8px);display:none;z-index:20
+  }
+  body.land #ccWrap{left:calc(var(--colLeftW) + 12px);right:12px}
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .tabbar{display:flex;gap:8px;flex-wrap:nowrap}
@@ -61,7 +82,7 @@
   .tab.active{outline:2px solid #fff;outline-offset:1px}
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
 
-  /* COMPOSITE OVERLAY */
+  /* ===== COMPOSITE OVERLAY ===== */
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
   #compositeCanvas{display:none}
@@ -134,12 +155,23 @@
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ---------- layout sizing ---------- */
-function setSquareToViewportWidth(){
-  const s = Math.max(1, Math.round(window.innerWidth));
+/* ---------- orientation & layout sizing ---------- */
+function applyOrientationClass(){
+  const land = window.innerWidth > window.innerHeight;
+  document.body.classList.toggle('land', land);
+  document.body.classList.toggle('port', !land);
+}
+function setSquareToViewportEdge(){
+  const land = window.innerWidth > window.innerHeight;
+  const s = land ? Math.max(1, Math.round(window.innerHeight))
+                 : Math.max(1, Math.round(window.innerWidth));
   document.documentElement.style.setProperty('--sq', s + 'px');
+  document.documentElement.style.setProperty('--colLeftW', s + 'px');
   updateControlsH();
 }
+addEventListener('load', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
+addEventListener('resize', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
+addEventListener('orientationchange', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
 
 /* Measure the REAL bottom bar (includes safe area, paddings). */
 const controlsBar = document.getElementById('controlsBar');
@@ -147,16 +179,11 @@ function updateControlsH(){
   const h = Math.round(controlsBar.getBoundingClientRect().height);
   document.documentElement.style.setProperty('--controlsH', h + 'px');
 }
-
 /* Keep --controlsH live even if the bar reflows. */
 const ro = new ResizeObserver(() => updateControlsH());
 ro.observe(controlsBar);
 
-addEventListener('load', setSquareToViewportWidth);
-addEventListener('resize', setSquareToViewportWidth);
-addEventListener('orientationchange', setSquareToViewportWidth);
-
-/* ---------- worker with jobId (with minor fixes) ---------- */
+/* ---------- worker with jobId ---------- */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
   const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
@@ -190,7 +217,7 @@ function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<sa
 function medianCutPalette(samples,k){
   const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
   let boxes=[{colors}];
-  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
+  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];}};
   boxes.forEach(bounds);
   const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
   const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
@@ -267,16 +294,13 @@ const resEl=document.getElementById('res');
 const swatchesEl=document.getElementById('swatches');
 const gradientEl=document.getElementById('gradient');
 const paletteClickable=document.getElementById('paletteClickable');
-
 const tabs=document.getElementById('tabs');
 const kRange=document.getElementById('k'); const kVal=document.getElementById('kVal');
 const sizeRange=document.getElementById('size'); const sizeVal=document.getElementById('sizeVal');
 const throttleLog=document.getElementById('throttleLog'); const throttleVal=document.getElementById('throttleVal');
 const rectChk=document.getElementById('rects'); const gradChk=document.getElementById('grad');
-
 const zoomSlider=document.getElementById('zoom'); const zoomMinus=document.getElementById('zoomMinus'); const zoomPlus=document.getElementById('zoomPlus');
 const freezeBtn=document.getElementById('freezeBtn');
-
 const compositeOverlay=document.getElementById('compositeOverlay');
 const compositeCanvas=document.getElementById('compositeCanvas');
 const compositeImg=document.getElementById('compositeImg');
@@ -316,8 +340,6 @@ async function startCamera(){
     } catch(playErr) {
       console.error("Autoplay was blocked:", playErr);
       status('Tap to start camera');
-
-      // install a one-time resume handler; ignore clicks while overlay is open
       const resumeOnce = () => {
         if (!compositeOverlay.classList.contains('open')) {
           video.play().catch(err => console.error('Resume play failed:', err));
@@ -330,8 +352,8 @@ async function startCamera(){
 
     status('Live');
     running=true; pending=false; throttleCountdown=1;
-    setSquareToViewportWidth();
-    renderPalette([]); // Render initial empty state
+    setSquareToViewportEdge();
+    renderPalette([]); // initial empty
     loop();
   } catch(err) {
     let msg = 'Camera failed';
@@ -436,15 +458,17 @@ function renderPalette(palette){
   }
 }
 
-/* ---------- freeze / unfreeze (overlay first; async compute with timeout) ---------- */
+/* ---------- freeze / unfreeze ---------- */
 async function freezeNow(){
   running=false; pending=false; throttleCountdown=1;
 
   const {sx,sy,sw,sh}=computeSquareCrop();
+  /* Low-res capture (for palette): */
   const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
   capFrame.width=w; capFrame.height=h;
   const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
 
+  /* UI-res freeze preview: */
   const wrap=document.querySelector('.videoWrap');
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
@@ -452,10 +476,17 @@ async function freezeNow(){
   frozenCanvas.style.display='block';
   await video.pause();
 
+  /* Hi-res capture for composite (native crop): */
+  const hiCap=document.createElement('canvas');
+  hiCap.width=sw; hiCap.height=sh;
+  const hiCtx=hiCap.getContext('2d');
+  hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
+
   compositeImg.src = '';
   compositeOverlay.classList.add('open');
   updateLpHint();
 
+  /* Compute palette (with timeout fallback) */
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
   const imgs=capCtx.getImageData(0,0,w,h);
 
@@ -478,13 +509,12 @@ async function freezeNow(){
 
   lastPalette = cols;
   renderPalette(cols);
-  
+
   const hexes = cols.map(toHex);
-  renderCompositeFullscreen(hexes,w,h,rectChk.checked,gradChk.checked);
+  /* 2× camera resolution in composite */
+  renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
 
-  // Preview image (no share/save): inline data URL
   compositeImg.src = compositeCanvas.toDataURL('image/png');
-
   updateLpHint();
 }
 
@@ -496,14 +526,18 @@ function unfreeze(){
   video.play().catch(err => console.error("Unfreeze play failed:", err));
 }
 
-/* ---------- composite draw ---------- */
-function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
-  const CAM_W=1024, CAM_H=1024, RECT_H=showRects?240:0, GRAD_H=showGrad?120:0, LABEL=showRects?26:0, PAD=24, GUT=24;
+/* ---------- composite draw (camera 2048×2048) ---------- */
+function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
+  const CAM_W=2048, CAM_H=2048;        /* doubled */
+  const RECT_H=showRects?240:0, GRAD_H=showGrad?120:0, LABEL=showRects?26:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
   const c=compositeCanvas; c.width=W; c.height=H;
   const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
   g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
-  g.drawImage(capFrame,0,0,frameW,frameH,PAD,PAD,CAM_W,CAM_H);
+
+  /* draw hi-res camera */
+  g.drawImage(hiCapCanvas, 0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
+
   let y=PAD+CAM_H; if(showRects||showGrad) y+=GUT;
   if(showRects){
     const N=hexes.length, w=Math.ceil(CAM_W/N);
@@ -518,7 +552,7 @@ function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
     const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0);
     const N=hexes.length; 
     if (N > 1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
-    else if (N === 1) grad.addColorStop(0, hexes[0]);
+    else grad.addColorStop(0, hexes[0]);
     g.fillStyle=grad; g.fillRect(PAD,y,CAM_W,GRAD_H);
   }
 }
