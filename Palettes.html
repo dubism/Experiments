@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Live Camera Palette — No Gate, Edge‑to‑Edge</title>
+<title>Live Camera Palette — Stable Freeze + Immediate Palettes</title>
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
-    --controlsH:120px;                  /* measured in JS */
-    --sq:100vw;                         /* square side (JS keeps it = viewport width) */
+    --controlsH:120px;
+    --sq:100vw;
     --ctaW:clamp(220px,60vw,340px);
   }
   *{box-sizing:border-box}
@@ -16,43 +16,21 @@
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
   /* CAMERA (edge-to-edge square) */
-  #videoPane{
-    position:fixed;left:0;right:0;top:0;height:var(--sq);
-    display:flex;align-items:center;justify-content:center;
-    border-bottom:1px solid var(--line);background:#000;overflow:hidden
-  }
-  .videoWrap{
-    position:relative;display:flex;align-items:center;justify-content:center;
-    width:var(--sq);max-height:var(--sq);aspect-ratio:1/1;border-radius:0; /* edge-to-edge */
-    overflow:hidden;background:#000
-  }
+  #videoPane{position:fixed;left:0;right:0;top:0;height:var(--sq);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
+  .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:var(--sq);max-height:var(--sq);aspect-ratio:1/1;border-radius:0;overflow:hidden;background:#000}
   video{width:100%;height:100%;object-fit:cover;display:block;transform:scale(var(--zoom));transform-origin:center}
   #frozenCanvas{position:absolute;inset:0;width:100%;height:100%;display:none}
 
-  /* PALETTE (fills between camera and controls) */
-  #palettePane{
-    position:fixed;left:0;right:0;top:var(--sq);
-    height:calc(100vh - var(--sq) - var(--controlsH) - env(safe-area-inset-bottom));
-    display:flex;flex-direction:column;gap:10px;
-    padding:10px 12px 12px;background:#000;border-bottom:1px solid var(--line)
-  }
+  /* PALETTE */
+  #palettePane{position:fixed;left:0;right:0;top:var(--sq);height:calc(100vh - var(--sq) - var(--controlsH) - env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;background:#000;border-bottom:1px solid var(--line)}
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
   .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px}
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
-
-  /* chevron hint (kept simple) */
-  #openHint{
-    position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;
-    background:rgba(255,255,255,.08);border:1px solid var(--line);
-    display:flex;align-items:center;justify-content:center;pointer-events:none
-  }
-  #openHint::after{
-    content:""; width:12px; height:12px; border-right:2px solid #bbb; border-bottom:2px solid #bbb;
-    transform:rotate(-45deg); display:block
-  }
+  #openHint{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;pointer-events:none}
+  #openHint::after{content:"";width:12px;height:12px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;transform:rotate(-45deg);display:block}
 
   /* BOTTOM CONTROLS */
   #controlsBar{position:fixed;left:0;right:0;bottom:0;background:#000;border-top:1px solid var(--line);padding:10px 12px calc(8px + env(safe-area-inset-bottom))}
@@ -70,7 +48,7 @@
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* CONTROL CENTER (tap palette to open; tap outside to close) */
+  /* CONTROL CENTER */
   #ccWrap{position:absolute;left:12px;right:12px;bottom:12px;display:none;z-index:10}
   #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -79,17 +57,13 @@
   .tab.active{outline:2px solid #fff;outline-offset:1px}
   .small{font-variant-numeric:tabular-nums;color:var(--muted)}
 
-  /* COMPOSITE OVERLAY (frozen) */
+  /* COMPOSITE OVERLAY */
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
   #compositeCanvas{display:none}
-  #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px}
+  #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
   .actions{display:flex;gap:14px}
-  .iconbtn{
-    width:56px;height:56px;border-radius:50%;
-    display:flex;align-items:center;justify-content:center;
-    background:#101010;border:1px solid #2a2a2a;color:#fff;cursor:pointer
-  }
+  .iconbtn{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#101010;border:1px solid #2a2a2a;color:#fff;cursor:pointer}
   .iconbtn svg{width:26px;height:26px;display:block}
   #unfreezeBtn{width:var(--ctaW);align-self:center}
 </style>
@@ -114,8 +88,6 @@
       <div id="gradient" class="gradient" hidden></div>
       <div id="openHint" aria-hidden="true"></div>
     </div>
-
-    <!-- Control Center -->
     <div id="ccWrap">
       <div id="cc">
         <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
@@ -127,9 +99,7 @@
         <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
         <div class="row"><span>Show gradient</span><input type="checkbox" id="grad"></div>
         <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
-        <div class="row"><span>Process every N frames</span><span>
-          <input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span>
-        </div>
+        <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span></div>
       </div>
     </div>
   </section>
@@ -154,75 +124,134 @@
     <img id="compositeImg" alt="Composite preview"/>
     <div class="actions">
       <button class="iconbtn" id="shareBtn" title="Share">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/>
-          <path d="M12 16V3"/><path d="M7 8l5-5 5 5"/>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 16V3"/><path d="M7 8l5-5 5 5"/></svg>
       </button>
       <button class="iconbtn" id="saveBtn" title="Save image">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/>
-          <rect x="4" y="19" width="16" height="2" rx="1"/>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><rect x="4" y="19" width="16" height="2" rx="1"/></svg>
       </button>
     </div>
     <button class="btn cta" id="unfreezeBtn">UNFREEZE</button>
   </div>
 
-  <!-- Offscreen canvases -->
+  <!-- Offscreen -->
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ===== layout sizing ===== */
+/* ---------- layout sizing ---------- */
 function setSquareToViewportWidth(){
-  // keep camera square = viewport width (edge-to-edge, no side gaps)
   const s = Math.max(1, Math.round(window.innerWidth));
   document.documentElement.style.setProperty('--sq', s + 'px');
   updateControlsH();
 }
 const bar = document.getElementById('bar');
 function updateControlsH(){
-  document.documentElement.style.setProperty('--controlsH',
-    Math.round(bar.getBoundingClientRect().height) + 'px'
-  );
+  document.documentElement.style.setProperty('--controlsH', Math.round(bar.getBoundingClientRect().height) + 'px');
 }
 addEventListener('load', setSquareToViewportWidth);
 addEventListener('resize', setSquareToViewportWidth);
 addEventListener('orientationchange', setSquareToViewportWidth);
 
-/* ===== worker with jobId ===== */
+/* ---------- worker with jobId (with minor fixes) ---------- */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
   const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
-  const data = new Uint8ClampedArray(pixels);
-  const samples = [];
-  for(let y=0;y<height;y+=stride){
-    let row=y*width*4;
-    for(let x=0;x<width;x+=stride){
-      const i=row+x*4; samples.push(data[i],data[i+1],data[i+2]);
+  try{
+    const data = new Uint8ClampedArray(pixels);
+    const samples = [];
+    for(let y=0;y<height;y+=stride){
+      let row=y*width*4;
+      for(let x=0;x<width;x+=stride){
+        const i=row+x*4; samples.push(data[i],data[i+1],data[i+2]);
+      }
     }
+    let palette;
+    if (algo==='hist') palette = histPalette(samples,k);
+    else if (algo==='mediancut') palette = medianCutPalette(samples,k);
+    else palette = kmeansLAB(samples,k,6);
+    palette = dedupeAndSort(palette,10);
+    const out = new Uint8Array(palette.flat());
+    self.postMessage({palette: out.buffer, jobId}, [out.buffer]);
+  }catch(err){
+    self.postMessage({palette: new Uint8Array(0).buffer, jobId, error: String(err&&err.message||err)});
   }
-  let palette;
-  if (algo==='hist') palette = histPalette(samples,k);
-  else if (algo==='mediancut') palette = medianCutPalette(samples,k);
-  else palette = kmeansLAB(samples,k,6);
-  palette = dedupeAndSort(palette,10);
-  const out = new Uint8Array(palette.flat());
-  self.postMessage({palette: out.buffer, jobId}, [out.buffer]);
 };
 function rgb2xyz(r,g,b){r/=255;g/=255;b/=255;r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;return[ r*0.4124+g*0.3576+b*0.1805, r*0.2126+g*0.7152+b*0.0722, r*0.0193+g*0.1192+b*0.9505];}
 function xyz2lab(x,y,z){const Xr=0.95047,Yr=1,Zr=1.08883;const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;const fx=f(x/Xr),fy=f(y/Yr),fz=f(z/Zr);return[116*fy-16,500*(fx-fy),200*(fy-fz)];}
 function rgb2lab(r,g,b){const[x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
 function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db);}
+
 function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);return idx.map(code=>{const r=(code>>6)&7,g=(code>>3)&7,b=code&7;return[r*32+16,g*32+16,b*32+16];});}
-function medianCutPalette(samples,k){const colors=[];for(let i=0;i<samples.length;i+=3)colors.push([samples[i],samples[i+1],samples[i+2]]);let boxes=[{colors}];const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};boxes.forEach(bounds);const range=b=>Math.max(b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b[0]);const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};while(boxes.length<k){boxes.sort((A,B)=>range(B)-range(A));const big=boxes.shift();if(!big||big.colors.length<=1)break;const ax=axis(big);big.colors.sort((a,b)=>a[ax]-b[ax]);const mid=big.colors.length>>1;const left={colors:big.colors.slice(0,mid)},right={colors:big.colors.slice(mid)};[left,right].forEach(bounds);boxes.push(left,right);}return boxes.map(b=>{let r=0,g=0,bl=0,n=b.colors.length||1;for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}return[r/n|0,g/n|0,bl/n|0];}).slice(0,k);}
-function kmeansLAB(samples,k,maxIter=6){const pts=[];for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2];const L=rgb2lab(r,g,b);pts.push([L[0],L[1],L[2],r,g,b]);}const centers=[];centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));while(centers.length<k){const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));const sum=d2.reduce((a,b)=>a+b,0)||1;let r=Math.random()*sum,i=0;for(;i<d2.length-1&&(r-=d2[i])>0)i++;centers.push(pts[i].slice(0,3));}const labels=new Uint16Array(pts.length);for(let it=0;it<maxIter;it++){for(let i=0;i<pts.length;i++){let best=0,bd=1e9;for(let c=0;c<centers.length;c++){const d=d2lab(pts[i],centers[c]);if(d<bd){bd=d;best=c;}}labels[i]=best;}const sums=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;}for(let c=0;c<k;c++)if(sums[c][3]>0){centers[c][0]=sums[c][0]/sums[c][3];centers[c][1]=sums[c][1]/sums[c][3];centers[c][2]=sums[c][2]/sums[c][3];}}const acc=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}const out=[];for(let c=0;c<k;c++)if(acc[c][3]>0)out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);while(out.length<k)out.push(out[out.length-1]||[128,128,128]);return out.slice(0,k);function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}}
-function dedupeAndSort(rgbList,minDE=10){const labList=rgbList.map(([r,g,b])=>{const L=rgb2lab(r,g,b);return[L[0],L[1],L[2],r,g,b];});labList.sort((a,b)=>a[0]-b[0]);const kept=[];for(const c of labList){let ok=true;for(const d of kept){if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;}}if(ok)kept.push(c);}return kept.map(c=>[c[3],c[4],c[5]]);}
+
+function medianCutPalette(samples,k){
+  const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
+  let boxes=[{colors}];
+  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
+  boxes.forEach(bounds);
+  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]); /* fixed typo */
+  const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
+  while(boxes.length<k){
+    boxes.sort((A,B)=>range(B)-range(A));
+    const big=boxes.shift(); if(!big||big.colors.length<=1) break;
+    const ax=axis(big);
+    big.colors.sort((a,b)=>a[ax]-b[ax]);
+    const mid=big.colors.length>>1;
+    const left={colors:big.colors.slice(0,mid)}, right={colors:big.colors.slice(mid)};
+    [left,right].forEach(bounds); boxes.push(left,right);
+  }
+  return boxes.map(b=>{
+    let r=0,g=0,bl=0,n=b.colors.length||1;
+    for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}
+    return [r/n|0,g/n|0,bl/n|0];
+  }).slice(0,k);
+}
+
+function kmeansLAB(samples,k,maxIter=6){
+  const pts=[];
+  for(let i=0;i<samples.length;i+=3){
+    const r=samples[i],g=samples[i+1],b=samples[i+2];
+    const L=rgb2lab(r,g,b); pts.push([L[0],L[1],L[2],r,g,b]);
+  }
+  const centers=[]; centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
+  while(centers.length<k){
+    const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));
+    const sum=d2.reduce((a,b)=>a+b,0)||1;
+    let r=Math.random()*sum,i=0; for(;i<d2.length-1&&(r-=d2[i])>0;i++); centers.push(pts[i].slice(0,3));
+  }
+  const labels=new Uint16Array(pts.length);
+  for(let it=0;it<maxIter;it++){
+    for(let i=0;i<pts.length;i++){
+      let best=0,bd=1e9;
+      for(let c=0;c<centers.length;c++){
+        const d=d2lab(pts[i],centers[c]); if(d<bd){bd=d;best=c;}
+      }
+      labels[i]=best;
+    }
+    const sums=Array.from({length:k},()=>[0,0,0,0]);
+    for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;}
+    for(let c=0;c<k;c++) if(sums[c][3]>0){centers[c][0]=sums[c][0]/sums[c][3];centers[c][1]=sums[c][1]/sums[c][3];centers[c][2]=sums[c][2]/sums[c][3];}
+  }
+  const acc=Array.from({length:k},()=>[0,0,0,0]);
+  for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}
+  const out=[]; for(let c=0;c<k;c++) if(acc[c][3]>0) out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);
+  while(out.length<k) out.push(out[out.length-1]||[128,128,128]);
+  return out.slice(0,k);
+  function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}
+}
+function dedupeAndSort(rgbList,minDE=10){
+  const labList=rgbList.map(([r,g,b])=>{const L=rgb2lab(r,g,b);return [L[0],L[1],L[2],r,g,b];});
+  labList.sort((a,b)=>a[0]-b[0]);
+  const kept=[]; for(const c of labList){
+    let ok=true; for(const d of kept){ if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;} }
+    if(ok) kept.push(c);
+  }
+  return kept.map(c=>[c[3],c[4],c[5]]);
+}
 `], {type:'application/javascript'});
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
+worker.addEventListener('error', e=>console.log('Worker error:', e.message));
 
-/* ===== elements ===== */
+/* ---------- elements ---------- */
 const video=document.getElementById('video');
 const frozenCanvas=document.getElementById('frozenCanvas');
 const off=document.getElementById('off');
@@ -241,82 +270,56 @@ const sizeRange=document.getElementById('size'); const sizeVal=document.getEleme
 const throttleLog=document.getElementById('throttleLog'); const throttleVal=document.getElementById('throttleVal');
 const rectChk=document.getElementById('rects'); const gradChk=document.getElementById('grad');
 
-const zoomSlider=document.getElementById('zoom');
-const zoomMinus=document.getElementById('zoomMinus');
-const zoomPlus =document.getElementById('zoomPlus');
+const zoomSlider=document.getElementById('zoom'); const zoomMinus=document.getElementById('zoomMinus'); const zoomPlus=document.getElementById('zoomPlus');
 const freezeBtn=document.getElementById('freezeBtn');
 
 const compositeOverlay=document.getElementById('compositeOverlay');
 const compositeCanvas=document.getElementById('compositeCanvas');
 const compositeImg=document.getElementById('compositeImg');
-const shareBtn=document.getElementById('shareBtn');
-const saveBtn=document.getElementById('saveBtn');
-const unfreezeBtn=document.getElementById('unfreezeBtn');
+const shareBtn=document.getElementById('shareBtn'); const saveBtn=document.getElementById('saveBtn'); const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
 
-/* ===== state ===== */
+/* ---------- state ---------- */
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
-let frameCounter=0,lastT=performance.now(),pending=false,every=0,running=false,hasPalette=false;
+let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
+let throttleCountdown=1; // process first frame immediately
 let lastPalette=[];
 let compositeBlob=null, compositeURL='', compositeName='palette-composite.png';
 
-/* ===== helpers ===== */
+/* ---------- helpers ---------- */
 const TH_MIN=1, TH_MAX=150;
 function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100); }
 function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
 function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
 function status(t){ statusEl.textContent=t; }
 
-/* ===== camera bootstrap (auto, no gate) ===== */
-async function getStream() {
-  const tryEnv = { video: { facingMode: { ideal: 'environment' } }, audio: false };
-  const tryUser = { video: { facingMode: { ideal: 'user' } }, audio: false };
-  try { return await navigator.mediaDevices.getUserMedia(tryEnv); }
-  catch (_) { return await navigator.mediaDevices.getUserMedia(tryUser); }
-}
-async function startCamera() {
+/* ---------- camera (auto) ---------- */
+async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'}},audio:false}); } }
+async function startCamera(){
   try{
-    const stream = await getStream();
-    video.setAttribute('playsinline',''); video.setAttribute('autoplay','');
-    video.muted = true; video.srcObject = stream;
-
-    await new Promise(res => {
-      if (video.readyState >= 1) res();
-      else video.addEventListener('loadedmetadata', res, { once: true });
-    });
+    const stream=await getStream();
+    video.setAttribute('playsinline',''); video.setAttribute('autoplay',''); video.muted=true; video.srcObject=stream;
+    await new Promise(res=>{ if(video.readyState>=1) res(); else video.addEventListener('loadedmetadata',res,{once:true}); });
     await video.play();
-
     status('Live');
-    running=true; pending=false; every=0;
-    setSquareToViewportWidth(); // ensure layout after metadata
-    loop();
-  }catch(err){
-    status('Camera failed: ' + (err && err.message ? err.message : err));
-  }
+    running=true; pending=false; throttleCountdown=1;
+    setSquareToViewportWidth(); loop();
+  }catch(err){ status('Camera failed: '+(err&&err.message||err)); }
 }
-// Autostart; if browser blocks, user’s first tap anywhere will retry silently.
 startCamera().catch(()=>{});
 document.addEventListener('click', function once(){ if (video.readyState<2) startCamera(); document.removeEventListener('click', once); }, {once:true});
 
-/* ===== UI wiring ===== */
+/* ---------- UI ---------- */
 addEventListener('load', ()=>{ updateControlsH(); throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN); });
 addEventListener('resize', updateControlsH);
 addEventListener('orientationchange', updateControlsH);
-
-throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
-
 paletteClickable.addEventListener('click',(e)=>{ e.stopPropagation(); ccWrap.style.display='block'; });
-document.addEventListener('click',(e)=>{
-  if (compositeOverlay.classList.contains('open')) return;
-  if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display='';
-});
-tabs.addEventListener('click',(e)=>{
-  const b=e.target.closest('.tab'); if(!b) return;
-  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));
-  algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':'');
-});
+document.addEventListener('click',(e)=>{ if (compositeOverlay.classList.contains('open')) return; if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display=''; });
+
+tabs.addEventListener('click',(e)=>{ const b=e.target.closest('.tab'); if(!b) return; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':''); });
 kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value; sizeVal.textContent=procWidth+' px';});
+throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
 rectChk.addEventListener('change',()=>renderPalette(lastPalette));
 gradChk.addEventListener('change',()=>renderPalette(lastPalette));
 
@@ -328,27 +331,27 @@ zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 freezeBtn.addEventListener('click',async()=>{ if(running) await freezeNow(); });
 unfreezeBtn.addEventListener('click',()=>unfreeze());
 
-/* ===== crop (square + zoom) ===== */
+/* ---------- crop ---------- */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
   return {sx,sy,sw,sh};
 }
 
-/* ===== worker live handler (jobId==='live') ===== */
+/* ---------- live handler (jobId==='live') ---------- */
 worker.onmessage = (e)=>{
-  const {jobId} = e.data || {};
-  if (jobId !== 'live') return;   // live only
+  const {jobId, error} = e.data || {};
+  if (jobId !== 'live') return;
+  if (error) { console.log('Worker live error:', error); pending=false; return; }
   const arr = new Uint8Array(e.data.palette||[]);
   const cols=[]; for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
   while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
-  lastPalette = cols.slice(0,K);
-  hasPalette = true;
+  lastPalette = cols.slice(0,K); hasPalette = true;
   renderPalette(lastPalette);
   pending=false; frameCounter++;
 };
 
-/* ===== RAF loop ===== */
+/* ---------- RAF loop (countdown throttle; first frame immediate) ---------- */
 function loop(){
   requestAnimationFrame(loop);
   if(video.readyState<2) return;
@@ -365,18 +368,18 @@ function loop(){
   ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
   resEl.textContent=w+'×'+h;
 
-  every=(every+1)%throttleN; if(every!==0) return;
+  if (--throttleCountdown > 0) return;
+  throttleCountdown = Math.max(1, throttleN);
   if(!pending){
     pending=true;
     const img=ctx.getImageData(0,0,w,h);
-    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
+    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride=2,jobId:'live'},[img.data.buffer]);
   }
 }
 
-/* ===== palette render (ensure visible) ===== */
+/* ---------- palette render ---------- */
 function renderPalette(palette){
   if(!hasPalette || !palette || !palette.length){
-    // keep containers present but empty
     swatchesEl.style.display='flex'; swatchesEl.innerHTML='';
     gradientEl.hidden=false; gradientEl.style.background='#000';
     return;
@@ -384,82 +387,79 @@ function renderPalette(palette){
   const hexes = palette.map(toHex);
   const wantRects=rectChk.checked, wantGrad=gradChk.checked;
 
-  // reset
   swatchesEl.style.display='none'; gradientEl.hidden=true; gradientEl.style.background=''; swatchesEl.innerHTML='';
 
-  if(wantRects && wantGrad){
-    swatchesEl.style.display='flex'; swatchesEl.style.flex='1';
-    gradientEl.hidden=false; gradientEl.style.flex='1';
-  }else if(wantRects){
-    swatchesEl.style.display='flex'; swatchesEl.style.flex='1';
-  }else if(wantGrad){
-    gradientEl.hidden=false; gradientEl.style.flex='1';
-  }else{
-    rectChk.checked=true; swatchesEl.style.display='flex'; swatchesEl.style.flex='1';
-  }
+  if(wantRects && wantGrad){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; gradientEl.hidden=false; gradientEl.style.flex='1'; }
+  else if(wantRects){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
+  else if(wantGrad){ gradientEl.hidden=false; gradientEl.style.flex='1'; }
+  else { rectChk.checked=true; swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
 
-  if(rectChk.checked){
-    for(const h of hexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); }
-  }
+  if(rectChk.checked){ for(const h of hexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); } }
   if(gradChk.checked){
     const stops = hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',');
-    gradientEl.hidden=false;
-    gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
+    gradientEl.hidden=false; gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
   }
 }
 
-/* ===== freeze / unfreeze with jobId ===== */
+/* ---------- freeze / unfreeze (overlay first; async compute with timeout) ---------- */
 async function freezeNow(){
-  running=false; pending=false; every=0;
+  running=false; pending=false; throttleCountdown=1;
 
   const {sx,sy,sw,sh}=computeSquareCrop();
   const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
   capFrame.width=w; capFrame.height=h;
-  capFrame.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,w,h);
+  const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
 
-  // show frozen preview under camera
+  // Freeze preview
   const wrap=document.querySelector('.videoWrap');
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
   fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
   frozenCanvas.style.display='block';
-  video.pause();
+  await video.pause();
 
-  // palette for this exact frame (unique job)
+  // Show overlay immediately (with previous composite or blank)
+  compositeImg.src = '';
+  compositeOverlay.classList.add('open');
+
+  // Compute palette for this frame with timeout guard
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
-  const imgs=capFrame.getContext('2d').getImageData(0,0,w,h);
+  const imgs=capCtx.getImageData(0,0,w,h);
+
   const cols = await new Promise((resolve)=>{
+    let settled=false;
+    const to = setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[ [0,0,0] ]); } }, 2000);
     const handler=(ev)=>{
-      const {jobId}=ev.data||{}; if(jobId!==freezeId) return;
+      const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
+      worker.removeEventListener('message',handler); if(settled) return;
+      settled=true; clearTimeout(to);
+      if(error){ console.log('Worker freeze error:', error); resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
       const arr=new Uint8Array(ev.data.palette||[]), out=[];
       for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
       while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
-      worker.removeEventListener('message',handler);
       resolve(out.slice(0,K));
     };
     worker.addEventListener('message',handler);
     worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
   });
 
+  // Draw composite and show in overlay
   const hexes = cols.map(toHex);
   renderCompositeFullscreen(hexes,w,h,rectChk.checked,gradChk.checked);
-
   compositeBlob = await new Promise(res=>compositeCanvas.toBlob(res,'image/png',1));
   if (compositeURL) URL.revokeObjectURL(compositeURL);
   compositeURL = URL.createObjectURL(compositeBlob);
   compositeImg.src = compositeURL;
-
-  compositeOverlay.classList.add('open');
 }
 
 function unfreeze(){
   compositeOverlay.classList.remove('open');
   frozenCanvas.style.display='none';
-  running=true; pending=false; every=0;
-  video.play().catch(()=>{}); // silent resume; user gesture fallback already attached once
+  running=true; pending=false; throttleCountdown=1;
+  video.play().catch(()=>{});
 }
 
-/* ===== composite draw (1024) ===== */
+/* ---------- composite draw ---------- */
 function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   const CAM_W=1024, CAM_H=1024, RECT_H=showRects?240:0, GRAD_H=showGrad?120:0, LABEL=showRects?26:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
@@ -484,23 +484,17 @@ function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
   }
 }
 
-/* ===== share & save ===== */
+/* ---------- share & save ---------- */
 shareBtn.addEventListener('click', async ()=>{
   if (!compositeBlob) return;
   const file = new File([compositeBlob], compositeName, {type:'image/png'});
-  if (navigator.canShare && navigator.canShare({files:[file]})) {
-    try { await navigator.share({files:[file], title:'Palette Composite'}); } catch(_) {}
-  } else if (navigator.share) {
-    try { await navigator.share({title:'Palette Composite', url: compositeURL}); } catch(_) {}
-  } else {
-    window.open(compositeURL, '_blank');
-  }
+  if (navigator.canShare && navigator.canShare({files:[file]})) { try { await navigator.share({files:[file], title:'Palette Composite'}); } catch(_) {} }
+  else if (navigator.share) { try { await navigator.share({title:'Palette Composite', url: compositeURL}); } catch(_) {} }
+  else { window.open(compositeURL, '_blank'); }
 });
 saveBtn.addEventListener('click', ()=>{
   if (!compositeBlob) return;
-  const a=document.createElement('a');
-  a.href = compositeURL; a.download = compositeName;
-  document.body.appendChild(a); a.click(); a.remove();
+  const a=document.createElement('a'); a.href=compositeURL; a.download=compositeName; document.body.appendChild(a); a.click(); a.remove();
 });
 </script>
 </body>
