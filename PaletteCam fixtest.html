@@ -5,68 +5,89 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Live Camera Palette — Stable Freeze + Immediate Palettes</title>
 <style>
+  /* ===== Base ===== */
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
-    --controlsH:120px;
-    --sq:100vw;           /* updated live by JS */
-    --colLeftW:var(--sq); /* used in landscape */
+    --sq:0px;           /* computed from visualViewport */
+    --cbH:0px;          /* measured controls bar height for CC placement */
     --ctaW:clamp(220px,60vw,340px);
+
+    /* CC positioning variables (computed in JS) */
+    --ccL:12px; --ccR:12px; --ccB:12px; --ccMaxH:60vh;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* ===== CAMERA (square, true edge-to-edge) ===== */
+  /* ===== Grid layout: camera square + leftover UI ===== */
+  .app{position:fixed; inset:0; display:grid; isolation:isolate;} /* root stacking context */
+  @media (orientation: portrait){
+    .app{ grid-template-rows: var(--sq) 1fr; grid-template-columns: 1fr; }
+    #videoPane{ grid-row:1; grid-column:1; }
+    #uiPane   { grid-row:2; grid-column:1; }
+  }
+  @media (orientation: landscape){
+    .app{ grid-template-columns: var(--sq) 1fr; grid-template-rows: 1fr; }
+    #videoPane{ grid-column:1; grid-row:1; }
+    #uiPane   { grid-column:2; grid-row:1; }
+  }
+
+  /* ===== Camera cell (perfect square, edge-to-edge) ===== */
   #videoPane{
-    position:fixed;left:0;right:0;top:0;height:var(--sq);
-    display:flex;align-items:center;justify-content:center;
-    border-bottom:1px solid var(--line);background:#000;overflow:hidden
-  }
-  body.land #videoPane{
-    right:auto;bottom:0;top:0;left:0;width:var(--colLeftW);height:auto;
-    border-bottom:none;border-right:1px solid var(--line);
-  }
-  .videoWrap{
     position:relative;
-    width:var(--sq); height:var(--sq);          /* ensure real square */
-    display:flex;align-items:center;justify-content:center;
-    border-radius:0;overflow:hidden;background:#000
+    overflow:hidden;           /* crop to square bounds */
+    background:#000;
+    z-index:1;                 /* explicitly below UI column */
   }
-  body.land .videoWrap{ width:var(--colLeftW); height:var(--sq); }
-  /* make video truly cover the square */
-  video{
+  #videoPane video,
+  #videoPane canvas{
     position:absolute; inset:0;
     width:100%; height:100%;
-    object-fit:cover; display:block;
-    transform:scale(var(--zoom)); transform-origin:center
+    object-fit:cover;          /* fill square without gaps */
+    transform:scale(var(--zoom));
+    transform-origin:center;
+    display:block;
   }
-  #frozenCanvas{position:absolute;inset:0;width:100%;height:100%;display:none}
+  #frozenCanvas{display:none}
 
-  /* ===== PALETTE (right/under content area) ===== */
-  #palettePane{
-    position:fixed;left:0;right:0;top:var(--sq);bottom:var(--controlsH);
-    display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;
-    background:#000;border-bottom:1px solid var(--line)
+  /* ===== UI cell: holds palette + controls; uses leftover space ===== */
+  #uiPane{
+    position:relative;
+    min-width:0; min-height:0;
+    display:flex; flex-direction:column; gap:10px;
+    padding:10px 12px 12px;
+    background:#000;           /* opaque paint over camera */
+    z-index:2;                 /* above camera */
+    contain:paint;             /* isolate painting; avoids iOS bleed */
   }
-  body.land #palettePane{
-    left:calc(var(--colLeftW)); right:0; top:0; bottom:var(--controlsH);
+  @supports (padding: env(safe-area-inset-bottom)){
+    #uiPane{ padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  }
+
+  /* ===== Palette area (flexes) ===== */
+  #palettePane{
+    display:flex; flex-direction:column; gap:10px;
+    min-height:0; flex:1; /* take the remainder above the controls */
     border-bottom:1px solid var(--line);
+    padding-bottom:10px;
+    background:#000;           /* belt and braces: no transparency */
   }
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
-  .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px}
+  .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px;background:#000}
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
   #openHint{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;pointer-events:none}
   #openHint::after{content:"";width:12px;height:12px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;transform:rotate(-45deg);display:block}
 
-  /* ===== BOTTOM CONTROLS ===== */
+  /* ===== Bottom controls (inside UI cell, pinned by flex) ===== */
   #controlsBar{
-    position:fixed;left:0;right:0;bottom:0;background:#000;border-top:1px solid var(--line);
-    padding:10px 12px calc(8px + env(safe-area-inset-bottom))
+    border-top:1px solid var(--line);
+    background:#000;
+    padding:10px 0 0;
+    margin-top:auto; /* push to bottom of UI pane */
   }
-  body.land #controlsBar{left:calc(var(--colLeftW)); right:0}
   #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto auto;gap:10px}
   .zoomArea{grid-row:1}
   #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaW);padding:14px 22px}
@@ -81,20 +102,34 @@
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* ===== CONTROL CENTER (stays inside the content column) ===== */
+  /* ===== Control Center (fixed overlay aligned to UI column) ===== */
   #ccWrap{
-    position:fixed;left:12px;right:12px;bottom:calc(var(--controlsH) + 8px);display:none;z-index:20
+    position:fixed;
+    z-index:4000;                /* above camera/UI, below composite overlay */
+    left:var(--ccL);
+    right:var(--ccR);
+    bottom:var(--ccB);
+    transform:translateZ(0);     /* ensure GPU layer above video on iOS */
+    display:none;
   }
-  body.land #ccWrap{left:calc(var(--colLeftW) + 12px);right:12px}
-  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
+  #cc{
+    background:rgba(0,0,0,.6);
+    backdrop-filter:blur(8px);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:12px;
+    display:grid; gap:12px;
+    max-height:var(--ccMaxH);
+    overflow:auto;
+  }
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .tabbar{display:flex;gap:8px;flex-wrap:nowrap}
   .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer;white-space:nowrap}
   .tab.active{outline:2px solid #fff;outline-offset:1px}
-  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
+  .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
 
-  /* ===== COMPOSITE OVERLAY ===== */
-  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
+  /* ===== Composite overlay (for shareable image) ===== */
+  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
   #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
@@ -109,90 +144,109 @@
 </style>
 </head>
 <body>
-  <section id="videoPane">
-    <div class="videoWrap">
+  <div class="app">
+    <!-- Camera square (left in landscape, top in portrait) -->
+    <section id="videoPane" aria-label="Camera">
       <video id="video" playsinline muted autoplay></video>
       <canvas id="frozenCanvas"></canvas>
-    </div>
-  </section>
+    </section>
 
-  <section id="palettePane">
-    <div class="title">
-      <div id="algoName" class="small">K-Means (LAB)</div>
-      <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
-    </div>
-    <div class="stack" id="paletteClickable" title="Open controls">
-      <div id="swatches" class="swatches"></div>
-      <div id="gradient" class="gradient" hidden></div>
-      <div id="openHint" aria-hidden="true"></div>
-    </div>
-    <div id="ccWrap">
-      <div id="cc">
-        <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
-          <button class="tab active" data-algo="kmeans" type="button">K-Means</button>
-          <button class="tab" data-algo="hist" type="button">Histogram</button>
-          <button class="tab" data-algo="mediancut" type="button">Median-cut</button>
-        </div></div>
-        <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
-        <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
-        <div class="row"><span>Show gradient</span><input type="checkbox" id="grad"></div>
-        <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
-        <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span></div>
-      </div>
-    </div>
-  </section>
+    <!-- Leftover UI column/row -->
+    <section id="uiPane" aria-label="UI">
+      <div id="palettePane">
+        <div class="title">
+          <div id="algoName" class="small">K-Means (LAB)</div>
+          <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
+        </div>
+        <div class="stack" id="paletteClickable" title="Open controls">
+          <div id="swatches" class="swatches"></div>
+          <div id="gradient" class="gradient" hidden></div>
+          <div id="openHint" aria-hidden="true"></div>
+        </div>
 
-  <section id="controlsBar">
-    <div id="bar">
-      <div class="zoomArea">
-        <div class="zoomWrap">
-          <button class="zbtn" id="zoomMinus" type="button" aria-label="Zoom out">−</button>
-          <input type="range" id="zoom" class="zoom" min="1" max="10" step="0.01" value="1">
-          <button class="zbtn" id="zoomPlus" type="button" aria-label="Zoom in">+</button>
+        <!-- Control Center lives as fixed overlay aligned to UI column -->
+        <div id="ccWrap">
+          <div id="cc">
+            <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
+              <button class="tab active" data-algo="kmeans" type="button">K-Means</button>
+              <button class="tab" data-algo="hist" type="button">Histogram</button>
+              <button class="tab" data-algo="mediancut" type="button">Median-cut</button>
+            </div></div>
+            <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
+            <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
+            <div class="row"><span>Show gradient</span><input type="checkbox" id="grad" checked></div>
+            <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
+            <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span></div>
+          </div>
         </div>
       </div>
-      <button class="btn cta" id="freezeBtn" type="button">FREEZE</button>
-    </div>
-  </section>
 
+      <section id="controlsBar">
+        <div id="bar">
+          <div class="zoomArea">
+            <div class="zoomWrap">
+              <button class="zbtn" id="zoomMinus" type="button" aria-label="Zoom out">−</button>
+              <input type="range" id="zoom" class="zoom" min="1" max="10" step="0.01" value="1">
+              <button class="zbtn" id="zoomPlus" type="button" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <button class="btn cta" id="freezeBtn" type="button">FREEZE</button>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <!-- Freeze composite overlay -->
   <div id="compositeOverlay">
     <canvas id="compositeCanvas"></canvas>
     <img id="compositeImg" alt="Composite preview"/>
-    <div id="lpHint" class="smallhint">Long‑press the image to save.</div>
+    <div id="lpHint" class="smallhint">Long-press the image to save.</div>
     <button class="btn cta" id="unfreezeBtn" type="button">UNFREEZE</button>
   </div>
 
+  <!-- Offscreen helpers -->
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ---------- orientation & layout sizing ---------- */
-function applyOrientationClass(){
-  const land = window.innerWidth > window.innerHeight;
-  document.body.classList.toggle('land', land);
-  document.body.classList.toggle('port', !land);
-}
-function setSquareToViewportEdge(){
-  const land = window.innerWidth > window.innerHeight;
-  const s = land ? Math.max(1, Math.round(window.innerHeight))
-                 : Math.max(1, Math.round(window.innerWidth));
-  document.documentElement.style.setProperty('--sq', s + 'px');
-  document.documentElement.style.setProperty('--colLeftW', s + 'px');
-  updateControlsH();
-}
-addEventListener('load', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
-addEventListener('resize', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
-addEventListener('orientationchange', ()=>{ applyOrientationClass(); setSquareToViewportEdge(); });
+/* ===== --sq sizing from visualViewport (single source of truth) ===== */
+(function(){
+  function recalcSquare(){
+    const vv = window.visualViewport;
+    const vw = Math.max(0, window.innerWidth);
+    const vh = Math.max(0, (vv?.height ?? window.innerHeight));
+    const isLandscape = vw > vh;
+    const sq = isLandscape ? vh : Math.min(vw, vh);
+    document.documentElement.style.setProperty('--sq', Math.round(sq) + 'px');
 
-/* Measure the REAL bottom bar (includes safe area, paddings). */
+    // keep frozen canvas sized to cell if it’s visible
+    const fc = document.getElementById('frozenCanvas');
+    if (fc && fc.style.display !== 'none') {
+      const wrap = document.getElementById('videoPane');
+      fc.width = wrap.clientWidth;
+      fc.height = wrap.clientHeight;
+    }
+  }
+  window.recalcSquare = recalcSquare; // expose
+
+  let raf = 0;
+  const kick = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(recalcSquare); };
+
+  window.addEventListener('load', kick, {passive:true});
+  window.addEventListener('resize', kick, {passive:true});
+  window.addEventListener('orientationchange', kick, {passive:true});
+  window.visualViewport && window.visualViewport.addEventListener('resize', kick, {passive:true});
+})();
+
+/* ===== Measure controls bar height for CC placement ===== */
 const controlsBar = document.getElementById('controlsBar');
-function updateControlsH(){
+function updateCbH(){
   const h = Math.round(controlsBar.getBoundingClientRect().height);
-  document.documentElement.style.setProperty('--controlsH', h + 'px');
+  document.documentElement.style.setProperty('--cbH', h + 'px');
 }
-/* Keep --controlsH live even if the bar reflows. */
-const ro = new ResizeObserver(() => updateControlsH());
-ro.observe(controlsBar);
+const cbRO = new ResizeObserver(updateCbH);
+cbRO.observe(controlsBar);
+addEventListener('load', updateCbH);
 
 /* ---------- worker with jobId ---------- */
 const workerBlob = new Blob([`
@@ -228,7 +282,7 @@ function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<sa
 function medianCutPalette(samples,k){
   const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
   let boxes=[{colors}];
-  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];}};
+  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
   boxes.forEach(bounds);
   const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
   const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
@@ -336,7 +390,53 @@ function updateLpHint(){
   lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
 }
 
-/* ---------- camera (auto, robust) ---------- */
+/* ---- CC positioning (align to UI column, keep palettes peek) ---- */
+const PEEK = 72; // px of palette that must remain visible
+function positionCC(){
+  const uiRect = document.getElementById('uiPane').getBoundingClientRect();
+  const cbH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cbH')) || 0;
+
+  // Insets relative to viewport so the fixed CC aligns with UI column/band
+  document.documentElement.style.setProperty('--ccL', (Math.max(0, uiRect.left) + 12) + 'px');
+  document.documentElement.style.setProperty('--ccR', (Math.max(0, window.innerWidth - uiRect.right) + 12) + 'px');
+
+  // Anchor above the controls bar, respecting any gap to bottom of viewport
+  const uiBottomInset = Math.max(0, window.innerHeight - uiRect.bottom);
+  document.documentElement.style.setProperty('--ccB', (uiBottomInset + cbH + 8) + 'px');
+
+  // Limit height so a peek of palettes is always visible
+  const usableH = Math.max(160, uiRect.height - cbH - 8 - PEEK);
+  document.documentElement.style.setProperty('--ccMaxH', usableH + 'px');
+}
+
+/* ---- ghost-frame prevention helpers ---- */
+function hardHideFrozenCanvas(){
+  const fc = frozenCanvas;
+  const w = fc.width, h = fc.height;
+  if (w && h) { const g = fc.getContext('2d'); g.clearRect(0,0,w,h); }
+  fc.width = 0; fc.height = 0;   // drop backing store/IOSurface
+  fc.style.display = 'none';
+}
+
+function forceReflowAndRecalc(){
+  window.recalcSquare && window.recalcSquare();
+  positionCC();
+  const v = video;
+  v.style.visibility = 'hidden'; // drop any cached composite
+  void document.body.offsetHeight; // force reflow
+  v.style.visibility = '';
+}
+
+async function refreshVideoSurface(){
+  // last-resort: briefly detach to force a new IOSurface without flicker
+  const s = video.srcObject;
+  video.srcObject = null;
+  await new Promise(r => requestAnimationFrame(r));
+  video.srcObject = s;
+  await video.play().catch(()=>{});
+}
+
+/* ---------- camera (auto, no gating) ---------- */
 async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
 async function startCamera(){
   try{
@@ -363,9 +463,8 @@ async function startCamera(){
 
     status('Live');
     running=true; pending=false; throttleCountdown=1;
-    setSquareToViewportEdge();
     renderPalette([]); // initial empty
-    loop();
+    requestAnimationFrame(loop);
   } catch(err) {
     let msg = 'Camera failed';
     if (err && err.name === 'NotAllowedError') msg = 'Camera permission denied.';
@@ -377,11 +476,31 @@ async function startCamera(){
 startCamera().catch(err => console.error(err));
 
 /* ---------- UI ---------- */
-addEventListener('load', ()=>{ updateControlsH(); throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN); });
-addEventListener('resize', updateControlsH);
-addEventListener('orientationchange', updateControlsH);
-paletteClickable.addEventListener('click',(e)=>{ e.stopPropagation(); ccWrap.style.display='block'; });
-document.addEventListener('click',(e)=>{ if (compositeOverlay.classList.contains('open')) return; if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display=''; });
+addEventListener('load', ()=>{
+  throttleLog.value=nToSlider(throttleN);
+  throttleVal.textContent=String(throttleN);
+
+  // Default both toggles ON at startup
+  rectChk.checked = true;
+  gradChk.checked = true;
+  renderPalette(lastPalette);
+
+  // Initial CC positioning
+  positionCC();
+});
+
+paletteClickable.addEventListener('click',(e)=>{
+  e.stopPropagation();
+  positionCC();
+  ccWrap.style.display='block';
+});
+document.addEventListener('click',(e)=>{
+  if (compositeOverlay.classList.contains('open')) return;
+  if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display='none';
+});
+
+['resize','orientationchange'].forEach(evt => addEventListener(evt, positionCC, {passive:true}));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', positionCC, {passive:true});
 
 tabs.addEventListener('click',(e)=>{ const b=e.target.closest('.tab'); if(!b) return; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':''); });
 kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
@@ -395,7 +514,7 @@ zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* Freeze: allow in landscape regardless of running; ignore if overlay open */
+/* Freeze: works in both orientations */
 freezeBtn.addEventListener('click',async()=>{
   if (compositeOverlay.classList.contains('open')) return;
   await freezeNow();
@@ -485,8 +604,8 @@ async function freezeNow(){
   capFrame.width=w; capFrame.height=h;
   const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
 
-  /* UI-res freeze preview: */
-  const wrap=document.querySelector('.videoWrap');
+  /* UI-res freeze preview: use the actual square cell size */
+  const wrap=document.getElementById('videoPane');
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
   fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
@@ -502,6 +621,7 @@ async function freezeNow(){
   compositeImg.src = '';
   compositeOverlay.classList.add('open');
   updateLpHint();
+  window.recalcSquare && window.recalcSquare(); // keep tracks correct with overlay
 
   /* Compute palette (with timeout fallback) */
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
@@ -537,8 +657,10 @@ async function freezeNow(){
 
 function unfreeze(){
   compositeOverlay.classList.remove('open');
-  frozenCanvas.style.display='none';
+  hardHideFrozenCanvas();                          // drop frozen frame completely
   running=true; pending=false; throttleCountdown=1;
+  forceReflowAndRecalc();                          // ensure correct layering and track sizing
+  setTimeout(()=>refreshVideoSurface(), 80);       // heal stubborn iOS compositor cases
   updateLpHint();
   video.play().catch(err => console.error("Unfreeze play failed:", err));
 }
