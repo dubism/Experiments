@@ -11,7 +11,8 @@
     --ctaW:clamp(220px,60vw,340px); --ctaH:56px;
     --ctaB:calc(16px + env(safe-area-inset-bottom));
     --ccL:12px; --ccR:12px; --ccB:12px; --ccMaxH:60vh;
-    /* camera pan (normalized, used in calc with --sq) */
+
+    /* Camera visual pan (fraction of the square size, derived from crop) */
     --panXNorm:0; --panYNorm:0;
   }
   *{box-sizing:border-box} html,body{height:100%}
@@ -29,13 +30,12 @@
 
   #videoPane{
     position:relative; overflow:hidden; background:#000; z-index:1;
-    /* Needed for Safari to deliver raw gestures for pinch/pan in photo/camera mode */
-    touch-action:none; 
+    touch-action:none; /* raw gestures for Safari/iOS */
   }
 
   /* Layers inside the square (bottom→top): video, photoPreview, frozenCanvas */
-  /* Camera/frozenCanvas use scale+translate from CSS vars; photoPreview is drawn manually */
-  #videoPane video, #videoPane canvas{
+  /* Camera live preview uses CSS transform based on crop; photoPreview is drawn manually */
+  #videoPane video{
     position:absolute; inset:0; width:100%; height:100%;
     object-fit:cover;
     transform:
@@ -44,9 +44,14 @@
     transform-origin:center;
     display:block;
   }
-  #frozenCanvas{display:none}
-  /* A separate canvas for photo preview when source==='photo' */
-  #photoPreview{display:none; z-index:2; transform:none !important; object-fit:contain;}
+  #photoPreview{
+    position:absolute; inset:0; width:100%; height:100%;
+    display:none; z-index:2; transform:none !important; object-fit:contain;
+  }
+  #frozenCanvas{
+    position:absolute; inset:0; width:100%; height:100%;
+    display:none; z-index:3; transform:none !important; /* no visual pan/zoom while frozen */
+  }
 
   /* Source chip (top-left of square) */
   #sourceChip{
@@ -223,7 +228,6 @@
       const wrap = document.getElementById('videoPane');
       pp.width = wrap.clientWidth;
       pp.height = wrap.clientHeight;
-      // Redraw current view for photo
       if (source==='photo' && photoBitmap) drawPhotoPreview();
     }
   }
@@ -390,8 +394,8 @@ let photoBitmap=null;
 /* Photo transform: crop-based (z ≥1), center cx,cy in image px */
 let photoZ=1, photoCX=0, photoCY=0;
 
-/* Camera pan state (normalized in [-max..max]) */
-let uiPanX=0, uiPanY=0;
+/* Camera pan state: fraction of allowed range [-1..+1] */
+let uiPanXF=0, uiPanYF=0;
 
 /* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
@@ -429,7 +433,7 @@ async function refreshVideoSurface(){
   video.srcObject=s; await video.play().catch(()=>{});
 }
 
-/* ===== camera ===== */
+/* ===== camera stream ===== */
 async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
 async function startCamera(){
   try{
@@ -443,6 +447,7 @@ async function startCamera(){
       document.addEventListener('click',resume,true); return;
     }
     status('Live'); running=true; pending=false; throttleCountdown=1; renderPalette([]); requestAnimationFrame(loop);
+    camUpdateCssTransform(); /* initialize CSS pan/zoom */
   }catch(err){ status(err?.name==='NotAllowedError'?'Camera permission denied.':(err?.message||'Camera failed')); }
 }
 
@@ -462,9 +467,8 @@ addEventListener('load', ()=>{
   rectChk.checked=true; gradChk.checked=true; renderPalette(lastPalette);
   positionCC(); showFreezeCTA();
 
-  // initialize pan vars
-  document.documentElement.style.setProperty('--panXNorm', uiPanX);
-  document.documentElement.style.setProperty('--panYNorm', uiPanY);
+  document.documentElement.style.setProperty('--panXNorm', 0);
+  document.documentElement.style.setProperty('--panYNorm', 0);
 });
 
 /* Open/close controls */
@@ -474,7 +478,7 @@ document.addEventListener('click',e=>{ if(compositeOverlay.classList.contains('o
 ['resize','orientationchange'].forEach(evt=>addEventListener(evt,positionCC,{passive:true}));
 window.visualViewport&&window.visualViewport.addEventListener('resize',positionCC,{passive:true});
 
-/* ===== Algorithm tabs: set algo + re-run ===== */
+/* ===== Algorithm tabs ===== */
 tabs.addEventListener('click',e=>{
   const b=e.target.closest('.tab'); if(!b) return;
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));
@@ -490,19 +494,46 @@ throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.valu
 rectChk.addEventListener('change',()=>{ renderPalette(lastPalette); if(source==='photo') analyzePhotoSoon(); });
 gradChk.addEventListener('change',()=>{ renderPalette(lastPalette); if(source==='photo') analyzePhotoSoon(); });
 
-/* Unified zoom: camera uses CSS var + pan clamp; photo uses crop zoom */
+/* ===== Camera crop helpers (truth) ===== */
+function camCropFromState(){
+  const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return null;
+  const z=Math.max(1,uiZoom);
+  const base=Math.min(vw,vh);
+  const sw=Math.round(base/z), sh=sw;
+  const maxShiftPx=(base - sw)/2;                          // allowed pan in px
+  const ox = (uiPanXF||0) * maxShiftPx;                    // pan in px
+  const oy = (uiPanYF||0) * maxShiftPx;
+  const sx=Math.floor((vw - sw)/2 + ox);
+  const sy=Math.floor((vh - sh)/2 + oy);
+  return {vw,vh,z,base,sw,sh,maxShiftPx,ox,oy,sx,sy};
+}
+
+function camClampPanFractions(){
+  const c=camCropFromState(); if(!c) return;
+  // if maxShiftPx==0 (z==1 on non-square), keep zeros
+  if(c.maxShiftPx<=0){ uiPanXF=0; uiPanYF=0; return; }
+  uiPanXF = Math.max(-1, Math.min(1, uiPanXF));
+  uiPanYF = Math.max(-1, Math.min(1, uiPanYF));
+}
+
+function camUpdateCssTransform(){
+  const c=camCropFromState(); if(!c) return;
+  // Visual translate = (-ox/sw) * sq pixels; store fraction in vars
+  const panXNorm = c.sw ? (-c.ox / c.sw) : 0;
+  const panYNorm = c.sw ? (-c.oy / c.sw) : 0;
+  document.documentElement.style.setProperty('--zoom', c.z);
+  document.documentElement.style.setProperty('--panXNorm', String(panXNorm));
+  document.documentElement.style.setProperty('--panYNorm', String(panYNorm));
+}
+
+/* ===== Unified zoom control ===== */
 function setZoom(v){
   const clamped=Math.max(1,Math.min(10,v));
   zoomSlider.value=clamped;
   if(source==='camera'){
     uiZoom=clamped;
-    document.documentElement.style.setProperty('--zoom',uiZoom);
-    // clamp pan to new bounds
-    const maxShift = 0.5 - 0.5/uiZoom;
-    uiPanX = Math.max(-maxShift, Math.min(maxShift, uiPanX));
-    uiPanY = Math.max(-maxShift, Math.min(maxShift, uiPanY));
-    document.documentElement.style.setProperty('--panXNorm', uiPanX);
-    document.documentElement.style.setProperty('--panYNorm', uiPanY);
+    camClampPanFractions();
+    camUpdateCssTransform();
   }else{ // photo
     photoZ=clamped;
     boundPhotoCenter();
@@ -526,10 +557,10 @@ srcCamera.addEventListener('click', ()=>{
   status('Live');
   photoBitmap=null;
   photoPreview.style.display='none';
-  // reset photo zoom
   zoomSlider.value = uiZoom;
   showFreezeCTA();
   running=true; pending=false; throttleCountdown=1;
+  camUpdateCssTransform();
   video.play().catch(()=>{});
 });
 srcPhoto.addEventListener('click', ()=> pick.click());
@@ -547,7 +578,6 @@ async function loadFromFile(blob){
     photoBitmap = bmp;
     source='photo'; updateSourceChip();
     initializePhotoTransform();
-    // Stop camera processing (keep video underneath)
     running=false; pending=false; throttleCountdown=1; fpsEl.textContent='0';
     photoPreview.style.display='block';
     drawPhotoPreview();
@@ -561,7 +591,7 @@ async function loadFromFile(blob){
   }
 }
 
-/* Clipboard read, gated by user gesture; one-tap paste */
+/* Clipboard read, one-tap */
 async function tryPasteImage(){
   if(!('clipboard' in navigator) || !navigator.clipboard.read){
     toast('Clipboard images not supported here.'); return;
@@ -581,9 +611,7 @@ async function tryPasteImage(){
   }
 }
 
-/* ===== Photo transform & preview drawing (crop-based) ===== */
-
-/* Reset transform to fit-cover baseline */
+/* ===== Photo transform & preview drawing ===== */
 function initializePhotoTransform(){
   if(!photoBitmap) return;
   const iw=photoBitmap.width, ih=photoBitmap.height;
@@ -591,8 +619,6 @@ function initializePhotoTransform(){
   photoCX=iw/2; photoCY=ih/2;
   zoomSlider.value = 1;
 }
-
-/* Keep crop inside image bounds based on current zoom */
 function boundPhotoCenter(){
   if(!photoBitmap) return;
   const iw=photoBitmap.width, ih=photoBitmap.height;
@@ -604,8 +630,6 @@ function boundPhotoCenter(){
   photoCX = Math.max(minCX, Math.min(maxCX, photoCX));
   photoCY = Math.max(minCY, Math.min(maxCY, photoCY));
 }
-
-/* Compute current source rect (sx,sy,sw,sh) in image px for square crop */
 function currentPhotoSrcRect(){
   const iw=photoBitmap.width, ih=photoBitmap.height;
   const baseCrop=Math.min(iw, ih);
@@ -614,8 +638,6 @@ function currentPhotoSrcRect(){
   const sy = Math.max(0, Math.min(ih - crop, photoCY - crop/2));
   return {sx, sy, sw:crop, sh:crop};
 }
-
-/* Draw the photo preview into #photoPreview canvas covering the square */
 function drawPhotoPreview(){
   if(source!=='photo' || !photoBitmap) return;
   const wrap = document.getElementById('videoPane');
@@ -628,9 +650,21 @@ function drawPhotoPreview(){
   g.drawImage(photoBitmap, sx, sy, sw, sh, 0, 0, w, h);
 }
 
-/* ===== Gesture handling ===== */
+/* ===== Gesture handling (with correct focal-point zoom) ===== */
 
-/* Photo mode pointer handling (pan + pinch around focal point) */
+/* Helpers: get square-relative finger center */
+function getSquareFocal(clientX, clientY){
+  const rect = videoPane.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+  const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
+  const sq = Math.min(rect.width, rect.height) || 1;
+  // If container is not perfectly square (rare), clamp to square coords
+  const cxRel = Math.min(x, sq);
+  const cyRel = Math.min(y, sq);
+  return {cxRel, cyRel, sq};
+}
+
+/* Photo mode (pan + pinch around focal point) */
 const photoPtrs = new Map();
 let photoLastDist = 0;
 
@@ -648,8 +682,8 @@ function onPointerMove(e){
   rec.x = e.clientX; rec.y = e.clientY;
 
   if(photoPtrs.size===1){
-    const wrap = document.getElementById('videoPane');
-    const sq = Math.max(1, Math.min(wrap.clientWidth, wrap.clientHeight));
+    // pan in image px
+    const {sq} = getSquareFocal(e.clientX, e.clientY);
     const baseCrop=Math.min(photoBitmap.width, photoBitmap.height);
     const crop = baseCrop / photoZ;
     const pxPerScreen = crop / sq;
@@ -658,28 +692,25 @@ function onPointerMove(e){
     boundPhotoCenter(); drawPhotoPreview(); analyzePhotoSoon();
   }else if(photoPtrs.size===2){
     const pts=[...photoPtrs.values()];
-    const cx=(pts[0].x+pts[1].x)/2, cy=(pts[0].y+pts[1].y)/2;
+    const centerX=(pts[0].x+pts[1].x)/2, centerY=(pts[0].y+pts[1].y)/2;
+    const {cxRel, cyRel, sq} = getSquareFocal(centerX, centerY);
     const dist=Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+
     if(photoLastDist>0 && dist>0){
-      const wrap = document.getElementById('videoPane');
-      const sq = Math.max(1, Math.min(wrap.clientWidth, wrap.clientHeight));
       const baseCrop = Math.min(photoBitmap.width, photoBitmap.height);
-
-      // image coords under fingers BEFORE zoom
+      // BEFORE
       const cropBefore = baseCrop / photoZ;
-      const pxPerScreenBefore = cropBefore / sq;
-      const imgX = (cx - 0.5*sq) * pxPerScreenBefore + (photoCX - cropBefore/2);
-      const imgY = (cy - 0.5*sq) * pxPerScreenBefore + (photoCY - cropBefore/2);
+      const imgX = (cxRel / sq) * cropBefore + (photoCX - cropBefore/2);
+      const imgY = (cyRel / sq) * cropBefore + (photoCY - cropBefore/2);
 
-      // apply zoom
+      // Zoom
       const pinch = dist / photoLastDist;
       photoZ = Math.max(1, Math.min(10, photoZ * pinch));
 
-      // keep focal point stable AFTER zoom
+      // AFTER: keep focal point
       const cropAfter = baseCrop / photoZ;
-      const pxPerScreenAfter = cropAfter / sq;
-      photoCX = imgX - (cx - 0.5*sq) * pxPerScreenAfter + cropAfter/2;
-      photoCY = imgY - (cy - 0.5*sq) * pxPerScreenAfter + cropAfter/2;
+      photoCX = imgX - (cxRel / sq) * cropAfter + cropAfter/2;
+      photoCY = imgY - (cyRel / sq) * cropAfter + cropAfter/2;
 
       boundPhotoCenter();
       zoomSlider.value = photoZ;
@@ -696,7 +727,7 @@ function onPointerUp(e){
   e.preventDefault();
 }
 
-/* Camera mode pointer handling (pan + pinch, visual + capture) */
+/* Camera mode (pan + pinch, focal-point correct) */
 const camPtrs = new Map();
 let camLastDist = 0;
 
@@ -713,33 +744,76 @@ function camMove(e){
   const dy = e.clientY - rec.y;
   rec.x = e.clientX; rec.y = e.clientY;
 
-  const sq = Math.min(videoPane.clientWidth, videoPane.clientHeight)||1;
+  const rect = videoPane.getBoundingClientRect();
+  const sqPx = Math.min(rect.width, rect.height) || 1;
+
   if(camPtrs.size===1){
-    const maxShift = 0.5 - 0.5/uiZoom;
-    uiPanX = clamp(uiPanX - dx / sq, -maxShift, maxShift);
-    uiPanY = clamp(uiPanY - dy / sq, -maxShift, maxShift);
-    document.documentElement.style.setProperty('--panXNorm', uiPanX);
-    document.documentElement.style.setProperty('--panYNorm', uiPanY);
+    const c = camCropFromState(); if(!c) return;
+    // Convert screen delta → video px delta in current crop
+    const dVideoX = dx * (c.sw / sqPx);
+    const dVideoY = dy * (c.sw / sqPx);
+
+    // New sx/sy (pan opposite to finger move)
+    let sxPrime = c.sx - dVideoX;
+    let syPrime = c.sy - dVideoY;
+
+    // Clamp within the base square bounds inside the video
+    const minSx = (c.vw - c.base)/2;
+    const minSy = (c.vh - c.base)/2;
+    const maxSx = minSx + (c.base - c.sw);
+    const maxSy = minSy + (c.base - c.sw);
+    sxPrime = Math.max(minSx, Math.min(maxSx, sxPrime));
+    syPrime = Math.max(minSy, Math.min(maxSy, syPrime));
+
+    // Convert back to fractional pan
+    const oxPrime = sxPrime - (c.vw - c.sw)/2;
+    const oyPrime = syPrime - (c.vh - c.sw)/2;
+    uiPanXF = c.maxShiftPx ? (oxPrime / c.maxShiftPx) : 0;
+    uiPanYF = c.maxShiftPx ? (oyPrime / c.maxShiftPx) : 0;
+    camClampPanFractions();
+    camUpdateCssTransform();
   }else if(camPtrs.size===2){
     const pts=[...camPtrs.values()];
+    const centerX=(pts[0].x+pts[1].x)/2, centerY=(pts[0].y+pts[1].y)/2;
+    const {cxRel, cyRel} = getSquareFocal(centerX, centerY);
     const dist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+    const c = camCropFromState(); if(!c) return;
+
     if(camLastDist>0 && dist>0){
-      const pinch = dist / camLastDist;
-      const newZ = clamp(uiZoom * pinch, 1, 10);
-      // keep pans within bounds of new zoom
-      const oldMax = 0.5 - 0.5/uiZoom;
-      const newMax = 0.5 - 0.5/newZ;
-      if(oldMax>0){
-        uiPanX = clamp(uiPanX * (newMax/oldMax), -newMax, newMax);
-        uiPanY = clamp(uiPanY * (newMax/oldMax), -newMax, newMax);
-      }else{
-        uiPanX=0; uiPanY=0;
-      }
+      // Video coords under the fingers BEFORE zoom
+      const videoX = c.sx + (cxRel / sqPx) * c.sw;
+      const videoY = c.sy + (cyRel / sqPx) * c.sw;
+
+      // New zoom
+      const newZ = Math.max(1, Math.min(10, uiZoom * (dist / camLastDist)));
+
+      // NEW crop size
+      const base=c.base;
+      const swPrime = Math.round(base / newZ);
+
+      // Desired sx'/sy' so that same video pixel stays under fingers
+      let sxPrime = videoX - (cxRel / sqPx) * swPrime;
+      let syPrime = videoY - (cyRel / sqPx) * swPrime;
+
+      // Clamp within base square bounds
+      const minSx = (c.vw - base)/2;
+      const minSy = (c.vh - base)/2;
+      const maxSx = minSx + (base - swPrime);
+      const maxSy = minSy + (base - swPrime);
+      sxPrime = Math.max(minSx, Math.min(maxSx, sxPrime));
+      syPrime = Math.max(minSy, Math.min(maxSy, syPrime));
+
+      // Convert to fractional pan at new zoom
+      const maxShiftPxPrime = (base - swPrime)/2;
+      const oxPrime = sxPrime - (c.vw - swPrime)/2;
+      const oyPrime = syPrime - (c.vh - swPrime)/2;
+
       uiZoom = newZ;
+      uiPanXF = maxShiftPxPrime ? (oxPrime / maxShiftPxPrime) : 0;
+      uiPanYF = maxShiftPxPrime ? (oyPrime / maxShiftPxPrime) : 0;
+      camClampPanFractions();
       zoomSlider.value = uiZoom;
-      document.documentElement.style.setProperty('--zoom', uiZoom);
-      document.documentElement.style.setProperty('--panXNorm', uiPanX);
-      document.documentElement.style.setProperty('--panYNorm', uiPanY);
+      camUpdateCssTransform();
     }
     camLastDist = dist;
   }
@@ -764,33 +838,22 @@ videoPane.addEventListener('pointermove', camMove, {passive:false});
 videoPane.addEventListener('pointerup', camUp, {passive:false});
 videoPane.addEventListener('pointercancel', camUp, {passive:false});
 
-/* ===== Live worker handler ===== */
+/* ===== Worker handler ===== */
 worker.onmessage = (e)=>{
   const {jobId, error} = e.data||{};
   if(error){ pending=false; return; }
 
-  // Live camera stream
-  if(jobId==='live'){
+  if(jobId==='live' || jobId==='photo'){
     const arr=new Uint8Array(e.data.palette||[]), cols=[];
     for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
     while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
-    lastPalette=cols.slice(0,K); renderPalette(lastPalette); pending=false; frameCounter++;
+    lastPalette=cols.slice(0,K); renderPalette(lastPalette); pending=false; if(jobId==='live') frameCounter++;
     return;
   }
-
-  // Photo preview analysis
-  if(jobId==='photo'){
-    const arr=new Uint8Array(e.data.palette||[]), cols=[];
-    for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
-    while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
-    lastPalette=cols.slice(0,K); renderPalette(lastPalette); pending=false;
-    return;
-  }
-
-  // Freeze handled inline in freezeNow()
+  // Freeze handled inline
 };
 
-/* ===== RAF loop for live camera ===== */
+/* ===== RAF loop for live camera (palette from current crop) ===== */
 function loop(){
   requestAnimationFrame(loop);
   if(video.readyState<2||video.paused||!running) return;
@@ -798,11 +861,11 @@ function loop(){
   const now=performance.now();
   if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
 
-  const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
-  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
+  const c=camCropFromState(); if(!c) return;
+  const scale=procWidth/c.sw, w=Math.max(2,Math.round(c.sw*scale)), h=w;
   off.width=w; off.height=h;
   const ctx=off.getContext('2d',{willReadFrequently:true});
-  ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
+  ctx.drawImage(video,c.sx,c.sy,c.sw,c.sh,0,0,w,h);
   resEl.textContent=w+'×'+h;
 
   if(--throttleCountdown>0) return;
@@ -812,20 +875,6 @@ function loop(){
     const img=ctx.getImageData(0,0,w,h);
     worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
   }
-}
-
-/* ===== camera square crop (for live) ===== */
-function computeSquareCrop(){
-  const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
-  const z=Math.max(1,uiZoom), base=Math.min(vw,vh);
-  const sw=Math.round(base/z), sh=sw;
-  // normalized pan → pixel offset, bounded so crop stays inside
-  const maxShift = Math.floor((base - sw)/2);
-  const ox = Math.round(uiPanX * 2 * maxShift);
-  const oy = Math.round(uiPanY * 2 * maxShift);
-  const sx = Math.floor((vw - sw)/2 + ox);
-  const sy = Math.floor((vh - sh)/2 + oy);
-  return {sx,sy,sw,sh};
 }
 
 /* ===== palette render ===== */
@@ -847,7 +896,7 @@ function renderPalette(palette){
   }
 }
 
-/* ===== Photo analysis (static) ===== */
+/* ===== Photo analysis (always from current zoomed crop) ===== */
 let photoAnalyzeRaf=0, photoTick=0;
 function analyzePhotoSoon(force=false){
   if(force){ photoTick=0; }
@@ -856,7 +905,6 @@ function analyzePhotoSoon(force=false){
 }
 function analyzePhotoNow(){
   if(source!=='photo' || !photoBitmap) return;
-  // Throttle using same N logic to keep it responsive under continuous pinch
   if(photoTick++ % Math.max(1, throttleN) !== 0) return;
 
   const {sx,sy,sw,sh}=currentPhotoSrcRect();
@@ -872,7 +920,7 @@ function analyzePhotoNow(){
   }
 }
 
-/* ===== FREEZE / UNFREEZE ===== */
+/* ===== FREEZE / UNFREEZE (uses current crop for both sources) ===== */
 freezeBtn.addEventListener('click',async()=>{
   if(compositeOverlay.classList.contains('open')) return;
   await freezeNow();
@@ -881,25 +929,24 @@ freezeBtn.addEventListener('click',async()=>{
 unfreezeBtn.addEventListener('click',()=>{ unfreeze(); showFreezeCTA(); });
 
 async function freezeNow(){
-  // For camera
   if(source==='camera'){
     running=false; pending=false; throttleCountdown=1;
-    const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
+    const c=camCropFromState(); if(!c) return;
 
-    const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
+    const scale=procWidth/c.sw, w=Math.max(2,Math.round(c.sw*scale)), h=w;
     capFrame.width=w; capFrame.height=h;
-    const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
+    const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,c.sx,c.sy,c.sw,c.sh,0,0,w,h);
 
     const wrap=document.getElementById('videoPane');
     frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
     const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
-    fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
-    frozenCanvas.style.display='block';            // preview first
+    fc.drawImage(video,c.sx,c.sy,c.sw,c.sh,0,0,frozenCanvas.width,frozenCanvas.height);
+    frozenCanvas.style.display='block';
     await video.pause();
 
     // Hi-res capture for composite
-    const hiCap=document.createElement('canvas'); hiCap.width=sw; hiCap.height=sh;
-    const hiCtx=hiCap.getContext('2d'); hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
+    const hiCap=document.createElement('canvas'); hiCap.width=c.sw; hiCap.height=c.sh;
+    const hiCtx=hiCap.getContext('2d'); hiCtx.drawImage(video,c.sx,c.sy,c.sw,c.sh,0,0,c.sw,c.sh);
 
     compositeImg.src=''; compositeOverlay.classList.add('open'); updateLpHint();
     window.recalcSquare&&window.recalcSquare();
@@ -925,7 +972,6 @@ async function freezeNow(){
     return;
   }
 
-  // For photo
   if(source==='photo' && photoBitmap){
     const {sx,sy,sw,sh}=currentPhotoSrcRect();
     const w=procWidth, h=procWidth;
@@ -952,10 +998,9 @@ async function freezeNow(){
     lastPalette=cols; renderPalette(cols);
     const hexes=cols.map(toHex);
 
-    // Hi-res square crop from the photo for composite (cap at 2048 for memory)
-    const hiCap=document.createElement('canvas');
-    const HI = 2048;
-    hiCap.width=HI; hiCap.height=HI;
+    // Hi-res square crop from the photo for composite (cap at 2048)
+    const HI = Math.min(2048, sw|0);
+    const hiCap=document.createElement('canvas'); hiCap.width=HI; hiCap.height=HI;
     const hiCtx=hiCap.getContext('2d'); hiCtx.imageSmoothingEnabled=true; hiCtx.imageSmoothingQuality='high';
     hiCtx.clearRect(0,0,HI,HI);
     hiCtx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, HI,HI);
@@ -1009,7 +1054,7 @@ function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
 new MutationObserver(updateLpHint).observe(compositeOverlay,{attributes:true,attributeFilter:['class']});
 document.addEventListener('DOMContentLoaded', updateLpHint);
 
-/* ===== Utility for photo mode: re-analyze on window square change ===== */
+/* ===== re-analyze on square change in photo mode ===== */
 addEventListener('resize', ()=>{ if(source==='photo' && photoBitmap){ drawPhotoPreview(); analyzePhotoSoon(true); }}, {passive:true});
 </script>
 </body>
