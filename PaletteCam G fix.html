@@ -7,36 +7,82 @@
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
-    --controlsH:120px;
-    --sq:100vw;
-    --ctaW:clamp(220px,60vw,340px);
+    --sq:0px; --cbH:0px;
+    --ctaW:clamp(220px,60vw,340px); --ctaH:56px;
+    --ctaB:calc(16px + env(safe-area-inset-bottom));
+    --ccL:12px; --ccR:12px; --ccB:12px; --ccMaxH:60vh;
+    /* camera pan (normalized, used in calc with --sq) */
+    --panXNorm:0; --panYNorm:0;
   }
-  *{box-sizing:border-box}
-  html,body{height:100%}
+  *{box-sizing:border-box} html,body{height:100%}
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* CAMERA (edge-to-edge square) */
-  #videoPane{position:fixed;left:0;right:0;top:0;height:var(--sq);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line);background:#000;overflow:hidden}
-  .videoWrap{position:relative;display:flex;align-items:center;justify-content:center;width:var(--sq);max-height:var(--sq);aspect-ratio:1/1;border-radius:0;overflow:hidden;background:#000}
-  video{width:100%;height:100%;object-fit:cover;display:block;transform:scale(var(--zoom));transform-origin:center}
-  #frozenCanvas{position:absolute;inset:0;width:100%;height:100%;display:none}
+  .app{position:fixed; inset:0; display:grid; isolation:isolate;}
+  @media (orientation: portrait){
+    .app{ grid-template-rows: var(--sq) 1fr; grid-template-columns: 1fr; }
+    #videoPane{ grid-row:1; grid-column:1; } #uiPane{ grid-row:2; grid-column:1; }
+  }
+  @media (orientation: landscape){
+    .app{ grid-template-columns: var(--sq) 1fr; grid-template-rows: 1fr; }
+    #videoPane{ grid-column:1; grid-row:1; } #uiPane{ grid-column:2; grid-row:1; }
+  }
 
-  /* PALETTE */
-  #palettePane{position:fixed;left:0;right:0;top:var(--sq);height:calc(100vh - var(--sq) - var(--controlsH) - env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;background:#000;border-bottom:1px solid var(--line)}
+  #videoPane{
+    position:relative; overflow:hidden; background:#000; z-index:1;
+    /* Needed for Safari to deliver raw gestures for pinch/pan in photo/camera mode */
+    touch-action:none; 
+  }
+
+  /* Layers inside the square (bottom→top): video, photoPreview, frozenCanvas */
+  /* Camera/frozenCanvas use scale+translate from CSS vars; photoPreview is drawn manually */
+  #videoPane video, #videoPane canvas{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover;
+    transform:
+      translate(calc(var(--panXNorm,0) * var(--sq)), calc(var(--panYNorm,0) * var(--sq)))
+      scale(var(--zoom));
+    transform-origin:center;
+    display:block;
+  }
+  #frozenCanvas{display:none}
+  /* A separate canvas for photo preview when source==='photo' */
+  #photoPreview{display:none; z-index:2; transform:none !important; object-fit:contain;}
+
+  /* Source chip (top-left of square) */
+  #sourceChip{
+    position:absolute; top:10px; left:10px; z-index:5;
+    display:flex; gap:6px; align-items:center;
+    background:rgba(0,0,0,.45); backdrop-filter:blur(6px);
+    border:1px solid var(--line); border-radius:12px; padding:6px 8px;
+    pointer-events:auto;
+  }
+  .chipbtn{
+    appearance:none; border:1px solid var(--line);
+    background:rgba(255,255,255,.06); color:#fff;
+    border-radius:10px; padding:6px 10px; font:12px/1.2 system-ui,sans-serif;
+  }
+  .chipbtn[aria-pressed="true"]{outline:2px solid #fff; outline-offset:1px}
+  .chipbtn:disabled{opacity:.5}
+
+  #uiPane{
+    position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; gap:10px;
+    padding:10px 12px 12px;
+    padding-bottom: calc(12px + var(--ctaH) + env(safe-area-inset-bottom));
+    background:#000; z-index:2; contain:paint;
+  }
+
+  #palettePane{ display:flex; flex-direction:column; gap:10px; min-height:0; flex:1;
+    border-bottom:1px solid var(--line); padding-bottom:10px; background:#000; }
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
-  .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px}
-  .swatches{display:flex}
-  .swatch{flex:1}
-  .gradient{display:block}
+  .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px;background:#000}
+  .swatches{display:flex} .swatch{flex:1} .gradient{display:block}
   #openHint{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;pointer-events:none}
   #openHint::after{content:"";width:12px;height:12px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;transform:rotate(-45deg);display:block}
 
-  /* BOTTOM CONTROLS */
-  #controlsBar{position:fixed;left:0;right:0;bottom:0;background:#000;border-top:1px solid var(--line);padding:10px 12px calc(8px + env(safe-area-inset-bottom))}
-  #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto auto;gap:10px}
+  #controlsBar{ border-top:1px solid var(--line); background:#000; padding:10px 0 0; margin-top:auto; }
+  #bar{display:grid;grid-template-columns:1fr;grid-template-rows:auto;gap:10px}
   .zoomArea{grid-row:1}
-  #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaW);padding:14px 22px}
   .zoomWrap{display:flex;align-items:center;gap:12px;width:100%}
   .zbtn{flex:none;width:42px;height:42px;aspect-ratio:1/1;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
   input[type="range"].zoom{appearance:none;-webkit-appearance:none;width:100%;height:16px;border-radius:999px;background:#1a1a1a;outline:none}
@@ -44,110 +90,162 @@
   input[type="range"].zoom::-webkit-slider-runnable-track{height:16px;border-radius:999px;background:#2b2b2b}
   input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border:none;border-radius:50%;background:#fff;cursor:pointer}
   input[type="range"].zoom::-moz-range-track{height:16px;border-radius:999px;background:#2b2b2b}
-
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* CONTROL CENTER */
-  #ccWrap{position:absolute;left:12px;right:12px;bottom:12px;display:none;z-index:10}
-  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
+  /* Fixed, identical CTAs */
+  #freezeBtn,#unfreezeBtn{
+    position:fixed; left:50%; transform:translateX(-50%) translateZ(0);
+    bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
+  }
+
+  #ccWrap{
+    position:fixed; z-index:4000; left:var(--ccL); right:var(--ccR);
+    bottom:var(--ccB); transform:translateZ(0); display:none;
+  }
+  #cc{ background:rgba(0,0,0,.6); backdrop-filter:blur(8px); border:1px solid var(--line);
+    border-radius:14px; padding:12px; display:grid; gap:12px; max-height:var(--ccMaxH); overflow:auto; }
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .tabbar{display:flex;gap:8px;flex-wrap:wrap}
+  .tabbar{display:flex;gap:8px;flex-wrap:nowrap}
   .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer;white-space:nowrap}
   .tab.active{outline:2px solid #fff;outline-offset:1px}
-  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
+  .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
 
-  /* COMPOSITE OVERLAY */
-  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
+  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
   #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
-  .actions{display:flex;gap:14px}
-  .iconbtn{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#101010;border:1px solid #2a2a2a;color:#fff;cursor:pointer}
-  .iconbtn svg{width:26px;height:26px;display:block}
-  #unfreezeBtn{width:var(--ctaW);align-self:center}
+  .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
+
+  /* Tiny toast for Paste/permission messages */
+  #toast{
+    position:fixed; left:50%; transform:translateX(-50%); bottom:calc(var(--ctaB) + var(--ctaH) + 10px);
+    background:rgba(20,20,20,.9); color:#fff; border:1px solid var(--line); border-radius:10px;
+    padding:8px 12px; font-size:12px; z-index:9000; display:none; max-width:min(90vw,520px)
+  }
+  #toast.show{display:block}
 </style>
 </head>
 <body>
-  <section id="videoPane">
-    <div class="videoWrap">
-      <video id="video" playsinline muted autoplay></video>
-      <canvas id="frozenCanvas"></canvas>
-    </div>
-  </section>
-
-  <section id="palettePane">
-    <div class="title">
-      <div id="algoName" class="small">K-Means (LAB)</div>
-      <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
-    </div>
-    <div class="stack" id="paletteClickable" title="Open controls">
-      <div id="swatches" class="swatches"></div>
-      <div id="gradient" class="gradient" hidden></div>
-      <div id="openHint" aria-hidden="true"></div>
-    </div>
-    <div id="ccWrap">
-      <div id="cc">
-        <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
-          <button class="tab active" data-algo="kmeans">K-Means</button>
-          <button class="tab" data-algo="hist">Histogram</button>
-          <button class="tab" data-algo="mediancut">Median-cut</button>
-        </div></div>
-        <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
-        <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
-        <div class="row"><span>Show gradient</span><input type="checkbox" id="grad"></div>
-        <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
-        <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span></div>
+  <div class="app">
+    <section id="videoPane" aria-label="Camera / Photo square">
+      <!-- Source chip -->
+      <div id="sourceChip" aria-label="Source">
+        <button id="srcCamera" class="chipbtn" aria-pressed="true" type="button">Camera</button>
+        <button id="srcPhoto"  class="chipbtn" aria-pressed="false" type="button">Photo</button>
+        <button id="srcPaste"  class="chipbtn" aria-pressed="false" type="button">Paste</button>
+        <input id="pick" type="file" accept="image/*" hidden />
       </div>
-    </div>
-  </section>
 
-  <section id="controlsBar">
-    <div id="bar">
-      <div class="zoomArea">
-        <div class="zoomWrap">
-          <button class="zbtn" id="zoomMinus" aria-label="Zoom out">−</button>
-          <input type="range" id="zoom" class="zoom" min="1" max="10" step="0.01" value="1">
-          <button class="zbtn" id="zoomPlus" aria-label="Zoom in">+</button>
+      <!-- Layers in the square -->
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="photoPreview"></canvas>
+      <canvas id="frozenCanvas"></canvas>
+    </section>
+
+    <section id="uiPane" aria-label="UI">
+      <div id="palettePane">
+        <div class="title">
+          <div id="algoName" class="small">K-Means (LAB)</div>
+          <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
+        </div>
+        <div class="stack" id="paletteClickable" title="Open controls">
+          <div id="swatches" class="swatches"></div>
+          <div id="gradient" class="gradient" hidden></div>
+          <div id="openHint" aria-hidden="true"></div>
+        </div>
+
+        <div id="ccWrap">
+          <div id="cc">
+            <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
+              <button class="tab active" data-algo="kmeans" type="button">K-Means</button>
+              <button class="tab" data-algo="hist" type="button">Histogram</button>
+              <button class="tab" data-algo="mediancut" type="button">Median-cut</button>
+            </div></div>
+            <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
+            <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
+            <div class="row"><span>Show gradient</span><input type="checkbox" id="grad" checked></div>
+            <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
+            <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span></div>
+          </div>
         </div>
       </div>
-      <button class="btn cta" id="freezeBtn">FREEZE</button>
-    </div>
-  </section>
+
+      <section id="controlsBar">
+        <div id="bar">
+          <div class="zoomArea">
+            <div class="zoomWrap">
+              <button class="zbtn" id="zoomMinus" type="button" aria-label="Zoom out">−</button>
+              <input type="range" id="zoom" class="zoom" min="1" max="10" step="0.01" value="1">
+              <button class="zbtn" id="zoomPlus" type="button" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <button class="btn cta" id="freezeBtn" type="button">FREEZE</button>
+        </div>
+      </section>
+    </section>
+  </div>
 
   <div id="compositeOverlay">
     <canvas id="compositeCanvas"></canvas>
     <img id="compositeImg" alt="Composite preview"/>
-    <div class="actions">
-      <button class="iconbtn" id="shareBtn" title="Share">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 16V3"/><path d="M7 8l5-5 5 5"/></svg>
-      </button>
-      <button class="iconbtn" id="saveBtn" title="Save image">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><rect x="4" y="19" width="16" height="2" rx="1"/></svg>
-      </button>
-    </div>
-    <button class="btn cta" id="unfreezeBtn">UNFREEZE</button>
+    <div id="lpHint" class="smallhint">Long-press the image to save.</div>
+    <button class="btn cta" id="unfreezeBtn" type="button">UNFREEZE</button>
   </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ---------- layout sizing ---------- */
-function setSquareToViewportWidth(){
-  const s = Math.max(1, Math.round(window.innerWidth));
-  document.documentElement.style.setProperty('--sq', s + 'px');
-  updateControlsH();
-}
-const bar = document.getElementById('bar');
-function updateControlsH(){
-  document.documentElement.style.setProperty('--controlsH', Math.round(bar.getBoundingClientRect().height) + 'px');
-}
-addEventListener('load', setSquareToViewportWidth);
-addEventListener('resize', setSquareToViewportWidth);
-addEventListener('orientationchange', setSquareToViewportWidth);
+/* ===== square sizing ===== */
+(function(){
+  function recalcSquare(){
+    const vv = window.visualViewport;
+    const vw = Math.max(0, window.innerWidth);
+    const vh = Math.max(0, (vv?.height ?? window.innerHeight));
+    const isLandscape = vw > vh;
+    const sq = isLandscape ? vh : Math.min(vw, vh);
+    document.documentElement.style.setProperty('--sq', Math.round(sq) + 'px');
 
-/* ---------- worker with jobId (with minor fixes) ---------- */
+    // Keep frozen canvas sized to square container
+    const fc = document.getElementById('frozenCanvas');
+    if (fc && fc.style.display !== 'none') {
+      const wrap = document.getElementById('videoPane');
+      fc.width = wrap.clientWidth;
+      fc.height = wrap.clientHeight;
+    }
+
+    // Resize photo preview canvas to square
+    const pp = document.getElementById('photoPreview');
+    if (pp.style.display !== 'none') {
+      const wrap = document.getElementById('videoPane');
+      pp.width = wrap.clientWidth;
+      pp.height = wrap.clientHeight;
+      // Redraw current view for photo
+      if (source==='photo' && photoBitmap) drawPhotoPreview();
+    }
+  }
+  window.recalcSquare = recalcSquare;
+  let raf = 0;
+  const kick = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(recalcSquare); };
+  addEventListener('load', kick,{passive:true});
+  addEventListener('resize', kick,{passive:true});
+  addEventListener('orientationchange', kick,{passive:true});
+  window.visualViewport && window.visualViewport.addEventListener('resize', kick,{passive:true});
+})();
+
+/* ===== measure bars / CTA ===== */
+const controlsBar = document.getElementById('controlsBar');
+function updateCbH(){
+  const h = Math.round(controlsBar.getBoundingClientRect().height);
+  document.documentElement.style.setProperty('--cbH', h + 'px');
+}
+new ResizeObserver(updateCbH).observe(controlsBar);
+addEventListener('load', updateCbH);
+
+/* ===== worker ===== */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
   const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
@@ -183,13 +281,12 @@ function medianCutPalette(samples,k){
   let boxes=[{colors}];
   const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
   boxes.forEach(bounds);
-  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
   const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
   while(boxes.length<k){
-    boxes.sort((A,B)=>range(B)-range(A));
-    const big=boxes.shift(); if(!big||big.colors.length<=1) break;
-    const ax=axis(big);
-    big.colors.sort((a,b)=>a[ax]-b[ax]);
+    boxes.sort((A,B)=>Math.max(A.r[1]-A.r[0],A.g[1]-A.g[0],A.b[1]-A.b[0]) - Math.max(B.r[1]-B.r[0],B.g[1]-B.g[0],B.b[1]-B.b[0]));
+    const big=boxes.pop(); if(!big||big.colors.length<=1) break;
+    const ax=['r','g','b'][axis(big)];
+    big.colors.sort((a,b)=>a[['r','g','b'].indexOf(ax)]-b[['r','g','b'].indexOf(ax)]);
     const mid=big.colors.length>>1;
     const left={colors:big.colors.slice(0,mid)}, right={colors:big.colors.slice(mid)};
     [left,right].forEach(bounds); boxes.push(left,right);
@@ -246,273 +343,674 @@ function dedupeAndSort(rgbList,minDE=10){
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
 worker.addEventListener('error', e=>console.log('Worker error:', e.message));
 
-/* ---------- elements ---------- */
+/* ===== elements ===== */
+const videoPane=document.getElementById('videoPane');
 const video=document.getElementById('video');
+const photoPreview=document.getElementById('photoPreview');
 const frozenCanvas=document.getElementById('frozenCanvas');
+
 const off=document.getElementById('off');
 const capFrame=document.getElementById('capFrame');
-const algoName=document.getElementById('algoName');
+
 const statusEl=document.getElementById('status');
 const fpsEl=document.getElementById('fps');
 const resEl=document.getElementById('res');
 const swatchesEl=document.getElementById('swatches');
 const gradientEl=document.getElementById('gradient');
 const paletteClickable=document.getElementById('paletteClickable');
-
 const tabs=document.getElementById('tabs');
 const kRange=document.getElementById('k'); const kVal=document.getElementById('kVal');
 const sizeRange=document.getElementById('size'); const sizeVal=document.getElementById('sizeVal');
 const throttleLog=document.getElementById('throttleLog'); const throttleVal=document.getElementById('throttleVal');
 const rectChk=document.getElementById('rects'); const gradChk=document.getElementById('grad');
-
 const zoomSlider=document.getElementById('zoom'); const zoomMinus=document.getElementById('zoomMinus'); const zoomPlus=document.getElementById('zoomPlus');
 const freezeBtn=document.getElementById('freezeBtn');
-
 const compositeOverlay=document.getElementById('compositeOverlay');
 const compositeCanvas=document.getElementById('compositeCanvas');
 const compositeImg=document.getElementById('compositeImg');
-const shareBtn=document.getElementById('shareBtn'); const saveBtn=document.getElementById('saveBtn'); const unfreezeBtn=document.getElementById('unfreezeBtn');
+const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
+const lpHint=document.getElementById('lpHint');
 
-/* ---------- state ---------- */
+const srcCamera=document.getElementById('srcCamera');
+const srcPhoto=document.getElementById('srcPhoto');
+const srcPaste=document.getElementById('srcPaste');
+const pick=document.getElementById('pick');
+
+const toastEl=document.getElementById('toast');
+
+/* ===== state ===== */
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
-let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
-let throttleCountdown=1; // process first frame immediately
-let lastPalette=[];
-let compositeBlob=null, compositeURL='', compositeName='palette-composite.png';
+let frameCounter=0,lastT=performance.now(),pending=false, running=false;
+let throttleCountdown=1; let lastPalette=[]; let ctaH=56;
 
-/* ---------- helpers ---------- */
+/* Source state: 'camera' | 'photo' */
+let source='camera';
+let photoBitmap=null;
+/* Photo transform: crop-based (z ≥1), center cx,cy in image px */
+let photoZ=1, photoCX=0, photoCY=0;
+
+/* Camera pan state (normalized in [-max..max]) */
+let uiPanX=0, uiPanY=0;
+
+/* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
-function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100); }
-function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
-function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
-function status(t){ statusEl.textContent=t; }
+const nToSlider=n=>Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100);
+const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
+const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+const status=t=>statusEl.textContent=t;
+function updateLpHint(){ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
+function toast(msg, ms=1800){ toastEl.textContent=msg; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'), ms); }
 
-/* ---------- camera (auto) ---------- */
+/* ===== CC positioning ===== */
+const PEEK=72;
+function positionCC(){
+  const uiRect=document.getElementById('uiPane').getBoundingClientRect();
+  document.documentElement.style.setProperty('--ccL',(Math.max(0,uiRect.left)+12)+'px');
+  document.documentElement.style.setProperty('--ccR',(Math.max(0,window.innerWidth-uiRect.right)+12)+'px');
+  const uiBottomInset=Math.max(0,window.innerHeight-uiRect.bottom);
+  document.documentElement.style.setProperty('--ccB',`calc(${uiBottomInset}px + ${ctaH}px + 8px + env(safe-area-inset-bottom))`);
+  const usableH=Math.max(160,uiRect.height-ctaH-8-PEEK);
+  document.documentElement.style.setProperty('--ccMaxH',usableH+'px');
+}
+
+/* ===== frozen-canvas hygiene ===== */
+function hardHideFrozenCanvas(){
+  const fc=frozenCanvas, w=fc.width, h=fc.height;
+  if(w&&h){const g=fc.getContext('2d'); g.clearRect(0,0,w,h);}
+  fc.width=0; fc.height=0; fc.style.display='none';
+}
+function forceReflowAndRecalc(){
+  window.recalcSquare&&window.recalcSquare(); positionCC();
+  video.style.visibility='hidden'; void document.body.offsetHeight; video.style.visibility='';
+}
+async function refreshVideoSurface(){
+  const s=video.srcObject; video.srcObject=null; await new Promise(r=>requestAnimationFrame(r));
+  video.srcObject=s; await video.play().catch(()=>{});
+}
+
+/* ===== camera ===== */
 async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
 async function startCamera(){
   try{
     status('Requesting camera…');
-    const stream=await getStream();
-    if (!stream || !stream.active) throw new Error('Camera access was not successful.');
+    const stream=await getStream(); if(!stream||!stream.active) throw new Error('Camera access was not successful.');
     video.srcObject=stream;
     await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
-    
-    try {
-      await video.play();
-    } catch(playErr) {
-      console.error("Autoplay was blocked:", playErr);
+    try{ await video.play(); }catch(e){
       status('Tap to start camera');
-      return;
+      const resume=()=>{ if(!compositeOverlay.classList.contains('open')) video.play().catch(()=>{}); document.removeEventListener('click',resume,true); };
+      document.addEventListener('click',resume,true); return;
     }
+    status('Live'); running=true; pending=false; throttleCountdown=1; renderPalette([]); requestAnimationFrame(loop);
+  }catch(err){ status(err?.name==='NotAllowedError'?'Camera permission denied.':(err?.message||'Camera failed')); }
+}
 
-    status('Live');
-    running=true; pending=false; throttleCountdown=1;
-    setSquareToViewportWidth();
-    renderPalette([]); // Render initial empty state
-    loop();
-  } catch(err) {
-    let msg = 'Camera failed';
-    if (err && err.name === 'NotAllowedError') msg = 'Camera permission denied.';
-    else if (err && err.message) msg = err.message;
-    status(msg);
-    console.error("Camera start error:", err);
+/* Start at load */
+startCamera();
+
+/* ===== CTA visibility ===== */
+function showFreezeCTA(){ freezeBtn.style.display='block'; unfreezeBtn.style.display='none'; }
+function showUnfreezeCTA(){ freezeBtn.style.display='none'; unfreezeBtn.style.display='block'; }
+
+/* ===== UI init ===== */
+addEventListener('load', ()=>{
+  ctaH = freezeBtn.offsetHeight || 56;
+  document.documentElement.style.setProperty('--ctaH', ctaH + 'px');
+
+  throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN);
+  rectChk.checked=true; gradChk.checked=true; renderPalette(lastPalette);
+  positionCC(); showFreezeCTA();
+
+  // initialize pan vars
+  document.documentElement.style.setProperty('--panXNorm', uiPanX);
+  document.documentElement.style.setProperty('--panYNorm', uiPanY);
+});
+
+/* Open/close controls */
+paletteClickable.addEventListener('click',e=>{ e.stopPropagation(); positionCC(); ccWrap.style.display='block'; });
+document.addEventListener('click',e=>{ if(compositeOverlay.classList.contains('open')) return;
+  if(ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display='none'; });
+['resize','orientationchange'].forEach(evt=>addEventListener(evt,positionCC,{passive:true}));
+window.visualViewport&&window.visualViewport.addEventListener('resize',positionCC,{passive:true});
+
+/* ===== Algorithm tabs: set algo + re-run ===== */
+tabs.addEventListener('click',e=>{
+  const b=e.target.closest('.tab'); if(!b) return;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));
+  algo = b.dataset.algo;
+  document.getElementById('algoName').textContent =
+    algo==='kmeans' ? 'K-Means (LAB)' : algo==='hist' ? 'Histogram' : 'Median-cut';
+  if(source==='camera'){ throttleCountdown=1; } else if(source==='photo'){ analyzePhotoSoon(true); }
+});
+
+kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette); if(source==='photo') analyzePhotoSoon(true);});
+sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value; sizeVal.textContent=procWidth+' px'; if(source==='photo') analyzePhotoSoon(true);});
+throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
+rectChk.addEventListener('change',()=>{ renderPalette(lastPalette); if(source==='photo') analyzePhotoSoon(); });
+gradChk.addEventListener('change',()=>{ renderPalette(lastPalette); if(source==='photo') analyzePhotoSoon(); });
+
+/* Unified zoom: camera uses CSS var + pan clamp; photo uses crop zoom */
+function setZoom(v){
+  const clamped=Math.max(1,Math.min(10,v));
+  zoomSlider.value=clamped;
+  if(source==='camera'){
+    uiZoom=clamped;
+    document.documentElement.style.setProperty('--zoom',uiZoom);
+    // clamp pan to new bounds
+    const maxShift = 0.5 - 0.5/uiZoom;
+    uiPanX = Math.max(-maxShift, Math.min(maxShift, uiPanX));
+    uiPanY = Math.max(-maxShift, Math.min(maxShift, uiPanY));
+    document.documentElement.style.setProperty('--panXNorm', uiPanX);
+    document.documentElement.style.setProperty('--panYNorm', uiPanY);
+  }else{ // photo
+    photoZ=clamped;
+    boundPhotoCenter();
+    drawPhotoPreview();
+    analyzePhotoSoon();
   }
 }
-startCamera().catch(err => console.error(err));
-document.addEventListener('click', ()=>{ if (video.paused) startCamera(); }, {once:true});
-
-/* ---------- UI ---------- */
-addEventListener('load', ()=>{ updateControlsH(); throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN); });
-addEventListener('resize', updateControlsH);
-addEventListener('orientationchange', updateControlsH);
-paletteClickable.addEventListener('click',(e)=>{ e.stopPropagation(); ccWrap.style.display='block'; });
-document.addEventListener('click',(e)=>{ if (compositeOverlay.classList.contains('open')) return; if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display=''; });
-
-tabs.addEventListener('click',(e)=>{ const b=e.target.closest('.tab'); if(!b) return; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':''); });
-kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
-sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value; sizeVal.textContent=procWidth+' px';});
-throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
-rectChk.addEventListener('change',()=>renderPalette(lastPalette));
-gradChk.addEventListener('change',()=>renderPalette(lastPalette));
-
-function setZoom(v){ uiZoom=Math.max(1,Math.min(10,v)); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
 zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-freezeBtn.addEventListener('click',async()=>{ if(running) await freezeNow(); });
-unfreezeBtn.addEventListener('click',()=>unfreeze());
+/* ===== SOURCE CHIP (Camera / Photo / Paste) ===== */
+function updateSourceChip(){
+  srcCamera.setAttribute('aria-pressed', String(source==='camera'));
+  srcPhoto .setAttribute('aria-pressed', String(source==='photo'));
+  srcPaste .setAttribute('aria-pressed', 'false');
+}
+srcCamera.addEventListener('click', ()=>{
+  if(source==='camera') return;
+  source='camera'; updateSourceChip();
+  status('Live');
+  photoBitmap=null;
+  photoPreview.style.display='none';
+  // reset photo zoom
+  zoomSlider.value = uiZoom;
+  showFreezeCTA();
+  running=true; pending=false; throttleCountdown=1;
+  video.play().catch(()=>{});
+});
+srcPhoto.addEventListener('click', ()=> pick.click());
+pick.addEventListener('change', async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  await loadFromFile(f);
+});
+srcPaste.addEventListener('click', tryPasteImage);
 
-/* ---------- crop ---------- */
-function computeSquareCrop(){
-  const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
-  const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
-  return {sx,sy,sw,sh};
+/* Load image blob into bitmap and switch to photo mode */
+async function loadFromFile(blob){
+  try{
+    status('Loading photo…');
+    const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+    photoBitmap = bmp;
+    source='photo'; updateSourceChip();
+    initializePhotoTransform();
+    // Stop camera processing (keep video underneath)
+    running=false; pending=false; throttleCountdown=1; fpsEl.textContent='0';
+    photoPreview.style.display='block';
+    drawPhotoPreview();
+    analyzePhotoSoon(true);
+    status('Photo');
+    showFreezeCTA();
+  }catch(err){
+    toast('Failed to load image.');
+  }finally{
+    pick.value=''; // reset input
+  }
 }
 
-/* ---------- live handler (jobId==='live') ---------- */
+/* Clipboard read, gated by user gesture; one-tap paste */
+async function tryPasteImage(){
+  if(!('clipboard' in navigator) || !navigator.clipboard.read){
+    toast('Clipboard images not supported here.'); return;
+  }
+  try{
+    const items = await navigator.clipboard.read();
+    for(const it of items){
+      const type = it.types.find(t => t.startsWith('image/'));
+      if(!type) continue;
+      const blob = await it.getType(type);
+      await loadFromFile(blob);
+      return;
+    }
+    toast('No image on clipboard.');
+  }catch(err){
+    toast('Paste was not allowed or contained no image.');
+  }
+}
+
+/* ===== Photo transform & preview drawing (crop-based) ===== */
+
+/* Reset transform to fit-cover baseline */
+function initializePhotoTransform(){
+  if(!photoBitmap) return;
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  photoZ=1;
+  photoCX=iw/2; photoCY=ih/2;
+  zoomSlider.value = 1;
+}
+
+/* Keep crop inside image bounds based on current zoom */
+function boundPhotoCenter(){
+  if(!photoBitmap) return;
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  const baseCrop=Math.min(iw, ih);
+  const crop = baseCrop / photoZ;
+  const half=crop/2;
+  const minCX=half, maxCX=iw-half;
+  const minCY=half, maxCY=ih-half;
+  photoCX = Math.max(minCX, Math.min(maxCX, photoCX));
+  photoCY = Math.max(minCY, Math.min(maxCY, photoCY));
+}
+
+/* Compute current source rect (sx,sy,sw,sh) in image px for square crop */
+function currentPhotoSrcRect(){
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  const baseCrop=Math.min(iw, ih);
+  const crop = baseCrop / photoZ;
+  const sx = Math.max(0, Math.min(iw - crop, photoCX - crop/2));
+  const sy = Math.max(0, Math.min(ih - crop, photoCY - crop/2));
+  return {sx, sy, sw:crop, sh:crop};
+}
+
+/* Draw the photo preview into #photoPreview canvas covering the square */
+function drawPhotoPreview(){
+  if(source!=='photo' || !photoBitmap) return;
+  const wrap = document.getElementById('videoPane');
+  const w = photoPreview.width = wrap.clientWidth;
+  const h = photoPreview.height = wrap.clientHeight;
+  const g = photoPreview.getContext('2d');
+  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.clearRect(0,0,w,h);
+  const {sx,sy,sw,sh}=currentPhotoSrcRect();
+  g.drawImage(photoBitmap, sx, sy, sw, sh, 0, 0, w, h);
+}
+
+/* ===== Gesture handling ===== */
+
+/* Photo mode pointer handling (pan + pinch around focal point) */
+const photoPtrs = new Map();
+let photoLastDist = 0;
+
+function onPointerDown(e){
+  if(source!=='photo' || !photoBitmap) return;
+  photoPreview.setPointerCapture?.(e.pointerId);
+  photoPtrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  e.preventDefault();
+}
+function onPointerMove(e){
+  if(source!=='photo' || !photoBitmap) return;
+  const rec = photoPtrs.get(e.pointerId); if(!rec) return;
+  const dx = e.clientX - rec.x;
+  const dy = e.clientY - rec.y;
+  rec.x = e.clientX; rec.y = e.clientY;
+
+  if(photoPtrs.size===1){
+    const wrap = document.getElementById('videoPane');
+    const sq = Math.max(1, Math.min(wrap.clientWidth, wrap.clientHeight));
+    const baseCrop=Math.min(photoBitmap.width, photoBitmap.height);
+    const crop = baseCrop / photoZ;
+    const pxPerScreen = crop / sq;
+    photoCX -= dx * pxPerScreen;
+    photoCY -= dy * pxPerScreen;
+    boundPhotoCenter(); drawPhotoPreview(); analyzePhotoSoon();
+  }else if(photoPtrs.size===2){
+    const pts=[...photoPtrs.values()];
+    const cx=(pts[0].x+pts[1].x)/2, cy=(pts[0].y+pts[1].y)/2;
+    const dist=Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+    if(photoLastDist>0 && dist>0){
+      const wrap = document.getElementById('videoPane');
+      const sq = Math.max(1, Math.min(wrap.clientWidth, wrap.clientHeight));
+      const baseCrop = Math.min(photoBitmap.width, photoBitmap.height);
+
+      // image coords under fingers BEFORE zoom
+      const cropBefore = baseCrop / photoZ;
+      const pxPerScreenBefore = cropBefore / sq;
+      const imgX = (cx - 0.5*sq) * pxPerScreenBefore + (photoCX - cropBefore/2);
+      const imgY = (cy - 0.5*sq) * pxPerScreenBefore + (photoCY - cropBefore/2);
+
+      // apply zoom
+      const pinch = dist / photoLastDist;
+      photoZ = Math.max(1, Math.min(10, photoZ * pinch));
+
+      // keep focal point stable AFTER zoom
+      const cropAfter = baseCrop / photoZ;
+      const pxPerScreenAfter = cropAfter / sq;
+      photoCX = imgX - (cx - 0.5*sq) * pxPerScreenAfter + cropAfter/2;
+      photoCY = imgY - (cy - 0.5*sq) * pxPerScreenAfter + cropAfter/2;
+
+      boundPhotoCenter();
+      zoomSlider.value = photoZ;
+    }
+    photoLastDist = dist;
+    drawPhotoPreview(); analyzePhotoSoon();
+  }
+  e.preventDefault();
+}
+function onPointerUp(e){
+  if(source!=='photo') return;
+  photoPtrs.delete(e.pointerId);
+  if(photoPtrs.size<2){ photoLastDist=0; }
+  e.preventDefault();
+}
+
+/* Camera mode pointer handling (pan + pinch, visual + capture) */
+const camPtrs = new Map();
+let camLastDist = 0;
+
+function camDown(e){
+  if(source!=='camera') return;
+  videoPane.setPointerCapture?.(e.pointerId);
+  camPtrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  e.preventDefault();
+}
+function camMove(e){
+  if(source!=='camera') return;
+  const rec = camPtrs.get(e.pointerId); if(!rec) return;
+  const dx = e.clientX - rec.x;
+  const dy = e.clientY - rec.y;
+  rec.x = e.clientX; rec.y = e.clientY;
+
+  const sq = Math.min(videoPane.clientWidth, videoPane.clientHeight)||1;
+  if(camPtrs.size===1){
+    const maxShift = 0.5 - 0.5/uiZoom;
+    uiPanX = clamp(uiPanX - dx / sq, -maxShift, maxShift);
+    uiPanY = clamp(uiPanY - dy / sq, -maxShift, maxShift);
+    document.documentElement.style.setProperty('--panXNorm', uiPanX);
+    document.documentElement.style.setProperty('--panYNorm', uiPanY);
+  }else if(camPtrs.size===2){
+    const pts=[...camPtrs.values()];
+    const dist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+    if(camLastDist>0 && dist>0){
+      const pinch = dist / camLastDist;
+      const newZ = clamp(uiZoom * pinch, 1, 10);
+      // keep pans within bounds of new zoom
+      const oldMax = 0.5 - 0.5/uiZoom;
+      const newMax = 0.5 - 0.5/newZ;
+      if(oldMax>0){
+        uiPanX = clamp(uiPanX * (newMax/oldMax), -newMax, newMax);
+        uiPanY = clamp(uiPanY * (newMax/oldMax), -newMax, newMax);
+      }else{
+        uiPanX=0; uiPanY=0;
+      }
+      uiZoom = newZ;
+      zoomSlider.value = uiZoom;
+      document.documentElement.style.setProperty('--zoom', uiZoom);
+      document.documentElement.style.setProperty('--panXNorm', uiPanX);
+      document.documentElement.style.setProperty('--panYNorm', uiPanY);
+    }
+    camLastDist = dist;
+  }
+  e.preventDefault();
+}
+function camUp(e){
+  if(source!=='camera') return;
+  camPtrs.delete(e.pointerId);
+  if(camPtrs.size<2) camLastDist=0;
+  e.preventDefault();
+}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+/* Bind both handler sets; each branches by source */
+videoPane.addEventListener('pointerdown', onPointerDown, {passive:false});
+videoPane.addEventListener('pointermove', onPointerMove, {passive:false});
+videoPane.addEventListener('pointerup', onPointerUp, {passive:false});
+videoPane.addEventListener('pointercancel', onPointerUp, {passive:false});
+
+videoPane.addEventListener('pointerdown', camDown, {passive:false});
+videoPane.addEventListener('pointermove', camMove, {passive:false});
+videoPane.addEventListener('pointerup', camUp, {passive:false});
+videoPane.addEventListener('pointercancel', camUp, {passive:false});
+
+/* ===== Live worker handler ===== */
 worker.onmessage = (e)=>{
-  const {jobId, error} = e.data || {};
-  if (jobId !== 'live') return;
-  if (error) { console.log('Worker live error:', error); pending=false; return; }
-  const arr = new Uint8Array(e.data.palette||[]);
-  const cols=[]; for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
-  while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
-  lastPalette = cols.slice(0,K); hasPalette = true;
-  renderPalette(lastPalette);
-  pending=false; frameCounter++;
+  const {jobId, error} = e.data||{};
+  if(error){ pending=false; return; }
+
+  // Live camera stream
+  if(jobId==='live'){
+    const arr=new Uint8Array(e.data.palette||[]), cols=[];
+    for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
+    while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
+    lastPalette=cols.slice(0,K); renderPalette(lastPalette); pending=false; frameCounter++;
+    return;
+  }
+
+  // Photo preview analysis
+  if(jobId==='photo'){
+    const arr=new Uint8Array(e.data.palette||[]), cols=[];
+    for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
+    while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
+    lastPalette=cols.slice(0,K); renderPalette(lastPalette); pending=false;
+    return;
+  }
+
+  // Freeze handled inline in freezeNow()
 };
 
-/* ---------- RAF loop (countdown throttle; first frame immediate) ---------- */
+/* ===== RAF loop for live camera ===== */
 function loop(){
   requestAnimationFrame(loop);
-  if(video.readyState<2 || video.paused) return;
-  if(!running) return;
+  if(video.readyState<2||video.paused||!running) return;
 
   const now=performance.now();
   if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
 
   const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
-
   const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
   off.width=w; off.height=h;
   const ctx=off.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
   resEl.textContent=w+'×'+h;
 
-  if (--throttleCountdown > 0) return;
-  throttleCountdown = Math.max(1, throttleN);
+  if(--throttleCountdown>0) return;
+  throttleCountdown=Math.max(1,throttleN);
   if(!pending){
     pending=true;
     const img=ctx.getImageData(0,0,w,h);
-    // ✅ FIX: Changed `stride=2` to `stride: 2`
     worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
   }
 }
 
-/* ---------- palette render ---------- */
+/* ===== camera square crop (for live) ===== */
+function computeSquareCrop(){
+  const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
+  const z=Math.max(1,uiZoom), base=Math.min(vw,vh);
+  const sw=Math.round(base/z), sh=sw;
+  // normalized pan → pixel offset, bounded so crop stays inside
+  const maxShift = Math.floor((base - sw)/2);
+  const ox = Math.round(uiPanX * 2 * maxShift);
+  const oy = Math.round(uiPanY * 2 * maxShift);
+  const sx = Math.floor((vw - sw)/2 + ox);
+  const sy = Math.floor((vh - sh)/2 + oy);
+  return {sx,sy,sw,sh};
+}
+
+/* ===== palette render ===== */
 function renderPalette(palette){
-  if(!palette || !palette.length){
+  if(!palette||!palette.length){
     swatchesEl.style.display='flex'; swatchesEl.innerHTML=`<div class="swatch" style="background:#111"></div>`.repeat(K);
-    gradientEl.hidden=true; gradientEl.style.background='';
-    hasPalette = false;
-    return;
+    gradientEl.hidden=true; gradientEl.style.background=''; return;
   }
-  const hexes = palette.map(toHex);
-  const wantRects=rectChk.checked, wantGrad=gradChk.checked;
-
+  const hexes=palette.map(toHex), wantRects=rectChk.checked, wantGrad=gradChk.checked;
   swatchesEl.style.display='none'; gradientEl.hidden=true; gradientEl.style.background=''; swatchesEl.innerHTML='';
-
-  if(wantRects && wantGrad){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; gradientEl.hidden=false; gradientEl.style.flex='1'; }
+  if(wantRects&&wantGrad){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; gradientEl.hidden=false; gradientEl.style.flex='1'; }
   else if(wantRects){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
   else if(wantGrad){ gradientEl.hidden=false; gradientEl.style.flex='1'; }
   else { rectChk.checked=true; swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
-
   if(rectChk.checked){ for(const h of hexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); } }
   if(gradChk.checked){
-    const stops = hexes.length > 1 ? hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',') : `${hexes[0]}, ${hexes[0]}`;
-    gradientEl.hidden=false; gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
+    const stops = hexes.length>1 ? hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',') : `${hexes[0]}, ${hexes[0]}`;
+    gradientEl.hidden=false; gradientEl.style.background=`linear-gradient(90deg, ${stops})`;
   }
 }
 
-/* ---------- freeze / unfreeze (overlay first; async compute with timeout) ---------- */
+/* ===== Photo analysis (static) ===== */
+let photoAnalyzeRaf=0, photoTick=0;
+function analyzePhotoSoon(force=false){
+  if(force){ photoTick=0; }
+  if(photoAnalyzeRaf) return;
+  photoAnalyzeRaf = requestAnimationFrame(()=>{ photoAnalyzeRaf=0; analyzePhotoNow(); });
+}
+function analyzePhotoNow(){
+  if(source!=='photo' || !photoBitmap) return;
+  // Throttle using same N logic to keep it responsive under continuous pinch
+  if(photoTick++ % Math.max(1, throttleN) !== 0) return;
+
+  const {sx,sy,sw,sh}=currentPhotoSrcRect();
+  const w=procWidth, h=procWidth;
+  off.width=w; off.height=h;
+  const ctx=off.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0,w,h);
+  resEl.textContent=w+'×'+h;
+  if(!pending){
+    pending=true;
+    const img=ctx.getImageData(0,0,w,h);
+    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'photo'},[img.data.buffer]);
+  }
+}
+
+/* ===== FREEZE / UNFREEZE ===== */
+freezeBtn.addEventListener('click',async()=>{
+  if(compositeOverlay.classList.contains('open')) return;
+  await freezeNow();
+  showUnfreezeCTA();
+});
+unfreezeBtn.addEventListener('click',()=>{ unfreeze(); showFreezeCTA(); });
+
 async function freezeNow(){
-  running=false; pending=false; throttleCountdown=1;
+  // For camera
+  if(source==='camera'){
+    running=false; pending=false; throttleCountdown=1;
+    const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
 
-  const {sx,sy,sw,sh}=computeSquareCrop();
-  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
-  capFrame.width=w; capFrame.height=h;
-  const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
+    const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
+    capFrame.width=w; capFrame.height=h;
+    const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
 
-  const wrap=document.querySelector('.videoWrap');
-  frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
-  const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
-  fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
-  frozenCanvas.style.display='block';
-  await video.pause();
+    const wrap=document.getElementById('videoPane');
+    frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
+    const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
+    fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
+    frozenCanvas.style.display='block';            // preview first
+    await video.pause();
 
-  compositeImg.src = '';
-  compositeOverlay.classList.add('open');
+    // Hi-res capture for composite
+    const hiCap=document.createElement('canvas'); hiCap.width=sw; hiCap.height=sh;
+    const hiCtx=hiCap.getContext('2d'); hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
 
-  const freezeId='freeze:'+Math.random().toString(36).slice(2);
-  const imgs=capCtx.getImageData(0,0,w,h);
+    compositeImg.src=''; compositeOverlay.classList.add('open'); updateLpHint();
+    window.recalcSquare&&window.recalcSquare();
 
-  const cols = await new Promise((resolve)=>{
-    let settled=false;
-    const to = setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[ [0,0,0] ]); } }, 2000);
-    const handler=(ev)=>{
-      const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
-      worker.removeEventListener('message',handler); if(settled) return;
-      settled=true; clearTimeout(to);
-      if(error){ console.log('Worker freeze error:', error); resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
-      const arr=new Uint8Array(ev.data.palette||[]), out=[];
-      for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
-      while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
-      resolve(out.slice(0,K));
-    };
-    worker.addEventListener('message',handler);
-    // ✅ FIX: Changed `stride=2` to `stride: 2`
-    worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
-  });
+    const freezeId='freeze:'+Math.random().toString(36).slice(2);
+    const imgs=capCtx.getImageData(0,0,w,h);
+    const cols=await new Promise((resolve)=>{
+      let settled=false; const to=setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[[0,0,0]]); } },2000);
+      const handler=(ev)=>{ const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
+        worker.removeEventListener('message',handler); if(settled) return; settled=true; clearTimeout(to);
+        if(error){ resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
+        const arr=new Uint8Array(ev.data.palette||[]), out=[]; for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
+        while(out.length<K) out.push(out[out.length-1]||[128,128,128]); resolve(out.slice(0,K));
+      };
+      worker.addEventListener('message',handler);
+      worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
+    });
 
-  lastPalette = cols;
-  renderPalette(cols);
-  
-  const hexes = cols.map(toHex);
-  renderCompositeFullscreen(hexes,w,h,rectChk.checked,gradChk.checked);
-  compositeBlob = await new Promise(res=>compositeCanvas.toBlob(res,'image/png',1));
-  if (compositeURL) URL.revokeObjectURL(compositeURL);
-  compositeURL = URL.createObjectURL(compositeBlob);
-  compositeImg.src = compositeURL;
+    lastPalette=cols; renderPalette(cols);
+    const hexes=cols.map(toHex);
+    renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
+    compositeImg.src=compositeCanvas.toDataURL('image/png'); updateLpHint();
+    return;
+  }
+
+  // For photo
+  if(source==='photo' && photoBitmap){
+    const {sx,sy,sw,sh}=currentPhotoSrcRect();
+    const w=procWidth, h=procWidth;
+    capFrame.width=w; capFrame.height=h;
+    const capCtx=capFrame.getContext('2d'); capCtx.drawImage(photoBitmap,sx,sy,sw,sh,0,0,w,h);
+
+    compositeImg.src=''; compositeOverlay.classList.add('open'); updateLpHint();
+    window.recalcSquare&&window.recalcSquare();
+
+    const freezeId='freeze:'+Math.random().toString(36).slice(2);
+    const imgs=capCtx.getImageData(0,0,w,h);
+    const cols=await new Promise((resolve)=>{
+      let settled=false; const to=setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[[0,0,0]]); } },2000);
+      const handler=(ev)=>{ const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
+        worker.removeEventListener('message',handler); if(settled) return; settled=true; clearTimeout(to);
+        if(error){ resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
+        const arr=new Uint8Array(ev.data.palette||[]), out=[]; for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
+        while(out.length<K) out.push(out[out.length-1]||[128,128,128]); resolve(out.slice(0,K));
+      };
+      worker.addEventListener('message',handler);
+      worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
+    });
+
+    lastPalette=cols; renderPalette(cols);
+    const hexes=cols.map(toHex);
+
+    // Hi-res square crop from the photo for composite (cap at 2048 for memory)
+    const hiCap=document.createElement('canvas');
+    const HI = 2048;
+    hiCap.width=HI; hiCap.height=HI;
+    const hiCtx=hiCap.getContext('2d'); hiCtx.imageSmoothingEnabled=true; hiCtx.imageSmoothingQuality='high';
+    hiCtx.clearRect(0,0,HI,HI);
+    hiCtx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, HI,HI);
+
+    renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
+    compositeImg.src=compositeCanvas.toDataURL('image/png'); updateLpHint();
+  }
 }
 
 function unfreeze(){
   compositeOverlay.classList.remove('open');
-  frozenCanvas.style.display='none';
-  running=true; pending=false; throttleCountdown=1;
-  video.play().catch(err => console.error("Unfreeze play failed:", err));
+  if(source==='camera'){
+    hardHideFrozenCanvas();
+    running=true; pending=false; throttleCountdown=1;
+    forceReflowAndRecalc();
+    setTimeout(()=>refreshVideoSurface(),80);
+    updateLpHint();
+    video.play().catch(()=>{});
+  }else{
+    updateLpHint();
+  }
 }
 
-/* ---------- composite draw ---------- */
-function renderCompositeFullscreen(hexes, frameW, frameH, showRects, showGrad){
-  const CAM_W=1024, CAM_H=1024, RECT_H=showRects?240:0, GRAD_H=showGrad?120:0, LABEL=showRects?26:0, PAD=24, GUT=24;
+/* ===== composite draw ===== */
+function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
+  const CAM_W=2048, CAM_H=2048;
+  const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
   const c=compositeCanvas; c.width=W; c.height=H;
   const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
   g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
-  g.drawImage(capFrame,0,0,frameW,frameH,PAD,PAD,CAM_W,CAM_H);
+  g.drawImage(hiCapCanvas,0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
   let y=PAD+CAM_H; if(showRects||showGrad) y+=GUT;
   if(showRects){
     const N=hexes.length, w=Math.ceil(CAM_W/N);
     for(let i=0;i<N;i++){ g.fillStyle=hexes[i]; g.fillRect(PAD+i*w,y,w,RECT_H); }
-    g.font='15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
     g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
-    for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+4); }
+    for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+8); }
     y+=RECT_H+LABEL;
   }
   if(showGrad){
     if(showRects) y+=GUT;
     const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0);
-    const N=hexes.length; 
-    if (N > 1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
-    else if (N === 1) grad.addColorStop(0, hexes[0]);
+    const N=hexes.length; if(N>1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h)); else grad.addColorStop(0,hexes[0]);
     g.fillStyle=grad; g.fillRect(PAD,y,CAM_W,GRAD_H);
   }
 }
 
-/* ---------- share & save ---------- */
-shareBtn.addEventListener('click', async ()=>{
-  if (!compositeBlob) return;
-  const file = new File([compositeBlob], compositeName, {type:'image/png'});
-  if (navigator.canShare && navigator.canShare({files:[file]})) { try { await navigator.share({files:[file], title:'Palette Composite'}); } catch(_) {} }
-  else if (navigator.share) { try { await navigator.share({title:'Palette Composite', url: compositeURL}); } catch(_) {} }
-  else { window.open(compositeURL, '_blank'); }
-});
-saveBtn.addEventListener('click', ()=>{
-  if (!compositeBlob) return;
-  const a=document.createElement('a'); a.href=compositeURL; a.download=compositeName; document.body.appendChild(a); a.click(); a.remove();
-});
+/* ===== overlay hint observer ===== */
+new MutationObserver(updateLpHint).observe(compositeOverlay,{attributes:true,attributeFilter:['class']});
+document.addEventListener('DOMContentLoaded', updateLpHint);
+
+/* ===== Utility for photo mode: re-analyze on window square change ===== */
+addEventListener('resize', ()=>{ if(source==='photo' && photoBitmap){ drawPhotoPreview(); analyzePhotoSoon(true); }}, {passive:true});
 </script>
 </body>
 </html>
