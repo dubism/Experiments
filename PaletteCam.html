@@ -34,6 +34,7 @@
     position:relative;
     overflow:hidden;           /* crop to square bounds */
     background:#000;
+    z-index:1;                 /* explicitly below UI column */
   }
   #videoPane video,
   #videoPane canvas{
@@ -52,6 +53,9 @@
     min-width:0; min-height:0;
     display:flex; flex-direction:column; gap:10px;
     padding:10px 12px 12px;
+    background:#000;           /* opaque paint over camera */
+    z-index:2;                 /* above camera */
+    contain:paint;             /* isolate painting; avoids iOS bleed */
   }
   @supports (padding: env(safe-area-inset-bottom)){
     #uiPane{ padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
@@ -63,10 +67,11 @@
     min-height:0; flex:1; /* take the remainder above the controls */
     border-bottom:1px solid var(--line);
     padding-bottom:10px;
+    background:#000;           /* belt and braces: no transparency */
   }
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
-  .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px}
+  .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px;background:#000}
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
@@ -105,7 +110,7 @@
   .tabbar{display:flex;gap:8px;flex-wrap:nowrap}
   .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer;white-space:nowrap}
   .tab.active{outline:2px solid #fff;outline-offset:1px}
-  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
+  .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
 
   /* ===== Composite overlay (for shareable image) ===== */
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
@@ -190,29 +195,31 @@
 <script>
 /* ===== --sq sizing from visualViewport (single source of truth) ===== */
 (function(){
-  const root = document.documentElement;
-  const vv = window.visualViewport;
-
-  function computeSq(){
+  function recalcSquare(){
+    const vv = window.visualViewport;
     const vw = Math.max(0, window.innerWidth);
     const vh = Math.max(0, (vv?.height ?? window.innerHeight));
     const isLandscape = vw > vh;
     const sq = isLandscape ? vh : Math.min(vw, vh);
-    root.style.setProperty('--sq', Math.round(sq) + 'px');
+    document.documentElement.style.setProperty('--sq', Math.round(sq) + 'px');
 
-    // If you add overlay canvas sized to the square, resize here if needed.
-    const cv = document.getElementById('frozenCanvas');
-    if (cv) { cv.width = document.getElementById('videoPane').clientWidth;
-              cv.height = document.getElementById('videoPane').clientHeight; }
+    // keep frozen canvas sized to cell if it’s visible
+    const fc = document.getElementById('frozenCanvas');
+    if (fc && fc.style.display !== 'none') {
+      const wrap = document.getElementById('videoPane');
+      fc.width = wrap.clientWidth;
+      fc.height = wrap.clientHeight;
+    }
   }
+  window.recalcSquare = recalcSquare; // expose
 
   let raf = 0;
-  const kick = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(computeSq); };
+  const kick = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(recalcSquare); };
 
   window.addEventListener('load', kick, {passive:true});
   window.addEventListener('resize', kick, {passive:true});
   window.addEventListener('orientationchange', kick, {passive:true});
-  vv && vv.addEventListener('resize', kick, {passive:true});
+  window.visualViewport && window.visualViewport.addEventListener('resize', kick, {passive:true});
 })();
 
 /* ===== Measure controls bar height for CC placement ===== */
@@ -367,6 +374,32 @@ function updateLpHint(){
   lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
 }
 
+/* ---- ghost-frame prevention helpers ---- */
+function hardHideFrozenCanvas(){
+  const fc = frozenCanvas;
+  const w = fc.width, h = fc.height;
+  if (w && h) { const g = fc.getContext('2d'); g.clearRect(0,0,w,h); }
+  fc.width = 0; fc.height = 0;   // drop backing store/IOSurface
+  fc.style.display = 'none';
+}
+
+function forceReflowAndRecalc(){
+  window.recalcSquare && window.recalcSquare();
+  const v = video;
+  v.style.visibility = 'hidden'; // drop any cached composite
+  void document.body.offsetHeight; // force reflow
+  v.style.visibility = '';
+}
+
+async function refreshVideoSurface(){
+  // last-resort: briefly detach to force a new IOSurface without flicker
+  const s = video.srcObject;
+  video.srcObject = null;
+  await new Promise(r => requestAnimationFrame(r));
+  video.srcObject = s;
+  await video.play().catch(()=>{});
+}
+
 /* ---------- camera (auto, no gating) ---------- */
 async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
 async function startCamera(){
@@ -395,7 +428,7 @@ async function startCamera(){
     status('Live');
     running=true; pending=false; throttleCountdown=1;
     renderPalette([]); // initial empty
-    loop();
+    requestAnimationFrame(loop);
   } catch(err) {
     let msg = 'Camera failed';
     if (err && err.name === 'NotAllowedError') msg = 'Camera permission denied.';
@@ -530,6 +563,7 @@ async function freezeNow(){
   compositeImg.src = '';
   compositeOverlay.classList.add('open');
   updateLpHint();
+  window.recalcSquare && window.recalcSquare(); // keep tracks correct with overlay
 
   /* Compute palette (with timeout fallback) */
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
@@ -565,8 +599,10 @@ async function freezeNow(){
 
 function unfreeze(){
   compositeOverlay.classList.remove('open');
-  frozenCanvas.style.display='none';
+  hardHideFrozenCanvas();                          // drop frozen frame completely
   running=true; pending=false; throttleCountdown=1;
+  forceReflowAndRecalc();                          // ensure correct layering and track sizing
+  setTimeout(()=>refreshVideoSurface(), 80);       // heal stubborn iOS compositor cases
   updateLpHint();
   video.play().catch(err => console.error("Unfreeze play failed:", err));
 }
