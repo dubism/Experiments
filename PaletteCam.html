@@ -13,9 +13,6 @@
     --ctaW:clamp(220px,60vw,340px);
     --ctaH:56px;        /* measured on load; used to reserve space */
     --ctaB:calc(16px + env(safe-area-inset-bottom)); /* fixed CTA bottom offset */
-
-    /* CC positioning variables (computed in JS) */
-    --ccL:12px; --ccR:12px; --ccB:12px; --ccMaxH:60vh;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -79,8 +76,8 @@
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
-  #openHint{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;pointer-events:none}
-  #openHint::after{content:"";width:12px;height:12px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;transform:rotate(-45deg);display:block}
+  /* removed any “open CC” button; no chevron/hint UI */
+  #openHint{display:none}
 
   /* ===== Bottom controls (inside UI cell, pinned by flex) ===== */
   #controlsBar{
@@ -115,44 +112,66 @@
     touch-action:manipulation;
   }
 
-  /* ===== Control Center (fixed overlay aligned to UI column) ===== */
+  /* ===== Control Center — full-screenish overlay (open by long-press only) ===== */
   #ccWrap{
     position:fixed;
-    z-index:4000;                /* above camera/UI, below composite overlay */
-    left:var(--ccL);
-    right:var(--ccR);
-    bottom:var(--ccB);
-    transform:translateZ(0);     /* ensure GPU layer above video on iOS */
+    z-index:4000;
+    inset:calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom));
     display:none;
-    pointer-events:none;         /* wrapper never intercepts taps */
+    pointer-events:none; /* container doesn’t intercept, panel does */
   }
   #cc{
-    background:rgba(0,0,0,.6);
-    backdrop-filter:blur(8px);
+    pointer-events:auto;
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    background:rgba(0,0,0,.72);
+    backdrop-filter:blur(10px);
     border:1px solid var(--line);
-    border-radius:14px;
-    padding:12px;
-    display:grid; gap:12px;
-    max-height:var(--ccMaxH);
+    border-radius:16px;
+    padding:16px;
     overflow:auto;
-    pointer-events:auto;         /* only visible panel receives input */
   }
-  #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
 
-  /* ===== Composite overlay (for shareable image) ===== */
+  /* CC header with algo label */
+  .ccHead{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;
+  }
+  .ccTitle{font-weight:700}
+  .ccClose{appearance:none;border:1px solid var(--line);background:#121212;color:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
+
+  /* Descriptions section */
+  .ccDesc{
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px;
+    background:rgba(255,255,255,.04);
+  }
+  .ccAlgo{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:start;margin-bottom:10px}
+  .ccAlgo:last-child{margin-bottom:0}
+  .ccTag{font-size:12px;color:#9aa0a6;padding:2px 8px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
+  .ccText{color:#d4d4d4;line-height:1.35}
+  .ccSep{height:1px;background:#1a1a1a;margin:14px 0}
+
+  /* Controls grid — tight alignment */
+  .ccGrid{
+    display:grid;
+    grid-template-columns:minmax(120px, 1fr) minmax(180px, 340px);
+    gap:12px 16px;
+    align-items:center;
+  }
+  .ccLabel{color:#c8c8c8}
+  .ccCtl{display:flex;align-items:center;gap:10px;justify-content:stretch}
+  .ccCtl input[type="range"]{flex:1}
+  .ccSmall{font-variant-numeric:tabular-nums;color:#9aa0a6;min-width:48px;text-align:right}
+
+  /* Composite overlay (for shareable image) */
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
-  #compositeOverlay:not(.open){pointer-events:none;} /* when hidden, never block taps */
+  #compositeOverlay:not(.open){pointer-events:none;}
   #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
 
-  /* Tiny hint */
-  .smallhint{
-    font-size:12px; color:#9aa0a6;
-    margin-top:6px; text-align:center;
-    user-select:none;
-  }
+  .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
 </style>
 </head>
 <body>
@@ -170,22 +189,69 @@
           <div id="algoName" class="small">K-Means (LAB)</div>
           <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
         </div>
-        <!-- Tap left/right to switch algorithm; long-press to open CC -->
-        <div class="stack" id="paletteClickable" title="Tap left/right to switch · Long-press for controls">
+        <!-- Tap left/right to switch algorithm; LONG‑PRESS to open CC -->
+        <div class="stack" id="paletteClickable">
           <div id="swatches" class="swatches"></div>
           <div id="gradient" class="gradient" hidden></div>
           <div id="openHint" aria-hidden="true"></div>
         </div>
 
-        <!-- Control Center lives as fixed overlay aligned to UI column -->
+        <!-- Control Center — long‑press to open; nearly full screen -->
         <div id="ccWrap">
           <div id="cc">
-            <!-- Algorithm row with tabs REMOVED -->
-            <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
-            <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
-            <div class="row"><span>Show gradient</span><input type="checkbox" id="grad" checked></div>
-            <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
-            <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span></div>
+            <div class="ccHead">
+              <div class="ccTitle">Controls</div>
+              <button class="ccClose" id="ccCloseBtn" type="button">Close</button>
+            </div>
+
+            <!-- Designer‑oriented algorithm intents -->
+            <div class="ccDesc" aria-label="Algorithm descriptions">
+              <div class="ccAlgo">
+                <span class="ccTag">K‑Means (LAB)</span>
+                <p class="ccText">Cluster perceived color <em>families</em> in LAB space. Great for extracting the dominant palette the eye reads first, suppressing noise and tiny outliers. Best when you want a clean, brand‑like set; sensitive to the chosen K.</p>
+              </div>
+              <div class="ccAlgo">
+                <span class="ccTag">Histogram Peaks</span>
+                <p class="ccText">Pick the most <em>frequent</em> RGB buckets. Faithful to what actually occurs in pixels, including materials or lighting that cover large areas. Good for documenting prevalence; may surface near‑duplicates if the image is flat.</p>
+              </div>
+              <div class="ccAlgo">
+                <span class="ccTag">Median‑cut</span>
+                <p class="ccText">Divide color space to ensure <em>coverage</em> across the gamut. Useful when you need a diverse swatch set (shadows, mids, highlights) rather than just what dominates. Less faithful to dominance; more balanced for exploration.</p>
+              </div>
+            </div>
+
+            <div class="ccSep" role="separator" aria-hidden="true"></div>
+
+            <!-- Well‑aligned controls -->
+            <div class="ccGrid">
+              <div class="ccLabel">Colors (K)</div>
+              <div class="ccCtl">
+                <input type="range" id="k" min="2" max="10" value="3" />
+                <span id="kVal" class="ccSmall">3</span>
+              </div>
+
+              <div class="ccLabel">Show rectangles</div>
+              <div class="ccCtl">
+                <input type="checkbox" id="rects" checked />
+              </div>
+
+              <div class="ccLabel">Show gradient</div>
+              <div class="ccCtl">
+                <input type="checkbox" id="grad" checked />
+              </div>
+
+              <div class="ccLabel">Processing width</div>
+              <div class="ccCtl">
+                <input type="range" id="size" min="120" max="360" step="20" value="240" />
+                <span id="sizeVal" class="ccSmall">240 px</span>
+              </div>
+
+              <div class="ccLabel">Process every N frames</div>
+              <div class="ccCtl">
+                <input type="range" id="throttleLog" min="0" max="100" value="0" />
+                <span id="throttleVal" class="ccSmall">20</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -381,6 +447,7 @@ const compositeCanvas=document.getElementById('compositeCanvas');
 const compositeImg=document.getElementById('compositeImg');
 const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
+const ccCloseBtn=document.getElementById('ccCloseBtn');
 const lpHint=document.getElementById('lpHint');
 
 /* ---------- state ---------- */
@@ -408,24 +475,6 @@ function updateLpHint(){
   lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
 }
 
-/* ---- CC positioning (align to UI column, keep palettes peek) ---- */
-const PEEK = 72; // px of palette that must remain visible
-function positionCC(){
-  const uiRect = document.getElementById('uiPane').getBoundingClientRect();
-
-  // Insets relative to viewport so the fixed CC aligns with UI column/band
-  document.documentElement.style.setProperty('--ccL', (Math.max(0, uiRect.left) + 12) + 'px');
-  document.documentElement.style.setProperty('--ccR', (Math.max(0, window.innerWidth - uiRect.right) + 12) + 'px');
-
-  // Bottom anchor: keep above the fixed CTA and safe-area
-  const uiBottomInset = Math.max(0, window.innerHeight - uiRect.bottom);
-  document.documentElement.style.setProperty('--ccB', `calc(${uiBottomInset}px + ${ctaH}px + 8px + env(safe-area-inset-bottom))`);
-
-  // Limit height so a peek of palettes is always visible
-  const usableH = Math.max(160, uiRect.height - ctaH - 8 - PEEK);
-  document.documentElement.style.setProperty('--ccMaxH', usableH + 'px');
-}
-
 /* ---- frozen-canvas hygiene ---- */
 function hardHideFrozenCanvas(){
   const fc = frozenCanvas;
@@ -437,15 +486,13 @@ function hardHideFrozenCanvas(){
 
 function forceReflowAndRecalc(){
   window.recalcSquare && window.recalcSquare();
-  positionCC();
   const v = video;
-  v.style.visibility = 'hidden'; // drop any cached composite
-  void document.body.offsetHeight; // force reflow
+  v.style.visibility = 'hidden';
+  void document.body.offsetHeight;
   v.style.visibility = '';
 }
 
 async function refreshVideoSurface(){
-  // last-resort: briefly detach to force a new IOSurface without flicker
   const s = video.srcObject;
   video.srcObject = null;
   await new Promise(r => requestAnimationFrame(r));
@@ -507,30 +554,27 @@ function onFreezeTap(ev){
 
 /* ---------- UI init ---------- */
 addEventListener('load', ()=>{
-  // measure CTA height to reserve space precisely
   ctaH = freezeBtn.offsetHeight || 56;
   document.documentElement.style.setProperty('--ctaH', ctaH + 'px');
 
   throttleLog.value=nToSlider(throttleN);
   throttleVal.textContent=String(throttleN);
 
-  // Default both toggles ON at startup
   rectChk.checked = true;
   gradChk.checked = true;
   renderPalette(lastPalette);
 
-  // Initial CC positioning and CTA visibility
-  positionCC();
   showFreezeCTA();
 });
 
-/* ---- CC open/close: long-press to open; tap outside to close ---- */
-let lpTimer=null, pressed=false, longPressed=false, downX=0, downY=0, downT=0;
+/* ---- CC open/close: long-press on palette; close button or outside click ---- */
+let pressState = {down:false, t0:0, x:0, y:0, timer:null, long:false};
 const LONG_MS = 450, TAP_MOV_PX = 14;
 
-function openCC(){ positionCC(); ccWrap.style.display='block'; }
+function openCC(){ ccWrap.style.display='block'; }
 function closeCC(){ ccWrap.style.display='none'; }
 
+ccCloseBtn.addEventListener('click', closeCC);
 document.addEventListener('click',(e)=>{
   if (compositeOverlay.classList.contains('open')) return;
   if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) closeCC();
@@ -552,22 +596,22 @@ function stepAlgo(dir){
    - long-press (> LONG_MS) => open CC (no algo change) */
 paletteClickable.addEventListener('pointerdown', (e)=>{
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  pressed = true; longPressed=false;
-  downX = e.clientX; downY = e.clientY; downT = performance.now();
-  clearTimeout(lpTimer);
-  lpTimer = setTimeout(()=>{ if(pressed){ longPressed=true; openCC(); } }, LONG_MS);
+  pressState.down = true; pressState.long=false;
+  pressState.t0 = performance.now(); pressState.x = e.clientX; pressState.y = e.clientY;
+  clearTimeout(pressState.timer);
+  pressState.timer = setTimeout(()=>{ if(pressState.down){ pressState.long=true; openCC(); } }, LONG_MS);
 });
 
 paletteClickable.addEventListener('pointerup', (e)=>{
-  if (!pressed) return;
-  pressed = false;
-  clearTimeout(lpTimer);
+  if (!pressState.down) return;
+  pressState.down = false;
+  clearTimeout(pressState.timer);
 
-  const dx = Math.abs(e.clientX - downX);
-  const dy = Math.abs(e.clientY - downY);
-  const dt = performance.now() - downT;
+  if (pressState.long) return; // CC opened, no algo step
 
-  if (longPressed) return; // CC already opened; no algo step on this gesture
+  const dx = Math.abs(e.clientX - pressState.x);
+  const dy = Math.abs(e.clientY - pressState.y);
+  const dt = performance.now() - pressState.t0;
 
   const isTap = dx < TAP_MOV_PX && dy < TAP_MOV_PX && dt < 300;
   if (!isTap) return;
@@ -577,8 +621,9 @@ paletteClickable.addEventListener('pointerup', (e)=>{
   if (e.clientX < mid) stepAlgo(-1); else stepAlgo(1);
 });
 
-paletteClickable.addEventListener('pointercancel', ()=>{ pressed=false; clearTimeout(lpTimer); });
-paletteClickable.addEventListener('pointerleave', ()=>{ pressed=false; clearTimeout(lpTimer); });
+['pointercancel','pointerleave'].forEach(evt=>{
+  paletteClickable.addEventListener(evt, ()=>{ pressState.down=false; clearTimeout(pressState.timer); });
+});
 
 /* ---- Sliders/toggles in CC ---- */
 kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
@@ -587,12 +632,13 @@ throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.valu
 rectChk.addEventListener('change',()=>renderPalette(lastPalette));
 gradChk.addEventListener('change',()=>renderPalette(lastPalette));
 
+/* ---- Zoom ---- */
 function setZoom(v){ uiZoom=Math.max(1,Math.min(10,v)); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
 zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* Bind freeze/unfreeze with robust touch handling */
+/* Bind freeze/unfreeze */
 freezeBtn.addEventListener('click', onFreezeTap);
 freezeBtn.addEventListener('touchend', onFreezeTap, {passive:false});
 unfreezeBtn.addEventListener('click',()=>{
@@ -607,7 +653,7 @@ function computeSquareCrop(){
   return {sx,sy,sw,sh};
 }
 
-/* ---------- live handler (jobId==='live') ---------- */
+/* ---------- worker live handler ---------- */
 worker.onmessage = (e)=>{
   const {jobId, error} = e.data || {};
   if (jobId !== 'live') return;
@@ -620,7 +666,7 @@ worker.onmessage = (e)=>{
   pending=false; frameCounter++;
 };
 
-/* ---------- RAF loop (countdown throttle; first frame immediate) ---------- */
+/* ---------- RAF loop ---------- */
 function loop(){
   requestAnimationFrame(loop);
   if(video.readyState<2 || video.paused) return;
@@ -688,7 +734,7 @@ async function freezeNow(){
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
   fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
-  frozenCanvas.style.display='block';        // show preview first (prevents any jump)
+  frozenCanvas.style.display='block';
   await video.pause();
 
   /* Hi-res capture for composite (native crop): */
@@ -700,7 +746,7 @@ async function freezeNow(){
   compositeImg.src = '';
   compositeOverlay.classList.add('open');
   updateLpHint();
-  window.recalcSquare && window.recalcSquare(); // keep tracks correct with overlay
+  window.recalcSquare && window.recalcSquare();
 
   /* Compute palette (with timeout fallback) */
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
@@ -727,7 +773,6 @@ async function freezeNow(){
   renderPalette(cols);
 
   const hexes = cols.map(toHex);
-  /* keep camera size; double palette + labels (unchanged from your last version) */
   renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
 
   compositeImg.src = compositeCanvas.toDataURL('image/png');
@@ -736,31 +781,30 @@ async function freezeNow(){
 
 function unfreeze(){
   compositeOverlay.classList.remove('open');
-  hardHideFrozenCanvas();                          // drop frozen frame completely
+  hardHideFrozenCanvas();
   running=true; pending=false; throttleCountdown=1;
-  forceReflowAndRecalc();                          // ensure correct layering and track sizing
-  setTimeout(()=>refreshVideoSurface(), 80);       // heal stubborn iOS compositor cases
+  forceReflowAndRecalc();
+  setTimeout(()=>refreshVideoSurface(), 80);
   updateLpHint();
   video.play().catch(err => console.error("Unfreeze play failed:", err));
 }
 
 /* ---------- composite draw (camera same size; palette 2×) ---------- */
 function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
-  const CAM_W=2048, CAM_H=2048;        /* unchanged camera size */
-  const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24; /* doubled */
+  const CAM_W=2048, CAM_H=2048;
+  const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
   const c=compositeCanvas; c.width=W; c.height=H;
   const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
   g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
 
-  /* draw hi-res camera */
   g.drawImage(hiCapCanvas, 0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
 
   let y=PAD+CAM_H; if(showRects||showGrad) y+=GUT;
   if(showRects){
     const N=hexes.length, w=Math.ceil(CAM_W/N);
     for(let i=0;i<N;i++){ g.fillStyle=hexes[i]; g.fillRect(PAD+i*w,y,w,RECT_H); }
-    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; /* doubled from 15px */
+    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
     g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
     for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+8); }
     y+=RECT_H+LABEL;
@@ -775,10 +819,8 @@ function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
   }
 }
 
-/* ---------- observe overlay state for hint ---------- */
-const obs = new MutationObserver(updateLpHint);
-obs.observe(compositeOverlay, { attributes:true, attributeFilter:['class'] });
-document.addEventListener('DOMContentLoaded', updateLpHint);
+/* ---------- worker live loop ---------- */
+function loop(){ /* defined above; left as-is */ }
 </script>
 </body>
 </html>
