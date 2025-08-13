@@ -8,9 +8,19 @@
   /* ===== Base ===== */
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
-    --sq:0px;           /* computed from visualViewport */
-    --cbH:0px;          /* measured controls bar height for CC placement */
+
+    /* portrait-only: square size */
+    --sq:0px;                 /* computed from visualViewport */
+    /* lock vars (set by JS during freeze) */
+    --sqLock: ;               /* e.g. "812px" */
+    --ctaWLock: ;             /* e.g. "320px" */
+
+    /* active values used by layout */
+    --sqA: var(--sqLock, var(--sq));
     --ctaW:clamp(220px,60vw,340px);
+    --ctaWActive: var(--ctaWLock, var(--ctaW));
+
+    --cbH:0px;                /* measured controls bar height for CC placement */
 
     /* CC positioning variables (computed in JS) */
     --ccL:12px; --ccR:12px; --ccB:12px; --ccMaxH:60vh;
@@ -19,18 +29,10 @@
   html,body{height:100%}
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* ===== Grid layout: camera square + leftover UI ===== */
-  .app{position:fixed; inset:0; display:grid; isolation:isolate;} /* root stacking context */
-  @media (orientation: portrait){
-    .app{ grid-template-rows: var(--sq) 1fr; grid-template-columns: 1fr; }
-    #videoPane{ grid-row:1; grid-column:1; }
-    #uiPane   { grid-row:2; grid-column:1; }
-  }
-  @media (orientation: landscape){
-    .app{ grid-template-columns: var(--sq) 1fr; grid-template-rows: 1fr; }
-    #videoPane{ grid-column:1; grid-row:1; }
-    #uiPane   { grid-column:2; grid-row:1; }
-  }
+  /* ===== Grid layout: portrait only — camera square + leftover UI ===== */
+  .app{position:fixed; inset:0; display:grid; grid-template-rows: var(--sqA) 1fr; grid-template-columns: 1fr; isolation:isolate;}
+  #videoPane{ grid-row:1; grid-column:1; }
+  #uiPane   { grid-row:2; grid-column:1; }
 
   /* ===== Camera cell (perfect square, edge-to-edge) ===== */
   #videoPane{
@@ -58,7 +60,7 @@
     padding:10px 12px 12px;
     background:#000;           /* opaque paint over camera */
     z-index:2;                 /* above camera */
-    contain:paint;             /* isolate painting; avoids iOS bleed */
+    contain:paint;
   }
   @supports (padding: env(safe-area-inset-bottom)){
     #uiPane{ padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
@@ -70,7 +72,7 @@
     min-height:0; flex:1; /* take the remainder above the controls */
     border-bottom:1px solid var(--line);
     padding-bottom:10px;
-    background:#000;           /* belt and braces: no transparency */
+    background:#000;
   }
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
@@ -90,7 +92,7 @@
   }
   #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto auto;gap:10px}
   .zoomArea{grid-row:1}
-  #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaW);padding:14px 22px}
+  #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaWActive);padding:14px 22px}
   .zoomWrap{display:flex;align-items:center;gap:12px;width:100%}
   .zbtn{flex:none;width:42px;height:42px;aspect-ratio:1/1;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
   input[type="range"].zoom{appearance:none;-webkit-appearance:none;width:100%;height:16px;border-radius:999px;background:#1a1a1a;outline:none}
@@ -133,7 +135,7 @@
   #compositeOverlay.open{display:flex}
   #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
-  #unfreezeBtn{width:var(--ctaW);align-self:center}
+  #unfreezeBtn{width:var(--ctaWActive);align-self:center}
 
   /* Tiny hint */
   .smallhint{
@@ -145,13 +147,13 @@
 </head>
 <body>
   <div class="app">
-    <!-- Camera square (left in landscape, top in portrait) -->
+    <!-- Camera square (top only; portrait layout) -->
     <section id="videoPane" aria-label="Camera">
       <video id="video" playsinline muted autoplay></video>
       <canvas id="frozenCanvas"></canvas>
     </section>
 
-    <!-- Leftover UI column/row -->
+    <!-- UI column (below camera) -->
     <section id="uiPane" aria-label="UI">
       <div id="palettePane">
         <div class="title">
@@ -209,14 +211,14 @@
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ===== --sq sizing from visualViewport (single source of truth) ===== */
+/* ===== --sq sizing from visualViewport (portrait-only) ===== */
 (function(){
   function recalcSquare(){
+    if (layoutLocked) return;               // <-- guard while frozen
     const vv = window.visualViewport;
     const vw = Math.max(0, window.innerWidth);
     const vh = Math.max(0, (vv?.height ?? window.innerHeight));
-    const isLandscape = vw > vh;
-    const sq = isLandscape ? vh : Math.min(vw, vh);
+    const sq = Math.min(vw, vh);            // portrait-only logic
     document.documentElement.style.setProperty('--sq', Math.round(sq) + 'px');
 
     // keep frozen canvas sized to cell if it’s visible
@@ -284,10 +286,10 @@ function medianCutPalette(samples,k){
   let boxes=[{colors}];
   const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
   boxes.forEach(bounds);
-  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
+  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b[0]);
   const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
   while(boxes.length<k){
-    boxes.sort((A,B)=>range(B)-range(A));
+    boxes.sort((A,B)=>Math.max(A.r[1]-A.r[0],A.g[1]-A.g[0],A.b[1]-A.b[0]) - Math.max(B.r[1]-B.r[0],B.g[1]-B.g[0],B.b[1]-B.b[0]));
     const big=boxes.shift(); if(!big||big.colors.length<=1) break;
     const ax=axis(big);
     big.colors.sort((a,b)=>a[ax]-b[ax]);
@@ -378,6 +380,7 @@ let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, ui
 let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
 let throttleCountdown=1; // process first frame immediately
 let lastPalette=[];
+let layoutLocked=false;  // <— prevents geometry changes while frozen
 
 /* ---------- helpers ---------- */
 const TH_MIN=1, TH_MAX=150;
@@ -390,21 +393,19 @@ function updateLpHint(){
   lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
 }
 
-/* ---- CC positioning (align to UI column, keep palettes peek) ---- */
+/* ---- CC positioning (align to UI column; portrait-only) ---- */
 const PEEK = 72; // px of palette that must remain visible
 function positionCC(){
+  if (layoutLocked) return;  // <— keep CC anchored while frozen
   const uiRect = document.getElementById('uiPane').getBoundingClientRect();
   const cbH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cbH')) || 0;
 
-  // Insets relative to viewport so the fixed CC aligns with UI column/band
   document.documentElement.style.setProperty('--ccL', (Math.max(0, uiRect.left) + 12) + 'px');
   document.documentElement.style.setProperty('--ccR', (Math.max(0, window.innerWidth - uiRect.right) + 12) + 'px');
 
-  // Anchor above the controls bar, respecting any gap to bottom of viewport
   const uiBottomInset = Math.max(0, window.innerHeight - uiRect.bottom);
   document.documentElement.style.setProperty('--ccB', (uiBottomInset + cbH + 8) + 'px');
 
-  // Limit height so a peek of palettes is always visible
   const usableH = Math.max(160, uiRect.height - cbH - 8 - PEEK);
   document.documentElement.style.setProperty('--ccMaxH', usableH + 'px');
 }
@@ -417,23 +418,51 @@ function hardHideFrozenCanvas(){
   fc.width = 0; fc.height = 0;   // drop backing store/IOSurface
   fc.style.display = 'none';
 }
-
 function forceReflowAndRecalc(){
-  window.recalcSquare && window.recalcSquare();
-  positionCC();
+  if (!layoutLocked) {
+    window.recalcSquare && window.recalcSquare();
+    positionCC();
+  }
   const v = video;
-  v.style.visibility = 'hidden'; // drop any cached composite
-  void document.body.offsetHeight; // force reflow
+  v.style.visibility = 'hidden';
+  void document.body.offsetHeight;
   v.style.visibility = '';
 }
-
 async function refreshVideoSurface(){
-  // last-resort: briefly detach to force a new IOSurface without flicker
   const s = video.srcObject;
   video.srcObject = null;
   await new Promise(r => requestAnimationFrame(r));
   video.srcObject = s;
   await video.play().catch(()=>{});
+}
+
+/* ===== Layout lock / unlock ===== */
+function lockLayout() {
+  if (layoutLocked) return;
+  layoutLocked = true;
+
+  // Freeze the square dimension currently in use
+  const sqPx = getComputedStyle(document.documentElement).getPropertyValue('--sq').trim();
+  if (sqPx) document.documentElement.style.setProperty('--sqLock', sqPx);
+
+  // Freeze CTA width and height (applies to both buttons)
+  const rect = freezeBtn.getBoundingClientRect();
+  document.documentElement.style.setProperty('--ctaWLock', Math.round(rect.width) + 'px');
+  const h = Math.round(rect.height) + 'px';
+  freezeBtn.style.height = h;
+  unfreezeBtn.style.height = h;
+}
+function unlockLayout() {
+  if (!layoutLocked) return;
+  layoutLocked = false;
+
+  document.documentElement.style.removeProperty('--sqLock');
+  document.documentElement.style.removeProperty('--ctaWLock');
+  freezeBtn.style.height = '';
+  unfreezeBtn.style.height = '';
+
+  window.recalcSquare && window.recalcSquare();
+  positionCC();
 }
 
 /* ---------- camera (auto, no gating) ---------- */
@@ -446,9 +475,8 @@ async function startCamera(){
     video.srcObject=stream;
     await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
 
-    try {
-      await video.play();
-    } catch(playErr) {
+    try { await video.play(); }
+    catch(playErr){
       console.error("Autoplay was blocked:", playErr);
       status('Tap to start camera');
       const resumeOnce = () => {
@@ -514,7 +542,7 @@ zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* Freeze: works in both orientations */
+/* Freeze: call lock first; works the same in portrait */
 freezeBtn.addEventListener('click',async()=>{
   if (compositeOverlay.classList.contains('open')) return;
   await freezeNow();
@@ -594,6 +622,8 @@ function renderPalette(palette){
 
 /* ---------- freeze / unfreeze ---------- */
 async function freezeNow(){
+  lockLayout();                                  // <— FIX: freeze geometry first
+
   running=false; pending=false; throttleCountdown=1;
 
   const {sx,sy,sw,sh}=computeSquareCrop();
@@ -621,7 +651,6 @@ async function freezeNow(){
   compositeImg.src = '';
   compositeOverlay.classList.add('open');
   updateLpHint();
-  window.recalcSquare && window.recalcSquare(); // keep tracks correct with overlay
 
   /* Compute palette (with timeout fallback) */
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
@@ -648,7 +677,6 @@ async function freezeNow(){
   renderPalette(cols);
 
   const hexes = cols.map(toHex);
-  /* keep camera size; double palette + labels */
   renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
 
   compositeImg.src = compositeCanvas.toDataURL('image/png');
@@ -656,6 +684,8 @@ async function freezeNow(){
 }
 
 function unfreeze(){
+  unlockLayout();                                 // <— FIX: restore responsiveness
+
   compositeOverlay.classList.remove('open');
   hardHideFrozenCanvas();                          // drop frozen frame completely
   running=true; pending=false; throttleCountdown=1;
