@@ -5,21 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Live Camera Palette — Stable Freeze + Immediate Palettes</title>
 <style>
-  /* ===== Base ===== */
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
-    --sq:0px;           /* computed from visualViewport */
-    --cbH:0px;          /* measured controls bar height (kept for compatibility) */
+    --sq:0px;
     --ctaW:clamp(220px,60vw,340px);
-    --ctaH:56px;        /* measured on load; used to reserve space */
-    --ctaB:calc(16px + env(safe-area-inset-bottom)); /* fixed CTA bottom offset */
+    --ctaH:56px;
+    --ctaB:calc(16px + env(safe-area-inset-bottom));
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* ===== Grid layout: camera square + leftover UI (PORTRAIT & LANDSCAPE) ===== */
-  .app{position:fixed; inset:0; display:grid; isolation:isolate;} /* root stacking context */
+  .app{position:fixed; inset:0; display:grid; isolation:isolate;}
   @media (orientation: portrait){
     .app{ grid-template-rows: var(--sq) 1fr; grid-template-columns: 1fr; }
     #videoPane{ grid-row:1; grid-column:1; }
@@ -31,172 +28,100 @@
     #uiPane   { grid-column:2; grid-row:1; }
   }
 
-  /* ===== Camera cell (perfect square, edge-to-edge) ===== */
-  #videoPane{
-    position:relative;
-    overflow:hidden;           /* crop to square bounds */
-    background:#000;
-    z-index:1;                 /* explicitly below UI column */
-  }
-  #videoPane video,
-  #videoPane canvas{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:cover;          /* fill square without gaps */
-    transform:scale(var(--zoom));
-    transform-origin:center;
-    display:block;
+  #videoPane{position:relative;overflow:hidden;background:#000;z-index:1;}
+  #videoPane video,#videoPane canvas{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    transform:scale(var(--zoom)); transform-origin:center; display:block;
   }
   #frozenCanvas{display:none}
 
-  /* ===== UI cell: holds palette + controls; uses leftover space ===== */
   #uiPane{
-    position:relative;
-    min-width:0; min-height:0;
+    position:relative; min-width:0; min-height:0;
     display:flex; flex-direction:column; gap:10px;
-    padding:10px 12px 12px;
-    /* reserve space for the fixed CTA so nothing is covered or shifts */
-    padding-bottom: calc(12px + var(--ctaH) + env(safe-area-inset-bottom));
-    background:#000;           /* opaque paint over camera */
-    z-index:2;                 /* above camera */
-    contain:paint;             /* isolate painting; avoids iOS bleed */
+    padding:10px 12px calc(12px + var(--ctaH) + env(safe-area-inset-bottom));
+    background:#000; z-index:2; contain:paint;
   }
 
-  /* ===== Palette area (flexes) ===== */
-  #palettePane{
-    display:flex; flex-direction:column; gap:10px;
-    min-height:0; flex:1; /* take the remainder above the controls */
-    border-bottom:1px solid var(--line);
-    padding-bottom:10px;
-    background:#000;           /* belt and braces: no transparency */
-  }
+  #palettePane{display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;border-bottom:1px solid var(--line);padding-bottom:10px;background:#000}
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer;touch-action:manipulation}
   .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px;background:#000}
   .swatches{display:flex}
   .swatch{flex:1}
   .gradient{display:block}
-  /* removed any “open CC” button; no chevron/hint UI */
   #openHint{display:none}
 
-  /* ===== Bottom controls (inside UI cell, pinned by flex) ===== */
-  #controlsBar{
-    border-top:1px solid var(--line);
-    background:#000;
-    padding:10px 0 0;
-    margin-top:auto; /* push to bottom of UI pane */
-  }
-  #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto;gap:10px}
-  .zoomArea{grid-row:1}
+  #controlsBar{border-top:1px solid var(--line);background:#000;padding:10px 0 0;margin-top:auto}
+  #bar{display:grid;grid-template-columns:1fr;gap:10px}
   .zoomWrap{display:flex;align-items:center;gap:12px;width:100%}
   .zbtn{flex:none;width:42px;height:42px;aspect-ratio:1/1;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
   input[type="range"].zoom{appearance:none;-webkit-appearance:none;width:100%;height:16px;border-radius:999px;background:#1a1a1a;outline:none}
   input[type="range"].zoom::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;border:none;cursor:pointer;margin-top:-6px}
   input[type="range"].zoom::-webkit-slider-runnable-track{height:16px;border-radius:999px;background:#2b2b2b}
-  input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border:none;border-radius:50%;background:#fff;cursor:pointer}
-  input[type="range"].zoom::-moz-range-track{height:16px;border-radius:999px;background:#2b2b2b}
 
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
-
-  /* ===== CTA: FREEZE & UNFREEZE share the exact same fixed spot ===== */
-  #freezeBtn, #unfreezeBtn{
-    position:fixed;
-    left:50%;
-    transform:translateX(-50%) translateZ(0);
-    will-change:transform;          /* ensure own compositing layer */
-    pointer-events:auto;            /* explicit: button always interactive */
-    bottom:var(--ctaB);
-    width:var(--ctaW);
-    z-index:5000; /* above all UI, below composite image */
-    touch-action:manipulation;
+  #freezeBtn,#unfreezeBtn{
+    position:fixed; left:50%; transform:translateX(-50%) translateZ(0);
+    bottom:var(--ctaB); width:var(--ctaW); z-index:5000; touch-action:manipulation;
   }
 
-  /* ===== Control Center — full-screenish overlay (open by long-press only) ===== */
+  /* ===== Control Center (fills from top down, ends above CTA) ===== */
   #ccWrap{
-    position:fixed;
-    z-index:4000;
-    inset:calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom));
-    display:none;
-    pointer-events:none; /* container doesn’t intercept, panel does */
+    position:fixed; z-index:4000; display:none; pointer-events:none;
+    /* values are written by JS to keep above CTA */
   }
   #cc{
-    pointer-events:auto;
-    width:100%; height:100%;
-    display:flex; flex-direction:column;
-    background:rgba(0,0,0,.72);
-    backdrop-filter:blur(10px);
-    border:1px solid var(--line);
-    border-radius:16px;
-    padding:16px;
-    overflow:auto;
+    pointer-events:auto; width:100%; height:100%; display:flex; flex-direction:column;
+    background:rgba(0,0,0,.72); backdrop-filter:blur(10px);
+    border:1px solid var(--line); border-radius:16px; padding:16px; overflow:auto;
   }
-
-  /* CC header with algo label */
-  .ccHead{
-    display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;
-  }
+  .ccHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
   .ccTitle{font-weight:700}
   .ccClose{appearance:none;border:1px solid var(--line);background:#121212;color:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
 
-  /* Descriptions section */
-  .ccDesc{
-    border:1px solid var(--line);
-    border-radius:12px;
-    padding:12px;
-    background:rgba(255,255,255,.04);
-  }
+  .ccDesc{border:1px solid var(--line);border-radius:12px;padding:12px;background:rgba(255,255,255,.04)}
   .ccAlgo{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:start;margin-bottom:10px}
   .ccAlgo:last-child{margin-bottom:0}
   .ccTag{font-size:12px;color:#9aa0a6;padding:2px 8px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
   .ccText{color:#d4d4d4;line-height:1.35}
   .ccSep{height:1px;background:#1a1a1a;margin:14px 0}
 
-  /* Controls grid — tight alignment */
-  .ccGrid{
-    display:grid;
-    grid-template-columns:minmax(120px, 1fr) minmax(180px, 340px);
-    gap:12px 16px;
-    align-items:center;
-  }
+  .ccGrid{display:grid;grid-template-columns:minmax(120px,1fr) minmax(180px,340px);gap:12px 16px;align-items:center}
   .ccLabel{color:#c8c8c8}
   .ccCtl{display:flex;align-items:center;gap:10px;justify-content:stretch}
   .ccCtl input[type="range"]{flex:1}
   .ccSmall{font-variant-numeric:tabular-nums;color:#9aa0a6;min-width:48px;text-align:right}
 
-  /* Composite overlay (for shareable image) */
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
   #compositeOverlay:not(.open){pointer-events:none;}
   #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
-
   .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
 </style>
 </head>
 <body>
   <div class="app">
-    <!-- Camera square (left in landscape, top in portrait) -->
     <section id="videoPane" aria-label="Camera">
       <video id="video" playsinline muted autoplay></video>
       <canvas id="frozenCanvas"></canvas>
     </section>
 
-    <!-- Leftover UI column/row -->
     <section id="uiPane" aria-label="UI">
       <div id="palettePane">
         <div class="title">
           <div id="algoName" class="small">K-Means (LAB)</div>
           <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
         </div>
-        <!-- Tap left/right to switch algorithm; LONG‑PRESS to open CC -->
+        <!-- Tap L/R to switch algo; LONG‑PRESS to open CC -->
         <div class="stack" id="paletteClickable">
           <div id="swatches" class="swatches"></div>
           <div id="gradient" class="gradient" hidden></div>
           <div id="openHint" aria-hidden="true"></div>
         </div>
 
-        <!-- Control Center — long‑press to open; nearly full screen -->
+        <!-- Control Center -->
         <div id="ccWrap">
           <div id="cc">
             <div class="ccHead">
@@ -204,25 +129,23 @@
               <button class="ccClose" id="ccCloseBtn" type="button">Close</button>
             </div>
 
-            <!-- Designer‑oriented algorithm intents -->
-            <div class="ccDesc" aria-label="Algorithm descriptions">
+            <div class="ccDesc">
               <div class="ccAlgo">
                 <span class="ccTag">K‑Means (LAB)</span>
-                <p class="ccText">Cluster perceived color <em>families</em> in LAB space. Great for extracting the dominant palette the eye reads first, suppressing noise and tiny outliers. Best when you want a clean, brand‑like set; sensitive to the chosen K.</p>
+                <p class="ccText">Clusters perceived color <em>families</em> in LAB. Extracts the palette the eye reads first; cleaner, brand‑like. Sensitive to K.</p>
               </div>
               <div class="ccAlgo">
                 <span class="ccTag">Histogram Peaks</span>
-                <p class="ccText">Pick the most <em>frequent</em> RGB buckets. Faithful to what actually occurs in pixels, including materials or lighting that cover large areas. Good for documenting prevalence; may surface near‑duplicates if the image is flat.</p>
+                <p class="ccText">Picks the most <em>frequent</em> RGB buckets. Truthful to prevalence; can surface near‑duplicates in flat images.</p>
               </div>
               <div class="ccAlgo">
                 <span class="ccTag">Median‑cut</span>
-                <p class="ccText">Divide color space to ensure <em>coverage</em> across the gamut. Useful when you need a diverse swatch set (shadows, mids, highlights) rather than just what dominates. Less faithful to dominance; more balanced for exploration.</p>
+                <p class="ccText">Divides color space for <em>coverage</em> (shadows/mids/highlights). Great for exploration; less about dominance.</p>
               </div>
             </div>
 
             <div class="ccSep" role="separator" aria-hidden="true"></div>
 
-            <!-- Well‑aligned controls -->
             <div class="ccGrid">
               <div class="ccLabel">Colors (K)</div>
               <div class="ccCtl">
@@ -231,14 +154,10 @@
               </div>
 
               <div class="ccLabel">Show rectangles</div>
-              <div class="ccCtl">
-                <input type="checkbox" id="rects" checked />
-              </div>
+              <div class="ccCtl"><input type="checkbox" id="rects" checked /></div>
 
               <div class="ccLabel">Show gradient</div>
-              <div class="ccCtl">
-                <input type="checkbox" id="grad" checked />
-              </div>
+              <div class="ccCtl"><input type="checkbox" id="grad" checked /></div>
 
               <div class="ccLabel">Processing width</div>
               <div class="ccCtl">
@@ -265,28 +184,24 @@
               <button class="zbtn" id="zoomPlus" type="button" aria-label="Zoom in">+</button>
             </div>
           </div>
-          <!-- FREEZE is position:fixed; remains in DOM for semantics -->
           <button class="btn cta" id="freezeBtn" type="button">FREEZE</button>
         </div>
       </section>
     </section>
   </div>
 
-  <!-- Freeze composite overlay -->
   <div id="compositeOverlay">
     <canvas id="compositeCanvas"></canvas>
     <img id="compositeImg" alt="Composite preview"/>
     <div id="lpHint" class="smallhint">Long-press the image to save.</div>
-    <!-- UNFREEZE is also position:fixed at the exact same spot as FREEZE -->
     <button class="btn cta" id="unfreezeBtn" type="button">UNFREEZE</button>
   </div>
 
-  <!-- Offscreen helpers -->
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ===== --sq sizing from visualViewport (single source of truth) ===== */
+/* ===== sizing ===== */
 (function(){
   function recalcSquare(){
     const vv = window.visualViewport;
@@ -295,136 +210,14 @@
     const isLandscape = vw > vh;
     const sq = isLandscape ? vh : Math.min(vw, vh);
     document.documentElement.style.setProperty('--sq', Math.round(sq) + 'px');
-
-    // keep frozen canvas sized to cell if it’s visible
-    const fc = document.getElementById('frozenCanvas');
-    if (fc && fc.style.display !== 'none') {
-      const wrap = document.getElementById('videoPane');
-      fc.width = wrap.clientWidth;
-      fc.height = wrap.clientHeight;
-    }
   }
-  window.recalcSquare = recalcSquare; // expose
-
-  let raf = 0;
-  const kick = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(recalcSquare); };
-
-  window.addEventListener('load', kick, {passive:true});
-  window.addEventListener('resize', kick, {passive:true});
-  window.addEventListener('orientationchange', kick, {passive:true});
-  window.visualViewport && window.visualViewport.addEventListener('resize', kick, {passive:true});
+  window.addEventListener('load', recalcSquare, {passive:true});
+  window.addEventListener('resize', recalcSquare, {passive:true});
+  window.addEventListener('orientationchange', recalcSquare, {passive:true});
+  window.visualViewport && window.visualViewport.addEventListener('resize', recalcSquare, {passive:true});
 })();
 
-/* ===== Measure controls bar height (kept for compatibility) & CTA height ===== */
-const controlsBar = document.getElementById('controlsBar');
-function updateCbH(){
-  const h = Math.round(controlsBar.getBoundingClientRect().height);
-  document.documentElement.style.setProperty('--cbH', h + 'px');
-}
-const cbRO = new ResizeObserver(updateCbH);
-cbRO.observe(controlsBar);
-addEventListener('load', updateCbH);
-
-/* ---------- worker with jobId ---------- */
-const workerBlob = new Blob([`
-self.onmessage = (e)=> {
-  const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
-  try{
-    const data = new Uint8ClampedArray(pixels);
-    const samples = [];
-    for(let y=0;y<height;y+=stride){
-      let row=y*width*4;
-      for(let x=0;x<width;x+=stride){
-        const i=row+x*4; samples.push(data[i],data[i+1],data[i+2]);
-      }
-    }
-    let palette;
-    if (algo==='hist') palette = histPalette(samples,k);
-    else if (algo==='mediancut') palette = medianCutPalette(samples,k);
-    else palette = kmeansLAB(samples,k,6);
-    palette = dedupeAndSort(palette,10);
-    const out = new Uint8Array(palette.flat());
-    self.postMessage({palette: out.buffer, jobId}, [out.buffer]);
-  }catch(err){
-    self.postMessage({palette: new Uint8Array(0).buffer, jobId, error: String(err&&err.message||err)});
-  }
-};
-function rgb2xyz(r,g,b){r/=255;g/=255;b/=255;r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;return[ r*0.4124+g*0.3576+b*0.1805, r*0.2126+g*0.7152+b*0.0722, r*0.0193+g*0.1192+b*0.9505];}
-function xyz2lab(x,y,z){const Xr=0.95047,Yr=1,Zr=1.08883;const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;const fx=f(x/Xr),fy=f(y/Yr),fz=f(z/Zr);return[116*fy-16,500*(fx-fy),200*(fy-fz)];}
-function rgb2lab(r,g,b){const[x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
-function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db);}
-
-function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);return idx.map(code=>{const r=(code>>6)&7,g=(code>>3)&7,b=code&7;return[r*32+16,g*32+16,b*32+16];});}
-
-function medianCutPalette(samples,k){
-  const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
-  let boxes=[{colors}];
-  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
-  boxes.forEach(bounds);
-  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
-  const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
-  while(boxes.length<k){
-    boxes.sort((A,B)=>range(B)-range(A));
-    const big=boxes.shift(); if(!big||big.colors.length<=1) break;
-    const ax=axis(big);
-    big.colors.sort((a,b)=>a[ax]-b[ax]);
-    const mid=big.colors.length>>1;
-    const left={colors:big.colors.slice(0,mid)}, right={colors:big.colors.slice(mid)};
-    [left,right].forEach(bounds); boxes.push(left,right);
-  }
-  return boxes.map(b=>{
-    let r=0,g=0,bl=0,n=b.colors.length||1;
-    for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}
-    return [r/n|0,g/n|0,bl/n|0];
-  }).slice(0,k);
-}
-
-function kmeansLAB(samples,k,maxIter=6){
-  const pts=[];
-  for(let i=0;i<samples.length;i+=3){
-    const r=samples[i],g=samples[i+1],b=samples[i+2];
-    const L=rgb2lab(r,g,b); pts.push([L[0],L[1],L[2],r,g,b]);
-  }
-  const centers=[]; centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
-  while(centers.length<k){
-    const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));
-    const sum=d2.reduce((a,b)=>a+b,0)||1;
-    let r=Math.random()*sum,i=0; for(;i<d2.length-1&&(r-=d2[i])>0;i++); centers.push(pts[i].slice(0,3));
-  }
-  const labels=new Uint16Array(pts.length);
-  for(let it=0;it<maxIter;it++){
-    for(let i=0;i<pts.length;i++){
-      let best=0,bd=1e9;
-      for(let c=0;c<centers.length;c++){
-        const d=d2lab(pts[i],centers[c]); if(d<bd){bd=d;best=c;}
-      }
-      labels[i]=best;
-    }
-    const sums=Array.from({length:k},()=>[0,0,0,0]);
-    for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;}
-    for(let c=0;c<k;c++) if(sums[c][3]>0){centers[c][0]=sums[c][0]/sums[c][3];centers[c][1]=sums[c][1]/sums[c][3];centers[c][2]=sums[c][2]/sums[c][3];}
-  }
-  const acc=Array.from({length:k},()=>[0,0,0,0]);
-  for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}
-  const out=[]; for(let c=0;c<k;c++) if(acc[c][3]>0) out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);
-  while(out.length<k) out.push(out[out.length-1]||[128,128,128]);
-  return out.slice(0,k);
-  function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}
-}
-function dedupeAndSort(rgbList,minDE=10){
-  const labList=rgbList.map(([r,g,b])=>{const L=rgb2lab(r,g,b);return [L[0],L[1],L[2],r,g,b];});
-  labList.sort((a,b)=>a[0]-b[0]);
-  const kept=[]; for(const c of labList){
-    let ok=true; for(const d of kept){ if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;} }
-    if(ok) kept.push(c);
-  }
-  return kept.map(c=>[c[3],c[4],c[5]]);
-}
-`], {type:'application/javascript'});
-const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
-worker.addEventListener('error', e=>console.log('Worker error:', e.message));
-
-/* ---------- elements ---------- */
+/* ===== elements ===== */
 const video=document.getElementById('video');
 const frozenCanvas=document.getElementById('frozenCanvas');
 const off=document.getElementById('off');
@@ -447,380 +240,249 @@ const compositeCanvas=document.getElementById('compositeCanvas');
 const compositeImg=document.getElementById('compositeImg');
 const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
+const cc=document.getElementById('cc');
 const ccCloseBtn=document.getElementById('ccCloseBtn');
 const lpHint=document.getElementById('lpHint');
 
-/* ---------- state ---------- */
-const ALGOS = ['kmeans','hist','mediancut'];
-const ALGO_LABEL = {
-  kmeans: 'K-Means (LAB)',
-  hist: 'Histogram',
-  mediancut: 'Median-cut'
-};
+/* ===== worker ===== */
+const workerBlob = new Blob([`self.onmessage=e=>{const{pixels,width,height,algo,k,stride=2,jobId}=e.data;try{const data=new Uint8ClampedArray(pixels);const samples=[];for(let y=0;y<height;y+=stride){let row=y*width*4;for(let x=0;x<width;x+=stride){const i=row+x*4;samples.push(data[i],data[i+1],data[i+2]);}}let palette;if(algo==='hist')palette=histPalette(samples,k);else if(algo==='mediancut')palette=medianCutPalette(samples,k);else palette=kmeansLAB(samples,k,6);palette=dedupeAndSort(palette,10);const out=new Uint8Array(palette.flat());self.postMessage({palette:out.buffer,jobId},[out.buffer]);}catch(err){self.postMessage({palette:new Uint8Array(0).buffer,jobId,error:String(err&&err.message||err)})}};function rgb2xyz(r,g,b){r/=255;g/=255;b/=255;r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;return[r*0.4124+g*0.3576+b*0.1805,r*0.2126+g*0.7152+b*0.0722,r*0.0193+g*0.1192+b*0.9505]}function xyz2lab(x,y,z){const Xr=0.95047,Yr=1,Zr=1.08883;const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;const fx=f(x/Xr),fy=f(y/Yr),fz=f(z/Zr);return[116*fy-16,500*(fx-fy),200*(fy-fz)]}function rgb2lab(r,g,b){const[x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z)}function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db)}function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);return idx.map(code=>{const r=(code>>6)&7,g=(code>>3)&7,b=code&7;return[r*32+16,g*32+16,b*32+16]})}function medianCutPalette(samples,k){const colors=[];for(let i=0;i<samples.length;i+=3)colors.push([samples[i],samples[i+1],samples[i+2]]);let boxes=[{colors}];const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};boxes.forEach(bounds);const range=b=>Math.max(b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]);const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs))};while(boxes.length<k){boxes.sort((A,B)=>range(B)-range(A));const big=boxes.shift();if(!big||big.colors.length<=1)break;const ax=axis(big);big.colors.sort((a,b)=>a[ax]-b[ax]);const mid=big.colors.length>>1;const left={colors:big.colors.slice(0,mid)},right={colors:big.colors.slice(mid)};[left,right].forEach(bounds);boxes.push(left,right)}return boxes.map(b=>{let r=0,g=0,bl=0,n=b.colors.length||1;for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2]}return[r/n|0,g/n|0,bl/n|0]}).slice(0,k)}function kmeansLAB(samples,k,maxIter=6){const pts=[];for(let i=0;i<samples.length;i+=3){const r=samples[i],g=samples[i+1],b=samples[i+2];const L=rgb2lab(r,g,b);pts.push([L[0],L[1],L[2],r,g,b])}const centers=[];centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));while(centers.length<k){const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));const sum=d2.reduce((a,b)=>a+b,0)||1;let r=Math.random()*sum,i=0;for(;i<d2.length-1&&(r-=d2[i])>0;i++);centers.push(pts[i].slice(0,3))}const labels=new Uint16Array(pts.length);for(let it=0;it<maxIter;it++){for(let i=0;i<pts.length;i++){let best=0,bd=1e9;for(let c=0;c<centers.length;c++){const d=d2lab(pts[i],centers[c]);if(d<bd){bd=d;best=c}}labels[i]=best}const sums=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++}for(let c=0;c<k;c++)if(sums[c][3]>0){centers[c][0]=sums[c][0]/sums[c][3];centers[c][1]=sums[c][1]/sums[c][3];centers[c][2]=sums[c][2]/sums[c][3]}}const acc=Array.from({length:k},()=>[0,0,0,0]);for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++}const out=[];for(let c=0;c<k;c++)if(acc[c][3]>0)out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);while(out.length<k)out.push(out[out.length-1]||[128,128,128]);return out.slice(0,k);function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2}}function dedupeAndSort(rgbList,minDE=10){const labList=rgbList.map(([r,g,b])=>{const L=rgb2lab(r,g,b);return[L[0],L[1],L[2],r,g,b]});labList.sort((a,b)=>a[0]-b[0]);const kept=[];for(const c of labList){let ok=true;for(const d of kept){if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break}}if(ok)kept.push(c)}return kept.map(c=>[c[3],c[4],c[5]])}`],{type:'application/javascript'});
+const worker = new Worker(URL.createObjectURL(workerBlob),{type:'module'});
+
+/* ===== state ===== */
+const ALGOS=['kmeans','hist','mediancut'];
+const ALGO_LABEL={kmeans:'K-Means (LAB)',hist:'Histogram',mediancut:'Median-cut'};
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
-let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
-let throttleCountdown=1; // process first frame immediately
+let frameCounter=0,lastT=performance.now(),running=false;
+let pending=false,pendingSince=0,lastLiveAt=0;
+let throttleCountdown=1;
 let lastPalette=[];
-let ctaH=56; // measured on load
-let freezing=false; // guard against double-fire on iOS
+let ctaH=56;
 
-/* ---------- helpers ---------- */
+/* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
-function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100); }
-function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
-function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
-function status(t){ statusEl.textContent=t; }
-function updateLpHint(){
-  const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
-  lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
-}
+const nToSlider=n=>Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100);
+const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
+const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+const status=t=>statusEl.textContent=t;
 
-/* ---- frozen-canvas hygiene ---- */
-function hardHideFrozenCanvas(){
-  const fc = frozenCanvas;
-  const w = fc.width, h = fc.height;
-  if (w && h) { const g = fc.getContext('2d'); g.clearRect(0,0,w,h); }
-  fc.width = 0; fc.height = 0;   // drop backing store/IOSurface
-  fc.style.display = 'none';
+/* ----- CC layout: top → just above CTA ----- */
+function layoutCC(){
+  // leave 10px + safe-area at top; bottom leaves CTA height + gap
+  ccWrap.style.left = '10px';
+  ccWrap.style.right = '10px';
+  ccWrap.style.top = `calc(10px + env(safe-area-inset-top))`;
+  ccWrap.style.bottom = `calc(${ctaH}px + 24px + env(safe-area-inset-bottom))`;
 }
+function openCC(){ layoutCC(); ccWrap.style.display='block'; }
+function closeCC(){ ccWrap.style.display='none'; }
 
-function forceReflowAndRecalc(){
-  window.recalcSquare && window.recalcSquare();
-  const v = video;
-  v.style.visibility = 'hidden';
-  void document.body.offsetHeight;
-  v.style.visibility = '';
-}
-
-async function refreshVideoSurface(){
-  const s = video.srcObject;
-  video.srcObject = null;
-  await new Promise(r => requestAnimationFrame(r));
-  video.srcObject = s;
-  await video.play().catch(()=>{});
-}
-
-/* ---------- camera (auto, no gating) ---------- */
-async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
+/* ===== camera ===== */
+async function getStream(){try{return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false})}catch(_){return await navigator.mediaDevices.getUserMedia({video:true,audio:false})}}
 async function startCamera(){
   try{
     status('Requesting camera…');
     const stream=await getStream();
-    if (!stream || !stream.active) throw new Error('Camera access was not successful.');
     video.srcObject=stream;
-    await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
-
-    try {
-      await video.play();
-    } catch(playErr) {
-      console.error("Autoplay was blocked:", playErr);
-      status('Tap to start camera');
-      const resumeOnce = () => {
-        if (!compositeOverlay.classList.contains('open')) {
-          video.play().catch(err => console.error('Resume play failed:', err));
-        }
-        document.removeEventListener('click', resumeOnce, true);
-      };
-      document.addEventListener('click', resumeOnce, true);
-      return;
-    }
-
+    await new Promise(r=>video.addEventListener('loadedmetadata',r,{once:true}));
+    try{await video.play();}catch{status('Tap to start');document.addEventListener('click',()=>video.play().catch(()=>{}),{once:true,capture:true});return;}
     status('Live');
-    running=true; pending=false; throttleCountdown=1;
-    renderPalette([]); // initial empty
-    requestAnimationFrame(loop);
-  } catch(err) {
-    let msg = 'Camera failed';
-    if (err && err.name === 'NotAllowedError') msg = 'Camera permission denied.';
-    else if (err && err.message) msg = err.message;
-    status(msg);
-    console.error("Camera start error:", err);
-  }
+    running=true; throttleCountdown=1; pending=false; pendingSince=0;
+    renderPalette([]); requestAnimationFrame(loop);
+  }catch(err){status('Camera failed');console.error(err);}
 }
-startCamera().catch(err => console.error(err));
+startCamera();
 
-/* ---------- CTA visibility control (exact same position/size) ---------- */
-function showFreezeCTA(){ freezeBtn.style.display='block';  unfreezeBtn.style.display='none'; }
-function showUnfreezeCTA(){ freezeBtn.style.display='none';  unfreezeBtn.style.display='block'; }
-
-/* ----- Unified freeze tap handler (click + touchend) ----- */
-function onFreezeTap(ev){
-  if (compositeOverlay.classList.contains('open')) return;
-  if (freezing) return;
-  freezing = true;
-  if (ev) ev.preventDefault();
-  freezeNow().then(showUnfreezeCTA).finally(()=>{ freezing = false; });
-}
-
-/* ---------- UI init ---------- */
-addEventListener('load', ()=>{
-  ctaH = freezeBtn.offsetHeight || 56;
-  document.documentElement.style.setProperty('--ctaH', ctaH + 'px');
-
-  throttleLog.value=nToSlider(throttleN);
-  throttleVal.textContent=String(throttleN);
-
-  rectChk.checked = true;
-  gradChk.checked = true;
+/* ===== live worker ===== */
+worker.addEventListener('message',e=>{
+  const {jobId,error}=e.data||{};
+  if(jobId!=='live') return;            // ignore freeze replies
+  if(error){ pending=false; return; }
+  const arr=new Uint8Array(e.data.palette||[]);
+  const cols=[]; for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
+  while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
+  lastPalette=cols.slice(0,K);
   renderPalette(lastPalette);
-
-  showFreezeCTA();
+  pending=false; lastLiveAt=performance.now();
 });
 
-/* ---- CC open/close: long-press on palette; close button or outside click ---- */
-let pressState = {down:false, t0:0, x:0, y:0, timer:null, long:false};
-const LONG_MS = 450, TAP_MOV_PX = 14;
-
-function openCC(){ ccWrap.style.display='block'; }
-function closeCC(){ ccWrap.style.display='none'; }
-
-ccCloseBtn.addEventListener('click', closeCC);
-document.addEventListener('click',(e)=>{
-  if (compositeOverlay.classList.contains('open')) return;
-  if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) closeCC();
-});
-
-/* ---- Algorithm switching on palette area (left/right half) ---- */
-function setAlgo(nextId){
-  algo = nextId;
-  algoName.textContent = ALGO_LABEL[algo] || algo;
-}
-function stepAlgo(dir){
-  const i = ALGOS.indexOf(algo);
-  const ni = ( (i + (dir>0?1:-1)) + ALGOS.length ) % ALGOS.length;
-  setAlgo(ALGOS[ni]);
-}
-
-/* Pointer handlers on palette area:
-   - short tap: left half => previous, right half => next
-   - long-press (> LONG_MS) => open CC (no algo change) */
-paletteClickable.addEventListener('pointerdown', (e)=>{
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
-  pressState.down = true; pressState.long=false;
-  pressState.t0 = performance.now(); pressState.x = e.clientX; pressState.y = e.clientY;
-  clearTimeout(pressState.timer);
-  pressState.timer = setTimeout(()=>{ if(pressState.down){ pressState.long=true; openCC(); } }, LONG_MS);
-});
-
-paletteClickable.addEventListener('pointerup', (e)=>{
-  if (!pressState.down) return;
-  pressState.down = false;
-  clearTimeout(pressState.timer);
-
-  if (pressState.long) return; // CC opened, no algo step
-
-  const dx = Math.abs(e.clientX - pressState.x);
-  const dy = Math.abs(e.clientY - pressState.y);
-  const dt = performance.now() - pressState.t0;
-
-  const isTap = dx < TAP_MOV_PX && dy < TAP_MOV_PX && dt < 300;
-  if (!isTap) return;
-
-  const rect = paletteClickable.getBoundingClientRect();
-  const mid = rect.left + rect.width/2;
-  if (e.clientX < mid) stepAlgo(-1); else stepAlgo(1);
-});
-
-['pointercancel','pointerleave'].forEach(evt=>{
-  paletteClickable.addEventListener(evt, ()=>{ pressState.down=false; clearTimeout(pressState.timer); });
-});
-
-/* ---- Sliders/toggles in CC ---- */
-kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
-sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value; sizeVal.textContent=procWidth+' px';});
-throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
-rectChk.addEventListener('change',()=>renderPalette(lastPalette));
-gradChk.addEventListener('change',()=>renderPalette(lastPalette));
-
-/* ---- Zoom ---- */
-function setZoom(v){ uiZoom=Math.max(1,Math.min(10,v)); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
-zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
-zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
-zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
-
-/* Bind freeze/unfreeze */
-freezeBtn.addEventListener('click', onFreezeTap);
-freezeBtn.addEventListener('touchend', onFreezeTap, {passive:false});
-unfreezeBtn.addEventListener('click',()=>{
-  unfreeze();
-  showFreezeCTA();
-});
-
-/* ---------- crop ---------- */
+/* ===== RAF ===== */
 function computeSquareCrop(){
-  const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
+  const vw=video.videoWidth||0, vh=video.videoHeight||0;
+  if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
   return {sx,sy,sw,sh};
 }
 
-/* ---------- worker live handler ---------- */
-worker.onmessage = (e)=>{
-  const {jobId, error} = e.data || {};
-  if (jobId !== 'live') return;
-  if (error) { console.log('Worker live error:', error); pending=false; return; }
-  const arr = new Uint8Array(e.data.palette||[]);
-  const cols=[]; for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
-  while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
-  lastPalette = cols.slice(0,K); hasPalette = true;
-  renderPalette(lastPalette);
-  pending=false; frameCounter++;
-};
-
-/* ---------- RAF loop ---------- */
 function loop(){
   requestAnimationFrame(loop);
-  if(video.readyState<2 || video.paused) return;
-  if(!running) return;
+  if(!running || video.readyState<2 || video.paused) return;
 
   const now=performance.now();
   if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
 
   const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
-
-  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
-  off.width=w; off.height=h;
+  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)); off.width=w; off.height=w;
   const ctx=off.getContext('2d',{willReadFrequently:true});
-  ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
-  resEl.textContent=w+'×'+h;
+  ctx.drawImage(video,sx,sy,sw,sh,0,0,w,w);
+  resEl.textContent=w+'×'+w;
 
-  if (--throttleCountdown > 0) return;
-  throttleCountdown = Math.max(1, throttleN);
+  /* watchdog: if a live job got stuck >1200 ms, clear and retry */
+  if(pending && now-pendingSince>1200){ pending=false; throttleCountdown=1; }
+
+  if(--throttleCountdown>0) return;
+  throttleCountdown=Math.max(1,throttleN);
   if(!pending){
-    pending=true;
-    const img=ctx.getImageData(0,0,w,h);
-    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
+    pending=true; pendingSince=now;
+    const img=ctx.getImageData(0,0,w,w);
+    worker.postMessage({pixels:img.data.buffer,width:w,height:w,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
+    frameCounter++;
   }
 }
 
-/* ---------- palette render ---------- */
+/* ===== palette render ===== */
 function renderPalette(palette){
   if(!palette || !palette.length){
-    swatchesEl.style.display='flex'; swatchesEl.innerHTML=`<div class="swatch" style="background:#111"></div>`.repeat(K);
+    swatchesEl.style.display='flex';
+    swatchesEl.innerHTML=`<div class="swatch" style="background:#111"></div>`.repeat(Math.max(3, K));
     gradientEl.hidden=true; gradientEl.style.background='';
-    hasPalette = false;
     return;
   }
-  const hexes = palette.map(toHex);
+  const hexes=palette.map(toHex);
   const wantRects=rectChk.checked, wantGrad=gradChk.checked;
 
   swatchesEl.style.display='none'; gradientEl.hidden=true; gradientEl.style.background=''; swatchesEl.innerHTML='';
-
-  if(wantRects && wantGrad){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; gradientEl.hidden=false; gradientEl.style.flex='1'; }
+  if(wantRects&&wantGrad){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; gradientEl.hidden=false; gradientEl.style.flex='1'; }
   else if(wantRects){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
   else if(wantGrad){ gradientEl.hidden=false; gradientEl.style.flex='1'; }
   else { rectChk.checked=true; swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
 
   if(rectChk.checked){ for(const h of hexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); } }
   if(gradChk.checked){
-    const stops = hexes.length > 1 ? hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',') : `${hexes[0]}, ${hexes[0]}`;
-    gradientEl.hidden=false; gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
+    const stops = hexes.length>1 ? hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',') : `${hexes[0]}, ${hexes[0]}`;
+    gradientEl.hidden=false; gradientEl.style.background=`linear-gradient(90deg, ${stops})`;
   }
 }
 
-/* ---------- freeze / unfreeze ---------- */
+/* ===== interactions ===== */
+function setAlgo(id){ algo=id; algoName.textContent=ALGO_LABEL[algo]||algo; throttleCountdown=1; } // immediate kick
+function stepAlgo(dir){ const i=ALGOS.indexOf(algo); const ni=((i+(dir>0?1:-1))+ALGOS.length)%ALGOS.length; setAlgo(ALGOS[ni]); }
+
+let press={down:false,t0:0,x:0,y:0,timer:null,long:false};
+const LONG_MS=450, TAP_MOV=14;
+
+paletteClickable.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse' && e.button!==0) return;
+  press={down:true,t0:performance.now(),x:e.clientX,y:e.clientY,timer:null,long:false};
+  press.timer=setTimeout(()=>{ if(press.down){ press.long=true; openCC(); } }, LONG_MS);
+});
+paletteClickable.addEventListener('pointerup',e=>{
+  if(!press.down) return; press.down=false; clearTimeout(press.timer);
+  if(press.long) return;
+  const dx=Math.abs(e.clientX-press.x), dy=Math.abs(e.clientY-press.y), dt=performance.now()-press.t0;
+  if(dx<TAP_MOV && dy<TAP_MOV && dt<300){
+    const mid=paletteClickable.getBoundingClientRect().left + paletteClickable.clientWidth/2;
+    if(e.clientX<mid) stepAlgo(-1); else stepAlgo(1);
+  }
+});
+['pointercancel','pointerleave'].forEach(ev=>paletteClickable.addEventListener(ev,()=>{press.down=false;clearTimeout(press.timer);}))
+
+kRange.addEventListener('input',()=>{K=+kRange.value;kVal.textContent=K;renderPalette(lastPalette); throttleCountdown=1;});
+sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value;sizeVal.textContent=procWidth+' px'; throttleCountdown=1;});
+throttleLog.addEventListener('input',()=>{throttleN=sliderToN(+throttleLog.value);throttleVal.textContent=String(throttleN);});
+rectChk.addEventListener('change',()=>renderPalette(lastPalette));
+gradChk.addEventListener('change',()=>renderPalette(lastPalette));
+
+function setZoom(v){uiZoom=Math.max(1,Math.min(10,v));zoomSlider.value=uiZoom;document.documentElement.style.setProperty('--zoom',uiZoom);throttleCountdown=1;}
+zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
+zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
+zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
+
+freezeBtn.addEventListener('click', onFreezeTap); freezeBtn.addEventListener('touchend', onFreezeTap, {passive:false});
+unfreezeBtn.addEventListener('click',()=>{unfreeze(); showFreezeCTA();});
+
+function showFreezeCTA(){ freezeBtn.style.display='block'; unfreezeBtn.style.display='none'; }
+function showUnfreezeCTA(){ freezeBtn.style.display='none'; unfreezeBtn.style.display='block'; }
+
+/* ===== FREEZE / UNFREEZE (unchanged rendering) ===== */
+let freezing=false;
+async function onFreezeTap(ev){ if(compositeOverlay.classList.contains('open')||freezing) return; ev&&ev.preventDefault(); freezing=true; await freezeNow().then(showUnfreezeCTA).finally(()=>{freezing=false}); }
+function computeSquareCrop(){ const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0}; const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2); return {sx,sy,sw,sh}; }
 async function freezeNow(){
   running=false; pending=false; throttleCountdown=1;
-
-  const {sx,sy,sw,sh}=computeSquareCrop();
-  if (!sw) return;
-
-  /* Low-res capture (for palette): */
-  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
-  capFrame.width=w; capFrame.height=h;
-  const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
-
-  /* UI-res freeze preview: use the actual square cell size */
+  const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
+  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)); capFrame.width=w; capFrame.height=w;
+  const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,w);
   const wrap=document.getElementById('videoPane');
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
   fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
-  frozenCanvas.style.display='block';
-  await video.pause();
-
-  /* Hi-res capture for composite (native crop): */
-  const hiCap=document.createElement('canvas');
-  hiCap.width=sw; hiCap.height=sh;
-  const hiCtx=hiCap.getContext('2d');
-  hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
-
-  compositeImg.src = '';
-  compositeOverlay.classList.add('open');
-  updateLpHint();
-  window.recalcSquare && window.recalcSquare();
-
-  /* Compute palette (with timeout fallback) */
+  frozenCanvas.style.display='block'; await video.pause();
+  const hiCap=document.createElement('canvas'); hiCap.width=sw; hiCap.height=sh;
+  hiCap.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
+  compositeImg.src=''; compositeOverlay.classList.add('open'); updateLpHint();
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
-  const imgs=capCtx.getImageData(0,0,w,h);
-
-  const cols = await new Promise((resolve)=>{
-    let settled=false;
-    const to = setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[ [0,0,0] ]); } }, 2000);
-    const handler=(ev)=>{
-      const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
-      worker.removeEventListener('message',handler); if(settled) return;
-      settled=true; clearTimeout(to);
-      if(error){ console.log('Worker freeze error:', error); resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
-      const arr=new Uint8Array(ev.data.palette||[]), out=[];
-      for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
-      while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
-      resolve(out.slice(0,K));
+  const imgs=capCtx.getImageData(0,0,w,w);
+  const cols=await new Promise((resolve)=>{
+    let settled=false; const to=setTimeout(()=>{if(!settled){settled=true;resolve(lastPalette.length?lastPalette:[[0,0,0]])}},2000);
+    const handler=(ev)=>{const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return; worker.removeEventListener('message',handler); if(settled) return; settled=true; clearTimeout(to);
+      if(error){resolve(lastPalette.length?lastPalette:[[0,0,0]]);return;}
+      const arr=new Uint8Array(ev.data.palette||[]), out=[]; for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
+      while(out.length<K) out.push(out[out.length-1]||[128,128,128]); resolve(out.slice(0,K));
     };
     worker.addEventListener('message',handler);
-    worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
+    worker.postMessage({pixels:imgs.data.buffer,width:w,height:w,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
   });
-
-  lastPalette = cols;
-  renderPalette(cols);
-
-  const hexes = cols.map(toHex);
+  lastPalette=cols; renderPalette(cols);
+  const hexes=cols.map(toHex);
   renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
-
-  compositeImg.src = compositeCanvas.toDataURL('image/png');
-  updateLpHint();
+  compositeImg.src=compositeCanvas.toDataURL('image/png'); updateLpHint();
 }
-
-function unfreeze(){
-  compositeOverlay.classList.remove('open');
-  hardHideFrozenCanvas();
-  running=true; pending=false; throttleCountdown=1;
-  forceReflowAndRecalc();
-  setTimeout(()=>refreshVideoSurface(), 80);
-  updateLpHint();
-  video.play().catch(err => console.error("Unfreeze play failed:", err));
-}
-
-/* ---------- composite draw (camera same size; palette 2×) ---------- */
 function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
-  const CAM_W=2048, CAM_H=2048;
-  const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24;
+  const CAM_W=2048, CAM_H=2048, RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
-  const c=compositeCanvas; c.width=W; c.height=H;
-  const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
-  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
-
-  g.drawImage(hiCapCanvas, 0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
-
+  const c=compositeCanvas; c.width=W; c.height=H; const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H); g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.drawImage(hiCapCanvas,0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
   let y=PAD+CAM_H; if(showRects||showGrad) y+=GUT;
-  if(showRects){
-    const N=hexes.length, w=Math.ceil(CAM_W/N);
+  if(showRects){ const N=hexes.length, w=Math.ceil(CAM_W/N);
     for(let i=0;i<N;i++){ g.fillStyle=hexes[i]; g.fillRect(PAD+i*w,y,w,RECT_H); }
-    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
-    g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
+    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
     for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+8); }
     y+=RECT_H+LABEL;
   }
-  if(showGrad){
-    if(showRects) y+=GUT;
-    const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0);
-    const N=hexes.length; 
-    if (N > 1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
-    else grad.addColorStop(0, hexes[0]);
+  if(showGrad){ if(showRects) y+=GUT; const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0); const N=hexes.length;
+    if(N>1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h)); else grad.addColorStop(0,hexes[0]);
     g.fillStyle=grad; g.fillRect(PAD,y,CAM_W,GRAD_H);
   }
 }
+function unfreeze(){
+  compositeOverlay.classList.remove('open');
+  const fc=frozenCanvas; if(fc.width||fc.height){ const g=fc.getContext('2d'); g.clearRect(0,0,fc.width,fc.height);} fc.width=0; fc.height=0; fc.style.display='none';
+  running=true; pending=false; throttleCountdown=1; video.play().catch(()=>{});
+}
 
-/* ---------- worker live loop ---------- */
-function loop(){ /* defined above; left as-is */ }
+/* ===== UI init ===== */
+function showFreezeCTA(){ freezeBtn.style.display='block'; unfreezeBtn.style.display='none'; }
+function updateLpHint(){ const touch=('ontouchstart'in window)||navigator.maxTouchPoints>0; lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
+
+addEventListener('load',()=>{
+  ctaH = freezeBtn.offsetHeight || 56;
+  document.documentElement.style.setProperty('--ctaH', ctaH + 'px');
+  throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN);
+  rectChk.checked=true; gradChk.checked=true; renderPalette(lastPalette);
+  layoutCC(); showFreezeCTA();
+});
+
+/* keep CC correctly placed */
+['resize','orientationchange'].forEach(evt=>addEventListener(evt,layoutCC,{passive:true}));
+window.visualViewport && window.visualViewport.addEventListener('resize',layoutCC,{passive:true});
+ccCloseBtn.addEventListener('click', closeCC);
+document.addEventListener('click',e=>{ if(compositeOverlay.classList.contains('open')) return; if(ccWrap.style.display==='block' && !cc.contains(e.target)) closeCC(); });
+
+/* ===== tiny FPS/res kick when algo/zoom changes ===== */
+const stepAlgo=(dir)=>{ const i=ALGOS.indexOf(algo); const ni=((i+(dir>0?1:-1))+ALGOS.length)%ALGOS.length; setAlgo(ALGOS[ni]); };
+function setAlgo(next){ algo=next; algoName.textContent=ALGO_LABEL[algo]||algo; throttleCountdown=1; }
+
+let press={}; // defined above; listeners already set
 </script>
 </body>
 </html>
