@@ -34,6 +34,8 @@
     position:absolute; inset:0; width:100%; height:100%;
     object-fit:cover; transform:scale(var(--zoom)); transform-origin:center; display:block;
   }
+  /* iOS start/play button kill-switch (fallback) */
+  #video::-webkit-media-controls-start-playback-button{ display:none !important; }
   #frozenCanvas{display:none}
 
   #uiPane{
@@ -52,7 +54,7 @@
   }
   .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px;background:#000}
   .swatches{display:flex} .swatch{flex:1} .gradient{display:block}
-  #openHint{display:none} /* no visual hint */
+  #openHint{display:none}
 
   #controlsBar{ border-top:1px solid var(--line); background:#000; padding:10px 0 0; margin-top:auto; }
   #bar{display:grid;grid-template-columns:1fr;grid-template-rows:auto;gap:10px}
@@ -122,6 +124,13 @@
   }
   #cc input[type="checkbox"]{ inline-size:22px; block-size:22px; }
 
+  /* Press-lock: hard-disable selection/callout globally during a long-press */
+  .pressLock, .pressLock *{
+    -webkit-user-select:none !important;
+    user-select:none !important;
+    -webkit-touch-callout:none !important;
+  }
+
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
   #compositeCanvas{display:none}
@@ -164,15 +173,12 @@
     </section>
   </div>
 
-  <!-- Moved CC overlay as direct child of body -->
+  <!-- CC overlay as direct child of body -->
   <div id="ccWrap" aria-modal="true" role="dialog">
     <div id="cc">
-      <!-- Method brief (designer intent + plain “tech” angle) -->
       <section id="algoBrief" class="small"></section>
       <hr class="ccsep">
 
-      <!-- iOS-like fields -->
-      <!-- Colors (K) -->
       <div class="field">
         <div class="field-head">
           <span class="label">Colors (K)</span>
@@ -184,7 +190,6 @@
         <div class="divider"></div>
       </div>
 
-      <!-- Rectangles toggle -->
       <div class="field">
         <div class="field-head">
           <span class="label">Show rectangles</span>
@@ -193,7 +198,6 @@
         <div class="divider"></div>
       </div>
 
-      <!-- Gradient toggle -->
       <div class="field">
         <div class="field-head">
           <span class="label">Show gradient</span>
@@ -202,7 +206,6 @@
         <div class="divider"></div>
       </div>
 
-      <!-- Processing width -->
       <div class="field">
         <div class="field-head">
           <span class="label">Processing width</span>
@@ -214,7 +217,6 @@
         <div class="divider"></div>
       </div>
 
-      <!-- Throttle N -->
       <div class="field">
         <div class="field-head">
           <span class="label">Process every N frames</span>
@@ -402,6 +404,7 @@ const lpHint=document.getElementById('lpHint');
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
 let frameCounter=0,lastT=performance.now(),pending=false, running=false;
 let throttleCountdown=1; let lastPalette=[]; let ctaH=56;
+let ccOpen=false, pressLock=false;
 
 /* ===== algo switching ===== */
 const ALGOS = ['kmeans','hist','mediancut'];
@@ -441,6 +444,25 @@ const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('
 const status=t=>statusEl.textContent=t;
 function updateLpHint(){ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
 
+/* ===== selection guard during press (prevents blue highlights) ===== */
+function lockPressSelection(){
+  if(pressLock) return;
+  pressLock=true;
+  document.body.classList.add('pressLock');
+}
+function unlockPressSelection(){
+  if(!pressLock) return;
+  pressLock=false;
+  document.body.classList.remove('pressLock');
+  // also clear any residual selection
+  const sel = window.getSelection && window.getSelection();
+  if(sel && sel.removeAllRanges) { try{ sel.removeAllRanges(); }catch{} }
+}
+// Prevent selection/callout while locked
+document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault(); }, {capture:true});
+document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.getSelection&&window.getSelection(); if(s&&s.removeAllRanges) try{s.removeAllRanges();}catch{} }});
+document.addEventListener('contextmenu',(e)=>{ if(ccOpen || pressLock) e.preventDefault(); }, {capture:true});
+
 /* ===== frozen-canvas hygiene ===== */
 function hardHideFrozenCanvas(){
   const fc=frozenCanvas, w=fc.width, h=fc.height;
@@ -460,15 +482,17 @@ async function refreshVideoSurface(){
 async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
 async function startCamera(){
   try{
+    // Ensure robust attributes for autoplay inline
+    video.setAttribute('playsinline',''); video.setAttribute('muted',''); video.setAttribute('autoplay','');
     status('Requesting camera…');
     const stream=await getStream(); if(!stream||!stream.active) throw new Error('Camera access was not successful.');
     video.srcObject=stream;
     await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
-    try{ await video.play(); }catch(e){
+    await video.play().catch(()=>{
       status('Tap to start camera');
       const resume=()=>{ if(!compositeOverlay.classList.contains('open')) video.play().catch(()=>{}); document.removeEventListener('click',resume,true); };
-      document.addEventListener('click',resume,true); return;
-    }
+      document.addEventListener('click',resume,true);
+    });
     status('Live'); running=true; pending=false; throttleCountdown=1; renderPalette([]); requestAnimationFrame(loop);
   }catch(err){ status(err?.name==='NotAllowedError'?'Camera permission denied.':(err?.message||'Camera failed')); }
 }
@@ -480,7 +504,7 @@ function showUnfreezeCTA(){ freezeBtn.style.display='none'; unfreezeBtn.style.di
 
 /* ===== UI init ===== */
 addEventListener('load', ()=>{
-  ctaH = freezeBtn.offsetHeight || 56;
+  const ctaH = freezeBtn.offsetHeight || 56;
   document.documentElement.style.setProperty('--ctaH', ctaH + 'px');
 
   throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN);
@@ -495,6 +519,7 @@ const LP_MS = 450, MOVE_TOL = 10;
 
 function openCC(){
   ccWrap.style.display='block';
+  ccOpen=true;
   // iOS video compositing guard (ensures CC paints above GPU video layer)
   video.dataset.prevOpacity = video.style.opacity || '';
   video.style.opacity = '0.9999';
@@ -503,6 +528,7 @@ function openCC(){
 }
 function closeCC(){
   ccWrap.style.display='none';
+  ccOpen=false;
   video.style.opacity = video.dataset.prevOpacity || '';
 }
 
@@ -512,6 +538,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   const sx=e.clientX, sy=e.clientY;
   paletteClickable.setPointerCapture(e.pointerId);
   clearTimeout(lpTimer);
+  lockPressSelection(); // prevent blue selection during the press
   lpTimer = setTimeout(()=>{ longPressArmed=true; }, LP_MS);
 
   const move = (ev)=>{
@@ -532,8 +559,13 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
       cycleAlgo(isLeft ? -1 : +1);
     }
     longPressArmed=false;
+    unlockPressSelection(); // release selection lock
   };
-  const cancel = ()=>{ clearTimeout(lpTimer); longPressArmed=false; };
+  const cancel = ()=>{
+    clearTimeout(lpTimer);
+    longPressArmed=false;
+    unlockPressSelection();
+  };
   paletteClickable.addEventListener('pointermove', move);
   paletteClickable.addEventListener('pointerup', up, {once:true});
   paletteClickable.addEventListener('pointercancel', cancel, {once:true});
@@ -549,10 +581,6 @@ document.addEventListener('click',e=>{
 document.addEventListener('keydown', (e)=>{
   if(e.key==='Escape' && ccWrap.style.display==='block') closeCC();
 });
-/* Disable context menu while CC open */
-document.addEventListener('contextmenu', (e)=>{
-  if (ccWrap.style.display==='block') e.preventDefault();
-}, {capture:true});
 
 /* ===== controls ===== */
 kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
@@ -634,6 +662,7 @@ function renderPalette(palette){
 
 /* ===== freeze / unfreeze ===== */
 async function freezeNow(){
+  // Keep the video PLAYING to avoid iOS play overlay
   running=false; pending=false; throttleCountdown=1;
   const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
 
@@ -646,7 +675,6 @@ async function freezeNow(){
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
   fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
   frozenCanvas.style.display='block';
-  await video.pause();
 
   const hiCap=document.createElement('canvas'); hiCap.width=sw; hiCap.height=sh;
   const hiCtx=hiCap.getContext('2d'); hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
@@ -681,7 +709,7 @@ function unfreeze(){
   forceReflowAndRecalc();
   setTimeout(()=>refreshVideoSurface(),80);
   updateLpHint();
-  video.play().catch(()=>{});
+  // Video remained playing; nothing to resume
 }
 
 /* ===== composite draw ===== */
