@@ -5,94 +5,52 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Live Camera Palette — Stable Freeze + Immediate Palettes</title>
 <style>
-  /* ===== Base ===== */
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
-
-    /* portrait-only: square size */
-    --sq:0px;                 /* computed from visualViewport */
-    /* lock vars (set by JS during freeze) */
-    --sqLock: ;               /* e.g. "812px" */
-    --ctaWLock: ;             /* e.g. "320px" */
-
-    /* active values used by layout */
-    --sqA: var(--sqLock, var(--sq));
-    --ctaW:clamp(220px,60vw,340px);
-    --ctaWActive: var(--ctaWLock, var(--ctaW));
-
-    --cbH:0px;                /* measured controls bar height for CC placement */
-
-    /* CC positioning variables (computed in JS) */
+    --sq:0px; --cbH:0px;
+    --ctaW:clamp(220px,60vw,340px); --ctaH:56px;
+    --ctaB:calc(16px + env(safe-area-inset-bottom));
     --ccL:12px; --ccR:12px; --ccB:12px; --ccMaxH:60vh;
   }
-  *{box-sizing:border-box}
-  html,body{height:100%}
+  *{box-sizing:border-box} html,body{height:100%}
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* ===== Grid layout: portrait only — camera square + leftover UI ===== */
-  .app{position:fixed; inset:0; display:grid; grid-template-rows: var(--sqA) 1fr; grid-template-columns: 1fr; isolation:isolate;}
-  #videoPane{ grid-row:1; grid-column:1; }
-  #uiPane   { grid-row:2; grid-column:1; }
-
-  /* ===== Camera cell (perfect square, edge-to-edge) ===== */
-  #videoPane{
-    position:relative;
-    overflow:hidden;           /* crop to square bounds */
-    background:#000;
-    z-index:1;                 /* explicitly below UI column */
+  .app{position:fixed; inset:0; display:grid; isolation:isolate;}
+  @media (orientation: portrait){
+    .app{ grid-template-rows: var(--sq) 1fr; grid-template-columns: 1fr; }
+    #videoPane{ grid-row:1; grid-column:1; } #uiPane{ grid-row:2; grid-column:1; }
   }
-  #videoPane video,
-  #videoPane canvas{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:cover;          /* fill square without gaps */
-    transform:scale(var(--zoom));
-    transform-origin:center;
-    display:block;
+  @media (orientation: landscape){
+    .app{ grid-template-columns: var(--sq) 1fr; grid-template-rows: 1fr; }
+    #videoPane{ grid-column:1; grid-row:1; } #uiPane{ grid-column:2; grid-row:1; }
+  }
+
+  #videoPane{ position:relative; overflow:hidden; background:#000; z-index:1; }
+  #videoPane video, #videoPane canvas{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; transform:scale(var(--zoom)); transform-origin:center; display:block;
   }
   #frozenCanvas{display:none}
 
-  /* ===== UI cell: holds palette + controls; uses leftover space ===== */
   #uiPane{
-    position:relative;
-    min-width:0; min-height:0;
-    display:flex; flex-direction:column; gap:10px;
+    position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; gap:10px;
     padding:10px 12px 12px;
-    background:#000;           /* opaque paint over camera */
-    z-index:2;                 /* above camera */
-    contain:paint;
-  }
-  @supports (padding: env(safe-area-inset-bottom)){
-    #uiPane{ padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    padding-bottom: calc(12px + var(--ctaH) + env(safe-area-inset-bottom));
+    background:#000; z-index:2; contain:paint;
   }
 
-  /* ===== Palette area (flexes) ===== */
-  #palettePane{
-    display:flex; flex-direction:column; gap:10px;
-    min-height:0; flex:1; /* take the remainder above the controls */
-    border-bottom:1px solid var(--line);
-    padding-bottom:10px;
-    background:#000;
-  }
+  #palettePane{ display:flex; flex-direction:column; gap:10px; min-height:0; flex:1;
+    border-bottom:1px solid var(--line); padding-bottom:10px; background:#000; }
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
   .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
   .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px;background:#000}
-  .swatches{display:flex}
-  .swatch{flex:1}
-  .gradient{display:block}
+  .swatches{display:flex} .swatch{flex:1} .gradient{display:block}
   #openHint{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;pointer-events:none}
   #openHint::after{content:"";width:12px;height:12px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;transform:rotate(-45deg);display:block}
 
-  /* ===== Bottom controls (inside UI cell, pinned by flex) ===== */
-  #controlsBar{
-    border-top:1px solid var(--line);
-    background:#000;
-    padding:10px 0 0;
-    margin-top:auto; /* push to bottom of UI pane */
-  }
-  #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto auto;gap:10px}
+  #controlsBar{ border-top:1px solid var(--line); background:#000; padding:10px 0 0; margin-top:auto; }
+  #bar{display:grid;grid-template-columns:1fr;grid-template-rows:auto;gap:10px}
   .zoomArea{grid-row:1}
-  #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaWActive);padding:14px 22px}
   .zoomWrap{display:flex;align-items:center;gap:12px;width:100%}
   .zbtn{flex:none;width:42px;height:42px;aspect-ratio:1/1;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
   input[type="range"].zoom{appearance:none;-webkit-appearance:none;width:100%;height:16px;border-radius:999px;background:#1a1a1a;outline:none}
@@ -100,60 +58,41 @@
   input[type="range"].zoom::-webkit-slider-runnable-track{height:16px;border-radius:999px;background:#2b2b2b}
   input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border:none;border-radius:50%;background:#fff;cursor:pointer}
   input[type="range"].zoom::-moz-range-track{height:16px;border-radius:999px;background:#2b2b2b}
-
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* ===== Control Center (fixed overlay aligned to UI column) ===== */
+  /* Fixed, identical CTAs */
+  #freezeBtn,#unfreezeBtn{
+    position:fixed; left:50%; transform:translateX(-50%) translateZ(0);
+    bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
+  }
+
   #ccWrap{
-    position:fixed;
-    z-index:4000;                /* above camera/UI, below composite overlay */
-    left:var(--ccL);
-    right:var(--ccR);
-    bottom:var(--ccB);
-    transform:translateZ(0);     /* ensure GPU layer above video on iOS */
-    display:none;
+    position:fixed; z-index:4000; left:var(--ccL); right:var(--ccR);
+    bottom:var(--ccB); transform:translateZ(0); display:none;
   }
-  #cc{
-    background:rgba(0,0,0,.6);
-    backdrop-filter:blur(8px);
-    border:1px solid var(--line);
-    border-radius:14px;
-    padding:12px;
-    display:grid; gap:12px;
-    max-height:var(--ccMaxH);
-    overflow:auto;
-  }
+  #cc{ background:rgba(0,0,0,.6); backdrop-filter:blur(8px); border:1px solid var(--line);
+    border-radius:14px; padding:12px; display:grid; gap:12px; max-height:var(--ccMaxH); overflow:auto; }
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .tabbar{display:flex;gap:8px;flex-wrap:nowrap}
   .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer;white-space:nowrap}
   .tab.active{outline:2px solid #fff;outline-offset:1px}
   .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
 
-  /* ===== Composite overlay (for shareable image) ===== */
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
   #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
-  #unfreezeBtn{width:var(--ctaWActive);align-self:center}
-
-  /* Tiny hint */
-  .smallhint{
-    font-size:12px; color:#9aa0a6;
-    margin-top:6px; text-align:center;
-    user-select:none;
-  }
+  .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
 </style>
 </head>
 <body>
   <div class="app">
-    <!-- Camera square (top only; portrait layout) -->
     <section id="videoPane" aria-label="Camera">
       <video id="video" playsinline muted autoplay></video>
       <canvas id="frozenCanvas"></canvas>
     </section>
 
-    <!-- UI column (below camera) -->
     <section id="uiPane" aria-label="UI">
       <div id="palettePane">
         <div class="title">
@@ -166,7 +105,6 @@
           <div id="openHint" aria-hidden="true"></div>
         </div>
 
-        <!-- Control Center lives as fixed overlay aligned to UI column -->
         <div id="ccWrap">
           <div id="cc">
             <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
@@ -198,7 +136,6 @@
     </section>
   </div>
 
-  <!-- Freeze composite overlay -->
   <div id="compositeOverlay">
     <canvas id="compositeCanvas"></canvas>
     <img id="compositeImg" alt="Composite preview"/>
@@ -206,22 +143,20 @@
     <button class="btn cta" id="unfreezeBtn" type="button">UNFREEZE</button>
   </div>
 
-  <!-- Offscreen helpers -->
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ===== --sq sizing from visualViewport (portrait-only) ===== */
+/* ===== square sizing ===== */
 (function(){
   function recalcSquare(){
-    if (layoutLocked) return;               // <-- guard while frozen
     const vv = window.visualViewport;
     const vw = Math.max(0, window.innerWidth);
     const vh = Math.max(0, (vv?.height ?? window.innerHeight));
-    const sq = Math.min(vw, vh);            // portrait-only logic
+    const isLandscape = vw > vh;
+    const sq = isLandscape ? vh : Math.min(vw, vh);
     document.documentElement.style.setProperty('--sq', Math.round(sq) + 'px');
 
-    // keep frozen canvas sized to cell if it’s visible
     const fc = document.getElementById('frozenCanvas');
     if (fc && fc.style.display !== 'none') {
       const wrap = document.getElementById('videoPane');
@@ -229,28 +164,25 @@
       fc.height = wrap.clientHeight;
     }
   }
-  window.recalcSquare = recalcSquare; // expose
-
+  window.recalcSquare = recalcSquare;
   let raf = 0;
   const kick = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(recalcSquare); };
-
-  window.addEventListener('load', kick, {passive:true});
-  window.addEventListener('resize', kick, {passive:true});
-  window.addEventListener('orientationchange', kick, {passive:true});
-  window.visualViewport && window.visualViewport.addEventListener('resize', kick, {passive:true});
+  addEventListener('load', kick,{passive:true});
+  addEventListener('resize', kick,{passive:true});
+  addEventListener('orientationchange', kick,{passive:true});
+  window.visualViewport && window.visualViewport.addEventListener('resize', kick,{passive:true});
 })();
 
-/* ===== Measure controls bar height for CC placement ===== */
+/* ===== measure bars / CTA ===== */
 const controlsBar = document.getElementById('controlsBar');
 function updateCbH(){
   const h = Math.round(controlsBar.getBoundingClientRect().height);
   document.documentElement.style.setProperty('--cbH', h + 'px');
 }
-const cbRO = new ResizeObserver(updateCbH);
-cbRO.observe(controlsBar);
+new ResizeObserver(updateCbH).observe(controlsBar);
 addEventListener('load', updateCbH);
 
-/* ---------- worker with jobId ---------- */
+/* ===== worker ===== */
 const workerBlob = new Blob([`
 self.onmessage = (e)=> {
   const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
@@ -286,10 +218,10 @@ function medianCutPalette(samples,k){
   let boxes=[{colors}];
   const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
   boxes.forEach(bounds);
-  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b[0]);
+  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
   const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
   while(boxes.length<k){
-    boxes.sort((A,B)=>Math.max(A.r[1]-A.r[0],A.g[1]-A.g[0],A.b[1]-A.b[0]) - Math.max(B.r[1]-B.r[0],B.g[1]-B.g[0],B.b[1]-B.b[0]));
+    boxes.sort((A,B)=>range(B)-range(A));
     const big=boxes.shift(); if(!big||big.colors.length<=1) break;
     const ax=axis(big);
     big.colors.sort((a,b)=>a[ax]-b[ax]);
@@ -349,12 +281,11 @@ function dedupeAndSort(rgbList,minDE=10){
 const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
 worker.addEventListener('error', e=>console.log('Worker error:', e.message));
 
-/* ---------- elements ---------- */
+/* ===== elements ===== */
 const video=document.getElementById('video');
 const frozenCanvas=document.getElementById('frozenCanvas');
 const off=document.getElementById('off');
 const capFrame=document.getElementById('capFrame');
-const algoName=document.getElementById('algoName');
 const statusEl=document.getElementById('status');
 const fpsEl=document.getElementById('fps');
 const resEl=document.getElementById('res');
@@ -375,343 +306,225 @@ const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
 const lpHint=document.getElementById('lpHint');
 
-/* ---------- state ---------- */
+/* ===== state ===== */
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
-let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
-let throttleCountdown=1; // process first frame immediately
-let lastPalette=[];
-let layoutLocked=false;  // <— prevents geometry changes while frozen
+let frameCounter=0,lastT=performance.now(),pending=false, running=false;
+let throttleCountdown=1; let lastPalette=[]; let ctaH=56;
 
-/* ---------- helpers ---------- */
+/* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
-function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100); }
-function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
-function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
-function status(t){ statusEl.textContent=t; }
-function updateLpHint(){
-  const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
-  lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
-}
+const nToSlider=n=>Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100);
+const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
+const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+const status=t=>statusEl.textContent=t;
+function updateLpHint(){ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
 
-/* ---- CC positioning (align to UI column; portrait-only) ---- */
-const PEEK = 72; // px of palette that must remain visible
+/* ===== CC positioning ===== */
+const PEEK=72;
 function positionCC(){
-  if (layoutLocked) return;  // <— keep CC anchored while frozen
-  const uiRect = document.getElementById('uiPane').getBoundingClientRect();
-  const cbH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cbH')) || 0;
-
-  document.documentElement.style.setProperty('--ccL', (Math.max(0, uiRect.left) + 12) + 'px');
-  document.documentElement.style.setProperty('--ccR', (Math.max(0, window.innerWidth - uiRect.right) + 12) + 'px');
-
-  const uiBottomInset = Math.max(0, window.innerHeight - uiRect.bottom);
-  document.documentElement.style.setProperty('--ccB', (uiBottomInset + cbH + 8) + 'px');
-
-  const usableH = Math.max(160, uiRect.height - cbH - 8 - PEEK);
-  document.documentElement.style.setProperty('--ccMaxH', usableH + 'px');
+  const uiRect=document.getElementById('uiPane').getBoundingClientRect();
+  document.documentElement.style.setProperty('--ccL',(Math.max(0,uiRect.left)+12)+'px');
+  document.documentElement.style.setProperty('--ccR',(Math.max(0,window.innerWidth-uiRect.right)+12)+'px');
+  const uiBottomInset=Math.max(0,window.innerHeight-uiRect.bottom);
+  document.documentElement.style.setProperty('--ccB',`calc(${uiBottomInset}px + ${ctaH}px + 8px + env(safe-area-inset-bottom))`);
+  const usableH=Math.max(160,uiRect.height-ctaH-8-PEEK);
+  document.documentElement.style.setProperty('--ccMaxH',usableH+'px');
 }
 
-/* ---- ghost-frame prevention helpers ---- */
+/* ===== frozen-canvas hygiene ===== */
 function hardHideFrozenCanvas(){
-  const fc = frozenCanvas;
-  const w = fc.width, h = fc.height;
-  if (w && h) { const g = fc.getContext('2d'); g.clearRect(0,0,w,h); }
-  fc.width = 0; fc.height = 0;   // drop backing store/IOSurface
-  fc.style.display = 'none';
+  const fc=frozenCanvas, w=fc.width, h=fc.height;
+  if(w&&h){const g=fc.getContext('2d'); g.clearRect(0,0,w,h);}
+  fc.width=0; fc.height=0; fc.style.display='none';
 }
 function forceReflowAndRecalc(){
-  if (!layoutLocked) {
-    window.recalcSquare && window.recalcSquare();
-    positionCC();
-  }
-  const v = video;
-  v.style.visibility = 'hidden';
-  void document.body.offsetHeight;
-  v.style.visibility = '';
+  window.recalcSquare&&window.recalcSquare(); positionCC();
+  video.style.visibility='hidden'; void document.body.offsetHeight; video.style.visibility='';
 }
 async function refreshVideoSurface(){
-  const s = video.srcObject;
-  video.srcObject = null;
-  await new Promise(r => requestAnimationFrame(r));
-  video.srcObject = s;
-  await video.play().catch(()=>{});
+  const s=video.srcObject; video.srcObject=null; await new Promise(r=>requestAnimationFrame(r));
+  video.srcObject=s; await video.play().catch(()=>{});
 }
 
-/* ===== Layout lock / unlock ===== */
-function lockLayout() {
-  if (layoutLocked) return;
-  layoutLocked = true;
-
-  // Freeze the square dimension currently in use
-  const sqPx = getComputedStyle(document.documentElement).getPropertyValue('--sq').trim();
-  if (sqPx) document.documentElement.style.setProperty('--sqLock', sqPx);
-
-  // Freeze CTA width and height (applies to both buttons)
-  const rect = freezeBtn.getBoundingClientRect();
-  document.documentElement.style.setProperty('--ctaWLock', Math.round(rect.width) + 'px');
-  const h = Math.round(rect.height) + 'px';
-  freezeBtn.style.height = h;
-  unfreezeBtn.style.height = h;
-}
-function unlockLayout() {
-  if (!layoutLocked) return;
-  layoutLocked = false;
-
-  document.documentElement.style.removeProperty('--sqLock');
-  document.documentElement.style.removeProperty('--ctaWLock');
-  freezeBtn.style.height = '';
-  unfreezeBtn.style.height = '';
-
-  window.recalcSquare && window.recalcSquare();
-  positionCC();
-}
-
-/* ---------- camera (auto, no gating) ---------- */
+/* ===== camera ===== */
 async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
 async function startCamera(){
   try{
     status('Requesting camera…');
-    const stream=await getStream();
-    if (!stream || !stream.active) throw new Error('Camera access was not successful.');
+    const stream=await getStream(); if(!stream||!stream.active) throw new Error('Camera access was not successful.');
     video.srcObject=stream;
     await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
-
-    try { await video.play(); }
-    catch(playErr){
-      console.error("Autoplay was blocked:", playErr);
+    try{ await video.play(); }catch(e){
       status('Tap to start camera');
-      const resumeOnce = () => {
-        if (!compositeOverlay.classList.contains('open')) {
-          video.play().catch(err => console.error('Resume play failed:', err));
-        }
-        document.removeEventListener('click', resumeOnce, true);
-      };
-      document.addEventListener('click', resumeOnce, true);
-      return;
+      const resume=()=>{ if(!compositeOverlay.classList.contains('open')) video.play().catch(()=>{}); document.removeEventListener('click',resume,true); };
+      document.addEventListener('click',resume,true); return;
     }
-
-    status('Live');
-    running=true; pending=false; throttleCountdown=1;
-    renderPalette([]); // initial empty
-    requestAnimationFrame(loop);
-  } catch(err) {
-    let msg = 'Camera failed';
-    if (err && err.name === 'NotAllowedError') msg = 'Camera permission denied.';
-    else if (err && err.message) msg = err.message;
-    status(msg);
-    console.error("Camera start error:", err);
-  }
+    status('Live'); running=true; pending=false; throttleCountdown=1; renderPalette([]); requestAnimationFrame(loop);
+  }catch(err){ status(err?.name==='NotAllowedError'?'Camera permission denied.':(err?.message||'Camera failed')); }
 }
-startCamera().catch(err => console.error(err));
+startCamera();
 
-/* ---------- UI ---------- */
+/* ===== CTA visibility ===== */
+function showFreezeCTA(){ freezeBtn.style.display='block'; unfreezeBtn.style.display='none'; }
+function showUnfreezeCTA(){ freezeBtn.style.display='none'; unfreezeBtn.style.display='block'; }
+
+/* ===== UI init ===== */
 addEventListener('load', ()=>{
-  throttleLog.value=nToSlider(throttleN);
-  throttleVal.textContent=String(throttleN);
+  ctaH = freezeBtn.offsetHeight || 56;
+  document.documentElement.style.setProperty('--ctaH', ctaH + 'px');
 
-  // Default both toggles ON at startup
-  rectChk.checked = true;
-  gradChk.checked = true;
-  renderPalette(lastPalette);
-
-  // Initial CC positioning
-  positionCC();
+  throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN);
+  rectChk.checked=true; gradChk.checked=true; renderPalette(lastPalette);
+  positionCC(); showFreezeCTA();
 });
+paletteClickable.addEventListener('click',e=>{ e.stopPropagation(); positionCC(); ccWrap.style.display='block'; });
+document.addEventListener('click',e=>{ if(compositeOverlay.classList.contains('open')) return;
+  if(ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display='none'; });
+['resize','orientationchange'].forEach(evt=>addEventListener(evt,positionCC,{passive:true}));
+window.visualViewport&&window.visualViewport.addEventListener('resize',positionCC,{passive:true});
 
-paletteClickable.addEventListener('click',(e)=>{
-  e.stopPropagation();
-  positionCC();
-  ccWrap.style.display='block';
-});
-document.addEventListener('click',(e)=>{
-  if (compositeOverlay.classList.contains('open')) return;
-  if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display='none';
-});
-
-['resize','orientationchange'].forEach(evt => addEventListener(evt, positionCC, {passive:true}));
-if (window.visualViewport) window.visualViewport.addEventListener('resize', positionCC, {passive:true});
-
-tabs.addEventListener('click',(e)=>{ const b=e.target.closest('.tab'); if(!b) return; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':''); });
+tabs.addEventListener('click',e=>{ const b=e.target.closest('.tab'); if(!b) return;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); });
 kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value; sizeVal.textContent=procWidth+' px';});
 throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
 rectChk.addEventListener('change',()=>renderPalette(lastPalette));
 gradChk.addEventListener('change',()=>renderPalette(lastPalette));
-
 function setZoom(v){ uiZoom=Math.max(1,Math.min(10,v)); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
 zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* Freeze: call lock first; works the same in portrait */
-freezeBtn.addEventListener('click',async()=>{
-  if (compositeOverlay.classList.contains('open')) return;
-  await freezeNow();
-});
-unfreezeBtn.addEventListener('click',()=>unfreeze());
+freezeBtn.addEventListener('click',async()=>{ if(compositeOverlay.classList.contains('open')) return; await freezeNow(); showUnfreezeCTA(); });
+unfreezeBtn.addEventListener('click',()=>{ unfreeze(); showFreezeCTA(); });
 
-/* ---------- crop ---------- */
+/* ===== crop ===== */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
-  const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
+  const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw,
+        sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
   return {sx,sy,sw,sh};
 }
 
-/* ---------- live handler (jobId==='live') ---------- */
+/* ===== live worker handler ===== */
 worker.onmessage = (e)=>{
-  const {jobId, error} = e.data || {};
-  if (jobId !== 'live') return;
-  if (error) { console.log('Worker live error:', error); pending=false; return; }
-  const arr = new Uint8Array(e.data.palette||[]);
-  const cols=[]; for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
+  const {jobId, error} = e.data||{}; if(jobId!=='live') return;
+  if(error){ pending=false; return; }
+  const arr=new Uint8Array(e.data.palette||[]), cols=[];
+  for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
   while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
-  lastPalette = cols.slice(0,K); hasPalette = true;
-  renderPalette(lastPalette);
-  pending=false; frameCounter++;
+  lastPalette=cols.slice(0,K); renderPalette(lastPalette); pending=false; frameCounter++;
 };
 
-/* ---------- RAF loop (countdown throttle; first frame immediate) ---------- */
+/* ===== RAF loop ===== */
 function loop(){
   requestAnimationFrame(loop);
-  if(video.readyState<2 || video.paused) return;
-  if(!running) return;
+  if(video.readyState<2||video.paused||!running) return;
 
   const now=performance.now();
   if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
 
   const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
-
   const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
   off.width=w; off.height=h;
   const ctx=off.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
   resEl.textContent=w+'×'+h;
 
-  if (--throttleCountdown > 0) return;
-  throttleCountdown = Math.max(1, throttleN);
+  if(--throttleCountdown>0) return;
+  throttleCountdown=Math.max(1,throttleN);
   if(!pending){
     pending=true;
     const img=ctx.getImageData(0,0,w,h);
-    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
+    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo:'kmeans',k:K,stride:2,jobId:'live'},[img.data.buffer]);
   }
 }
 
-/* ---------- palette render ---------- */
+/* ===== palette render ===== */
 function renderPalette(palette){
-  if(!palette || !palette.length){
+  if(!palette||!palette.length){
     swatchesEl.style.display='flex'; swatchesEl.innerHTML=`<div class="swatch" style="background:#111"></div>`.repeat(K);
-    gradientEl.hidden=true; gradientEl.style.background='';
-    hasPalette = false;
-    return;
+    gradientEl.hidden=true; gradientEl.style.background=''; return;
   }
-  const hexes = palette.map(toHex);
-  const wantRects=rectChk.checked, wantGrad=gradChk.checked;
-
+  const hexes=palette.map(toHex), wantRects=rectChk.checked, wantGrad=gradChk.checked;
   swatchesEl.style.display='none'; gradientEl.hidden=true; gradientEl.style.background=''; swatchesEl.innerHTML='';
-
-  if(wantRects && wantGrad){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; gradientEl.hidden=false; gradientEl.style.flex='1'; }
+  if(wantRects&&wantGrad){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; gradientEl.hidden=false; gradientEl.style.flex='1'; }
   else if(wantRects){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
   else if(wantGrad){ gradientEl.hidden=false; gradientEl.style.flex='1'; }
   else { rectChk.checked=true; swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
-
   if(rectChk.checked){ for(const h of hexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); } }
   if(gradChk.checked){
-    const stops = hexes.length > 1 ? hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',') : `${hexes[0]}, ${hexes[0]}`;
-    gradientEl.hidden=false; gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
+    const stops = hexes.length>1 ? hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',') : `${hexes[0]}, ${hexes[0]}`;
+    gradientEl.hidden=false; gradientEl.style.background=`linear-gradient(90deg, ${stops})`;
   }
 }
 
-/* ---------- freeze / unfreeze ---------- */
+/* ===== freeze / unfreeze ===== */
 async function freezeNow(){
-  lockLayout();                                  // <— FIX: freeze geometry first
-
   running=false; pending=false; throttleCountdown=1;
+  const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
 
-  const {sx,sy,sw,sh}=computeSquareCrop();
-  if (!sw) return;
-
-  /* Low-res capture (for palette): */
   const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
   capFrame.width=w; capFrame.height=h;
   const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
 
-  /* UI-res freeze preview: use the actual square cell size */
   const wrap=document.getElementById('videoPane');
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
   fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
-  frozenCanvas.style.display='block';
+  frozenCanvas.style.display='block';            // preview first
   await video.pause();
 
-  /* Hi-res capture for composite (native crop): */
-  const hiCap=document.createElement('canvas');
-  hiCap.width=sw; hiCap.height=sh;
-  const hiCtx=hiCap.getContext('2d');
-  hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
+  const hiCap=document.createElement('canvas'); hiCap.width=sw; hiCap.height=sh;
+  const hiCtx=hiCap.getContext('2d'); hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
 
-  compositeImg.src = '';
-  compositeOverlay.classList.add('open');
-  updateLpHint();
+  compositeImg.src=''; compositeOverlay.classList.add('open'); updateLpHint();
+  window.recalcSquare&&window.recalcSquare();
 
-  /* Compute palette (with timeout fallback) */
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
   const imgs=capCtx.getImageData(0,0,w,h);
-
-  const cols = await new Promise((resolve)=>{
-    let settled=false;
-    const to = setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[ [0,0,0] ]); } }, 2000);
-    const handler=(ev)=>{
-      const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
-      worker.removeEventListener('message',handler); if(settled) return;
-      settled=true; clearTimeout(to);
-      if(error){ console.log('Worker freeze error:', error); resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
-      const arr=new Uint8Array(ev.data.palette||[]), out=[];
-      for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
-      while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
-      resolve(out.slice(0,K));
+  const cols=await new Promise((resolve)=>{
+    let settled=false; const to=setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[[0,0,0]]); } },2000);
+    const handler=(ev)=>{ const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
+      worker.removeEventListener('message',handler); if(settled) return; settled=true; clearTimeout(to);
+      if(error){ resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
+      const arr=new Uint8Array(ev.data.palette||[]), out=[]; for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
+      while(out.length<K) out.push(out[out.length-1]||[128,128,128]); resolve(out.slice(0,K));
     };
     worker.addEventListener('message',handler);
-    worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
+    worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo:'kmeans',k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
   });
 
-  lastPalette = cols;
-  renderPalette(cols);
-
-  const hexes = cols.map(toHex);
+  lastPalette=cols; renderPalette(cols);
+  const hexes=cols.map(toHex);
   renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
-
-  compositeImg.src = compositeCanvas.toDataURL('image/png');
-  updateLpHint();
+  compositeImg.src=compositeCanvas.toDataURL('image/png'); updateLpHint();
 }
 
 function unfreeze(){
-  unlockLayout();                                 // <— FIX: restore responsiveness
-
   compositeOverlay.classList.remove('open');
-  hardHideFrozenCanvas();                          // drop frozen frame completely
+  hardHideFrozenCanvas();
   running=true; pending=false; throttleCountdown=1;
-  forceReflowAndRecalc();                          // ensure correct layering and track sizing
-  setTimeout(()=>refreshVideoSurface(), 80);       // heal stubborn iOS compositor cases
+  forceReflowAndRecalc();
+  setTimeout(()=>refreshVideoSurface(),80);
   updateLpHint();
-  video.play().catch(err => console.error("Unfreeze play failed:", err));
+  video.play().catch(()=>{});
 }
 
-/* ---------- composite draw (camera same size; palette 2×) ---------- */
+/* ===== composite draw ===== */
 function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
-  const CAM_W=2048, CAM_H=2048;        /* unchanged camera size */
-  const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24; /* doubled */
+  const CAM_W=2048, CAM_H=2048;
+  const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
   const c=compositeCanvas; c.width=W; c.height=H;
   const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
   g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
-
-  /* draw hi-res camera */
-  g.drawImage(hiCapCanvas, 0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
-
+  g.drawImage(hiCapCanvas,0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
   let y=PAD+CAM_H; if(showRects||showGrad) y+=GUT;
   if(showRects){
     const N=hexes.length, w=Math.ceil(CAM_W/N);
     for(let i=0;i<N;i++){ g.fillStyle=hexes[i]; g.fillRect(PAD+i*w,y,w,RECT_H); }
-    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; /* doubled from 15px */
+    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
     g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
     for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+8); }
     y+=RECT_H+LABEL;
@@ -719,16 +532,13 @@ function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
   if(showGrad){
     if(showRects) y+=GUT;
     const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0);
-    const N=hexes.length; 
-    if (N > 1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
-    else grad.addColorStop(0, hexes[0]);
+    const N=hexes.length; if(N>1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h)); else grad.addColorStop(0,hexes[0]);
     g.fillStyle=grad; g.fillRect(PAD,y,CAM_W,GRAD_H);
   }
 }
 
-/* ---------- observe overlay state for hint ---------- */
-const obs = new MutationObserver(updateLpHint);
-obs.observe(compositeOverlay, { attributes:true, attributeFilter:['class'] });
+/* ===== overlay hint observer ===== */
+new MutationObserver(updateLpHint).observe(compositeOverlay,{attributes:true,attributeFilter:['class']});
 document.addEventListener('DOMContentLoaded', updateLpHint);
 </script>
 </body>
