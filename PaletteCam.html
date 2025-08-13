@@ -9,15 +9,20 @@
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
     --sq:0px;           /* computed from visualViewport */
-    --cbH:0px;          /* measured controls bar height for CC placement */
+    --cbH:0px;          /* measured controls bar height (kept for compatibility) */
     --ctaW:clamp(220px,60vw,340px);
+    --ctaH:56px;        /* measured on load; used to reserve space */
+    --ctaB:calc(16px + env(safe-area-inset-bottom)); /* fixed CTA bottom offset */
+
+    /* CC positioning variables (computed in JS) */
+    --ccL:12px; --ccR:12px; --ccB:12px; --ccMaxH:60vh;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* ===== Grid layout: camera square + leftover UI ===== */
-  .app{position:fixed; inset:0; display:grid;}
+  /* ===== Grid layout: camera square + leftover UI (PORTRAIT & LANDSCAPE) ===== */
+  .app{position:fixed; inset:0; display:grid; isolation:isolate;} /* root stacking context */
   @media (orientation: portrait){
     .app{ grid-template-rows: var(--sq) 1fr; grid-template-columns: 1fr; }
     #videoPane{ grid-row:1; grid-column:1; }
@@ -53,12 +58,11 @@
     min-width:0; min-height:0;
     display:flex; flex-direction:column; gap:10px;
     padding:10px 12px 12px;
+    /* reserve space for the fixed CTA so nothing is covered or shifts */
+    padding-bottom: calc(12px + var(--ctaH) + env(safe-area-inset-bottom));
     background:#000;           /* opaque paint over camera */
     z-index:2;                 /* above camera */
     contain:paint;             /* isolate painting; avoids iOS bleed */
-  }
-  @supports (padding: env(safe-area-inset-bottom)){
-    #uiPane{ padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   }
 
   /* ===== Palette area (flexes) ===== */
@@ -85,9 +89,8 @@
     padding:10px 0 0;
     margin-top:auto; /* push to bottom of UI pane */
   }
-  #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto auto;gap:10px}
+  #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto;gap:10px}
   .zoomArea{grid-row:1}
-  #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaW);padding:14px 22px}
   .zoomWrap{display:flex;align-items:center;gap:12px;width:100%}
   .zbtn{flex:none;width:42px;height:42px;aspect-ratio:1/1;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
   input[type="range"].zoom{appearance:none;-webkit-appearance:none;width:100%;height:16px;border-radius:999px;background:#1a1a1a;outline:none}
@@ -99,13 +102,41 @@
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* ===== Control Center (inside UI column) ===== */
-  #ccWrap{
-    position:absolute;
-    left:12px; right:12px; bottom: calc(var(--cbH) + 8px);
-    display:none; z-index:20;
+  /* ===== CTA: FREEZE & UNFREEZE share the exact same fixed spot ===== */
+  #freezeBtn, #unfreezeBtn{
+    position:fixed;
+    left:50%;
+    transform:translateX(-50%) translateZ(0);
+    will-change:transform;          /* ensure own compositing layer */
+    pointer-events:auto;            /* explicit: button always interactive */
+    bottom:var(--ctaB);
+    width:var(--ctaW);
+    z-index:5000; /* above all UI, below composite image */
+    touch-action:manipulation;
   }
-  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
+
+  /* ===== Control Center (fixed overlay aligned to UI column) ===== */
+  #ccWrap{
+    position:fixed;
+    z-index:4000;                /* above camera/UI, below composite overlay */
+    left:var(--ccL);
+    right:var(--ccR);
+    bottom:var(--ccB);
+    transform:translateZ(0);     /* ensure GPU layer above video on iOS */
+    display:none;
+    pointer-events:none;         /* wrapper never intercepts taps */
+  }
+  #cc{
+    background:rgba(0,0,0,.6);
+    backdrop-filter:blur(8px);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:12px;
+    display:grid; gap:12px;
+    max-height:var(--ccMaxH);
+    overflow:auto;
+    pointer-events:auto;         /* only visible panel receives input */
+  }
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .tabbar{display:flex;gap:8px;flex-wrap:nowrap}
   .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer;white-space:nowrap}
@@ -113,11 +144,11 @@
   .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
 
   /* ===== Composite overlay (for shareable image) ===== */
-  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
+  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
   #compositeOverlay.open{display:flex}
+  #compositeOverlay:not(.open){pointer-events:none;} /* when hidden, never block taps */
   #compositeCanvas{display:none}
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
-  #unfreezeBtn{width:var(--ctaW);align-self:center}
 
   /* Tiny hint */
   .smallhint{
@@ -148,7 +179,7 @@
           <div id="openHint" aria-hidden="true"></div>
         </div>
 
-        <!-- Control Center lives inside UI column -->
+        <!-- Control Center lives as fixed overlay aligned to UI column -->
         <div id="ccWrap">
           <div id="cc">
             <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
@@ -158,7 +189,7 @@
             </div></div>
             <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
             <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
-            <div class="row"><span>Show gradient</span><input type="checkbox" id="grad"></div>
+            <div class="row"><span>Show gradient</span><input type="checkbox" id="grad" checked></div>
             <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
             <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span></div>
           </div>
@@ -174,6 +205,7 @@
               <button class="zbtn" id="zoomPlus" type="button" aria-label="Zoom in">+</button>
             </div>
           </div>
+          <!-- FREEZE is position:fixed; remains in DOM for semantics -->
           <button class="btn cta" id="freezeBtn" type="button">FREEZE</button>
         </div>
       </section>
@@ -185,6 +217,7 @@
     <canvas id="compositeCanvas"></canvas>
     <img id="compositeImg" alt="Composite preview"/>
     <div id="lpHint" class="smallhint">Long-press the image to save.</div>
+    <!-- UNFREEZE is also position:fixed at the exact same spot as FREEZE -->
     <button class="btn cta" id="unfreezeBtn" type="button">UNFREEZE</button>
   </div>
 
@@ -222,7 +255,7 @@
   window.visualViewport && window.visualViewport.addEventListener('resize', kick, {passive:true});
 })();
 
-/* ===== Measure controls bar height for CC placement ===== */
+/* ===== Measure controls bar height (kept for compatibility) & CTA height ===== */
 const controlsBar = document.getElementById('controlsBar');
 function updateCbH(){
   const h = Math.round(controlsBar.getBoundingClientRect().height);
@@ -362,6 +395,8 @@ let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, ui
 let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
 let throttleCountdown=1; // process first frame immediately
 let lastPalette=[];
+let ctaH=56; // measured on load
+let freezing=false; // guard against double-fire on iOS
 
 /* ---------- helpers ---------- */
 const TH_MIN=1, TH_MAX=150;
@@ -374,7 +409,25 @@ function updateLpHint(){
   lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
 }
 
-/* ---- ghost-frame prevention helpers ---- */
+/* ---- CC positioning (align to UI column, keep palettes peek) ---- */
+const PEEK = 72; // px of palette that must remain visible
+function positionCC(){
+  const uiRect = document.getElementById('uiPane').getBoundingClientRect();
+
+  // Insets relative to viewport so the fixed CC aligns with UI column/band
+  document.documentElement.style.setProperty('--ccL', (Math.max(0, uiRect.left) + 12) + 'px');
+  document.documentElement.style.setProperty('--ccR', (Math.max(0, window.innerWidth - uiRect.right) + 12) + 'px');
+
+  // Bottom anchor: keep above the fixed CTA and safe-area
+  const uiBottomInset = Math.max(0, window.innerHeight - uiRect.bottom);
+  document.documentElement.style.setProperty('--ccB', `calc(${uiBottomInset}px + ${ctaH}px + 8px + env(safe-area-inset-bottom))`);
+
+  // Limit height so a peek of palettes is always visible
+  const usableH = Math.max(160, uiRect.height - ctaH - 8 - PEEK);
+  document.documentElement.style.setProperty('--ccMaxH', usableH + 'px');
+}
+
+/* ---- frozen-canvas hygiene ---- */
 function hardHideFrozenCanvas(){
   const fc = frozenCanvas;
   const w = fc.width, h = fc.height;
@@ -385,6 +438,7 @@ function hardHideFrozenCanvas(){
 
 function forceReflowAndRecalc(){
   window.recalcSquare && window.recalcSquare();
+  positionCC();
   const v = video;
   v.style.visibility = 'hidden'; // drop any cached composite
   void document.body.offsetHeight; // force reflow
@@ -439,10 +493,51 @@ async function startCamera(){
 }
 startCamera().catch(err => console.error(err));
 
+/* ---------- CTA visibility control (exact same position/size) ---------- */
+function showFreezeCTA(){ freezeBtn.style.display='block';  unfreezeBtn.style.display='none'; }
+function showUnfreezeCTA(){ freezeBtn.style.display='none';  unfreezeBtn.style.display='block'; }
+
+/* ----- Unified freeze tap handler (click + touchend) ----- */
+function onFreezeTap(ev){
+  if (compositeOverlay.classList.contains('open')) return;
+  if (freezing) return;
+  freezing = true;
+  if (ev) ev.preventDefault();
+  freezeNow().then(showUnfreezeCTA).finally(()=>{ freezing = false; });
+}
+
 /* ---------- UI ---------- */
-addEventListener('load', ()=>{ throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN); });
-paletteClickable.addEventListener('click',(e)=>{ e.stopPropagation(); ccWrap.style.display='block'; });
-document.addEventListener('click',(e)=>{ if (compositeOverlay.classList.contains('open')) return; if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display=''; });
+addEventListener('load', ()=>{
+  // measure CTA height to reserve space precisely
+  ctaH = freezeBtn.offsetHeight || 56;
+  document.documentElement.style.setProperty('--ctaH', ctaH + 'px');
+
+  throttleLog.value=nToSlider(throttleN);
+  throttleVal.textContent=String(throttleN);
+
+  // Default both toggles ON at startup
+  rectChk.checked = true;
+  gradChk.checked = true;
+  renderPalette(lastPalette);
+
+  // Initial CC positioning and CTA visibility
+  positionCC();
+  showFreezeCTA();
+});
+
+// CC open/close
+paletteClickable.addEventListener('click',(e)=>{
+  e.stopPropagation();
+  positionCC();
+  ccWrap.style.display='block';
+});
+document.addEventListener('click',(e)=>{
+  if (compositeOverlay.classList.contains('open')) return;
+  if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display='none';
+});
+
+['resize','orientationchange'].forEach(evt => addEventListener(evt, positionCC, {passive:true}));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', positionCC, {passive:true});
 
 tabs.addEventListener('click',(e)=>{ const b=e.target.closest('.tab'); if(!b) return; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':''); });
 kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
@@ -456,12 +551,13 @@ zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* Freeze: works in both orientations */
-freezeBtn.addEventListener('click',async()=>{
-  if (compositeOverlay.classList.contains('open')) return;
-  await freezeNow();
+/* Bind freeze/unfreeze with robust touch handling */
+freezeBtn.addEventListener('click', onFreezeTap);
+freezeBtn.addEventListener('touchend', onFreezeTap, {passive:false});
+unfreezeBtn.addEventListener('click',()=>{
+  unfreeze();
+  showFreezeCTA();
 });
-unfreezeBtn.addEventListener('click',()=>unfreeze());
 
 /* ---------- crop ---------- */
 function computeSquareCrop(){
@@ -551,7 +647,7 @@ async function freezeNow(){
   frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
   const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
   fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
-  frozenCanvas.style.display='block';
+  frozenCanvas.style.display='block';        // show preview first (prevents any jump)
   await video.pause();
 
   /* Hi-res capture for composite (native crop): */
@@ -590,7 +686,7 @@ async function freezeNow(){
   renderPalette(cols);
 
   const hexes = cols.map(toHex);
-  /* keep camera size; double palette + labels */
+  /* keep camera size; double palette + labels (unchanged from your last version) */
   renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
 
   compositeImg.src = compositeCanvas.toDataURL('image/png');
