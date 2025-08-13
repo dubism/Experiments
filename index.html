@@ -13,7 +13,7 @@
     --shadow-hover: 0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 18px 36px rgba(0,0,0,.6);
     --radius:14px;
 
-    /* Green → Bluish → Grey (subtle, consistent family) */
+    /* Green → Bluish → Grey palette */
     --t0:#82FFB5;  /* <1m fresh green */
     --t1:#66F5C8;  /* 1–5m greenish aqua */
     --t2:#4FDEDE;  /* 5–15m teal-blue */
@@ -51,6 +51,14 @@
   }
   button:hover{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#31456b;background:#141e2c}
   .status{font-size:12px;color:var(--muted)}
+
+  /* sort toggle (segmented) */
+  .seg{display:inline-flex;border:1px solid #27324a;border-radius:12px;overflow:hidden}
+  .seg button{border:0;border-right:1px solid #27324a;background:#101622;padding:.5rem .7rem}
+  .seg button:last-child{border-right:0}
+  .seg button[aria-pressed="true"]{background:#162133}
+  .seg button[aria-pressed="true"] span{opacity:1}
+  .seg button span{opacity:.85}
 
   .grp{margin-top:18px}
   .grp h2{
@@ -91,7 +99,8 @@
   .name{font-weight:700;letter-spacing:.2px;line-height:1.25;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .path{font-size:11px;color:#97a1b1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-  .meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+  .meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .timeBlock{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
   /* Time badge base */
   .ago{
@@ -113,6 +122,12 @@
   .ago.t6{color:var(--t6);background:color-mix(in oklab,var(--t6) 16%, transparent);border-color:color-mix(in oklab,var(--t6) 26%, transparent)}
   .ago.t7{color:var(--t7);background:color-mix(in oklab,var(--t7) 16%, transparent);border-color:color-mix(in oklab,var(--t7) 28%, transparent)}
 
+  /* Exact timestamp chip (shown in time-sort mode) */
+  .exact{
+    font-size:11px;color:#cfd5df;opacity:.9;border:1px solid #25324a;border-radius:999px;
+    padding:.25rem .55rem;white-space:nowrap
+  }
+
   .go{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#cfd5df;opacity:.85}
   .go svg{opacity:.9;transition:transform .18s}
   .card:hover .go svg{transform:translateX(2px)}
@@ -128,6 +143,10 @@
     <h1>🧪 Experiments — Auto Index</h1>
     <div class="row" style="margin-top:10px">
       <input id="q" type="search" placeholder="Filter by name or path…" />
+      <div class="seg" role="group" aria-label="Sort">
+        <button id="sortTime" aria-pressed="true" title="Newest → Oldest"><span>Time</span></button>
+        <button id="sortName" aria-pressed="false" title="A → Z by name"><span>Name</span></button>
+      </div>
       <button id="refresh" aria-label="Refresh list">
         <span style="display:inline-flex;gap:8px;align-items:center">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -156,10 +175,23 @@ const BASE = `https://${USER}.github.io/${REPO}/`;
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('list');
 const qEl = document.getElementById('q');
+const sortTimeBtn = document.getElementById('sortTime');
+const sortNameBtn = document.getElementById('sortName');
 document.getElementById('refresh').onclick = fetchTree;
 qEl.oninput = applyFilter;
 
 let allItems = [];
+let sortMode = 'time'; // 'time' | 'name'
+
+sortTimeBtn.onclick = () => setSort('time');
+sortNameBtn.onclick = () => setSort('name');
+
+function setSort(mode){
+  sortMode = mode;
+  sortTimeBtn.setAttribute('aria-pressed', mode==='time' ? 'true' : 'false');
+  sortNameBtn.setAttribute('aria-pressed', mode==='name' ? 'true' : 'false');
+  applyFilter(); // re-render with current filter + sort
+}
 
 function folderOf(path){const i=path.lastIndexOf('/');return i===-1?"":path.slice(0,i);}
 function fileIcon(){return `
@@ -179,7 +211,7 @@ function arrowIcon(){return `
 function prettyName(name){return name.replace(/\.html?$/i,'').replace(/[-_]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase());}
 function isoLocal(d){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ` +
-         `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+         `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 
 /* Buckets (green → bluish → grey):
@@ -201,7 +233,6 @@ function timeAgoClassAndText(d){
   if(hours < 4)   return {cls:'t5', text:`${Math.floor(hours)}h ago`};
   if(hours < 12)  return {cls:'t6', text:`${Math.floor(hours)}h ago`};
 
-  // 12h or older → neutral grey bucket
   if(hours < 24)  return {cls:'t7', text:`${Math.floor(hours)}h ago`};
 
   let days = Math.floor(hours/24);
@@ -209,9 +240,100 @@ function timeAgoClassAndText(d){
 }
 
 function render(items){
+  // filter first
+  const q = qEl.value.trim().toLowerCase();
+  let list = !q ? items : items.filter(it =>
+    it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
+  );
+
   listEl.innerHTML = "";
+
+  if(sortMode === 'time'){
+    // sort: newest → oldest (nulls last)
+    list.sort((a,b)=>{
+      const ad = a.updatedAt ? new Date(a.updatedAt).getTime() : -Infinity;
+      const bd = b.updatedAt ? new Date(b.updatedAt).getTime() : -Infinity;
+      return bd - ad;
+    });
+
+    const section = document.createElement('section');
+    section.className = 'grp';
+
+    const h2 = document.createElement('h2');
+    h2.textContent = "All files — Newest → Oldest";
+    section.appendChild(h2);
+
+    const grid = document.createElement('div');
+    grid.className = 'cards';
+
+    list.forEach(it=>{
+      const a = document.createElement('a');
+      a.className = 'card';
+      a.href = it.href;
+
+      const top = document.createElement('div');
+      top.className = 'top';
+
+      const ic = document.createElement('div');
+      ic.className = 'ic';
+      ic.innerHTML = fileIcon();
+
+      const textWrap = document.createElement('div');
+      const nm = document.createElement('div');
+      nm.className = 'name';
+      nm.textContent = prettyName(it.name);
+
+      const pt = document.createElement('div');
+      pt.className = 'path';
+      pt.textContent = it.path;
+
+      textWrap.append(nm, pt);
+      top.append(ic, textWrap);
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+
+      const timeBlock = document.createElement('div');
+      timeBlock.className = 'timeBlock';
+
+      const when = document.createElement('span');
+      when.className = 'ago';
+      when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
+
+      const exact = document.createElement('span');
+      exact.className = 'exact';
+      exact.textContent = '—';
+
+      if(it.updatedAt){
+        const d = new Date(it.updatedAt);
+        const ag = timeAgoClassAndText(d);
+        when.classList.add(ag.cls);
+        when.querySelector('.t').textContent = ag.text;
+        when.title = `Last updated: ${isoLocal(d)}`;
+        exact.textContent = isoLocal(d); // show exact timestamp visibly in time-sort mode
+      } else {
+        when.classList.add('t7');
+      }
+
+      timeBlock.append(when, exact);
+
+      const go = document.createElement('span');
+      go.className = 'go';
+      go.innerHTML = `Open ${arrowIcon()}`;
+
+      meta.append(timeBlock, go);
+      a.append(top, meta);
+      grid.appendChild(a);
+    });
+
+    section.appendChild(grid);
+    listEl.appendChild(section);
+    return;
+  }
+
+  // sortMode === 'name' → grouped by folder, A→Z
   const groups = new Map();
-  items.forEach(it=>{
+  list.forEach(it=>{
     const key = folderOf(it.path);
     if(!groups.has(key)) groups.set(key,[]);
     groups.get(key).push(it);
@@ -257,6 +379,9 @@ function render(items){
       const meta = document.createElement('div');
       meta.className = 'meta';
 
+      const timeBlock = document.createElement('div');
+      timeBlock.className = 'timeBlock';
+
       const when = document.createElement('span');
       when.className = 'ago';
       when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
@@ -271,11 +396,13 @@ function render(items){
         when.classList.add('t7');
       }
 
+      timeBlock.append(when);
+
       const go = document.createElement('span');
       go.className = 'go';
       go.innerHTML = `Open ${arrowIcon()}`;
 
-      meta.append(when, go);
+      meta.append(timeBlock, go);
       a.append(top, meta);
       grid.appendChild(a);
     });
@@ -286,10 +413,7 @@ function render(items){
 }
 
 function applyFilter(){
-  const q = qEl.value.trim().toLowerCase();
-  render(!q ? allItems : allItems.filter(it =>
-    it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
-  ));
+  render(allItems);
 }
 
 async function fetchTree(){
@@ -312,7 +436,7 @@ async function fetchTree(){
 }
 
 async function fetchDates(){
-  let i = 0, max = 4; // concurrency unchanged
+  let i = 0, max = 4;
   async function worker(){
     while(i < allItems.length){
       const idx = i++;
