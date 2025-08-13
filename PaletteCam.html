@@ -3,141 +3,609 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Edge-to-Edge Square Camera · Leftover UI</title>
+<title>Live Camera Palette — Stable Freeze + Immediate Palettes</title>
 <style>
-  /* ===== Base reset ===== */
-  html,body{height:100%}
-  body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-
-  /* ===== Layout: one source of truth for square side ===== */
-  :root{ --sq:0px; }
-
-  .app{
-    position:fixed; inset:0;
-    display:grid;
+  /* ===== Base ===== */
+  :root{
+    --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
+    --sq:0px;           /* computed from visualViewport */
+    --cbH:0px;          /* measured controls bar height for CC placement */
+    --ctaW:clamp(220px,60vw,340px);
   }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;user-select:none}
 
-  /* Portrait: camera on top as a square band; UI below uses remainder */
+  /* ===== Grid layout: camera square + leftover UI ===== */
+  .app{position:fixed; inset:0; display:grid;}
   @media (orientation: portrait){
     .app{ grid-template-rows: var(--sq) 1fr; grid-template-columns: 1fr; }
     #videoPane{ grid-row:1; grid-column:1; }
-    #uiPane   { grid-row:2; grid-column:1; min-height:0; overflow:auto; }
+    #uiPane   { grid-row:2; grid-column:1; }
   }
-
-  /* Landscape: camera on left as a full-height square; UI on the right uses remainder */
   @media (orientation: landscape){
     .app{ grid-template-columns: var(--sq) 1fr; grid-template-rows: 1fr; }
     #videoPane{ grid-column:1; grid-row:1; }
-    #uiPane   { grid-column:2; grid-row:1; min-width:0; overflow:auto; }
+    #uiPane   { grid-column:2; grid-row:1; }
   }
 
-  /* Camera cell */
+  /* ===== Camera cell (perfect square, edge-to-edge) ===== */
   #videoPane{
     position:relative;
-    overflow:hidden;           /* crop to perfect square */
+    overflow:hidden;           /* crop to square bounds */
     background:#000;
   }
-  /* Make media fill the square edge-to-edge without gaps */
   #videoPane video,
   #videoPane canvas{
     position:absolute; inset:0;
     width:100%; height:100%;
-    object-fit:cover;          /* critical: no letterboxing */
-    transform:translateZ(0);   /* helps some GPUs on iOS */
-    background:#000;
+    object-fit:cover;          /* fill square without gaps */
+    transform:scale(var(--zoom));
+    transform-origin:center;
+    display:block;
   }
+  #frozenCanvas{display:none}
 
-  /* UI cell; pad for safe areas only here (camera stays flush) */
-  #uiPane{ box-sizing:border-box; padding:12px; }
+  /* ===== UI cell: holds palette + controls; uses leftover space ===== */
+  #uiPane{
+    position:relative;
+    min-width:0; min-height:0;
+    display:flex; flex-direction:column; gap:10px;
+    padding:10px 12px 12px;
+  }
   @supports (padding: env(safe-area-inset-bottom)){
     #uiPane{ padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   }
 
-  /* --- Demo-only styling (safe to remove) --- */
-  .demoCard{
-    border:1px solid #222; border-radius:10px; padding:12px; background:#0a0a0a;
-    margin:0 0 12px 0;
+  /* ===== Palette area (flexes) ===== */
+  #palettePane{
+    display:flex; flex-direction:column; gap:10px;
+    min-height:0; flex:1; /* take the remainder above the controls */
+    border-bottom:1px solid var(--line);
+    padding-bottom:10px;
   }
-  .muted{color:#bdbdbd}
-  button{background:#111;border:1px solid #222;border-radius:10px;color:#fff;padding:10px 14px}
+  .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
+  .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
+  .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px}
+  .swatches{display:flex}
+  .swatch{flex:1}
+  .gradient{display:block}
+  #openHint{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;pointer-events:none}
+  #openHint::after{content:"";width:12px;height:12px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;transform:rotate(-45deg);display:block}
+
+  /* ===== Bottom controls (inside UI cell, pinned by flex) ===== */
+  #controlsBar{
+    border-top:1px solid var(--line);
+    background:#000;
+    padding:10px 0 0;
+    margin-top:auto; /* push to bottom of UI pane */
+  }
+  #bar{display:grid;grid-template-columns: 1fr;grid-template-rows:auto auto;gap:10px}
+  .zoomArea{grid-row:1}
+  #freezeBtn{grid-row:2;justify-self:center;width:var(--ctaW);padding:14px 22px}
+  .zoomWrap{display:flex;align-items:center;gap:12px;width:100%}
+  .zbtn{flex:none;width:42px;height:42px;aspect-ratio:1/1;border-radius:50%;border:1px solid var(--line);background:#121212;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  input[type="range"].zoom{appearance:none;-webkit-appearance:none;width:100%;height:16px;border-radius:999px;background:#1a1a1a;outline:none}
+  input[type="range"].zoom::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;border:none;cursor:pointer;margin-top:-6px}
+  input[type="range"].zoom::-webkit-slider-runnable-track{height:16px;border-radius:999px;background:#2b2b2b}
+  input[type="range"].zoom::-moz-range-thumb{width:28px;height:28px;border:none;border-radius:50%;background:#fff;cursor:pointer}
+  input[type="range"].zoom::-moz-range-track{height:16px;border-radius:999px;background:#2b2b2b}
+
+  .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
+  .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
+
+  /* ===== Control Center (inside UI column) ===== */
+  #ccWrap{
+    position:absolute;
+    left:12px; right:12px; bottom: calc(var(--cbH) + 8px);
+    display:none; z-index:20;
+  }
+  #cc{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:12px}
+  #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .tabbar{display:flex;gap:8px;flex-wrap:nowrap}
+  .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer;white-space:nowrap}
+  .tab.active{outline:2px solid #fff;outline-offset:1px}
+  .small{font-variant-numeric:tabular-nums;color:var(--muted)}
+
+  /* ===== Composite overlay (for shareable image) ===== */
+  #compositeOverlay{position:fixed;inset:0;background:#000;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
+  #compositeOverlay.open{display:flex}
+  #compositeCanvas{display:none}
+  #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
+  #unfreezeBtn{width:var(--ctaW);align-self:center}
+
+  /* Tiny hint */
+  .smallhint{
+    font-size:12px; color:#9aa0a6;
+    margin-top:6px; text-align:center;
+    user-select:none;
+  }
 </style>
 </head>
 <body>
   <div class="app">
     <!-- Camera square (left in landscape, top in portrait) -->
     <section id="videoPane" aria-label="Camera">
-      <video id="cam" autoplay playsinline muted></video>
-      <!-- If you draw overlays, put a <canvas> here sized to the cell -->
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="frozenCanvas"></canvas>
     </section>
 
-    <!-- Everything else in your UI goes here; it will only use leftover space -->
+    <!-- Leftover UI column/row -->
     <section id="uiPane" aria-label="UI">
-      <!-- Demo content; replace with your existing UI -->
-      <div class="demoCard">
-        <strong>UI area (leftover space)</strong>
-        <div class="muted">Sized automatically from what remains after the square camera is placed.</div>
+      <div id="palettePane">
+        <div class="title">
+          <div id="algoName" class="small">K-Means (LAB)</div>
+          <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
+        </div>
+        <div class="stack" id="paletteClickable" title="Open controls">
+          <div id="swatches" class="swatches"></div>
+          <div id="gradient" class="gradient" hidden></div>
+          <div id="openHint" aria-hidden="true"></div>
+        </div>
+
+        <!-- Control Center lives inside UI column -->
+        <div id="ccWrap">
+          <div id="cc">
+            <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
+              <button class="tab active" data-algo="kmeans" type="button">K-Means</button>
+              <button class="tab" data-algo="hist" type="button">Histogram</button>
+              <button class="tab" data-algo="mediancut" type="button">Median-cut</button>
+            </div></div>
+            <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
+            <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
+            <div class="row"><span>Show gradient</span><input type="checkbox" id="grad"></div>
+            <div class="row"><span>Processing width</span><span><input type="range" id="size" min="120" max="360" step="20" value="240"><span id="sizeVal" class="small">240 px</span></span></div>
+            <div class="row"><span>Process every N frames</span><span><input type="range" id="throttleLog" min="0" max="100" value="0"><span id="throttleVal" class="small">20</span></span></div>
+          </div>
+        </div>
       </div>
-      <button id="toggle">Demo action</button>
+
+      <section id="controlsBar">
+        <div id="bar">
+          <div class="zoomArea">
+            <div class="zoomWrap">
+              <button class="zbtn" id="zoomMinus" type="button" aria-label="Zoom out">−</button>
+              <input type="range" id="zoom" class="zoom" min="1" max="10" step="0.01" value="1">
+              <button class="zbtn" id="zoomPlus" type="button" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <button class="btn cta" id="freezeBtn" type="button">FREEZE</button>
+        </div>
+      </section>
     </section>
   </div>
 
+  <!-- Freeze composite overlay -->
+  <div id="compositeOverlay">
+    <canvas id="compositeCanvas"></canvas>
+    <img id="compositeImg" alt="Composite preview"/>
+    <div id="lpHint" class="smallhint">Long-press the image to save.</div>
+    <button class="btn cta" id="unfreezeBtn" type="button">UNFREEZE</button>
+  </div>
+
+  <!-- Offscreen helpers -->
+  <canvas id="off"></canvas>
+  <canvas id="capFrame"></canvas>
+
 <script>
-/* ===== Robust sizing: compute --sq from visualViewport ===== */
+/* ===== --sq sizing from visualViewport (single source of truth) ===== */
 (function(){
   const root = document.documentElement;
   const vv = window.visualViewport;
 
   function computeSq(){
-    // Use visualViewport when available for iOS URL bar correctness
     const vw = Math.max(0, window.innerWidth);
     const vh = Math.max(0, (vv?.height ?? window.innerHeight));
-
     const isLandscape = vw > vh;
-    // Square side: full viewport height in landscape; min(vw, vh) in portrait
     const sq = isLandscape ? vh : Math.min(vw, vh);
-
     root.style.setProperty('--sq', Math.round(sq) + 'px');
 
-    // If you have a canvas overlay in #videoPane, resize it here to match the cell:
-    // const cv = document.querySelector('#videoPane canvas');
-    // if (cv) { cv.width = cv.clientWidth; cv.height = cv.clientHeight; }
+    // If you add overlay canvas sized to the square, resize here if needed.
+    const cv = document.getElementById('frozenCanvas');
+    if (cv) { cv.width = document.getElementById('videoPane').clientWidth;
+              cv.height = document.getElementById('videoPane').clientHeight; }
   }
 
   let raf = 0;
   const kick = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(computeSq); };
 
-  // Run on initial paint and on viewport changes
   window.addEventListener('load', kick, {passive:true});
   window.addEventListener('resize', kick, {passive:true});
   window.addEventListener('orientationchange', kick, {passive:true});
-  window.addEventListener('pageshow', kick, {passive:true}); // bfcache restore
   vv && vv.addEventListener('resize', kick, {passive:true});
 })();
 
-/* ===== Minimal camera bootstrap (no gating) ===== */
-(async function startCamera(){
-  const video = document.getElementById('cam');
-  try{
-    // Prefer environment camera; no audio
-    const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = stream;
-    await video.play(); // ensure autoplay begins
-  }catch(err){
-    console.error('Camera error:', err);
-    // Optional: unobtrusive error UI
-    const msg = document.createElement('div');
-    msg.textContent = 'Camera unavailable. Check permissions.';
-    msg.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#bbb';
-    document.getElementById('videoPane').appendChild(msg);
-  }
-})();
+/* ===== Measure controls bar height for CC placement ===== */
+const controlsBar = document.getElementById('controlsBar');
+function updateCbH(){
+  const h = Math.round(controlsBar.getBoundingClientRect().height);
+  document.documentElement.style.setProperty('--cbH', h + 'px');
+}
+const cbRO = new ResizeObserver(updateCbH);
+cbRO.observe(controlsBar);
+addEventListener('load', updateCbH);
 
-/* ===== Demo-only: quick first sizing pass ===== */
-document.addEventListener('DOMContentLoaded', ()=> {
-  // Force one sizing pass immediately for quick correctness
-  const evt = document.createEvent('Event'); evt.initEvent('resize', true, true); window.dispatchEvent(evt);
+/* ---------- worker with jobId ---------- */
+const workerBlob = new Blob([`
+self.onmessage = (e)=> {
+  const {pixels,width,height,algo,k,stride=2,jobId} = e.data;
+  try{
+    const data = new Uint8ClampedArray(pixels);
+    const samples = [];
+    for(let y=0;y<height;y+=stride){
+      let row=y*width*4;
+      for(let x=0;x<width;x+=stride){
+        const i=row+x*4; samples.push(data[i],data[i+1],data[i+2]);
+      }
+    }
+    let palette;
+    if (algo==='hist') palette = histPalette(samples,k);
+    else if (algo==='mediancut') palette = medianCutPalette(samples,k);
+    else palette = kmeansLAB(samples,k,6);
+    palette = dedupeAndSort(palette,10);
+    const out = new Uint8Array(palette.flat());
+    self.postMessage({palette: out.buffer, jobId}, [out.buffer]);
+  }catch(err){
+    self.postMessage({palette: new Uint8Array(0).buffer, jobId, error: String(err&&err.message||err)});
+  }
+};
+function rgb2xyz(r,g,b){r/=255;g/=255;b/=255;r=r<=0.04045?r/12.92:((r+0.055)/1.055)**2.4;g=g<=0.04045?g/12.92:((g+0.055)/1.055)**2.4;b=b<=0.04045?b/12.92:((b+0.055)/1.055)**2.4;return[ r*0.4124+g*0.3576+b*0.1805, r*0.2126+g*0.7152+b*0.0722, r*0.0193+g*0.1192+b*0.9505];}
+function xyz2lab(x,y,z){const Xr=0.95047,Yr=1,Zr=1.08883;const f=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;const fx=f(x/Xr),fy=f(y/Yr),fz=f(z/Zr);return[116*fy-16,500*(fx-fy),200*(fy-fz)];}
+function rgb2lab(r,g,b){const[x,y,z]=rgb2xyz(r,g,b);return xyz2lab(x,y,z);}
+function dE76(L1,a1,b1,L2,a2,b2){const dL=L1-L2,da=a1-a2,db=b1-b2;return Math.hypot(dL,da,db);}
+
+function histPalette(samples,k){const bins=new Uint32Array(512);for(let i=0;i<samples.length;i+=3){const r=samples[i]>>5,g=samples[i+1]>>5,b=samples[i+2]>>5;bins[(r<<6)|(g<<3)|b]++;}const idx=[...bins.keys()].sort((a,b)=>bins[b]-bins[a]).slice(0,k);return idx.map(code=>{const r=(code>>6)&7,g=(code>>3)&7,b=code&7;return[r*32+16,g*32+16,b*32+16];});}
+
+function medianCutPalette(samples,k){
+  const colors=[]; for(let i=0;i<samples.length;i+=3) colors.push([samples[i],samples[i+1],samples[i+2]]);
+  let boxes=[{colors}];
+  const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
+  boxes.forEach(bounds);
+  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
+  const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
+  while(boxes.length<k){
+    boxes.sort((A,B)=>range(B)-range(A));
+    const big=boxes.shift(); if(!big||big.colors.length<=1) break;
+    const ax=axis(big);
+    big.colors.sort((a,b)=>a[ax]-b[ax]);
+    const mid=big.colors.length>>1;
+    const left={colors:big.colors.slice(0,mid)}, right={colors:big.colors.slice(mid)};
+    [left,right].forEach(bounds); boxes.push(left,right);
+  }
+  return boxes.map(b=>{
+    let r=0,g=0,bl=0,n=b.colors.length||1;
+    for(const c of b.colors){r+=c[0];g+=c[1];bl+=c[2];}
+    return [r/n|0,g/n|0,bl/n|0];
+  }).slice(0,k);
+}
+
+function kmeansLAB(samples,k,maxIter=6){
+  const pts=[];
+  for(let i=0;i<samples.length;i+=3){
+    const r=samples[i],g=samples[i+1],b=samples[i+2];
+    const L=rgb2lab(r,g,b); pts.push([L[0],L[1],L[2],r,g,b]);
+  }
+  const centers=[]; centers.push(pts[(Math.random()*pts.length)|0].slice(0,3));
+  while(centers.length<k){
+    const d2=pts.map(p=>Math.min(...centers.map(c=>d2lab(p,c))));
+    const sum=d2.reduce((a,b)=>a+b,0)||1;
+    let r=Math.random()*sum,i=0; for(;i<d2.length-1&&(r-=d2[i])>0;i++); centers.push(pts[i].slice(0,3));
+  }
+  const labels=new Uint16Array(pts.length);
+  for(let it=0;it<maxIter;it++){
+    for(let i=0;i<pts.length;i++){
+      let best=0,bd=1e9;
+      for(let c=0;c<centers.length;c++){
+        const d=d2lab(pts[i],centers[c]); if(d<bd){bd=d;best=c;}
+      }
+      labels[i]=best;
+    }
+    const sums=Array.from({length:k},()=>[0,0,0,0]);
+    for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];sums[c][0]+=p[0];sums[c][1]+=p[1];sums[c][2]+=p[2];sums[c][3]++;}
+    for(let c=0;c<k;c++) if(sums[c][3]>0){centers[c][0]=sums[c][0]/sums[c][3];centers[c][1]=sums[c][1]/sums[c][3];centers[c][2]=sums[c][2]/sums[c][3];}
+  }
+  const acc=Array.from({length:k},()=>[0,0,0,0]);
+  for(let i=0;i<pts.length;i++){const c=labels[i],p=pts[i];acc[c][0]+=p[3];acc[c][1]+=p[4];acc[c][2]+=p[5];acc[c][3]++;}
+  const out=[]; for(let c=0;c<k;c++) if(acc[c][3]>0) out.push([acc[c][0]/acc[c][3]|0,acc[c][1]/acc[c][3]|0,acc[c][2]/acc[c][3]|0]);
+  while(out.length<k) out.push(out[out.length-1]||[128,128,128]);
+  return out.slice(0,k);
+  function d2lab(p,c){const d0=p[0]-c[0],d1=p[1]-c[1],d2=p[2]-c[2];return d0*d0+d1*d1+d2*d2;}
+}
+function dedupeAndSort(rgbList,minDE=10){
+  const labList=rgbList.map(([r,g,b])=>{const L=rgb2lab(r,g,b);return [L[0],L[1],L[2],r,g,b];});
+  labList.sort((a,b)=>a[0]-b[0]);
+  const kept=[]; for(const c of labList){
+    let ok=true; for(const d of kept){ if(dE76(c[0],c[1],c[2],d[0],d[1],d[2])<minDE){ok=false;break;} }
+    if(ok) kept.push(c);
+  }
+  return kept.map(c=>[c[3],c[4],c[5]]);
+}
+`], {type:'application/javascript'});
+const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
+worker.addEventListener('error', e=>console.log('Worker error:', e.message));
+
+/* ---------- elements ---------- */
+const video=document.getElementById('video');
+const frozenCanvas=document.getElementById('frozenCanvas');
+const off=document.getElementById('off');
+const capFrame=document.getElementById('capFrame');
+const algoName=document.getElementById('algoName');
+const statusEl=document.getElementById('status');
+const fpsEl=document.getElementById('fps');
+const resEl=document.getElementById('res');
+const swatchesEl=document.getElementById('swatches');
+const gradientEl=document.getElementById('gradient');
+const paletteClickable=document.getElementById('paletteClickable');
+const tabs=document.getElementById('tabs');
+const kRange=document.getElementById('k'); const kVal=document.getElementById('kVal');
+const sizeRange=document.getElementById('size'); const sizeVal=document.getElementById('sizeVal');
+const throttleLog=document.getElementById('throttleLog'); const throttleVal=document.getElementById('throttleVal');
+const rectChk=document.getElementById('rects'); const gradChk=document.getElementById('grad');
+const zoomSlider=document.getElementById('zoom'); const zoomMinus=document.getElementById('zoomMinus'); const zoomPlus=document.getElementById('zoomPlus');
+const freezeBtn=document.getElementById('freezeBtn');
+const compositeOverlay=document.getElementById('compositeOverlay');
+const compositeCanvas=document.getElementById('compositeCanvas');
+const compositeImg=document.getElementById('compositeImg');
+const unfreezeBtn=document.getElementById('unfreezeBtn');
+const ccWrap=document.getElementById('ccWrap');
+const lpHint=document.getElementById('lpHint');
+
+/* ---------- state ---------- */
+let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
+let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
+let throttleCountdown=1; // process first frame immediately
+let lastPalette=[];
+
+/* ---------- helpers ---------- */
+const TH_MIN=1, TH_MAX=150;
+function nToSlider(n){ return Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100); }
+function sliderToN(v){ return Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN))))); }
+function toHex([r,g,b]){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+function status(t){ statusEl.textContent=t; }
+function updateLpHint(){
+  const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
+  lpHint.hidden = !touch || !compositeOverlay.classList.contains('open');
+}
+
+/* ---------- camera (auto, no gating) ---------- */
+async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
+async function startCamera(){
+  try{
+    status('Requesting camera…');
+    const stream=await getStream();
+    if (!stream || !stream.active) throw new Error('Camera access was not successful.');
+    video.srcObject=stream;
+    await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
+
+    try {
+      await video.play();
+    } catch(playErr) {
+      console.error("Autoplay was blocked:", playErr);
+      status('Tap to start camera');
+      const resumeOnce = () => {
+        if (!compositeOverlay.classList.contains('open')) {
+          video.play().catch(err => console.error('Resume play failed:', err));
+        }
+        document.removeEventListener('click', resumeOnce, true);
+      };
+      document.addEventListener('click', resumeOnce, true);
+      return;
+    }
+
+    status('Live');
+    running=true; pending=false; throttleCountdown=1;
+    renderPalette([]); // initial empty
+    loop();
+  } catch(err) {
+    let msg = 'Camera failed';
+    if (err && err.name === 'NotAllowedError') msg = 'Camera permission denied.';
+    else if (err && err.message) msg = err.message;
+    status(msg);
+    console.error("Camera start error:", err);
+  }
+}
+startCamera().catch(err => console.error(err));
+
+/* ---------- UI ---------- */
+addEventListener('load', ()=>{ throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN); });
+paletteClickable.addEventListener('click',(e)=>{ e.stopPropagation(); ccWrap.style.display='block'; });
+document.addEventListener('click',(e)=>{ if (compositeOverlay.classList.contains('open')) return; if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display=''; });
+
+tabs.addEventListener('click',(e)=>{ const b=e.target.closest('.tab'); if(!b) return; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':''); });
+kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
+sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value; sizeVal.textContent=procWidth+' px';});
+throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
+rectChk.addEventListener('change',()=>renderPalette(lastPalette));
+gradChk.addEventListener('change',()=>renderPalette(lastPalette));
+
+function setZoom(v){ uiZoom=Math.max(1,Math.min(10,v)); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
+zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
+zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
+zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
+
+/* Freeze: works in both orientations */
+freezeBtn.addEventListener('click',async()=>{
+  if (compositeOverlay.classList.contains('open')) return;
+  await freezeNow();
 });
+unfreezeBtn.addEventListener('click',()=>unfreeze());
+
+/* ---------- crop ---------- */
+function computeSquareCrop(){
+  const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
+  const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw, sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
+  return {sx,sy,sw,sh};
+}
+
+/* ---------- live handler (jobId==='live') ---------- */
+worker.onmessage = (e)=>{
+  const {jobId, error} = e.data || {};
+  if (jobId !== 'live') return;
+  if (error) { console.log('Worker live error:', error); pending=false; return; }
+  const arr = new Uint8Array(e.data.palette||[]);
+  const cols=[]; for(let i=0;i<arr.length;i+=3) cols.push([arr[i],arr[i+1],arr[i+2]]);
+  while(cols.length<K) cols.push(cols[cols.length-1]||[128,128,128]);
+  lastPalette = cols.slice(0,K); hasPalette = true;
+  renderPalette(lastPalette);
+  pending=false; frameCounter++;
+};
+
+/* ---------- RAF loop (countdown throttle; first frame immediate) ---------- */
+function loop(){
+  requestAnimationFrame(loop);
+  if(video.readyState<2 || video.paused) return;
+  if(!running) return;
+
+  const now=performance.now();
+  if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
+
+  const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
+
+  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
+  off.width=w; off.height=h;
+  const ctx=off.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
+  resEl.textContent=w+'×'+h;
+
+  if (--throttleCountdown > 0) return;
+  throttleCountdown = Math.max(1, throttleN);
+  if(!pending){
+    pending=true;
+    const img=ctx.getImageData(0,0,w,h);
+    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
+  }
+}
+
+/* ---------- palette render ---------- */
+function renderPalette(palette){
+  if(!palette || !palette.length){
+    swatchesEl.style.display='flex'; swatchesEl.innerHTML=`<div class="swatch" style="background:#111"></div>`.repeat(K);
+    gradientEl.hidden=true; gradientEl.style.background='';
+    hasPalette = false;
+    return;
+  }
+  const hexes = palette.map(toHex);
+  const wantRects=rectChk.checked, wantGrad=gradChk.checked;
+
+  swatchesEl.style.display='none'; gradientEl.hidden=true; gradientEl.style.background=''; swatchesEl.innerHTML='';
+
+  if(wantRects && wantGrad){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; gradientEl.hidden=false; gradientEl.style.flex='1'; }
+  else if(wantRects){ swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
+  else if(wantGrad){ gradientEl.hidden=false; gradientEl.style.flex='1'; }
+  else { rectChk.checked=true; swatchesEl.style.display='flex'; swatchesEl.style.flex='1'; }
+
+  if(rectChk.checked){ for(const h of hexes){ const d=document.createElement('div'); d.className='swatch'; d.style.background=h; swatchesEl.appendChild(d); } }
+  if(gradChk.checked){
+    const stops = hexes.length > 1 ? hexes.map((c,i)=>`${c} ${(i/(hexes.length-1))*100}%`).join(',') : `${hexes[0]}, ${hexes[0]}`;
+    gradientEl.hidden=false; gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
+  }
+}
+
+/* ---------- freeze / unfreeze ---------- */
+async function freezeNow(){
+  running=false; pending=false; throttleCountdown=1;
+
+  const {sx,sy,sw,sh}=computeSquareCrop();
+  if (!sw) return;
+
+  /* Low-res capture (for palette): */
+  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
+  capFrame.width=w; capFrame.height=h;
+  const capCtx=capFrame.getContext('2d'); capCtx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
+
+  /* UI-res freeze preview: use the actual square cell size */
+  const wrap=document.getElementById('videoPane');
+  frozenCanvas.width=wrap.clientWidth; frozenCanvas.height=wrap.clientHeight;
+  const fc=frozenCanvas.getContext('2d'); fc.imageSmoothingEnabled=true; fc.imageSmoothingQuality='high';
+  fc.drawImage(video,sx,sy,sw,sh,0,0,frozenCanvas.width,frozenCanvas.height);
+  frozenCanvas.style.display='block';
+  await video.pause();
+
+  /* Hi-res capture for composite (native crop): */
+  const hiCap=document.createElement('canvas');
+  hiCap.width=sw; hiCap.height=sh;
+  const hiCtx=hiCap.getContext('2d');
+  hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
+
+  compositeImg.src = '';
+  compositeOverlay.classList.add('open');
+  updateLpHint();
+
+  /* Compute palette (with timeout fallback) */
+  const freezeId='freeze:'+Math.random().toString(36).slice(2);
+  const imgs=capCtx.getImageData(0,0,w,h);
+
+  const cols = await new Promise((resolve)=>{
+    let settled=false;
+    const to = setTimeout(()=>{ if(!settled){ settled=true; resolve(lastPalette.length?lastPalette:[ [0,0,0] ]); } }, 2000);
+    const handler=(ev)=>{
+      const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
+      worker.removeEventListener('message',handler); if(settled) return;
+      settled=true; clearTimeout(to);
+      if(error){ console.log('Worker freeze error:', error); resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
+      const arr=new Uint8Array(ev.data.palette||[]), out=[];
+      for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
+      while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
+      resolve(out.slice(0,K));
+    };
+    worker.addEventListener('message',handler);
+    worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
+  });
+
+  lastPalette = cols;
+  renderPalette(cols);
+
+  const hexes = cols.map(toHex);
+  /* keep camera size; double palette + labels */
+  renderCompositeFullscreen(hexes, hiCap, rectChk.checked, gradChk.checked);
+
+  compositeImg.src = compositeCanvas.toDataURL('image/png');
+  updateLpHint();
+}
+
+function unfreeze(){
+  compositeOverlay.classList.remove('open');
+  frozenCanvas.style.display='none';
+  running=true; pending=false; throttleCountdown=1;
+  updateLpHint();
+  video.play().catch(err => console.error("Unfreeze play failed:", err));
+}
+
+/* ---------- composite draw (camera same size; palette 2×) ---------- */
+function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
+  const CAM_W=2048, CAM_H=2048;        /* unchanged camera size */
+  const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24; /* doubled */
+  const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
+  const c=compositeCanvas; c.width=W; c.height=H;
+  const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
+  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+
+  /* draw hi-res camera */
+  g.drawImage(hiCapCanvas, 0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
+
+  let y=PAD+CAM_H; if(showRects||showGrad) y+=GUT;
+  if(showRects){
+    const N=hexes.length, w=Math.ceil(CAM_W/N);
+    for(let i=0;i<N;i++){ g.fillStyle=hexes[i]; g.fillRect(PAD+i*w,y,w,RECT_H); }
+    g.font='30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; /* doubled from 15px */
+    g.fillStyle='#d0d0d0'; g.textAlign='center'; g.textBaseline='top';
+    for(let i=0;i<N;i++){ const cx=PAD+Math.round(i*w+w/2); g.fillText(hexes[i].toUpperCase(), cx, y+RECT_H+8); }
+    y+=RECT_H+LABEL;
+  }
+  if(showGrad){
+    if(showRects) y+=GUT;
+    const grad=g.createLinearGradient(PAD,0,PAD+CAM_W,0);
+    const N=hexes.length; 
+    if (N > 1) hexes.forEach((h,i)=>grad.addColorStop(i/(N-1),h));
+    else grad.addColorStop(0, hexes[0]);
+    g.fillStyle=grad; g.fillRect(PAD,y,CAM_W,GRAD_H);
+  }
+}
+
+/* ---------- observe overlay state for hint ---------- */
+const obs = new MutationObserver(updateLpHint);
+obs.observe(compositeOverlay, { attributes:true, attributeFilter:['class'] });
+document.addEventListener('DOMContentLoaded', updateLpHint);
 </script>
 </body>
 </html>
