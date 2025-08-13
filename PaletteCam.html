@@ -74,7 +74,7 @@
     background:#000;           /* belt and braces: no transparency */
   }
   .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
-  .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer}
+  .stack{position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer;touch-action:manipulation}
   .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px;background:#000}
   .swatches{display:flex}
   .swatch{flex:1}
@@ -138,9 +138,6 @@
     pointer-events:auto;         /* only visible panel receives input */
   }
   #cc .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .tabbar{display:flex;gap:8px;flex-wrap:nowrap}
-  .tab{padding:10px 14px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff;border-radius:12px;cursor:pointer;white-space:nowrap}
-  .tab.active{outline:2px solid #fff;outline-offset:1px}
   .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
 
   /* ===== Composite overlay (for shareable image) ===== */
@@ -173,7 +170,8 @@
           <div id="algoName" class="small">K-Means (LAB)</div>
           <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
         </div>
-        <div class="stack" id="paletteClickable" title="Open controls">
+        <!-- Tap left/right to switch algorithm; long-press to open CC -->
+        <div class="stack" id="paletteClickable" title="Tap left/right to switch · Long-press for controls">
           <div id="swatches" class="swatches"></div>
           <div id="gradient" class="gradient" hidden></div>
           <div id="openHint" aria-hidden="true"></div>
@@ -182,11 +180,7 @@
         <!-- Control Center lives as fixed overlay aligned to UI column -->
         <div id="ccWrap">
           <div id="cc">
-            <div class="row"><strong>Algorithm</strong><div class="tabbar" id="tabs">
-              <button class="tab active" data-algo="kmeans" type="button">K-Means</button>
-              <button class="tab" data-algo="hist" type="button">Histogram</button>
-              <button class="tab" data-algo="mediancut" type="button">Median-cut</button>
-            </div></div>
+            <!-- Algorithm row with tabs REMOVED -->
             <div class="row"><span>Colors (K)</span><span><input type="range" id="k" min="2" max="10" value="3"><span id="kVal" class="small">3</span></span></div>
             <div class="row"><span>Show rectangles</span><input type="checkbox" id="rects" checked></div>
             <div class="row"><span>Show gradient</span><input type="checkbox" id="grad" checked></div>
@@ -376,7 +370,6 @@ const resEl=document.getElementById('res');
 const swatchesEl=document.getElementById('swatches');
 const gradientEl=document.getElementById('gradient');
 const paletteClickable=document.getElementById('paletteClickable');
-const tabs=document.getElementById('tabs');
 const kRange=document.getElementById('k'); const kVal=document.getElementById('kVal');
 const sizeRange=document.getElementById('size'); const sizeVal=document.getElementById('sizeVal');
 const throttleLog=document.getElementById('throttleLog'); const throttleVal=document.getElementById('throttleVal');
@@ -391,6 +384,12 @@ const ccWrap=document.getElementById('ccWrap');
 const lpHint=document.getElementById('lpHint');
 
 /* ---------- state ---------- */
+const ALGOS = ['kmeans','hist','mediancut'];
+const ALGO_LABEL = {
+  kmeans: 'K-Means (LAB)',
+  hist: 'Histogram',
+  mediancut: 'Median-cut'
+};
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
 let frameCounter=0,lastT=performance.now(),pending=false, running=false, hasPalette=false;
 let throttleCountdown=1; // process first frame immediately
@@ -506,7 +505,7 @@ function onFreezeTap(ev){
   freezeNow().then(showUnfreezeCTA).finally(()=>{ freezing = false; });
 }
 
-/* ---------- UI ---------- */
+/* ---------- UI init ---------- */
 addEventListener('load', ()=>{
   // measure CTA height to reserve space precisely
   ctaH = freezeBtn.offsetHeight || 56;
@@ -525,21 +524,63 @@ addEventListener('load', ()=>{
   showFreezeCTA();
 });
 
-// CC open/close
-paletteClickable.addEventListener('click',(e)=>{
-  e.stopPropagation();
-  positionCC();
-  ccWrap.style.display='block';
-});
+/* ---- CC open/close: long-press to open; tap outside to close ---- */
+let lpTimer=null, pressed=false, longPressed=false, downX=0, downY=0, downT=0;
+const LONG_MS = 450, TAP_MOV_PX = 14;
+
+function openCC(){ positionCC(); ccWrap.style.display='block'; }
+function closeCC(){ ccWrap.style.display='none'; }
+
 document.addEventListener('click',(e)=>{
   if (compositeOverlay.classList.contains('open')) return;
-  if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) ccWrap.style.display='none';
+  if (ccWrap.style.display==='block' && !ccWrap.contains(e.target)) closeCC();
 });
 
-['resize','orientationchange'].forEach(evt => addEventListener(evt, positionCC, {passive:true}));
-if (window.visualViewport) window.visualViewport.addEventListener('resize', positionCC, {passive:true});
+/* ---- Algorithm switching on palette area (left/right half) ---- */
+function setAlgo(nextId){
+  algo = nextId;
+  algoName.textContent = ALGO_LABEL[algo] || algo;
+}
+function stepAlgo(dir){
+  const i = ALGOS.indexOf(algo);
+  const ni = ( (i + (dir>0?1:-1)) + ALGOS.length ) % ALGOS.length;
+  setAlgo(ALGOS[ni]);
+}
 
-tabs.addEventListener('click',(e)=>{ const b=e.target.closest('.tab'); if(!b) return; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b)); algo=b.dataset.algo; algoName.textContent=b.textContent+(algo==='kmeans'?' (LAB)':''); });
+/* Pointer handlers on palette area:
+   - short tap: left half => previous, right half => next
+   - long-press (> LONG_MS) => open CC (no algo change) */
+paletteClickable.addEventListener('pointerdown', (e)=>{
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  pressed = true; longPressed=false;
+  downX = e.clientX; downY = e.clientY; downT = performance.now();
+  clearTimeout(lpTimer);
+  lpTimer = setTimeout(()=>{ if(pressed){ longPressed=true; openCC(); } }, LONG_MS);
+});
+
+paletteClickable.addEventListener('pointerup', (e)=>{
+  if (!pressed) return;
+  pressed = false;
+  clearTimeout(lpTimer);
+
+  const dx = Math.abs(e.clientX - downX);
+  const dy = Math.abs(e.clientY - downY);
+  const dt = performance.now() - downT;
+
+  if (longPressed) return; // CC already opened; no algo step on this gesture
+
+  const isTap = dx < TAP_MOV_PX && dy < TAP_MOV_PX && dt < 300;
+  if (!isTap) return;
+
+  const rect = paletteClickable.getBoundingClientRect();
+  const mid = rect.left + rect.width/2;
+  if (e.clientX < mid) stepAlgo(-1); else stepAlgo(1);
+});
+
+paletteClickable.addEventListener('pointercancel', ()=>{ pressed=false; clearTimeout(lpTimer); });
+paletteClickable.addEventListener('pointerleave', ()=>{ pressed=false; clearTimeout(lpTimer); });
+
+/* ---- Sliders/toggles in CC ---- */
 kRange.addEventListener('input',()=>{K=+kRange.value; kVal.textContent=K; renderPalette(lastPalette);});
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value; sizeVal.textContent=procWidth+' px';});
 throttleLog.addEventListener('input',()=>{ throttleN=sliderToN(+throttleLog.value); throttleVal.textContent=String(throttleN); });
