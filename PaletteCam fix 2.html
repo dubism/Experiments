@@ -98,6 +98,11 @@
     padding:14px;
     overflow:auto; overscroll-behavior:contain;
     opacity:0; transform:scale(.96) translateY(8px);
+
+    /* >>> make CC interactive regardless of global locks <<< */
+    touch-action:auto; 
+    pointer-events:auto;
+    -webkit-overflow-scrolling:touch;
   }
   #ccWrap.open #cc{ animation: ccBounceIn 360ms cubic-bezier(.2,.8,.2,1) forwards; }
   @keyframes ccBounceIn{
@@ -109,8 +114,9 @@
     #ccWrap.open #cc{ animation:none; opacity:1; transform:none; }
   }
 
-  #cc, #cc *{ -webkit-user-select:none; user-select:none; }
-  #cc input, #cc textarea, #cc select{ -webkit-user-select:auto; user-select:auto; }
+  /* selection rules: allow interaction inside CC */
+  #cc, #cc *{ -webkit-user-select:auto; user-select:auto; }
+  #cc input, #cc textarea, #cc select, #cc button, #cc label{ pointer-events:auto; }
 
   .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
   #algoBrief{ margin:10px 4px 14px; line-height:1.45; }
@@ -118,6 +124,7 @@
   #algoBrief .a.active{ opacity:1; font-weight:600; }
   .ccsep{ border:0; border-top:1px solid var(--line); opacity:.6; margin:6px 0 10px 0; }
 
+  /* long-press shield (kept, but hidden whenever CC is open) */
   .pressLock, .pressLock *{ -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }
   #pressShield{ position:fixed; inset:0; z-index:9500; background:transparent; display:none; touch-action:none; pointer-events:auto; }
 
@@ -275,7 +282,7 @@ const off=document.getElementById('off');
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, uiZoom=+zoomSlider.value;
 let throttleN=20, frameCounter=0, lastT=performance.now(), fps=0;
 let ccOpen=false, pressLock=false, draggingK=false;
-let lastPaletteKmax=null;  // Option A cache (for the current algo)
+let lastPaletteKmax=null;
 const KMAX = +kRange.max;
 
 /* ===== helpers ===== */
@@ -302,7 +309,7 @@ function renderAlgoBrief(){ document.getElementById('algoBrief').innerHTML =
    <div class="a" data-a="mediancut">${ALGO_COPY.mediancut}</div>`; }
 function highlightAlgoDesc(a){ document.querySelectorAll('#algoBrief .a').forEach(n=>n.classList.toggle('active',n.dataset.a===a)); }
 
-/* ===== selection + CC close behavior ===== */
+/* ===== selection + CC behavior ===== */
 function lockPressSelection(){ if(pressLock) return; pressLock=true; document.body.classList.add('pressLock'); }
 function unlockPressSelection(){ if(!pressLock) return; pressLock=false; document.body.classList.remove('pressLock'); const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }
 document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault(); },{capture:true});
@@ -310,14 +317,24 @@ document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen||pressLock) e.preventDefault(); },{capture:true});
 
 /* CC open/close */
-function openCC(){ ccWrap.classList.add('open'); ccOpen=true; }
+function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
+function openCC(){
+  hidePressShield(); unlockScroll(); unlockPressSelection();
+  ccWrap.classList.add('open'); ccOpen=true;
+}
 function closeCC(){ ccOpen=false; ccWrap.classList.remove('open'); hidePressShield(); }
-cc.addEventListener('pointerdown', e=>e.stopPropagation());
-cc.addEventListener('click', e=>e.stopPropagation());
+
+/* Stop outside-close bubbling from inside CC */
+cc.addEventListener('pointerdown', e=>e.stopPropagation(), {capture:true});
+cc.addEventListener('click', e=>e.stopPropagation(), {capture:true});
+
 /* Close on ANY outside tap (capture so nothing can swallow it) */
 document.addEventListener('pointerdown', (e)=>{
   if(ccOpen && !cc.contains(e.target)) closeCC();
 }, {capture:true});
+
+/* ESC closes CC */
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && ccOpen) closeCC(); });
 
 /* Long-press shield helpers */
 function showPressShieldWithAutoRelease(){
@@ -329,12 +346,17 @@ function showPressShieldWithAutoRelease(){
   clearTimeout(showPressShieldWithAutoRelease._t);
   showPressShieldWithAutoRelease._t=setTimeout(hidePressShield,1200);
 }
-function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
 
-/* ===== global scroll lock during K-drag ===== */
-function noScroll(e){ if(e.cancelable) e.preventDefault(); }
-function lockScroll(){ document.addEventListener('touchmove', noScroll, {passive:false, capture:true}); document.addEventListener('wheel', noScroll, {passive:false, capture:true}); }
-function unlockScroll(){ document.removeEventListener('touchmove', noScroll, {capture:true}); document.removeEventListener('wheel', noScroll, {capture:true}); }
+/* ===== global scroll lock during K-drag (never when CC is open) ===== */
+function noScroll(e){ if(ccOpen) return; if(e.cancelable) e.preventDefault(); }
+function lockScroll(){
+  document.addEventListener('touchmove', noScroll, {passive:false, capture:true});
+  document.addEventListener('wheel', noScroll, {passive:false, capture:true});
+}
+function unlockScroll(){
+  document.removeEventListener('touchmove', noScroll, {capture:true});
+  document.removeEventListener('wheel', noScroll, {capture:true});
+}
 
 /* ===== K-drag + gestures (instant) ===== */
 let lpTimer=0,movedTooFar=false,longPressed=false;
@@ -343,7 +365,6 @@ function getKStepPx(){ const h = paletteClickable.clientHeight || 200; return Ma
 
 /* instant K application (Option A: slice from lastPaletteKmax) */
 function renderPlaceholders(count){
-  // append dark-grey placeholders
   for(let i=0;i<count;i++){
     const d=document.createElement('div');
     d.className='swatch';
@@ -353,7 +374,6 @@ function renderPlaceholders(count){
 }
 function applyKInstant(newK){
   K = newK; kVal.textContent = newK;
-  // Re-render from cache immediately
   swatchesEl.innerHTML='';
   if(lastPaletteKmax && lastPaletteKmax.length){
     const have = Math.min(K, lastPaletteKmax.length);
@@ -365,7 +385,7 @@ function applyKInstant(newK){
 }
 
 paletteClickable.addEventListener('pointerdown', (e)=>{
-  if(ccOpen) return; // no conflict with CC
+  if(ccOpen) return;
   if(e.pointerType==='mouse' && e.button!==0) return;
 
   movedTooFar=false; longPressed=false;
@@ -385,7 +405,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
     if(movedTooFar || kDrag) return;
     longPressed=true;
     try{paletteClickable.releasePointerCapture(e.pointerId);}catch{}
-    openCC(); showPressShieldWithAutoRelease();
+    openCC(); // opening CC now fully enables interactions
   }, LP_MS);
 
   const move=(ev)=>{
@@ -416,7 +436,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
         const newK = clamp(+kRange.value + steps, +kRange.min, +kRange.max);
         if (newK !== +kRange.value){
           kRange.value = String(newK);
-          applyKInstant(newK);     // <- instant, independent of processing loop
+          applyKInstant(newK);
         }
         kAccum -= steps * stepPx;
       }
@@ -492,7 +512,6 @@ function samplePixels(imgData, step){
 /* Bisecting K-Means (prefix-stable) */
 function kmeansKmax(pixels, Kmax){
   if(!pixels.length) return [];
-  // one cluster containing all indices
   const idxs = Uint32Array.from({length:pixels.length}, (_,i)=>i);
   let leaves = [{ids:idxs, id:0}];
   let nextId=1;
@@ -503,7 +522,6 @@ function kmeansKmax(pixels, Kmax){
     const inv=1/Math.max(1,n); return [r*inv,g*inv,b*inv];
   }
   function split2(ids){
-    // choose axis of max variance
     let nr=0,ng=0,nb=0, n=ids.length||ids.byteLength;
     for(let i=0;i<n;i++){ const p=pixels[ids[i]]; nr+=p[0]; ng+=p[1]; nb+=p[2]; }
     const mr=nr/n, mg=ng/n, mb=nb/n;
@@ -511,14 +529,12 @@ function kmeansKmax(pixels, Kmax){
     for(let i=0;i<n;i++){ const p=pixels[ids[i]]; const dr=p[0]-mr,dg=p[1]-mg,db=p[2]-mb; vr+=dr*dr; vg+=dg*dg; vb+=db*db; }
     const axis = (vr>=vg && vr>=vb)?0:((vg>=vb)?1:2);
 
-    // seeds: mean +/- small jitter along axis
     const c=[mr,mg,mb];
     const seedA=c.slice(), seedB=c.slice();
     const j = Math.sqrt((axis===0?vr:(axis===1?vg:vb))/Math.max(1,n)) * 0.5;
     seedA[axis]-=j; seedB[axis]+=j;
 
     let A=[], B=[];
-    // few iterations
     let ca=seedA, cb=seedB;
     for(let it=0; it<3; it++){
       A.length=0; B.length=0;
@@ -529,7 +545,6 @@ function kmeansKmax(pixels, Kmax){
         (da<=db?A:B).push(ids[i]);
       }
       if(A.length===0 || B.length===0){
-        // fallback: hard split by median along axis
         const sorted = Array.from(ids).sort((i1,i2)=>pixels[i1][axis]-pixels[i2][axis]);
         const mid = sorted.length>>1;
         A = sorted.slice(0, mid);
@@ -541,7 +556,6 @@ function kmeansKmax(pixels, Kmax){
   }
 
   while(leaves.length < Kmax){
-    // pick leaf with highest population; tie by id
     leaves.sort((x,y)=> (y.ids.length - x.ids.length) || (x.id - y.id));
     const node = leaves.shift();
     if(!node || node.ids.length<=1){ if(node) leaves.push(node); break; }
@@ -550,7 +564,6 @@ function kmeansKmax(pixels, Kmax){
     leaves.push({ids:B, id:nextId++});
   }
 
-  // representatives = centroids; order by population desc (stable)
   const reps = leaves.map(l=>({c:centroid(l.ids), n:l.ids.length, id:l.id}))
                      .sort((a,b)=> (b.n-a.n) || (a.id-b.id))
                      .map(o=>o.c);
@@ -610,7 +623,7 @@ function medianCutKmax(pixels, Kmax){
 /* Fixed-grid Histogram with global peak ranking (NMS) */
 function histogramKmax(pixels, Kmax){
   if(!pixels.length) return [];
-  const B=16; // bins per channel
+  const B=16;
   const gridSize=B*B*B;
   const bins = new Uint32Array(gridSize);
 
@@ -619,7 +632,6 @@ function histogramKmax(pixels, Kmax){
     const r=toBin(p[0]), g=toBin(p[1]), b=toBin(p[2]);
     bins[r*B*B + g*B + b]++;
   }
-  // small 3x3x3 smoothing
   const w = [1,2,1];
   const smooth = new Float32Array(gridSize);
   for(let r=0;r<B;r++){
@@ -640,14 +652,13 @@ function histogramKmax(pixels, Kmax){
       }
     }
   }
-  // collect peaks and NMS
   const candidates=[];
   for(let i=0;i<gridSize;i++) if(smooth[i]>0) candidates.push({i, v:smooth[i]});
   candidates.sort((a,b)=>b.v-a.v);
 
   const picked=[];
   const taken = new Uint8Array(gridSize);
-  const NMSr = 1; // suppress 1-neighborhood
+  const NMSr = 1;
   for(const c of candidates){
     if(picked.length>=Kmax) break;
     if(taken[c.i]) continue;
@@ -668,7 +679,6 @@ function histogramKmax(pixels, Kmax){
     }
   }
 
-  // map bin centers to RGB
   const toCenter = (bin)=> Math.round((bin+0.5)*(255/B));
   const palette = picked.map(i=>{
     const r=(i/(B*B))|0, g=((i%(B*B))/B)|0, b=i%B;
@@ -707,7 +717,6 @@ function renderPalette(pal, skipClear=false){
 /* processing loop */
 const offCtx = off.getContext('2d', {willReadFrequently:true});
 function tick(now){
-  // fps
   const dt = now - lastT;
   if(dt>=500){ fps = Math.round((frameCounter*1000)/dt); fpsEl.textContent=String(fps); frameCounter=0; lastT=now; }
   frameCounter++;
@@ -720,9 +729,8 @@ function tick(now){
         off.width = procWidth; off.height = procWidth;
         offCtx.drawImage(video, sx,sy,sw,sh, 0,0,procWidth,procWidth);
         const img = offCtx.getImageData(0,0,procWidth,procWidth);
-        const pixels = samplePixels(img, 6); // keep light on mobile
+        const pixels = samplePixels(img, 6);
 
-        // compute hierarchical Kmax based on current algo
         if(algo==='kmeans')      lastPaletteKmax = kmeansKmax(pixels, KMAX);
         else if(algo==='hist')   lastPaletteKmax = histogramKmax(pixels, KMAX);
         else                     lastPaletteKmax = medianCutKmax(pixels, KMAX);
