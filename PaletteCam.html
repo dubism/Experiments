@@ -79,7 +79,7 @@
     bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
   }
 
-  /* ——— Control Center wrapper ——— */
+  /* ——— Control Center wrapper (contract) ——— */
   #ccWrap{
     position:fixed;
     inset:
@@ -88,13 +88,13 @@
       calc(var(--ctaH) + env(safe-area-inset-bottom) + 12px)
       max(12px, env(safe-area-inset-left));
     z-index:9000;
-    transform:translateZ(0);
     display:none;
     pointer-events:auto;
+    transform:translateZ(0);
   }
   #ccWrap.open{ display:block; }
 
-  /* ——— Control Center content (redesigned layout) ——— */
+  /* ——— Control Center card (contract) ——— */
   #cc{
     position:absolute; inset:0;
     background:rgba(0,0,0,.65);
@@ -102,46 +102,33 @@
     border:1px solid var(--line);
     border-radius:14px;
     padding:14px;
-    overflow:auto; overscroll-behavior:contain;
-    opacity:0; transform:scale(.96) translateY(8px);
-    touch-action:pan-y; pointer-events:auto; -webkit-overflow-scrolling:touch;
+    overflow:auto; max-height:100%;
+    touch-action:pan-y;
   }
-  #ccWrap.open #cc{ animation: ccIn 360ms cubic-bezier(.2,.8,.2,1) forwards; }
-  @keyframes ccIn{0%{opacity:0;transform:scale(.96) translateY(8px)}60%{opacity:1;transform:scale(1.015) translateY(0)}100%{opacity:1;transform:scale(1) translateY(0)}}
-  @media (prefers-reduced-motion:reduce){ #ccWrap.open #cc{ animation:none; opacity:1; transform:none; } }
 
-  /* Typography + numbers */
-  .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
-  .secTitle{font-weight:600; letter-spacing:.01em; color:#d0d0d0; margin:14px 2px 8px}
+  /* Typography + numerics */
+  .small,.value{font-variant-numeric:tabular-nums}
+  .label{font-weight:600}
 
-  /* Grid rhythm */
-  .ccSection{ padding:6px 2px 4px; }
-  .ccSection + .ccSection{ border-top:1px solid var(--line); margin-top:8px; padding-top:12px; }
+  /* Method copy + separator (contract) */
+  #algoBrief{ margin:10px 4px 14px; line-height:1.45; }
+  #algoBrief .a{ margin:8px 0 12px; opacity:.85; }
+  #algoBrief .a.active{ opacity:1; font-weight:600; }
+  .ccsep{ border:0; border-top:1px solid var(--line); opacity:.6; margin:6px 0 10px; }
 
-  .ccGrid{
-    display:grid;
-    grid-template-columns: 1fr auto;
-    grid-auto-rows:minmax(24px,auto);
-    gap:6px 12px;
-    align-items:center;
-  }
-  .lbl{min-height:24px}
-  .val{justify-self:end; color:#9aa0a6; font-variant-numeric:tabular-nums}
-  .control{grid-column:1 / -1}
-  .control input[type="range"]{width:100%}
+  /* Field blocks (contract) */
+  .field{ padding:6px 2px 0; }
+  .field-head{ display:flex; align-items:center; justify-content:space-between; min-height:44px; }
+  .value{ color:#9aa0a6; margin-left:12px; }
+  .field-body{ padding:2px 0 8px; }
+  .divider{ height:1px; margin:6px 0 4px; background:linear-gradient(to right, transparent, #222, transparent); }
 
-  /* Checkbox row alignment */
-  .checkRow{ display:grid; grid-template-columns: 1fr auto; align-items:center; gap:6px 12px; }
-  .checkRow input[type="checkbox"]{ width:22px; height:22px; accent-color:#fff; }
-
-  /* Fine spacing for sliders */
-  .tightTop{ margin-top:-2px }
-
-  /* selection inside CC allowed only for inputs */
+  /* Inputs inside CC (contract) */
+  #cc .field-body input[type="range"]{ width:100%; }
   #cc, #cc *{ -webkit-user-select:none; user-select:none; }
   #cc input, #cc textarea, #cc select, #cc button, #cc label{ -webkit-user-select:auto; user-select:auto; pointer-events:auto; }
 
-  /* long-press shield, error toast, composite overlay (unchanged) */
+  /* Long-press shield, error toast, composite overlay */
   .pressLock, .pressLock *{ -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }
   #pressShield{ position:fixed; inset:0; z-index:9500; background:transparent; display:none; touch-action:none; pointer-events:auto; }
 
@@ -198,43 +185,59 @@
     </section>
   </div>
 
-  <!-- CC overlay (layout improved) -->
-  <div id="ccWrap" aria-modal="true" role="dialog">
+  <!-- ===== CC overlay (contractual structure) as a direct child of <body> ===== -->
+  <div id="ccWrap" role="dialog" aria-modal="true" style="display:none">
     <div id="cc">
-      <section id="algoBrief" class="small" style="margin:8px 2px 6px; line-height:1.45;"></section>
+      <section id="algoBrief" class="small"></section>
+      <hr class="ccsep">
 
-      <div class="ccSection">
-        <div class="secTitle">Palette</div>
-        <div class="ccGrid">
-          <label class="lbl" for="k">Colors (K)</label>
-          <div class="val" id="kVal">3</div>
-          <div class="control tightTop"><input type="range" id="k" min="2" max="10" value="3"></div>
+      <div class="field">
+        <div class="field-head">
+          <span class="label">Colors (K)</span>
+          <span class="value" id="kVal">3</span>
         </div>
+        <div class="field-body">
+          <input type="range" id="k" min="2" max="10" value="3">
+        </div>
+        <div class="divider"></div>
       </div>
 
-      <div class="ccSection">
-        <div class="secTitle">Display</div>
-        <div class="checkRow">
-          <label class="lbl" for="rects">Show rectangles</label>
+      <div class="field">
+        <div class="field-head">
+          <span class="label">Show rectangles</span>
           <input type="checkbox" id="rects" checked>
         </div>
-        <div class="checkRow" style="margin-top:6px">
-          <label class="lbl" for="grad">Show gradient</label>
-          <input type="checkbox" id="grad" checked>
-        </div>
+        <div class="divider"></div>
       </div>
 
-      <div class="ccSection">
-        <div class="secTitle">Processing</div>
-        <div class="ccGrid">
-          <label class="lbl" for="size">Processing width</label>
-          <div class="val" id="sizeVal">240 px</div>
-          <div class="control tightTop"><input type="range" id="size" min="120" max="360" step="20" value="240"></div>
-
-          <label class="lbl" for="throttleLog">Process every N frames</label>
-          <div class="val" id="throttleVal">20</div>
-          <div class="control tightTop"><input type="range" id="throttleLog" min="0" max="100" value="0"></div>
+      <div class="field">
+        <div class="field-head">
+          <span class="label">Show gradient</span>
+          <input type="checkbox" id="grad" checked>
         </div>
+        <div class="divider"></div>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <span class="label">Processing width</span>
+          <span class="value" id="sizeVal">240 px</span>
+        </div>
+        <div class="field-body">
+          <input type="range" id="size" min="120" max="360" step="20" value="240">
+        </div>
+        <div class="divider"></div>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <span class="label">Process every N frames</span>
+          <span class="value" id="throttleVal">20</span>
+        </div>
+        <div class="field-body">
+          <input type="range" id="throttleLog" min="0" max="100" value="0">
+        </div>
+        <div class="divider"></div>
       </div>
     </div>
   </div>
@@ -342,40 +345,50 @@ const KMAX = +kRange.max;
 /* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
 const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
+const nToSlider=n=>Math.round((Math.log(Math.max(TH_MIN,Math.min(TH_MAX,n))/TH_MIN)/Math.log(TH_MAX/TH_MIN))*100);
 const clamp=(v,min,max)=>v<min?min:(v>max?max:v);
 const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
 const status=t=>{ try{statusEl.textContent=t;}catch{} };
 function toast(msg){ if(!msg) return; camError.textContent=msg; camError.style.display='block'; setTimeout(()=>camError.style.display='none', 3000); }
 
-/* ===== algo labels/brief ===== */
+/* ===== algo labels/brief (contract) ===== */
 const ALGOS=['kmeans','hist','mediancut'];
-const ALGO_LABEL={kmeans:'K-Means (hierarchical)',hist:'Histogram peaks',mediancut:'Median-cut'};
+const ALGO_LABEL={kmeans:'K-Means (LAB)',hist:'Histogram',mediancut:'Median-cut'};
 const ALGO_COPY={
-  kmeans:'Bisecting k-means (hierarchical) for prefix-stable K.',
-  hist:'Fixed-grid histogram with global peak ranking (NMS).',
-  mediancut:'Deterministic median-cut (hierarchical).'
+  kmeans:'K-Means (LAB): groups similar colors in human-perceived space.',
+  hist:'Histogram: picks colors that appear most often with simple smoothing.',
+  mediancut:'Median-cut: slices the color range into balanced boxes.'
 };
 function setAlgo(next){ algo=next; algoNameEl.textContent=ALGO_LABEL[algo]; highlightAlgoDesc(algo); lastPaletteKmax=null; }
 function cycleAlgo(dir){ const i=ALGOS.indexOf(algo); setAlgo(ALGOS[(i+(dir>0?1:-1)+ALGOS.length)%ALGOS.length]); }
-function renderAlgoBrief(){ document.getElementById('algoBrief').innerHTML =
-  `<div class="a" data-a="kmeans">${ALGO_COPY.kmeans}</div>
-   <div class="a" data-a="hist">${ALGO_COPY.hist}</div>
-   <div class="a" data-a="mediancut">${ALGO_COPY.mediancut}</div>`; }
+function renderAlgoBrief(){
+  const b=document.getElementById('algoBrief');
+  b.innerHTML = `
+    <div class="a" data-a="kmeans">${ALGO_COPY.kmeans}</div>
+    <div class="a" data-a="hist">${ALGO_COPY.hist}</div>
+    <div class="a" data-a="mediancut">${ALGO_COPY.mediancut}</div>`;
+}
 function highlightAlgoDesc(a){ document.querySelectorAll('#algoBrief .a').forEach(n=>n.classList.toggle('active',n.dataset.a===a)); }
 
-/* ===== selection + CC behavior ===== */
+/* ===== selection + CC behavior (contract) ===== */
 function lockPressSelection(){ if(pressLock) return; pressLock=true; document.body.classList.add('pressLock'); }
 function unlockPressSelection(){ if(!pressLock) return; pressLock=false; document.body.classList.remove('pressLock'); const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }
 document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault(); },{capture:true});
 document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }});
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen||pressLock) e.preventDefault(); },{capture:true});
 
-/* CC open/close */
+/* CC open/close (contract) */
 function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
 function openCC(){
   hidePressShield(); unlockScroll(); unlockPressSelection();
   try{ video.dataset.prevOpacity = video.style.opacity || ''; video.style.opacity = '0.9999'; }catch{}
   ccWrap.classList.add('open'); ccOpen=true;
+
+  // focus first form control (keyboard reachability)
+  queueMicrotask(()=>{
+    const first = cc.querySelector('input, select, textarea, button');
+    if(first && first.focus) try{ first.focus({preventScroll:true}); }catch{}
+  });
 }
 function closeCC(){
   ccOpen=false; ccWrap.classList.remove('open'); hidePressShield();
@@ -386,7 +399,7 @@ function closeCC(){
 cc.addEventListener('pointerdown', e=>e.stopPropagation(), {capture:true});
 cc.addEventListener('click', e=>e.stopPropagation(), {capture:true});
 
-/* Close on ANY outside tap */
+/* Close on ANY outside tap (keep open if composite overlay is up) */
 document.addEventListener('pointerdown', (e)=>{
   if(document.getElementById('compositeOverlay')?.classList.contains('open')) return;
   if(ccOpen && !cc.contains(e.target)) closeCC();
@@ -535,7 +548,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
 
 paletteClickable.addEventListener('wheel', (e)=>{ e.preventDefault(); }, {passive:false});
 
-/* ===== controls ===== */
+/* ===== controls (contract bindings) ===== */
 kRange.addEventListener('input',()=>applyKInstant(+kRange.value));
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value;sizeVal.textContent=procWidth+' px';});
 throttleLog.addEventListener('input',()=>{throttleN=sliderToN(+throttleLog.value);throttleVal.textContent=String(throttleN);});
@@ -844,9 +857,10 @@ function unfreeze(){
 
 /* ===== wire up + start ===== */
 renderAlgoBrief(); highlightAlgoDesc(algo);
-throttleVal.textContent=String(throttleN);
 sizeVal.textContent=procWidth+' px';
 kVal.textContent=String(K);
+throttleVal.textContent=String(throttleN);
+throttleLog.value = String(nToSlider(throttleN));
 
 freezeBtn.addEventListener('click', freezeNow);
 unfreezeBtn.addEventListener('click', unfreeze);
