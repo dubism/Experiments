@@ -186,7 +186,7 @@
   </div>
 
   <!-- ===== CC overlay (contractual structure) as a direct child of <body> ===== -->
-  <div id="ccWrap" role="dialog" aria-modal="true" style="display:none">
+  <div id="ccWrap" role="dialog" aria-modal="true">
     <div id="cc">
       <section id="algoBrief" class="small"></section>
       <hr class="ccsep">
@@ -382,9 +382,9 @@ function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showP
 function openCC(){
   hidePressShield(); unlockScroll(); unlockPressSelection();
   try{ video.dataset.prevOpacity = video.style.opacity || ''; video.style.opacity = '0.9999'; }catch{}
+  ccWrap.style.display = 'block';           // <-- explicit, beats any inline default
   ccWrap.classList.add('open'); ccOpen=true;
 
-  // focus first form control (keyboard reachability)
   queueMicrotask(()=>{
     const first = cc.querySelector('input, select, textarea, button');
     if(first && first.focus) try{ first.focus({preventScroll:true}); }catch{}
@@ -392,6 +392,7 @@ function openCC(){
 }
 function closeCC(){
   ccOpen=false; ccWrap.classList.remove('open'); hidePressShield();
+  ccWrap.style.display = 'none';            // <-- explicit hide
   try{ video.style.opacity = video.dataset.prevOpacity || ''; }catch{}
 }
 
