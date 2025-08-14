@@ -43,6 +43,24 @@
   #video::-webkit-media-controls-start-playback-button{ display:none !important; }
   #frozenCanvas{display:none}
 
+  /* Source chip + photo preview */
+  #sourceChip{
+    position:absolute; top:10px; left:10px; z-index:5; display:flex; gap:6px; align-items:center;
+    background:rgba(0,0,0,.45); backdrop-filter:blur(6px);
+    border:1px solid var(--line); border-radius:12px; padding:6px 8px; pointer-events:auto;
+  }
+  .chipbtn{
+    appearance:none; border:1px solid var(--line);
+    background:rgba(255,255,255,.06); color:#fff;
+    border-radius:10px; padding:6px 10px; font:12px/1.2 system-ui,sans-serif; cursor:pointer;
+  }
+  .chipbtn[aria-pressed="true"]{outline:2px solid #fff; outline-offset:1px}
+  #photoPreview{
+    position:absolute; inset:0; width:100%; height:100%;
+    display:none; z-index:2; object-fit:contain;
+    transform:none !important; pointer-events:none;
+  }
+
   #uiPane{
     position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; gap:10px;
     padding:10px 12px 12px;
@@ -79,7 +97,7 @@
     bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
   }
 
-  /* ——— Control Center wrapper (contract) ——— */
+  /* CC wrapper/card + open animation */
   #ccWrap{
     position:fixed;
     inset:
@@ -93,8 +111,6 @@
     transform:translateZ(0);
   }
   #ccWrap.open{ display:block; }
-
-  /* ——— Control Center card (contract) + open animation ——— */
   #cc{
     position:absolute; inset:0;
     background:rgba(0,0,0,.65);
@@ -104,45 +120,29 @@
     padding:14px;
     overflow:auto; max-height:100%;
     touch-action:pan-y;
-
-    /* animation start state */
     opacity:0; transform:scale(.96) translateY(8px);
   }
-  #ccWrap.open #cc{
-    animation: ccIn 360ms cubic-bezier(.2,.8,.2,1) forwards;
-  }
-  @keyframes ccIn{
-    0%   { opacity:0;   transform:scale(.96)  translateY(8px); }
-    60%  { opacity:1;   transform:scale(1.015) translateY(0);  } /* subtle overshoot */
-    100% { opacity:1;   transform:scale(1)     translateY(0);  }
-  }
-  @media (prefers-reduced-motion:reduce){
-    #ccWrap.open #cc{ animation:none; opacity:1; transform:none; }
-  }
+  #ccWrap.open #cc{ animation: ccIn 360ms cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes ccIn{ 0%{opacity:0;transform:scale(.96) translateY(8px)}60%{opacity:1;transform:scale(1.015)}100%{opacity:1;transform:scale(1)} }
+  @media (prefers-reduced-motion:reduce){ #ccWrap.open #cc{ animation:none; opacity:1; transform:none; } }
 
-  /* Typography + numerics */
   .small,.value{font-variant-numeric:tabular-nums}
   .label{font-weight:600}
-
-  /* Method copy + separator (contract) */
   #algoBrief{ margin:10px 4px 14px; line-height:1.45; }
   #algoBrief .a{ margin:8px 0 12px; opacity:.85; }
   #algoBrief .a.active{ opacity:1; font-weight:600; }
   .ccsep{ border:0; border-top:1px solid var(--line); opacity:.6; margin:6px 0 10px; }
 
-  /* Field blocks (contract) */
   .field{ padding:6px 2px 0; }
   .field-head{ display:flex; align-items:center; justify-content:space-between; min-height:44px; }
   .value{ color:#9aa0a6; margin-left:12px; }
   .field-body{ padding:2px 0 8px; }
   .divider{ height:1px; margin:6px 0 4px; background:linear-gradient(to right, transparent, #222, transparent); }
 
-  /* Inputs inside CC (contract) */
   #cc .field-body input[type="range"]{ width:100%; }
   #cc, #cc *{ -webkit-user-select:none; user-select:none; }
   #cc input, #cc textarea, #cc select, #cc button, #cc label{ -webkit-user-select:auto; user-select:auto; pointer-events:auto; }
 
-  /* Long-press shield, error toast, composite overlay */
   .pressLock, .pressLock *{ -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }
   #pressShield{ position:fixed; inset:0; z-index:9500; background:transparent; display:none; touch-action:none; pointer-events:auto; }
 
@@ -160,7 +160,6 @@
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
   .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
 
-  /* Processing canvases must never layout/paint */
   #off,#capFrame{ display:none !important; width:0 !important; height:0 !important; }
 </style>
 </head>
@@ -169,6 +168,13 @@
     <section id="videoPane" aria-label="Camera">
       <video id="video" playsinline muted autoplay></video>
       <canvas id="frozenCanvas"></canvas>
+
+      <div id="sourceChip" aria-label="Source">
+        <button id="srcCamera" class="chipbtn" aria-pressed="true" type="button">Camera</button>
+        <button id="srcPhoto"  class="chipbtn" aria-pressed="false" type="button">Photo</button>
+        <input id="pick" type="file" accept="image/*" hidden />
+      </div>
+      <canvas id="photoPreview"></canvas>
     </section>
 
     <section id="uiPane" aria-label="UI">
@@ -199,7 +205,7 @@
     </section>
   </div>
 
-  <!-- ===== CC overlay (contractual structure) as a direct child of <body> ===== -->
+  <!-- CC -->
   <div id="ccWrap" role="dialog" aria-modal="true">
     <div id="cc">
       <section id="algoBrief" class="small"></section>
@@ -297,6 +303,14 @@
       fc.width = wrap.clientWidth;
       fc.height = wrap.clientHeight;
     }
+
+    const pp = document.getElementById('photoPreview');
+    if (pp && pp.style.display !== 'none') {
+      const wrap = document.getElementById('videoPane');
+      pp.width = wrap.clientWidth;
+      pp.height = wrap.clientHeight;
+      drawPhotoPreview();
+    }
   }
   window.recalcSquare = recalcSquare;
   let raf = 0;
@@ -365,7 +379,7 @@ const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))
 const status=t=>{ try{statusEl.textContent=t;}catch{} };
 function toast(msg){ if(!msg) return; camError.textContent=msg; camError.style.display='block'; setTimeout(()=>camError.style.display='none', 3000); }
 
-/* ===== algo labels/brief (contract) ===== */
+/* ===== algo labels/brief ===== */
 const ALGOS=['kmeans','hist','mediancut'];
 const ALGO_LABEL={kmeans:'K-Means (LAB)',hist:'Histogram',mediancut:'Median-cut'};
 const ALGO_COPY={
@@ -384,21 +398,20 @@ function renderAlgoBrief(){
 }
 function highlightAlgoDesc(a){ document.querySelectorAll('#algoBrief .a').forEach(n=>n.classList.toggle('active',n.dataset.a===a)); }
 
-/* ===== selection + CC behavior (contract) ===== */
+/* ===== selection + CC ===== */
 function lockPressSelection(){ if(pressLock) return; pressLock=true; document.body.classList.add('pressLock'); }
 function unlockPressSelection(){ if(!pressLock) return; pressLock=false; document.body.classList.remove('pressLock'); const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }
 document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault(); },{capture:true});
 document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }});
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen||pressLock) e.preventDefault(); },{capture:true});
 
-/* CC open/close (contract) */
+/* CC open/close */
 function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
 function openCC(){
   hidePressShield(); unlockScroll(); unlockPressSelection();
   try{ video.dataset.prevOpacity = video.style.opacity || ''; video.style.opacity = '0.9999'; }catch{}
   ccWrap.style.display = 'block';
   ccWrap.classList.add('open'); ccOpen=true;
-
   queueMicrotask(()=>{
     const first = cc.querySelector('input, select, textarea, button');
     if(first && first.focus) try{ first.focus({preventScroll:true}); }catch{}
@@ -409,18 +422,12 @@ function closeCC(){
   ccWrap.style.display = 'none';
   try{ video.style.opacity = video.dataset.prevOpacity || ''; }catch{}
 }
-
-/* Stop outside-close bubbling from inside CC */
 cc.addEventListener('pointerdown', e=>e.stopPropagation(), {capture:true});
 cc.addEventListener('click', e=>e.stopPropagation(), {capture:true});
-
-/* Close on ANY outside tap (keep open if composite overlay is up) */
 document.addEventListener('pointerdown', (e)=>{
   if(document.getElementById('compositeOverlay')?.classList.contains('open')) return;
   if(ccOpen && !cc.contains(e.target)) closeCC();
 }, {capture:true});
-
-/* ESC closes CC */
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && ccOpen) closeCC(); });
 
 /* Long-press shield helpers */
@@ -434,7 +441,7 @@ function showPressShieldWithAutoRelease(){
   showPressShieldWithAutoRelease._t=setTimeout(hidePressShield,1200);
 }
 
-/* ===== global scroll lock during K-drag (never when CC is open) ===== */
+/* ===== global scroll lock during K-drag ===== */
 function noScroll(e){ if(ccOpen) return; if(e.cancelable) e.preventDefault(); }
 function lockScroll(){
   document.addEventListener('touchmove', noScroll, {passive:false, capture:true});
@@ -445,12 +452,12 @@ function unlockScroll(){
   document.removeEventListener('wheel', noScroll, {capture:true});
 }
 
-/* ===== K-drag + gestures (instant) ===== */
+/* ===== K-drag + gestures ===== */
 let lpTimer=0,movedTooFar=false,longPressed=false;
 const LP_MS=450,MOVE_TOL=10;
 function getKStepPx(){ const h = paletteClickable.clientHeight || 200; return Math.max(14, Math.min(56, Math.round(h / 6))); }
 
-/* instant K application (Option A: slice from lastPaletteKmax) */
+/* instant K application (Option A) */
 function renderPlaceholders(count){
   for(let i=0;i<count;i++){
     const d=document.createElement('div');
@@ -563,18 +570,29 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
 
 paletteClickable.addEventListener('wheel', (e)=>{ e.preventDefault(); }, {passive:false});
 
-/* ===== controls (contract bindings) ===== */
+/* ===== controls ===== */
 kRange.addEventListener('input',()=>applyKInstant(+kRange.value));
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value;sizeVal.textContent=procWidth+' px';});
 throttleLog.addEventListener('input',()=>{throttleN=sliderToN(+throttleLog.value);throttleVal.textContent=String(throttleN);});
 rectChk.addEventListener('change',()=>renderPalette(lastPaletteKmax?.slice(0,K)||[]));
 gradChk.addEventListener('change',()=>renderPalette(lastPaletteKmax?.slice(0,K)||[]));
-function setZoom(v){ uiZoom=clamp(v,1,10); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
+
+/* ===== Zoom: source-aware ===== */
+function setZoom(v){
+  const z = clamp(v,1,10);
+  zoomSlider.value = z;
+  if(source==='camera'){
+    uiZoom = z;
+    document.documentElement.style.setProperty('--zoom', uiZoom);
+  }else{
+    photoZ = z; boundPhotoCenter(); drawPhotoPreview();
+  }
+}
 zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* ===== crop helper ===== */
+/* ===== crop helper (camera) ===== */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw,
@@ -594,7 +612,7 @@ function samplePixels(imgData, step){
   return out;
 }
 
-/* ===== Option A: compute Kmax palette (hierarchical / deterministic) ===== */
+/* ===== Kmax algos ===== */
 function kmeansKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const idxs = Uint32Array.from({length:pixels.length}, (_,i)=>i);
@@ -654,7 +672,6 @@ function kmeansKmax(pixels, Kmax){
                      .map(o=>o.c);
   return reps.slice(0, Kmax);
 }
-
 function medianCutKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const allIdx = Uint32Array.from({length:pixels.length}, (_,i)=>i);
@@ -671,17 +688,14 @@ function medianCutKmax(pixels, Kmax){
     }
     return {rMin,rMax,gMin,gMax,bMin,bMax, mean:[sr/n, sg/n, sb/n], n};
   }
-
   function split(ids){
     const s = stats(ids);
     const rangeR = s.rMax - s.rMin, rangeG = s.gMax - s.gMin, rangeB = s.bMax - s.bMin;
     const axis = (rangeR>=rangeG && rangeR>=rangeB)?0:((rangeG>=rangeB)?1:2);
-
     const sorted = Array.from(ids).sort((i1,i2)=>pixels[i1][axis]-pixels[i2][axis]);
     const mid = sorted.length>>1 || 1;
     return {A:Uint32Array.from(sorted.slice(0,mid)), B:Uint32Array.from(sorted.slice(mid))};
   }
-
   while(boxes.length < Kmax){
     boxes.sort((x,y)=>{
       const sx=stats(x.ids), sy=stats(y.ids);
@@ -696,14 +710,11 @@ function medianCutKmax(pixels, Kmax){
     boxes.push({ids:A, id:nextId++});
     boxes.push({ids:B, id:nextId++});
   }
-
   const reps = boxes.map(b=>{
     const s=stats(b.ids); return {c:s.mean, n:s.n, id:b.id};
   }).sort((a,b)=> (b.n-a.n) || (a.id-b.id)).map(o=>o.c);
-
   return reps.slice(0,Kmax);
 }
-
 function histogramKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const B=16, gridSize=B*B*B;
@@ -730,7 +741,6 @@ function histogramKmax(pixels, Kmax){
   }
   const candidates=[]; for(let i=0;i<gridSize;i++) if(smooth[i]>0) candidates.push({i, v:smooth[i]});
   candidates.sort((a,b)=>b.v-a.v);
-
   const picked=[], taken = new Uint8Array(gridSize); const NMSr = 1;
   for(const c of candidates){
     if(picked.length>=Kmax) break;
@@ -748,7 +758,6 @@ function histogramKmax(pixels, Kmax){
       }
     }
   }
-
   const toCenter = (bin)=> Math.round((bin+0.5)*(255/B));
   return picked.map(i=>{
     const r=(i/(B*B))|0, g=((i%(B*B))/B)|0, b=i%B;
@@ -756,7 +765,7 @@ function histogramKmax(pixels, Kmax){
   });
 }
 
-/* render */
+/* render swatches/gradient to UI */
 function renderPalette(pal, skipClear=false){
   if(!skipClear) swatchesEl.innerHTML='';
   const showRects = rectChk.checked!==false;
@@ -783,88 +792,321 @@ function renderPalette(pal, skipClear=false){
   }
 }
 
-/* processing loop */
+/* ======== SOURCE SWITCHING ======== */
+let source = 'camera';
+let photoBitmap = null;
+let photoZ = 1, photoCX = 0, photoCY = 0;
+
+const photoPreview = document.getElementById('photoPreview');
+const srcCamera = document.getElementById('srcCamera');
+const srcPhoto  = document.getElementById('srcPhoto');
+const pick      = document.getElementById('pick');
+
+function updateSourceChip(){
+  srcCamera?.setAttribute('aria-pressed', String(source==='camera'));
+  srcPhoto ?.setAttribute('aria-pressed', String(source==='photo'));
+}
+updateSourceChip();
+
+srcCamera?.addEventListener('click', ()=>{
+  if(source==='camera') return;
+  source='camera'; updateSourceChip();
+  status('Live');
+  photoBitmap=null; photoPreview.style.display='none';
+});
+
+srcPhoto?.addEventListener('click', ()=> pick?.click());
+pick?.addEventListener('change', async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  try{
+    status('Loading photo…');
+    const bmp = await createImageBitmap(f, { imageOrientation:'from-image' });
+    photoBitmap = bmp;
+    photoZ = 1; photoCX = bmp.width/2; photoCY = bmp.height/2; zoomSlider.value='1';
+    source='photo'; updateSourceChip();
+    drawPhotoPreview();
+    status('Photo');
+  }catch(_){ status('Photo load failed'); }
+  finally{ e.target.value=''; }
+});
+function boundPhotoCenter(){
+  if(!photoBitmap) return;
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  const baseCrop=Math.min(iw, ih), crop=baseCrop/Math.max(1,photoZ);
+  const half=crop/2;
+  photoCX = Math.max(half, Math.min(iw-half, photoCX));
+  photoCY = Math.max(half, Math.min(ih-half, photoCY));
+}
+function currentPhotoSrcRect(){
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  const baseCrop=Math.min(iw, ih), crop=baseCrop/Math.max(1,photoZ);
+  const sx = Math.max(0, Math.min(iw-crop, photoCX - crop/2));
+  const sy = Math.max(0, Math.min(ih-crop, photoCY - crop/2));
+  return {sx, sy, sw:crop, sh:crop};
+}
+function drawPhotoPreview(){
+  if(source!=='photo' || !photoBitmap) return;
+  const wrap = document.getElementById('videoPane');
+  const w = photoPreview.width  = wrap.clientWidth;
+  const h = photoPreview.height = wrap.clientHeight;
+  const g = photoPreview.getContext('2d');
+  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.clearRect(0,0,w,h);
+  const {sx,sy,sw,sh}=currentPhotoSrcRect();
+  g.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, w,h);
+  photoPreview.style.display='block';
+}
+addEventListener('resize', ()=>{ if(source==='photo' && photoBitmap) drawPhotoPreview(); }, {passive:true});
+
+/* ============== processing loop (source-aware) ============== */
 const offCtx = off.getContext('2d', {willReadFrequently:true});
 function tick(now){
   const dt = now - lastT;
   if(dt>=500){ fps = Math.round((frameCounter*1000)/dt); fpsEl.textContent=String(fps); frameCounter=0; lastT=now; }
   frameCounter++;
 
-  if(video.readyState>=2){
-    if(tick._skip===undefined) tick._skip=0;
-    if(tick._skip<=0){
-      const {sx,sy,sw,sh} = computeSquareCrop();
-      if(sw>0){
-        off.width = procWidth; off.height = procWidth;
-        offCtx.drawImage(video, sx,sy,sw,sh, 0,0,procWidth,procWidth);
-        const img = offCtx.getImageData(0,0,procWidth,procWidth);
-        const pixels = samplePixels(img, 6);
+  if(tick._skip===undefined) tick._skip=0;
+  if(tick._skip<=0){
+    off.width = procWidth; off.height = procWidth;
 
-        if(algo==='kmeans')      lastPaletteKmax = kmeansKmax(pixels, KMAX);
-        else if(algo==='hist')   lastPaletteKmax = histogramKmax(pixels, KMAX);
-        else                     lastPaletteKmax = medianCutKmax(pixels, KMAX);
-
-        if(lastPaletteKmax && lastPaletteKmax.length){
-          renderPalette(lastPaletteKmax.slice(0, Math.min(K, lastPaletteKmax.length)));
+    if(source==='camera'){
+      if(video.readyState>=2){
+        const {sx,sy,sw,sh} = computeSquareCrop();
+        if(sw>0){
+          offCtx.drawImage(video, sx,sy,sw,sh, 0,0,procWidth,procWidth);
+          resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
         }
       }
-      tick._skip = throttleN;
+    }else if(source==='photo' && photoBitmap){
+      const {sx,sy,sw,sh} = currentPhotoSrcRect();
+      offCtx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0,procWidth,procWidth);
+      resEl.textContent = `${Math.round(sw)}×${Math.round(sh)}`;
     }else{
-      tick._skip--;
+      offCtx.clearRect(0,0,procWidth,procWidth);
     }
+
+    const img = offCtx.getImageData(0,0,procWidth,procWidth);
+    const pixels = samplePixels(img, 6);
+
+    if(algo==='kmeans')      lastPaletteKmax = kmeansKmax(pixels, KMAX);
+    else if(algo==='hist')   lastPaletteKmax = histogramKmax(pixels, KMAX);
+    else                     lastPaletteKmax = medianCutKmax(pixels, KMAX);
+
+    if(lastPaletteKmax && lastPaletteKmax.length){
+      renderPalette(lastPaletteKmax.slice(0, Math.min(K, lastPaletteKmax.length)));
+    }
+
+    tick._skip = throttleN;
+  }else{
+    tick._skip--;
   }
   requestAnimationFrame(tick);
 }
 
 /* ===== camera start ===== */
+let _stream;
 async function startCamera(){
   try{
     status('Requesting camera…');
     const cstr = {
       audio:false,
-      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:1280}, frameRate:{ideal:30} }
+      video:{
+        facingMode:{ ideal:'environment' },
+        width:  { min:320, ideal:1280, max:1920 },
+        height: { min:320, ideal:1280, max:1920 },
+        frameRate:{ ideal:30, max:60 }
+      }
     };
-    const stream = await navigator.mediaDevices.getUserMedia(cstr);
+    _stream?.getTracks?.().forEach(t=>t.stop());
+    _stream = await navigator.mediaDevices.getUserMedia(cstr);
+
     video.setAttribute('playsinline','');
+    video.setAttribute('muted','');
     video.muted = true;
-    video.srcObject = stream;
+    video.srcObject = _stream;
 
     await new Promise((res)=>video.addEventListener('loadedmetadata', res, {once:true}));
-    try{ await video.play(); }catch(_){}
-    resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
-    status('Live');
+    try{
+      await video.play();
+      status('Live');
+      resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
+    }catch(_){
+      status('Tap to start camera');
+      const resume = async (ev)=>{
+        ev?.preventDefault?.();
+        try{ await video.play(); status('Live'); }
+        catch(e){ status('Camera paused'); }
+        document.removeEventListener('click', resume, true);
+        document.removeEventListener('touchend', resume, true);
+      };
+      document.addEventListener('click', resume, true);
+      document.addEventListener('touchend', resume, true);
+    }
   }catch(err){
     console.error(err);
-    status('Camera error');
+    status(err?.name==='NotAllowedError' ? 'Camera permission denied' :
+           err?.name==='OverconstrainedError' ? 'Camera constraints failed' :
+           'Camera error');
     toast(err?.message || 'Camera failed');
   }
 }
-
-/* ===== freeze / unfreeze ===== */
-function freezeNow(){
-  try{
-    const wrap = document.getElementById('videoPane');
-    const w = wrap.clientWidth, h = wrap.clientHeight;
-    compositeCanvas.width = w; compositeCanvas.height = h;
-    const ctx = compositeCanvas.getContext('2d', {willReadFrequently:true});
-    const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
-    if(vw && vh){
-      const z = Math.max(1, uiZoom);
-      const base = Math.min(vw, vh);
-      const sw = Math.round(base / z);
-      const sx = Math.floor((vw - sw)/2);
-      const sy = Math.floor((vh - sw)/2);
-      ctx.drawImage(video, sx, sy, sw, sw, 0, 0, w, h);
-    }else{
-      ctx.fillStyle = '#000'; ctx.fillRect(0,0,w,h);
-    }
-    compositeImg.src = compositeCanvas.toDataURL('image/jpeg', 0.9);
-    compositeOverlay.classList.add('open');
-    status('Frozen');
-  }catch(e){
-    toast('Freeze failed: ' + (e?.message||'unknown'));
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && source==='camera'){
+    video.play().catch(()=>{});
   }
+});
+
+/* ======== >>> FREEZE COMPOSITE: image + palette from SAME FRAME ======== */
+function drawPaletteOnCanvas(ctx, pal, W, H){
+  // layout
+  const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const pad = 12 * DPR;
+  const metaH = 18 * DPR;
+  const gap = 8 * DPR;
+
+  const barH = Math.max(44 * DPR, Math.round(Math.min(W, H) * 0.10));
+  const barY = H - pad - barH;
+  const rectRadius = 10 * DPR;
+
+  // swatches (if enabled)
+  const showRects = rectChk.checked !== false;
+  const showGrad  = gradChk.checked !== false;
+
+  if(showRects && pal.length){
+    const n = pal.length;
+    const segW = Math.floor((W - pad*2) / n);
+    for(let i=0;i<n;i++){
+      const [r,g,b]=pal[i];
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const x = pad + i*segW;
+      const y = barY;
+      const w = (i===n-1) ? (W - pad - x) : segW; // last segment fills remainder
+
+      // rounded rect
+      const rr = rectRadius;
+      ctx.beginPath();
+      ctx.moveTo(x+rr, y);
+      ctx.lineTo(x+w-rr, y);
+      ctx.quadraticCurveTo(x+w, y, x+w, y+rr);
+      ctx.lineTo(x+w, y+barH-rr);
+      ctx.quadraticCurveTo(x+w, y+barH, x+w-rr, y+barH);
+      ctx.lineTo(x+rr, y+barH);
+      ctx.quadraticCurveTo(x, y+barH, x, y+barH-rr);
+      ctx.lineTo(x, y+rr);
+      ctx.quadraticCurveTo(x, y, x+rr, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // stroke line to separate from photo slightly
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = Math.max(1, Math.round(1 * DPR));
+    ctx.strokeRect(pad-0.5, barY-0.5, W-pad*2+1, barH+1);
+  }
+
+  // gradient line (above swatches)
+  if(showGrad && pal.length){
+    const gradH = 10 * DPR;
+    const gy = barY - gap - gradH;
+    const g = ctx.createLinearGradient(pad, gy, W - pad, gy);
+    const n = pal.length;
+    for(let i=0;i<n;i++){
+      const t = n <= 1 ? 0 : i/(n-1);
+      const [r,gc,b]=pal[i];
+      g.addColorStop(t, `rgb(${r},${gc},${b})`);
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(pad, gy, W - pad*2, gradH);
+  }
+
+  // meta text
+  const ts = 12 * DPR;
+  ctx.font = `${ts}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  const meta = `${ALGO_LABEL[algo]} · K=${K} · ${new Date().toLocaleString()} · ${compositeCanvas.dataset.srcRes||''}`;
+  ctx.fillText(meta, pad, H - pad - barH - gap*2);
 }
+
+/**
+ * Compute palette from an ImageData using current algo and KMAX, then slice to K.
+ */
+function computePaletteForImageData(imgData){
+  const pixels = samplePixels(imgData, 6); // same step as live loop
+  let pal;
+  if(algo==='kmeans')      pal = kmeansKmax(pixels, KMAX);
+  else if(algo==='hist')   pal = histogramKmax(pixels, KMAX);
+  else                     pal = medianCutKmax(pixels, KMAX);
+  return pal.slice(0, Math.min(K, pal.length));
+}
+
+function freezeNow(){
+  // Ensure layout is ready
+  if (typeof window.recalcSquare === 'function') window.recalcSquare();
+
+  const wrap = document.getElementById('videoPane');
+  const cssW = wrap.clientWidth, cssH = wrap.clientHeight;
+  if(cssW<=0 || cssH<=0){ toast('Freeze failed (layout not ready)'); return; }
+
+  // Hi-DPI canvas setup
+  const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  const W = cssW * DPR, H = cssH * DPR;
+  compositeCanvas.width = W; compositeCanvas.height = H;
+  compositeCanvas.style.width = cssW + 'px';
+  compositeCanvas.style.height = cssH + 'px';
+  const ctx = compositeCanvas.getContext('2d', {willReadFrequently:true});
+  ctx.setTransform(DPR,0,0,DPR,0,0); // draw in CSS pixels
+
+  // draw the visual (camera/photo) at current zoom/crop
+  let srcOK=false;
+  let srcRes = '';
+  if(source==='camera'){
+    if(!(video.readyState>=2 && video.videoWidth>0 && video.videoHeight>0)){
+      toast('No camera frame to capture'); return;
+    }
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const z = Math.max(1, uiZoom);
+    const base = Math.min(vw, vh);
+    const sw = Math.round(base / z);
+    const sx = Math.floor((vw - sw)/2);
+    const sy = Math.floor((vh - sw)/2);
+    ctx.drawImage(video, sx, sy, sw, sw, 0, 0, cssW, cssH);
+    srcOK = true;
+    srcRes = `${vw}×${vh}`;
+  }else if(source==='photo' && photoBitmap){
+    const {sx,sy,sw,sh}=currentPhotoSrcRect();
+    ctx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, cssW, cssH);
+    srcOK = true;
+    srcRes = `${Math.round(sw)}×${Math.round(sh)}`;
+  }
+  if(!srcOK){ toast('Nothing to capture'); return; }
+
+  // compute palette from the SAME pixels we just drew
+  // make a temp buffer matching processing size to keep palette clean
+  const tmp = document.createElement('canvas');
+  tmp.width = procWidth; tmp.height = procWidth;
+  const tctx = tmp.getContext('2d', {willReadFrequently:true});
+
+  if(source==='camera'){
+    const {sx,sy,sw,sh} = computeSquareCrop();
+    tctx.drawImage(video, sx,sy,sw,sh, 0,0, procWidth,procWidth);
+  }else{
+    const {sx,sy,sw,sh} = currentPhotoSrcRect();
+    tctx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, procWidth,procWidth);
+  }
+  const imgData = tctx.getImageData(0,0,procWidth,procWidth);
+  const pal = computePaletteForImageData(imgData);
+
+  // draw palette + metadata on the composite
+  compositeCanvas.dataset.srcRes = srcRes;
+  drawPaletteOnCanvas(ctx, pal, cssW, cssH);
+
+  // export and show
+  compositeImg.src = compositeCanvas.toDataURL('image/jpeg', 0.95);
+  compositeOverlay.classList.add('open');
+  status('Frozen');
+}
+/* ======== <<< FREEZE COMPOSITE ======== */
+
 function unfreeze(){
   compositeOverlay.classList.remove('open');
   status('Live');
