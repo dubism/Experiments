@@ -11,7 +11,7 @@
     --card:#0f1117; --card2:#10131a; --line:#1a2130;
     --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 0 0 1px #1a2130, 0 8px 24px rgba(0,0,0,.45);
     --shadow-hover: 0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 18px 36px rgba(0,0,0,.6);
-    --radius:14px;
+    --radius:16px;
 
     /* Green → Bluish → Grey (grey only after 3 days) */
     --t0:#82FFB5;  /* <1m fresh green */
@@ -71,19 +71,28 @@
 
   .cards{
     display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
-    gap:12px;
+    grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+    gap:14px;
   }
 
-  /* Card */
+  /* Card – spacious grid */
   .card{
     display:block;text-decoration:none;color:inherit;
     background:linear-gradient(180deg,var(--card),var(--card2));
     border:1px solid var(--line);border-radius:var(--radius);
-    padding:12px 12px 10px;
+    padding:16px 18px;
     box-shadow:var(--shadow);
     transition:transform .18s, box-shadow .22s, border-color .2s, background .25s;
     position:relative;overflow:hidden;
+
+    /* Grid layout */
+    display:grid;
+    grid-template-columns: 40px 1fr auto;         /* icon | title | open */
+    grid-template-rows: auto auto;                /* top row | meta row */
+    grid-template-areas:
+      "icon title open"
+      "icon meta  actions";
+    column-gap:14px; row-gap:8px;
   }
   .card:before{
     content:"";position:absolute;inset:-1px;border-radius:var(--radius);
@@ -93,16 +102,25 @@
   }
   .card:hover,.card:focus-visible{transform:translateY(-2px);box-shadow:var(--shadow-hover);border-color:#2a3755;outline:none}
 
-  .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
   .ic{
-    width:22px;height:22px;flex:0 0 22px;display:grid;place-items:center;
-    background:#0c1119;border:1px solid #1f2a42;border-radius:9px;
+    grid-area:icon;
+    width:40px;height:40px;display:grid;place-items:center;
+    background:#0c1119;border:1px solid #1f2a42;border-radius:12px;
   }
-  .name{font-weight:700;letter-spacing:.2px;line-height:1.25;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .titleWrap{grid-area:title;min-width:0}
+  .name{font-weight:750;letter-spacing:.2px;line-height:1.25;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .path{font-size:11px;color:#97a1b1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-  .meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .timeBlock{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .openVis{
+    grid-area:open;
+    align-self:start; justify-self:end;
+    font-size:12px;color:#cfd5df;opacity:.9;display:inline-flex;gap:6px;align-items:center;
+    pointer-events:none; /* whole card already clickable */
+  }
+  .openVis svg{opacity:.9}
+
+  .meta{grid-area:meta;display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+  .actions{grid-area:actions;display:flex;align-items:center;gap:10px;justify-self:end}
 
   /* “Time since” — text only (no backplate) */
   .ago{
@@ -111,7 +129,7 @@
   }
   .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.95}
 
-  /* Colored text variants (no background/border) */
+  /* Colored text variants */
   .ago.t0{color:var(--t0)} .ago.t1{color:var(--t1)} .ago.t2{color:var(--t2)}
   .ago.t3{color:var(--t3)} .ago.t4{color:var(--t4)} .ago.t5{color:var(--t5)}
   .ago.t6{color:var(--t6)} .ago.t7{color:var(--t7)} .ago.t8{color:var(--t8)}
@@ -123,17 +141,26 @@
   /* Copy button (small, non-primary) */
   .copyBtn{
     border:1px dashed #2a3755;background:#101622;color:#d9e1ee;
-    padding:.35rem .55rem;border-radius:10px;font-size:11px;letter-spacing:.2px;
+    padding:.4rem .6rem;border-radius:10px;font-size:11px;letter-spacing:.2px;
     display:inline-flex;align-items:center;gap:6px;box-shadow:none;
   }
   .copyBtn:hover{background:#12203a;border-color:#35507d}
   .copyBtn svg{opacity:.9}
 
-  .go{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#cfd5df;opacity:.85}
-  .go svg{opacity:.9;transition:transform .18s}
-  .card:hover .go svg{transform:translateX(2px)}
-
   footer{color:#9aa3b2;text-align:center;padding:18px 16px;border-top:1px solid #161b25}
+
+  /* Small screens: stack open under title */
+  @media (max-width:520px){
+    .card{
+      grid-template-columns:40px 1fr;
+      grid-template-areas:
+        "icon title"
+        "icon open"
+        "icon meta"
+        "icon actions";
+    }
+    .openVis{justify-self:start; margin-top:2px}
+  }
 
   @media (prefers-reduced-motion: reduce){*{transition:none !important}}
 </style>
@@ -196,9 +223,9 @@ function setSort(mode){
 
 function folderOf(path){const i=path.lastIndexOf('/');return i===-1?"":path.slice(0,i);}
 function fileIcon(){return `
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.3" />
-    <path d="M13 3v5h5" stroke="#9fb3d6" stroke-width="1.3"/>
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.4" />
+    <path d="M13 3v5h5" stroke="#9fb3d6" stroke-width="1.4"/>
   </svg>`;}
 function folderIcon(){return `
   <svg class="folder-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -270,30 +297,23 @@ function render(items){
       a.className = 'card';
       a.href = it.href;
 
-      const top = document.createElement('div');
-      top.className = 'top';
-
       const ic = document.createElement('div');
       ic.className = 'ic';
       ic.innerHTML = fileIcon();
 
-      const textWrap = document.createElement('div');
-      const nm = document.createElement('div');
-      nm.className = 'name';
-      nm.textContent = prettyName(it.name);
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'titleWrap';
+      titleWrap.innerHTML = `
+        <div class="name">${prettyName(it.name)}</div>
+        <div class="path">${it.path}</div>
+      `;
 
-      const pt = document.createElement('div');
-      pt.className = 'path';
-      pt.textContent = it.path;
-
-      textWrap.append(nm, pt);
-      top.append(ic, textWrap);
+      const open = document.createElement('div');
+      open.className = 'openVis';
+      open.innerHTML = `Open ${arrowIcon()}`;
 
       const meta = document.createElement('div');
       meta.className = 'meta';
-
-      const timeBlock = document.createElement('div');
-      timeBlock.className = 'timeBlock';
 
       const when = document.createElement('span');
       when.className = 'ago';
@@ -309,17 +329,15 @@ function render(items){
         when.classList.add(ag.cls);
         when.querySelector('.t').textContent = ag.text;
         when.title = `Last updated: ${isoLocal(d)}`;
-        exact.textContent = isoLocal(d); // visible exact time
+        exact.textContent = isoLocal(d);
       } else {
         when.classList.add('t9');
       }
 
-      timeBlock.append(when, exact);
+      meta.append(when, exact);
 
       const actions = document.createElement('div');
-      actions.style.display='inline-flex';
-      actions.style.gap='8px';
-      actions.style.alignItems='center';
+      actions.className = 'actions';
 
       const copyBtn = document.createElement('button');
       copyBtn.className = 'copyBtn';
@@ -330,20 +348,14 @@ function render(items){
           <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
         </svg>
         Copy HTML`;
-      // Prevent navigation when pressing copy
       copyBtn.addEventListener('click', (ev)=>{
         ev.preventDefault(); ev.stopPropagation();
         copyFile(it.path, copyBtn);
       });
 
-      const go = document.createElement('span');
-      go.className = 'go';
-      go.innerHTML = `Open ${arrowIcon()}`;
+      actions.append(copyBtn);
 
-      actions.append(copyBtn, go);
-
-      meta.append(timeBlock, actions);
-      a.append(top, meta);
+      a.append(ic, titleWrap, open, meta, actions);
       grid.appendChild(a);
     });
 
@@ -378,30 +390,23 @@ function render(items){
       a.className = 'card';
       a.href = it.href;
 
-      const top = document.createElement('div');
-      top.className = 'top';
-
       const ic = document.createElement('div');
       ic.className = 'ic';
       ic.innerHTML = fileIcon();
 
-      const textWrap = document.createElement('div');
-      const nm = document.createElement('div');
-      nm.className = 'name';
-      nm.textContent = prettyName(it.name);
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'titleWrap';
+      titleWrap.innerHTML = `
+        <div class="name">${prettyName(it.name)}</div>
+        <div class="path">${it.path}</div>
+      `;
 
-      const pt = document.createElement('div');
-      pt.className = 'path';
-      pt.textContent = it.path;
-
-      textWrap.append(nm, pt);
-      top.append(ic, textWrap);
+      const open = document.createElement('div');
+      open.className = 'openVis';
+      open.innerHTML = `Open ${arrowIcon()}`;
 
       const meta = document.createElement('div');
       meta.className = 'meta';
-
-      const timeBlock = document.createElement('div');
-      timeBlock.className = 'timeBlock';
 
       const when = document.createElement('span');
       when.className = 'ago';
@@ -416,13 +421,10 @@ function render(items){
       } else {
         when.classList.add('t9');
       }
-
-      timeBlock.append(when);
+      meta.append(when);
 
       const actions = document.createElement('div');
-      actions.style.display='inline-flex';
-      actions.style.gap='8px';
-      actions.style.alignItems='center';
+      actions.className = 'actions';
 
       const copyBtn = document.createElement('button');
       copyBtn.className = 'copyBtn';
@@ -438,14 +440,9 @@ function render(items){
         copyFile(it.path, copyBtn);
       });
 
-      const go = document.createElement('span');
-      go.className = 'go';
-      go.innerHTML = `Open ${arrowIcon()}`;
+      actions.append(copyBtn);
 
-      actions.append(copyBtn, go);
-
-      meta.append(timeBlock, actions);
-      a.append(top, meta);
+      a.append(ic, titleWrap, open, meta, actions);
       grid.appendChild(a);
     });
 
@@ -454,9 +451,7 @@ function render(items){
   });
 }
 
-function applyFilter(){
-  render(allItems);
-}
+function applyFilter(){ render(allItems); }
 
 async function fetchTree(){
   statusEl.textContent = "Loading…";
@@ -506,15 +501,12 @@ async function copyFile(path, btn){
     const data = await resp.json();
     let content = '';
     if(data && data.content){
-      // decode base64; handle large strings safely by chunking
       const b64 = data.content.replace(/\n/g,'');
       content = atob(b64);
     }else{
-      // fallback: fetch from pages
       const r2 = await fetch(`${BASE}${path}`);
       content = await r2.text();
     }
-
     await writeToClipboard(content);
     btn.innerHTML = 'Copied ✓';
   }catch(err){
@@ -529,7 +521,6 @@ async function writeToClipboard(text){
   if(navigator.clipboard && navigator.clipboard.writeText){
     return navigator.clipboard.writeText(text);
   }
-  // Fallback
   const ta = document.createElement('textarea');
   ta.value = text;
   ta.style.position='fixed'; ta.style.left='-9999px';
