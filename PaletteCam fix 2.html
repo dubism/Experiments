@@ -47,7 +47,7 @@
 
   #palettePane{ display:flex; flex-direction:column; gap:10px; min-height:0; flex:1;
     border-bottom:1px solid var(--line); padding-bottom:10px; background:#000; }
-  .title{display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
+  .title{display:flex;align-items:center;justify-content:space-between;color:#9aa0a6}
   .stack{
     position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer;
     touch-action:manipulation; -webkit-touch-callout:none;
@@ -138,7 +138,7 @@
   }
   #cc input[type="checkbox"]{ inline-size:22px; block-size:22px; }
 
-  /* Press-lock: hard-disable selection/callout globally during a long-press */
+  /* Press-lock: disable selection/callout globally during a long-press */
   .pressLock, .pressLock *{
     -webkit-user-select:none !important;
     user-select:none !important;
@@ -196,7 +196,7 @@
     </section>
   </div>
 
-  <!-- CC overlay as direct child of body -->
+  <!-- CC overlay -->
   <div id="ccWrap" aria-modal="true" role="dialog">
     <div id="cc">
       <section id="algoBrief" class="small"></section>
@@ -432,8 +432,16 @@ let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, ui
 let frameCounter=0,lastT=performance.now(),pending=false, running=false;
 let throttleCountdown=1; let lastPalette=[]; let ctaH=56;
 let ccOpen=false, pressLock=false;
+let rafStarted=false;
 
-/* ===== algo switching ===== */
+/* ===== util ===== */
+const TH_MIN=1, TH_MAX=150;
+const nToSlider=n=>Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100);
+const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
+const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+const status=t=>{ try{statusEl.textContent=t;}catch{} };
+
+/* ===== algo switching (tap left/right) ===== */
 const ALGOS = ['kmeans','hist','mediancut'];
 const ALGO_LABEL = { kmeans:'K-Means (LAB)', hist:'Histogram', mediancut:'Median-cut' };
 const ALGO_COPY = {
@@ -463,15 +471,7 @@ function highlightAlgoDesc(a){
   document.querySelectorAll('#algoBrief .a').forEach(n=>n.classList.toggle('active', n.dataset.a===a));
 }
 
-/* ===== helpers ===== */
-const TH_MIN=1, TH_MAX=150;
-const nToSlider=n=>Math.round(Math.log(n/TH_MIN)/Math.log(TH_MAX/TH_MIN)*100);
-const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
-const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
-const status=t=>statusEl.textContent=t;
-function updateLpHint(){ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
-
-/* ===== selection/callout guards ===== */
+/* ===== selection / callout guards (for long-press) ===== */
 function lockPressSelection(){
   if(pressLock) return;
   pressLock=true;
@@ -488,47 +488,18 @@ document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault();
 document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.getSelection&&window.getSelection(); if(s&&s.removeAllRanges) try{s.removeAllRanges();}catch{} }});
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen || pressLock) e.preventDefault(); }, {capture:true});
 
-/* ===== camera ===== */
-async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
-async function startCamera(){
-  try{
-    video.setAttribute('playsinline',''); video.setAttribute('muted',''); video.setAttribute('autoplay','');
-    status('Requesting camera…');
-    const stream=await getStream(); if(!stream||!stream.active) throw new Error('Camera access was not successful.');
-    video.srcObject=stream;
-    await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
-    await video.play().catch(()=>{
-      status('Tap to start camera');
-      const resume=()=>{ if(!compositeOverlay.classList.contains('open')) video.play().catch(()=>{}); document.removeEventListener('click',resume,true); };
-      document.addEventListener('click',resume,true);
-    });
-    status('Live'); running=true; pending=false; throttleCountdown=1; renderPalette([]); requestAnimationFrame(loop);
-  }catch(err){ status(err?.name==='NotAllowedError'?'Camera permission denied.':(err?.message||'Camera failed')); }
+/* ===== frozen-canvas hygiene ===== */
+function hardHideFrozenCanvas(){
+  const fc=frozenCanvas, w=fc.width, h=fc.height;
+  if(w&&h){const g=fc.getContext('2d'); g.clearRect(0,0,w,h);}
+  fc.width=0; fc.height=0; fc.style.display='none';
 }
-startCamera();
 
-/* ===== CTA visibility ===== */
-function showFreezeCTA(){ freezeBtn.style.display='block'; unfreezeBtn.style.display='none'; }
-function showUnfreezeCTA(){ freezeBtn.style.display='none'; unfreezeBtn.style.display='block'; }
-
-/* ===== UI init ===== */
-addEventListener('load', ()=>{
-  const ctaH = freezeBtn.offsetHeight || 56;
-  document.documentElement.style.setProperty('--ctaH', ctaH + 'px');
-
-  throttleLog.value=nToSlider(throttleN); throttleVal.textContent=String(throttleN);
-  rectChk.checked=true; gradChk.checked=true; renderPalette(lastPalette);
-  renderAlgoBrief(); setAlgo(algo);
-  showFreezeCTA();
-});
-
-/* ===== CC open/close ===== */
+/* ===== CC open/close with bounce ===== */
 function openCC(){
   ccWrap.style.display='block';
-  // trigger animation
   ccWrap.classList.add('open');
   ccOpen=true;
-  // force above GPU video layer on older iOS
   video.dataset.prevOpacity = video.style.opacity || '';
   video.style.opacity = '0.9999';
   const first = document.querySelector('#cc input, #cc button, #cc select');
@@ -541,11 +512,9 @@ function closeCC(){
   video.style.opacity = video.dataset.prevOpacity || '';
 }
 
-/* ===== Press shield helpers (ensures CC opens DURING press, but UI is usable after release) ===== */
+/* ===== press shield helpers ===== */
 function showPressShieldWithAutoRelease(){
   pressShield.style.display='block';
-
-  // Release shield on the very next end of gesture, from top of tree (capture)
   const release = ()=>{
     hidePressShield();
     document.removeEventListener('pointerup', release, true);
@@ -555,8 +524,6 @@ function showPressShieldWithAutoRelease(){
   document.addEventListener('pointerup', release, true);
   document.addEventListener('touchend', release, true);
   document.addEventListener('mouseup', release, true);
-
-  // Failsafe: auto remove if somehow no pointerup arrives (older iOS oddities)
   clearTimeout(showPressShieldWithAutoRelease._t);
   showPressShieldWithAutoRelease._t = setTimeout(()=>{ hidePressShield(); }, 1200);
 }
@@ -565,7 +532,7 @@ function hidePressShield(){
   clearTimeout(showPressShieldWithAutoRelease._t);
 }
 
-/* ===== Long-press: open DURING press, shield absorbs remainder; ALSO ensure release even if capture quirks ===== */
+/* ===== Long-press: open DURING press, shield absorbs remainder ===== */
 let lpTimer = 0, movedTooFar = false, longPressed = false, activePointerId = null;
 const LP_MS = 450, MOVE_TOL = 10;
 
@@ -580,10 +547,9 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   lpTimer = setTimeout(()=>{
     if(movedTooFar) return;
     longPressed = true;
-    // release capture so document-level pointerup can fire reliably on iOS
     try{ paletteClickable.releasePointerCapture(activePointerId); }catch{}
-    openCC();                     // 1) open immediately during press
-    showPressShieldWithAutoRelease(); // 2) absorb remainder of this press, auto-remove on release
+    openCC();
+    showPressShieldWithAutoRelease();
   }, LP_MS);
 
   const move = (ev)=>{
@@ -597,7 +563,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
     paletteClickable.removeEventListener('pointerup', finish);
     paletteClickable.removeEventListener('pointercancel', cancel);
     clearTimeout(lpTimer);
-    hidePressShield();         // in case auto-release missed
+    hidePressShield();
     if(!longPressed && !movedTooFar){
       const r = paletteClickable.getBoundingClientRect();
       const isLeft = (ev.clientX - r.left) < (r.width/2);
@@ -616,7 +582,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   paletteClickable.addEventListener('pointercancel', cancel, {once:true});
 });
 
-/* Shield eats any events while visible */
+/* Shield consumes events while visible */
 ['pointerdown','pointerup','click','touchstart','touchend','mousedown','mouseup','wheel'].forEach(evt=>{
   pressShield.addEventListener(evt, (e)=>{ e.stopPropagation(); e.preventDefault(); }, {capture:true});
 });
@@ -707,7 +673,7 @@ function renderPalette(palette){
   }
 }
 
-/* ===== freeze / unfreeze (video stays playing → no play/stop icons) ===== */
+/* ===== freeze / unfreeze (video stays playing) ===== */
 async function freezeNow(){
   running=false; pending=false; throttleCountdown=1;
   const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
@@ -726,7 +692,6 @@ async function freezeNow(){
   const hiCtx=hiCap.getContext('2d'); hiCtx.drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
 
   compositeImg.src=''; compositeOverlay.classList.add('open'); updateLpHint();
-  window.recalcSquare&&window.recalcSquare();
 
   const freezeId='freeze:'+Math.random().toString(36).slice(2);
   const imgs=capCtx.getImageData(0,0,w,h);
@@ -752,40 +717,15 @@ function unfreeze(){
   compositeOverlay.classList.remove('open');
   hardHideFrozenCanvas();
   running=true; pending=false; throttleCountdown=1;
-  // no need to resume video; it was never paused
-}
-
-/* ===== RAF loop ===== */
-function loop(){
-  requestAnimationFrame(loop);
-  if(video.readyState<2||video.paused||!running) return;
-
-  const now=performance.now();
-  if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
-
-  const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
-  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
-  off.width=w; off.height=h;
-  const ctx=off.getContext('2d',{willReadFrequently:true});
-  ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
-  resEl.textContent=w+'×'+h;
-
-  if(--throttleCountdown>0) return;
-  throttleCountdown=Math.max(1,throttleN);
-  if(!pending){
-    pending=true;
-    const img=ctx.getImageData(0,0,w,h);
-    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
-  }
 }
 
 /* ===== composite draw ===== */
-const compositeCanvas=document.getElementById('compositeCanvas');
+const compositeCanvasRef = document.getElementById('compositeCanvas');
 function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
   const CAM_W=2048, CAM_H=2048;
   const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24;
   const W=PAD+CAM_W+PAD, H=PAD+CAM_H+(showRects||showGrad?GUT:0)+RECT_H+LABEL+(showGrad?GUT:0)+GRAD_H+PAD;
-  const c=compositeCanvas; c.width=W; c.height=H;
+  const c=compositeCanvasRef; c.width=W; c.height=H;
   const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,W,H);
   g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
   g.drawImage(hiCapCanvas,0,0,hiCapCanvas.width,hiCapCanvas.height, PAD,PAD, CAM_W,CAM_H);
@@ -807,8 +747,176 @@ function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
 }
 
 /* ===== overlay hint observer ===== */
+const compositeOverlayRef=document.getElementById('compositeOverlay');
+function updateLpHint(){ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlayRef.classList.contains('open'); }
+new MutationObserver(updateLpHint).observe(compositeOverlayRef,{attributes:true,attributeFilter:['class']});
+document.addEventListener('DOMContentLoaded', updateLpHint);
+
+/* =========================================================================
+   ROBUST CAMERA STARTER + AUTO-RECOVERY (replaces old startCamera)
+   ========================================================================= */
+let currentStream = null;
+let starting = false;
+
+function secureContextGuard(){
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost'){
+    status('Camera requires HTTPS or localhost'); throw new Error('InsecureContext');
+  }
+}
+
+async function waitVisible(){
+  if (document.visibilityState === 'visible') return;
+  await new Promise(res => {
+    const h = () => { if (document.visibilityState === 'visible'){ document.removeEventListener('visibilitychange', h); res(); } };
+    document.addEventListener('visibilitychange', h);
+  });
+}
+
+function haveLiveVideoTrack(stream){
+  return !!stream && stream.getVideoTracks().some(t => t.readyState === 'live' && !t.muted);
+}
+
+async function getStreamWithFallbacks(){
+  const tries = [
+    { video:{ facingMode:{ ideal:'environment' } }, audio:false },
+    { video:{ facingMode:{ ideal:'user' } },        audio:false },
+    { video:true,                                   audio:false },
+  ];
+  let lastErr;
+  for (const c of tries){
+    try{
+      const s = await navigator.mediaDevices.getUserMedia(c);
+      if (haveLiveVideoTrack(s)) return s;
+      s.getTracks().forEach(t => t.stop());
+      lastErr = new Error('Track not live');
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error('No camera stream');
+}
+
+function bindPlayFallbackOnce(){
+  const resume = () => {
+    video.play().catch(()=>{});
+    window.removeEventListener('pointerdown', resume, true);
+    window.removeEventListener('click', resume, true);
+  };
+  window.addEventListener('pointerdown', resume, true);
+  window.addEventListener('click', resume, true);
+}
+
+async function startCameraRobust({maxRetries=3} = {}){
+  if (starting) return; starting = true;
+  try{
+    secureContextGuard();
+    await waitVisible();
+
+    // Ensure attributes BEFORE attaching stream
+    video.setAttribute('playsinline','');
+    video.setAttribute('muted','');
+    video.setAttribute('autoplay','');
+
+    let attempt = 0;
+    while (attempt <= maxRetries){
+      attempt++;
+      status(attempt === 1 ? 'Requesting camera…' : `Retry ${attempt}/${maxRetries}…`);
+
+      // Stop any existing stream before retry
+      if (currentStream) { currentStream.getTracks().forEach(t=>t.stop()); currentStream = null; }
+
+      let stream;
+      try{
+        stream = await getStreamWithFallbacks();
+      }catch(err){
+        if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')){
+          status('Camera blocked. Enable in Settings ▸ Safari/PWA ▸ Camera.'); throw err;
+        }
+        if (attempt > maxRetries) throw err;
+        await new Promise(r => setTimeout(r, 400));
+        continue;
+      }
+
+      currentStream = stream;
+      video.srcObject = stream;
+
+      // Wait for readiness
+      await new Promise((res) => {
+        let done = false;
+        const onReady = () => { if (done) return; done = true;
+          video.removeEventListener('loadedmetadata', onReady);
+          video.removeEventListener('canplay',        onReady);
+          res();
+        };
+        video.addEventListener('loadedmetadata', onReady, {once:true});
+        video.addEventListener('canplay',        onReady, {once:true});
+      });
+
+      try{
+        await video.play();
+      }catch{
+        bindPlayFallbackOnce(); // one-shot tap if iOS insists
+      }
+
+      // Final liveness check
+      if (haveLiveVideoTrack(stream) && !video.paused){
+        status('Live');
+        // Kick loop exactly once
+        if (!rafStarted){ rafStarted=true; running=true; pending=false; throttleCountdown=1; renderPalette([]); requestAnimationFrame(loop); }
+        starting = false;
+        return;
+      }
+
+      // If here, element didn't render; brief backoff then retry
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    throw new Error('Camera failed after retries');
+  }catch(err){
+    if (err.message === 'InsecureContext'){
+      /* already messaged */
+    } else if (err.name === 'NotReadableError'){
+      status('Camera busy in another app. Close it and return.');
+    } else if (err.name === 'OverconstrainedError'){
+      status('No camera matches constraints. Retrying with generic…');
+    } else if (err.name === 'NotAllowedError'){
+      status('Permission denied. Allow camera in site/PWA settings.');
+    } else {
+      status('Camera failed'); console.error(err);
+    }
+  }finally{
+    starting = false;
+  }
+}
+
+// Auto-recover when returning to the page or device list changes
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible'){
+    const live = currentStream && haveLiveVideoTrack(currentStream);
+    if (!live || video.paused){ startCameraRobust({maxRetries:2}); }
+  }
+});
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener){
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    const live = currentStream && haveLiveVideoTrack(currentStream);
+    if (!live){ startCameraRobust({maxRetries:2}); }
+  });
+}
+
+// Start once on load (deferred one tick)
+window.addEventListener('load', () => {
+  setTimeout(()=> startCameraRobust({maxRetries:3}), 0);
+});
+
+// Utility to hard-stop
+function stopCamera(){
+  if (currentStream){
+    currentStream.getTracks().forEach(t=>t.stop());
+    currentStream = null;
+  }
+  try{ video.srcObject = null; }catch{}
+}
+
+/* ===== overlay hint observer ===== */
 const compositeOverlay=document.getElementById('compositeOverlay');
-const lpHint=document.getElementById('lpHint');
 function updateLpHint(){ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
 new MutationObserver(updateLpHint).observe(compositeOverlay,{attributes:true,attributeFilter:['class']});
 document.addEventListener('DOMContentLoaded', updateLpHint);
