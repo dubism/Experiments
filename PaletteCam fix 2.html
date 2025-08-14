@@ -79,25 +79,24 @@
     bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
   }
 
+  /* ——— Control Center: full-screen backdrop + fixed dialog ——— */
   #ccWrap{
-    position:fixed;
-    inset: max(12px, env(safe-area-inset-top))
-           max(12px, env(safe-area-inset-right))
-           calc(var(--ctaH) + env(safe-area-inset-bottom) + 12px)
-           max(12px, env(safe-area-inset-left));
-    z-index:9000;
-    transform:translateZ(0); will-change:transform;
-    display:none;
+    position:fixed; inset:0; z-index:9000;
+    display:none; pointer-events:auto;
   }
+  #ccWrap.open{ display:block; }
   #cc{
+    position:fixed;
+    left:max(12px, env(safe-area-inset-left));
+    right:max(12px, env(safe-area-inset-right));
+    top:max(12px, env(safe-area-inset-top));
+    bottom:calc(var(--ctaH) + env(safe-area-inset-bottom) + 12px);
     background:rgba(0,0,0,.65);
     backdrop-filter:blur(10px);
     border:1px solid var(--line);
     border-radius:14px;
     padding:14px;
-    max-height:100%;
     overflow:auto; overscroll-behavior:contain;
-    -webkit-touch-callout:none;
     opacity:0; transform:scale(.96) translateY(8px);
   }
   #ccWrap.open #cc{ animation: ccBounceIn 360ms cubic-bezier(.2,.8,.2,1) forwards; }
@@ -120,10 +119,7 @@
   .ccsep{ border:0; border-top:1px solid var(--line); opacity:.6; margin:6px 0 10px 0; }
 
   .pressLock, .pressLock *{ -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }
-  #pressShield{
-    position:fixed; inset:0; z-index:9500;
-    background:transparent; display:none; touch-action:none; pointer-events:auto;
-  }
+  #pressShield{ position:fixed; inset:0; z-index:9500; background:transparent; display:none; touch-action:none; pointer-events:auto; }
 
   #camError{
     position:fixed; left:50%; transform:translateX(-50%);
@@ -139,6 +135,7 @@
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
   .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
 
+  /* Processing canvases must never layout/paint */
   #off,#capFrame{ display:none !important; width:0 !important; height:0 !important; }
 </style>
 </head>
@@ -177,6 +174,7 @@
     </section>
   </div>
 
+  <!-- CC overlay -->
   <div id="ccWrap" aria-modal="true" role="dialog">
     <div id="cc">
       <section id="algoBrief" class="small"></section>
@@ -266,6 +264,7 @@ const compositeCanvas=document.getElementById('compositeCanvas');
 const compositeImg=document.getElementById('compositeImg');
 const unfreezeBtn=document.getElementById('unfreezeBtn');
 const ccWrap=document.getElementById('ccWrap');
+const cc=document.getElementById('cc');
 const algoNameEl=document.getElementById('algoName');
 const lpHint=document.getElementById('lpHint');
 const pressShield=document.getElementById('pressShield');
@@ -276,24 +275,26 @@ const off=document.getElementById('off');
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, uiZoom=+zoomSlider.value;
 let throttleN=20, frameCounter=0, lastT=performance.now(), fps=0;
 let ccOpen=false, pressLock=false, draggingK=false;
-let lastPalette=[];
+let lastPaletteKmax=null;  // Option A cache (for the current algo)
+const KMAX = +kRange.max;
 
 /* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
 const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
+const clamp=(v,min,max)=>v<min?min:(v>max?max:v);
 const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
 const status=t=>{ try{statusEl.textContent=t;}catch{} };
-function toast(msg){ if(!msg) return; camError.textContent=msg; camError.style.display='block'; setTimeout(()=>camError.style.display='none', 4000); }
+function toast(msg){ if(!msg) return; camError.textContent=msg; camError.style.display='block'; setTimeout(()=>camError.style.display='none', 3000); }
 
-/* ===== algo labels (we compute kmeans for all for now) ===== */
+/* ===== algo labels/brief ===== */
 const ALGOS=['kmeans','hist','mediancut'];
-const ALGO_LABEL={kmeans:'K-Means (LAB)',hist:'Histogram',mediancut:'Median-cut'};
+const ALGO_LABEL={kmeans:'K-Means (hierarchical)',hist:'Histogram peaks',mediancut:'Median-cut'};
 const ALGO_COPY={
-  kmeans:'K-Means (RGB-approx): general capture of dominant hues.',
-  hist:'Histogram (approx via k-means): favors frequently occurring colors.',
-  mediancut:'Median-cut (approx via k-means): balanced spread.'
+  kmeans:'Bisecting k-means (hierarchical) for prefix-stable K.',
+  hist:'Fixed-grid histogram with global peak ranking (NMS).',
+  mediancut:'Deterministic median-cut (hierarchical).'
 };
-function setAlgo(next){ algo=next; algoNameEl.textContent=ALGO_LABEL[algo]; highlightAlgoDesc(algo); }
+function setAlgo(next){ algo=next; algoNameEl.textContent=ALGO_LABEL[algo]; highlightAlgoDesc(algo); lastPaletteKmax=null; }
 function cycleAlgo(dir){ const i=ALGOS.indexOf(algo); setAlgo(ALGOS[(i+(dir>0?1:-1)+ALGOS.length)%ALGOS.length]); }
 function renderAlgoBrief(){ document.getElementById('algoBrief').innerHTML =
   `<div class="a" data-a="kmeans">${ALGO_COPY.kmeans}</div>
@@ -301,18 +302,24 @@ function renderAlgoBrief(){ document.getElementById('algoBrief').innerHTML =
    <div class="a" data-a="mediancut">${ALGO_COPY.mediancut}</div>`; }
 function highlightAlgoDesc(a){ document.querySelectorAll('#algoBrief .a').forEach(n=>n.classList.toggle('active',n.dataset.a===a)); }
 
-/* ===== selection guards ===== */
+/* ===== selection + CC close behavior ===== */
 function lockPressSelection(){ if(pressLock) return; pressLock=true; document.body.classList.add('pressLock'); }
 function unlockPressSelection(){ if(!pressLock) return; pressLock=false; document.body.classList.remove('pressLock'); const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }
 document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault(); },{capture:true});
 document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }});
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen||pressLock) e.preventDefault(); },{capture:true});
 
-/* ===== CC open/close ===== */
-function openCC(){ ccWrap.style.display='block'; ccWrap.classList.add('open'); ccOpen=true; }
-function closeCC(){ ccWrap.style.display='none'; ccWrap.classList.remove('open'); ccOpen=false; }
+/* CC open/close */
+function openCC(){ ccWrap.classList.add('open'); ccOpen=true; }
+function closeCC(){ ccOpen=false; ccWrap.classList.remove('open'); hidePressShield(); }
+cc.addEventListener('pointerdown', e=>e.stopPropagation());
+cc.addEventListener('click', e=>e.stopPropagation());
+/* Close on ANY outside tap (capture so nothing can swallow it) */
+document.addEventListener('pointerdown', (e)=>{
+  if(ccOpen && !cc.contains(e.target)) closeCC();
+}, {capture:true});
 
-/* ===== press shield helpers ===== */
+/* Long-press shield helpers */
 function showPressShieldWithAutoRelease(){
   pressShield.style.display='block';
   const release=()=>{ hidePressShield(); document.removeEventListener('pointerup',release,true); document.removeEventListener('touchend',release,true); document.removeEventListener('mouseup',release,true); };
@@ -329,12 +336,36 @@ function noScroll(e){ if(e.cancelable) e.preventDefault(); }
 function lockScroll(){ document.addEventListener('touchmove', noScroll, {passive:false, capture:true}); document.addEventListener('wheel', noScroll, {passive:false, capture:true}); }
 function unlockScroll(){ document.removeEventListener('touchmove', noScroll, {capture:true}); document.removeEventListener('wheel', noScroll, {capture:true}); }
 
-/* ===== K-drag + gestures ===== */
+/* ===== K-drag + gestures (instant) ===== */
 let lpTimer=0,movedTooFar=false,longPressed=false;
 const LP_MS=450,MOVE_TOL=10;
 function getKStepPx(){ const h = paletteClickable.clientHeight || 200; return Math.max(14, Math.min(56, Math.round(h / 6))); }
 
+/* instant K application (Option A: slice from lastPaletteKmax) */
+function renderPlaceholders(count){
+  // append dark-grey placeholders
+  for(let i=0;i<count;i++){
+    const d=document.createElement('div');
+    d.className='swatch';
+    d.style.background='#222';
+    swatchesEl.appendChild(d);
+  }
+}
+function applyKInstant(newK){
+  K = newK; kVal.textContent = newK;
+  // Re-render from cache immediately
+  swatchesEl.innerHTML='';
+  if(lastPaletteKmax && lastPaletteKmax.length){
+    const have = Math.min(K, lastPaletteKmax.length);
+    renderPalette(lastPaletteKmax.slice(0, have), true);
+    if(have < K) renderPlaceholders(K - have);
+  }else{
+    renderPlaceholders(K);
+  }
+}
+
 paletteClickable.addEventListener('pointerdown', (e)=>{
+  if(ccOpen) return; // no conflict with CC
   if(e.pointerType==='mouse' && e.button!==0) return;
 
   movedTooFar=false; longPressed=false;
@@ -382,11 +413,10 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
       else if(kAccum <= -stepPx) steps = Math.ceil(kAccum / stepPx);
 
       if(steps){
-        const newK = Math.max(2, Math.min(10, (+kRange.value) + steps));
-        if(newK !== +kRange.value){
+        const newK = clamp(+kRange.value + steps, +kRange.min, +kRange.max);
+        if (newK !== +kRange.value){
           kRange.value = String(newK);
-          kVal.textContent=newK;
-          K=newK;
+          applyKInstant(newK);     // <- instant, independent of processing loop
         }
         kAccum -= steps * stepPx;
       }
@@ -426,27 +456,18 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
 
 paletteClickable.addEventListener('wheel', (e)=>{ e.preventDefault(); }, {passive:false});
 
-['pointerdown','pointerup','click','touchstart','touchend','mousedown','mouseup','wheel'].forEach(evt=>{
-  pressShield.addEventListener(evt,(e)=>{ e.stopPropagation(); e.preventDefault(); },{capture:true});
-});
-document.addEventListener('click',e=>{
-  if(compositeOverlay.classList.contains('open')) return;
-  if(ccWrap.style.display==='block' && !ccWrap.contains(e.target) && !paletteClickable.contains(e.target)) closeCC();
-});
-document.addEventListener('keydown',(e)=>{ if(e.key==='Escape'&&ccWrap.style.display==='block') closeCC(); });
-
 /* ===== controls ===== */
-kRange.addEventListener('input',()=>{K=+kRange.value;kVal.textContent=K;});
+kRange.addEventListener('input',()=>applyKInstant(+kRange.value));
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value;sizeVal.textContent=procWidth+' px';});
 throttleLog.addEventListener('input',()=>{throttleN=sliderToN(+throttleLog.value);throttleVal.textContent=String(throttleN);});
-rectChk.addEventListener('change',()=>renderPalette(lastPalette));
-gradChk.addEventListener('change',()=>renderPalette(lastPalette));
-function setZoom(v){ uiZoom=Math.max(1,Math.min(10,v)); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
+rectChk.addEventListener('change',()=>renderPalette(lastPaletteKmax?.slice(0,K)||[]));
+gradChk.addEventListener('change',()=>renderPalette(lastPaletteKmax?.slice(0,K)||[]));
+function setZoom(v){ uiZoom=clamp(v,1,10); zoomSlider.value=uiZoom; document.documentElement.style.setProperty('--zoom',uiZoom); }
 zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* ===== crop helper (square, center, obey uiZoom) ===== */
+/* ===== crop helper ===== */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw,
@@ -454,83 +475,228 @@ function computeSquareCrop(){
   return {sx,sy,sw,sh};
 }
 
-/* ===== simple on-thread K-Means palette (fast, few iters) ===== */
-function kmeansPalette(imgData, k=3, maxIter=6, sampleStep=4){
-  const data = imgData.data;
-  const pts = [];
-  for(let i=0;i<data.length;i+=4*sampleStep){
-    const a=data[i+3]; if(a<250) continue;
-    pts.push([data[i], data[i+1], data[i+2]]);
+/* ===== sampling ===== */
+function samplePixels(imgData, step){
+  const d = imgData.data;
+  const n = d.length;
+  const out=[];
+  for(let i=0;i<n;i+=4*step){
+    if(d[i+3] < 250) continue;
+    out.push([d[i], d[i+1], d[i+2]]);
   }
-  if(pts.length===0){ return []; }
+  return out;
+}
 
-  // init: pick k random unique points
-  const cent=[]; const used=new Set();
-  while(cent.length<k && cent.length<pts.length){
-    const idx = (Math.random()*pts.length)|0;
-    if(used.has(idx)) continue; used.add(idx); cent.push(pts[idx].slice());
-  }
-  const assign=new Array(pts.length).fill(0);
+/* ===== Option A: compute Kmax palette (hierarchical / deterministic) ===== */
 
-  for(let it=0; it<maxIter; it++){
-    // assign
-    for(let i=0;i<pts.length;i++){
-      let best=0, bd=1e12;
-      const p=pts[i];
-      for(let c=0;c<cent.length;c++){
-        const d0=p[0]-cent[c][0], d1=p[1]-cent[c][1], d2=p[2]-cent[c][2];
-        const d=d0*d0+d1*d1+d2*d2;
-        if(d<bd){ bd=d; best=c; }
+/* Bisecting K-Means (prefix-stable) */
+function kmeansKmax(pixels, Kmax){
+  if(!pixels.length) return [];
+  // one cluster containing all indices
+  const idxs = Uint32Array.from({length:pixels.length}, (_,i)=>i);
+  let leaves = [{ids:idxs, id:0}];
+  let nextId=1;
+
+  function centroid(ids){
+    let r=0,g=0,b=0; const n=ids.length||ids.byteLength;
+    for(let i=0;i<n;i++){ const p=pixels[ids[i]]; r+=p[0]; g+=p[1]; b+=p[2]; }
+    const inv=1/Math.max(1,n); return [r*inv,g*inv,b*inv];
+  }
+  function split2(ids){
+    // choose axis of max variance
+    let nr=0,ng=0,nb=0, n=ids.length||ids.byteLength;
+    for(let i=0;i<n;i++){ const p=pixels[ids[i]]; nr+=p[0]; ng+=p[1]; nb+=p[2]; }
+    const mr=nr/n, mg=ng/n, mb=nb/n;
+    let vr=0,vg=0,vb=0;
+    for(let i=0;i<n;i++){ const p=pixels[ids[i]]; const dr=p[0]-mr,dg=p[1]-mg,db=p[2]-mb; vr+=dr*dr; vg+=dg*dg; vb+=db*db; }
+    const axis = (vr>=vg && vr>=vb)?0:((vg>=vb)?1:2);
+
+    // seeds: mean +/- small jitter along axis
+    const c=[mr,mg,mb];
+    const seedA=c.slice(), seedB=c.slice();
+    const j = Math.sqrt((axis===0?vr:(axis===1?vg:vb))/Math.max(1,n)) * 0.5;
+    seedA[axis]-=j; seedB[axis]+=j;
+
+    let A=[], B=[];
+    // few iterations
+    let ca=seedA, cb=seedB;
+    for(let it=0; it<3; it++){
+      A.length=0; B.length=0;
+      for(let i=0;i<n;i++){
+        const p=pixels[ids[i]];
+        const da=(p[0]-ca[0])**2 + (p[1]-ca[1])**2 + (p[2]-ca[2])**2;
+        const db=(p[0]-cb[0])**2 + (p[1]-cb[1])**2 + (p[2]-cb[2])**2;
+        (da<=db?A:B).push(ids[i]);
       }
-      assign[i]=best;
+      if(A.length===0 || B.length===0){
+        // fallback: hard split by median along axis
+        const sorted = Array.from(ids).sort((i1,i2)=>pixels[i1][axis]-pixels[i2][axis]);
+        const mid = sorted.length>>1;
+        A = sorted.slice(0, mid);
+        B = sorted.slice(mid);
+      }
+      ca = centroid(A); cb = centroid(B);
     }
-    // recompute
-    const sum=Array.from({length:cent.length},()=>[0,0,0,0]);
-    for(let i=0;i<pts.length;i++){
-      const a=assign[i]; const p=pts[i]; const s=sum[a]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]++;
+    return {A:Uint32Array.from(A), B:Uint32Array.from(B), ca, cb};
+  }
+
+  while(leaves.length < Kmax){
+    // pick leaf with highest population; tie by id
+    leaves.sort((x,y)=> (y.ids.length - x.ids.length) || (x.id - y.id));
+    const node = leaves.shift();
+    if(!node || node.ids.length<=1){ if(node) leaves.push(node); break; }
+    const {A,B} = split2(node.ids);
+    leaves.push({ids:A, id:nextId++});
+    leaves.push({ids:B, id:nextId++});
+  }
+
+  // representatives = centroids; order by population desc (stable)
+  const reps = leaves.map(l=>({c:centroid(l.ids), n:l.ids.length, id:l.id}))
+                     .sort((a,b)=> (b.n-a.n) || (a.id-b.id))
+                     .map(o=>o.c);
+  return reps.slice(0, Kmax);
+}
+
+/* Deterministic Median-Cut (prefix-stable) */
+function medianCutKmax(pixels, Kmax){
+  if(!pixels.length) return [];
+  const allIdx = Uint32Array.from({length:pixels.length}, (_,i)=>i);
+  let boxes=[{ids:allIdx, id:0}]; let nextId=1;
+
+  function stats(ids){
+    let rMin=255,gMin=255,bMin=255, rMax=0,gMax=0,bMax=0;
+    let sr=0,sg=0,sb=0, n=ids.length||ids.byteLength;
+    for(let i=0;i<n;i++){
+      const p=pixels[ids[i]]; const r=p[0],g=p[1],b=p[2];
+      if(r<rMin)rMin=r; if(g<gMin)gMin=g; if(b<bMin)bMin=b;
+      if(r>rMax)rMax=r; if(g>gMax)gMax=g; if(b>bMax)bMax=b;
+      sr+=r; sg+=g; sb+=b;
     }
-    for(let c=0;c<cent.length;c++){
-      if(sum[c][3]>0){
-        cent[c][0]=sum[c][0]/sum[c][3];
-        cent[c][1]=sum[c][1]/sum[c][3];
-        cent[c][2]=sum[c][2]/sum[c][3];
-      }else{
-        // re-seed empty cluster
-        const idx=(Math.random()*pts.length)|0;
-        cent[c]=pts[idx].slice();
+    return {rMin,rMax,gMin,gMax,bMin,bMax, mean:[sr/n, sg/n, sb/n], n};
+  }
+
+  function split(ids){
+    const s = stats(ids);
+    const rangeR = s.rMax - s.rMin, rangeG = s.gMax - s.gMin, rangeB = s.bMax - s.bMin;
+    const axis = (rangeR>=rangeG && rangeR>=rangeB)?0:((rangeG>=rangeB)?1:2);
+
+    const sorted = Array.from(ids).sort((i1,i2)=>pixels[i1][axis]-pixels[i2][axis]);
+    const mid = sorted.length>>1 || 1;
+    return {A:Uint32Array.from(sorted.slice(0,mid)), B:Uint32Array.from(sorted.slice(mid))};
+  }
+
+  while(boxes.length < Kmax){
+    boxes.sort((x,y)=>{
+      const sx=stats(x.ids), sy=stats(y.ids);
+      const pop = (sy.n - sx.n);
+      if(pop) return pop;
+      const rx = Math.max(sx.rMax-sx.rMin, sx.gMax-sx.gMin, sx.bMax-sx.bMin);
+      const ry = Math.max(sy.rMax-sy.rMin, sy.gMax-sy.gMin, sy.bMax-sy.bMin);
+      return (ry - rx) || (x.id - y.id);
+    });
+    const box=boxes.shift(); if(!box || box.ids.length<=1){ if(box) boxes.push(box); break; }
+    const {A,B} = split(box.ids);
+    boxes.push({ids:A, id:nextId++});
+    boxes.push({ids:B, id:nextId++});
+  }
+
+  const reps = boxes.map(b=>{
+    const s=stats(b.ids); return {c:s.mean, n:s.n, id:b.id};
+  }).sort((a,b)=> (b.n-a.n) || (a.id-b.id)).map(o=>o.c);
+
+  return reps.slice(0,Kmax);
+}
+
+/* Fixed-grid Histogram with global peak ranking (NMS) */
+function histogramKmax(pixels, Kmax){
+  if(!pixels.length) return [];
+  const B=16; // bins per channel
+  const gridSize=B*B*B;
+  const bins = new Uint32Array(gridSize);
+
+  const toBin = (v)=> Math.min(B-1, (v*B/256)|0);
+  for(const p of pixels){
+    const r=toBin(p[0]), g=toBin(p[1]), b=toBin(p[2]);
+    bins[r*B*B + g*B + b]++;
+  }
+  // small 3x3x3 smoothing
+  const w = [1,2,1];
+  const smooth = new Float32Array(gridSize);
+  for(let r=0;r<B;r++){
+    for(let g=0;g<B;g++){
+      for(let b=0;b<B;b++){
+        let acc=0;
+        for(let dr=-1;dr<=1;dr++){
+          const rr=r+dr; if(rr<0||rr>=B) continue;
+          for(let dg=-1;dg<=1;dg++){
+            const gg=g+dg; if(gg<0||gg>=B) continue;
+            for(let db=-1;db<=1;db++){
+              const bb=b+db; if(bb<0||bb>=B) continue;
+              acc += bins[rr*B*B + gg*B + bb] * w[dr+1]*w[dg+1]*w[db+1];
+            }
+          }
+        }
+        smooth[r*B*B + g*B + b] = acc;
       }
     }
   }
-  // population for ordering
-  const pop=new Array(cent.length).fill(0);
-  for(let i=0;i<assign.length;i++) pop[assign[i]]++;
-  const palette = cent.map((c,i)=>({rgb:c, n:pop[i]}))
-                      .sort((a,b)=>b.n-a.n)
-                      .map(o=>o.rgb);
+  // collect peaks and NMS
+  const candidates=[];
+  for(let i=0;i<gridSize;i++) if(smooth[i]>0) candidates.push({i, v:smooth[i]});
+  candidates.sort((a,b)=>b.v-a.v);
+
+  const picked=[];
+  const taken = new Uint8Array(gridSize);
+  const NMSr = 1; // suppress 1-neighborhood
+  for(const c of candidates){
+    if(picked.length>=Kmax) break;
+    if(taken[c.i]) continue;
+    picked.push(c.i);
+    const bi = c.i;
+    const br = (bi/(B*B))|0;
+    const bg = ((bi%(B*B))/B)|0;
+    const bb = bi%B;
+    for(let dr=-NMSr; dr<=NMSr; dr++){
+      const rr=br+dr; if(rr<0||rr>=B) continue;
+      for(let dg=-NMSr; dg<=NMSr; dg++){
+        const gg=bg+dg; if(gg<0||gg>=B) continue;
+        for(let db=-NMSr; db<=NMSr; db++){
+          const bb2=bb+db; if(bb2<0||bb2>=B) continue;
+          taken[rr*B*B + gg*B + bb2] = 1;
+        }
+      }
+    }
+  }
+
+  // map bin centers to RGB
+  const toCenter = (bin)=> Math.round((bin+0.5)*(255/B));
+  const palette = picked.map(i=>{
+    const r=(i/(B*B))|0, g=((i%(B*B))/B)|0, b=i%B;
+    return [toCenter(r), toCenter(g), toCenter(b)];
+  });
   return palette;
 }
 
-/* ===== palette render ===== */
-function renderPalette(pal){
-  lastPalette = Array.isArray(pal) ? pal : lastPalette;
-  swatchesEl.innerHTML='';
+/* render */
+function renderPalette(pal, skipClear=false){
+  if(!skipClear) swatchesEl.innerHTML='';
   const showRects = rectChk.checked!==false;
   const showGrad  = gradChk.checked!==false;
 
   if(showRects){
-    lastPalette.forEach(rgb=>{
+    for(const rgb of pal){
       const d=document.createElement('div');
       d.className='swatch';
       d.style.background=toHex(rgb);
       swatchesEl.appendChild(d);
-    });
+    }
     swatchesEl.style.display='';
   }else{
     swatchesEl.style.display='none';
   }
 
-  if(showGrad && lastPalette.length){
-    const stops = lastPalette.map(rgb=>toHex(rgb)).join(', ');
+  if(showGrad && pal.length){
+    const stops = pal.map(rgb=>toHex(rgb)).join(', ');
     gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
     gradientEl.hidden = false;
   }else{
@@ -538,7 +704,7 @@ function renderPalette(pal){
   }
 }
 
-/* ===== processing loop ===== */
+/* processing loop */
 const offCtx = off.getContext('2d', {willReadFrequently:true});
 function tick(now){
   // fps
@@ -547,7 +713,6 @@ function tick(now){
   frameCounter++;
 
   if(video.readyState>=2){
-    // throttle
     if(tick._skip===undefined) tick._skip=0;
     if(tick._skip<=0){
       const {sx,sy,sw,sh} = computeSquareCrop();
@@ -555,8 +720,16 @@ function tick(now){
         off.width = procWidth; off.height = procWidth;
         offCtx.drawImage(video, sx,sy,sw,sh, 0,0,procWidth,procWidth);
         const img = offCtx.getImageData(0,0,procWidth,procWidth);
-        const pal = kmeansPalette(img, K, 6, 4);
-        if(pal && pal.length){ renderPalette(pal); }
+        const pixels = samplePixels(img, 6); // keep light on mobile
+
+        // compute hierarchical Kmax based on current algo
+        if(algo==='kmeans')      lastPaletteKmax = kmeansKmax(pixels, KMAX);
+        else if(algo==='hist')   lastPaletteKmax = histogramKmax(pixels, KMAX);
+        else                     lastPaletteKmax = medianCutKmax(pixels, KMAX);
+
+        if(lastPaletteKmax && lastPaletteKmax.length){
+          renderPalette(lastPaletteKmax.slice(0, Math.min(K, lastPaletteKmax.length)));
+        }
       }
       tick._skip = throttleN;
     }else{
@@ -627,6 +800,7 @@ function unfreeze(){
 renderAlgoBrief(); highlightAlgoDesc(algo);
 throttleVal.textContent=String(throttleN);
 sizeVal.textContent=procWidth+' px';
+kVal.textContent=String(K);
 
 freezeBtn.addEventListener('click', freezeNow);
 unfreezeBtn.addEventListener('click', unfreeze);
