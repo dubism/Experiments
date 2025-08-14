@@ -13,15 +13,17 @@
     --shadow-hover: 0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 18px 36px rgba(0,0,0,.6);
     --radius:14px;
 
-    /* Green → Bluish → Grey palette */
+    /* Green → Bluish → Grey (grey only after 3 days) */
     --t0:#82FFB5;  /* <1m fresh green */
     --t1:#66F5C8;  /* 1–5m greenish aqua */
     --t2:#4FDEDE;  /* 5–15m teal-blue */
     --t3:#4BC5F2;  /* 15–30m light blue */
     --t4:#5AAAF5;  /* 30–60m medium blue */
     --t5:#7D96F0;  /* 1–4h soft blue-grey */
-    --t6:#9CA6CC;  /* 4–12h cool grey */
-    --t7:#B8B8B8;  /* >12h neutral grey */
+    --t6:#9CA6CC;  /* 4–12h cool grey-blue */
+    --t7:#A9B6E0;  /* 12–24h cooler blue-grey */
+    --t8:#B9C2E0;  /* 24–72h desaturated blue-grey */
+    --t9:#B8B8B8;  /* >72h neutral grey */
   }
 
   *{box-sizing:border-box}
@@ -100,33 +102,32 @@
   .path{font-size:11px;color:#97a1b1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   .meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .timeBlock{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .timeBlock{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 
-  /* Time badge base */
+  /* “Time since” — text only (no backplate) */
   .ago{
     font-size:11px;font-weight:700;letter-spacing:.3px;
-    padding:.25rem .55rem;border-radius:999px;
     display:inline-flex;align-items:center;gap:6px;
-    border:1px solid transparent;
-    transition:background .25s,color .25s,border-color .25s;
   }
   .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.95}
 
-  /* Variants: text uses solid; background uses ~16% tint */
-  .ago.t0{color:var(--t0);background:color-mix(in oklab,var(--t0) 16%, transparent);border-color:color-mix(in oklab,var(--t0) 26%, transparent)}
-  .ago.t1{color:var(--t1);background:color-mix(in oklab,var(--t1) 16%, transparent);border-color:color-mix(in oklab,var(--t1) 26%, transparent)}
-  .ago.t2{color:var(--t2);background:color-mix(in oklab,var(--t2) 16%, transparent);border-color:color-mix(in oklab,var(--t2) 26%, transparent)}
-  .ago.t3{color:var(--t3);background:color-mix(in oklab,var(--t3) 16%, transparent);border-color:color-mix(in oklab,var(--t3) 26%, transparent)}
-  .ago.t4{color:var(--t4);background:color-mix(in oklab,var(--t4) 16%, transparent);border-color:color-mix(in oklab,var(--t4) 26%, transparent)}
-  .ago.t5{color:var(--t5);background:color-mix(in oklab,var(--t5) 16%, transparent);border-color:color-mix(in oklab,var(--t5) 26%, transparent)}
-  .ago.t6{color:var(--t6);background:color-mix(in oklab,var(--t6) 16%, transparent);border-color:color-mix(in oklab,var(--t6) 26%, transparent)}
-  .ago.t7{color:var(--t7);background:color-mix(in oklab,var(--t7) 16%, transparent);border-color:color-mix(in oklab,var(--t7) 28%, transparent)}
+  /* Colored text variants (no background/border) */
+  .ago.t0{color:var(--t0)} .ago.t1{color:var(--t1)} .ago.t2{color:var(--t2)}
+  .ago.t3{color:var(--t3)} .ago.t4{color:var(--t4)} .ago.t5{color:var(--t5)}
+  .ago.t6{color:var(--t6)} .ago.t7{color:var(--t7)} .ago.t8{color:var(--t8)}
+  .ago.t9{color:var(--t9)}
 
-  /* Exact timestamp chip (shown in time-sort mode) */
-  .exact{
-    font-size:11px;color:#cfd5df;opacity:.9;border:1px solid #25324a;border-radius:999px;
-    padding:.25rem .55rem;white-space:nowrap
+  /* Exact timestamp — subtle, text only */
+  .exact{font-size:11px;color:#cfd5df;opacity:.85;white-space:nowrap}
+
+  /* Copy button (small, non-primary) */
+  .copyBtn{
+    border:1px dashed #2a3755;background:#101622;color:#d9e1ee;
+    padding:.35rem .55rem;border-radius:10px;font-size:11px;letter-spacing:.2px;
+    display:inline-flex;align-items:center;gap:6px;box-shadow:none;
   }
+  .copyBtn:hover{background:#12203a;border-color:#35507d}
+  .copyBtn svg{opacity:.9}
 
   .go{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#cfd5df;opacity:.85}
   .go svg{opacity:.9;transition:transform .18s}
@@ -190,7 +191,7 @@ function setSort(mode){
   sortMode = mode;
   sortTimeBtn.setAttribute('aria-pressed', mode==='time' ? 'true' : 'false');
   sortNameBtn.setAttribute('aria-pressed', mode==='name' ? 'true' : 'false');
-  applyFilter(); // re-render with current filter + sort
+  applyFilter();
 }
 
 function folderOf(path){const i=path.lastIndexOf('/');return i===-1?"":path.slice(0,i);}
@@ -214,15 +215,13 @@ function isoLocal(d){
          `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 
-/* Buckets (green → bluish → grey):
+/* Buckets (green → bluish → grey; grey only after 72h):
    t0:<1m, t1:1–5m, t2:5–15m, t3:15–30m, t4:30–60m,
-   t5:1–4h, t6:4–12h, t7:>12h */
+   t5:1–4h, t6:4–12h, t7:12–24h, t8:24–72h, t9:>72h */
 function timeAgoClassAndText(d){
   let secs = Math.max(0,(Date.now()-d.getTime())/1000);
+  if(secs < 60)  return {cls:'t0', text:`${Math.floor(secs)}s ago`};
 
-  if(secs < 60){
-    return {cls:'t0', text:`${Math.floor(secs)}s ago`};
-  }
   let mins = secs/60;
   if(mins < 5)   return {cls:'t1', text:`${Math.floor(mins)}m ago`};
   if(mins < 15)  return {cls:'t2', text:`${Math.floor(mins)}m ago`};
@@ -232,15 +231,15 @@ function timeAgoClassAndText(d){
   let hours = mins/60;
   if(hours < 4)   return {cls:'t5', text:`${Math.floor(hours)}h ago`};
   if(hours < 12)  return {cls:'t6', text:`${Math.floor(hours)}h ago`};
-
   if(hours < 24)  return {cls:'t7', text:`${Math.floor(hours)}h ago`};
+  if(hours < 72)  return {cls:'t8', text:`${Math.floor(hours)}h ago`};
 
   let days = Math.floor(hours/24);
-  return {cls:'t7', text: days < 365 ? `${days}d ago` : `${Math.floor(days/365)}y ago`};
+  return {cls:'t9', text: days < 365 ? `${days}d ago` : `${Math.floor(days/365)}y ago`};
 }
 
 function render(items){
-  // filter first
+  // filter
   const q = qEl.value.trim().toLowerCase();
   let list = !q ? items : items.filter(it =>
     it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
@@ -249,7 +248,7 @@ function render(items){
   listEl.innerHTML = "";
 
   if(sortMode === 'time'){
-    // sort: newest → oldest (nulls last)
+    // newest → oldest (items without updatedAt go last)
     list.sort((a,b)=>{
       const ad = a.updatedAt ? new Date(a.updatedAt).getTime() : -Infinity;
       const bd = b.updatedAt ? new Date(b.updatedAt).getTime() : -Infinity;
@@ -310,18 +309,40 @@ function render(items){
         when.classList.add(ag.cls);
         when.querySelector('.t').textContent = ag.text;
         when.title = `Last updated: ${isoLocal(d)}`;
-        exact.textContent = isoLocal(d); // show exact timestamp visibly in time-sort mode
+        exact.textContent = isoLocal(d); // visible exact time
       } else {
-        when.classList.add('t7');
+        when.classList.add('t9');
       }
 
       timeBlock.append(when, exact);
+
+      const actions = document.createElement('div');
+      actions.style.display='inline-flex';
+      actions.style.gap='8px';
+      actions.style.alignItems='center';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copyBtn';
+      copyBtn.type = 'button';
+      copyBtn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
+          <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
+        </svg>
+        Copy HTML`;
+      // Prevent navigation when pressing copy
+      copyBtn.addEventListener('click', (ev)=>{
+        ev.preventDefault(); ev.stopPropagation();
+        copyFile(it.path, copyBtn);
+      });
 
       const go = document.createElement('span');
       go.className = 'go';
       go.innerHTML = `Open ${arrowIcon()}`;
 
-      meta.append(timeBlock, go);
+      actions.append(copyBtn, go);
+
+      meta.append(timeBlock, actions);
       a.append(top, meta);
       grid.appendChild(a);
     });
@@ -331,7 +352,7 @@ function render(items){
     return;
   }
 
-  // sortMode === 'name' → grouped by folder, A→Z
+  // Name sort (grouped by folder)
   const groups = new Map();
   list.forEach(it=>{
     const key = folderOf(it.path);
@@ -393,16 +414,37 @@ function render(items){
         when.querySelector('.t').textContent = ag.text;
         when.title = `Last updated: ${isoLocal(d)}`;
       } else {
-        when.classList.add('t7');
+        when.classList.add('t9');
       }
 
       timeBlock.append(when);
+
+      const actions = document.createElement('div');
+      actions.style.display='inline-flex';
+      actions.style.gap='8px';
+      actions.style.alignItems='center';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copyBtn';
+      copyBtn.type = 'button';
+      copyBtn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
+          <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
+        </svg>
+        Copy HTML`;
+      copyBtn.addEventListener('click', (ev)=>{
+        ev.preventDefault(); ev.stopPropagation();
+        copyFile(it.path, copyBtn);
+      });
 
       const go = document.createElement('span');
       go.className = 'go';
       go.innerHTML = `Open ${arrowIcon()}`;
 
-      meta.append(timeBlock, go);
+      actions.append(copyBtn, go);
+
+      meta.append(timeBlock, actions);
       a.append(top, meta);
       grid.appendChild(a);
     });
@@ -450,6 +492,51 @@ async function fetchDates(){
     }
   }
   await Promise.all(Array.from({length:max}, worker));
+}
+
+/* Copy the file's HTML contents to clipboard using GitHub Contents API (base64) */
+async function copyFile(path, btn){
+  const original = btn.innerHTML;
+  try{
+    btn.disabled = true;
+    btn.innerHTML = 'Copying…';
+    const url = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodeURIComponent(path)}?ref=HEAD`;
+    const resp = await fetch(url);
+    if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    let content = '';
+    if(data && data.content){
+      // decode base64; handle large strings safely by chunking
+      const b64 = data.content.replace(/\n/g,'');
+      content = atob(b64);
+    }else{
+      // fallback: fetch from pages
+      const r2 = await fetch(`${BASE}${path}`);
+      content = await r2.text();
+    }
+
+    await writeToClipboard(content);
+    btn.innerHTML = 'Copied ✓';
+  }catch(err){
+    console.error(err);
+    btn.innerHTML = 'Failed ✕';
+  }finally{
+    setTimeout(()=>{ btn.disabled=false; btn.innerHTML = original; }, 1500);
+  }
+}
+
+async function writeToClipboard(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text);
+  }
+  // Fallback
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position='fixed'; ta.style.left='-9999px';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try{ document.execCommand('copy'); }
+  finally{ document.body.removeChild(ta); }
 }
 
 fetchTree();
