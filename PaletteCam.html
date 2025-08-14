@@ -94,7 +94,7 @@
   }
   #ccWrap.open{ display:block; }
 
-  /* ——— Control Center card (contract) ——— */
+  /* ——— Control Center card (contract) + open animation ——— */
   #cc{
     position:absolute; inset:0;
     background:rgba(0,0,0,.65);
@@ -104,6 +104,20 @@
     padding:14px;
     overflow:auto; max-height:100%;
     touch-action:pan-y;
+
+    /* animation start state */
+    opacity:0; transform:scale(.96) translateY(8px);
+  }
+  #ccWrap.open #cc{
+    animation: ccIn 360ms cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  @keyframes ccIn{
+    0%   { opacity:0;   transform:scale(.96)  translateY(8px); }
+    60%  { opacity:1;   transform:scale(1.015) translateY(0);  } /* subtle overshoot */
+    100% { opacity:1;   transform:scale(1)     translateY(0);  }
+  }
+  @media (prefers-reduced-motion:reduce){
+    #ccWrap.open #cc{ animation:none; opacity:1; transform:none; }
   }
 
   /* Typography + numerics */
@@ -382,7 +396,7 @@ function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showP
 function openCC(){
   hidePressShield(); unlockScroll(); unlockPressSelection();
   try{ video.dataset.prevOpacity = video.style.opacity || ''; video.style.opacity = '0.9999'; }catch{}
-  ccWrap.style.display = 'block';           // <-- explicit, beats any inline default
+  ccWrap.style.display = 'block';
   ccWrap.classList.add('open'); ccOpen=true;
 
   queueMicrotask(()=>{
@@ -392,7 +406,7 @@ function openCC(){
 }
 function closeCC(){
   ccOpen=false; ccWrap.classList.remove('open'); hidePressShield();
-  ccWrap.style.display = 'none';            // <-- explicit hide
+  ccWrap.style.display = 'none';
   try{ video.style.opacity = video.dataset.prevOpacity || ''; }catch{}
 }
 
