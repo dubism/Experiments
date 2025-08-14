@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Live Camera Palette — Camera & Photo</title>
+<title>Live Camera Palette — Stable Freeze + Immediate Palettes</title>
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
@@ -34,39 +34,35 @@
     contain:layout paint size; clip-path: inset(0);
     -webkit-user-drag:none;
   }
-
-  /* Camera video uses CSS zoom */
-  #videoPane video{
+  /* Original camera/frozen layers */
+  #videoPane video, #videoPane canvas{
     position:absolute; inset:0; width:100%; height:100%;
     object-fit:cover; transform:scale(var(--zoom)); transform-origin:center; display:block;
     backface-visibility:hidden; will-change:transform;
     -webkit-user-drag:none; pointer-events:none;
   }
+  #video::-webkit-media-controls-start-playback-button{ display:none !important; }
+  #frozenCanvas{display:none}
 
-  /* Photo preview sits above video; we redraw instead of CSS scaling */
-  #photoPreview{
-    position:absolute; inset:0; width:100%; height:100%;
-    display:none; z-index:2; pointer-events:none;
-  }
-
-  /* Source chip */
+  /* ---- Added: source chip + photo canvas overrides ---- */
   #sourceChip{
     position:absolute; top:10px; left:10px; z-index:5; display:flex; gap:6px; align-items:center;
     background:rgba(0,0,0,.45); backdrop-filter:blur(6px);
-    border:1px solid var(--line); border-radius:12px; padding:6px 8px;
-    pointer-events:auto;
+    border:1px solid var(--line); border-radius:12px; padding:6px 8px; pointer-events:auto;
   }
   .chipbtn{
     appearance:none; border:1px solid var(--line);
     background:rgba(255,255,255,.06); color:#fff;
     border-radius:10px; padding:6px 10px; font:12px/1.2 system-ui,sans-serif; cursor:pointer;
   }
-  .chipbtn[aria-pressed="true"]{ outline:2px solid #fff; outline-offset:1px }
-  .chipbtn:disabled{ opacity:.5 }
-
-  #video::-webkit-media-controls-start-playback-button{ display:none !important; }
-
-  #frozenCanvas{display:none}
+  .chipbtn[aria-pressed="true"]{outline:2px solid #fff; outline-offset:1px}
+  #photoPreview{
+    position:absolute; inset:0; width:100%; height:100%;
+    display:none; z-index:2; object-fit:contain;
+    /* IMPORTANT: photo should not inherit camera's CSS zoom */
+    transform:none !important; pointer-events:none;
+  }
+  /* ----------------------------------------------------- */
 
   #uiPane{
     position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; gap:10px;
@@ -104,7 +100,7 @@
     bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
   }
 
-  /* CC wrapper + card */
+  /* ——— Control Center wrapper (contract) ——— */
   #ccWrap{
     position:fixed;
     inset:
@@ -118,6 +114,8 @@
     transform:translateZ(0);
   }
   #ccWrap.open{ display:block; }
+
+  /* ——— Control Center card (contract) + open animation ——— */
   #cc{
     position:absolute; inset:0;
     background:rgba(0,0,0,.65);
@@ -127,9 +125,13 @@
     padding:14px;
     overflow:auto; max-height:100%;
     touch-action:pan-y;
+
+    /* animation start state */
     opacity:0; transform:scale(.96) translateY(8px);
   }
-  #ccWrap.open #cc{ animation: ccIn 360ms cubic-bezier(.2,.8,.2,1) forwards; }
+  #ccWrap.open #cc{
+    animation: ccIn 360ms cubic-bezier(.2,.8,.2,1) forwards;
+  }
   @keyframes ccIn{
     0%   { opacity:0;   transform:scale(.96)  translateY(8px); }
     60%  { opacity:1;   transform:scale(1.015) translateY(0);  }
@@ -139,23 +141,29 @@
     #ccWrap.open #cc{ animation:none; opacity:1; transform:none; }
   }
 
+  /* Typography + numerics */
   .small,.value{font-variant-numeric:tabular-nums}
   .label{font-weight:600}
+
+  /* Method copy + separator (contract) */
   #algoBrief{ margin:10px 4px 14px; line-height:1.45; }
   #algoBrief .a{ margin:8px 0 12px; opacity:.85; }
   #algoBrief .a.active{ opacity:1; font-weight:600; }
   .ccsep{ border:0; border-top:1px solid var(--line); opacity:.6; margin:6px 0 10px; }
 
+  /* Field blocks (contract) */
   .field{ padding:6px 2px 0; }
   .field-head{ display:flex; align-items:center; justify-content:space-between; min-height:44px; }
   .value{ color:#9aa0a6; margin-left:12px; }
   .field-body{ padding:2px 0 8px; }
   .divider{ height:1px; margin:6px 0 4px; background:linear-gradient(to right, transparent, #222, transparent); }
 
+  /* Inputs inside CC (contract) */
   #cc .field-body input[type="range"]{ width:100%; }
   #cc, #cc *{ -webkit-user-select:none; user-select:none; }
   #cc input, #cc textarea, #cc select, #cc button, #cc label{ -webkit-user-select:auto; user-select:auto; pointer-events:auto; }
 
+  /* Long-press shield, error toast, composite overlay */
   .pressLock, .pressLock *{ -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }
   #pressShield{ position:fixed; inset:0; z-index:9500; background:transparent; display:none; touch-action:none; pointer-events:auto; }
 
@@ -173,22 +181,24 @@
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
   .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
 
+  /* Processing canvases must never layout/paint */
   #off,#capFrame{ display:none !important; width:0 !important; height:0 !important; }
 </style>
 </head>
 <body>
   <div class="app">
-    <section id="videoPane" aria-label="Camera / Photo">
-      <!-- Source chip -->
-      <div id="sourceChip">
+    <section id="videoPane" aria-label="Camera">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="frozenCanvas"></canvas>
+
+      <!-- Added: source chip + photo preview layer -->
+      <div id="sourceChip" aria-label="Source">
         <button id="srcCamera" class="chipbtn" aria-pressed="true" type="button">Camera</button>
         <button id="srcPhoto"  class="chipbtn" aria-pressed="false" type="button">Photo</button>
         <input id="pick" type="file" accept="image/*" hidden />
       </div>
-
-      <video id="video" playsinline muted autoplay></video>
       <canvas id="photoPreview"></canvas>
-      <canvas id="frozenCanvas"></canvas>
+      <!-- ----------------------------------------- -->
     </section>
 
     <section id="uiPane" aria-label="UI">
@@ -219,7 +229,7 @@
     </section>
   </div>
 
-  <!-- ===== CC overlay ===== -->
+  <!-- ===== CC overlay (contractual structure) as a direct child of <body> ===== -->
   <div id="ccWrap" role="dialog" aria-modal="true">
     <div id="cc">
       <section id="algoBrief" class="small"></section>
@@ -318,9 +328,13 @@
       fc.height = wrap.clientHeight;
     }
 
-    if (window.source === 'photo' && window.photoBitmap) {
+    // Added: keep photo preview in sync
+    const pp = document.getElementById('photoPreview');
+    if (pp && pp.style.display !== 'none') {
+      const wrap = document.getElementById('videoPane');
+      pp.width = wrap.clientWidth;
+      pp.height = wrap.clientHeight;
       drawPhotoPreview();
-      analyzePhotoSoon(true);
     }
   }
   window.recalcSquare = recalcSquare;
@@ -349,7 +363,7 @@ addEventListener('load', updateCbH);
 
 /* ===== elements ===== */
 const video=document.getElementById('video');
-const photoPreview=document.getElementById('photoPreview');
+const frozenCanvas=document.getElementById('frozenCanvas');
 const statusEl=document.getElementById('status');
 const fpsEl=document.getElementById('fps');
 const resEl=document.getElementById('res');
@@ -374,22 +388,12 @@ const pressShield=document.getElementById('pressShield');
 const camError=document.getElementById('camError');
 const off=document.getElementById('off');
 
-/* Source UI */
-const srcCamera=document.getElementById('srcCamera');
-const srcPhoto =document.getElementById('srcPhoto');
-const pick     =document.getElementById('pick');
-
 /* ===== state ===== */
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, uiZoom=+zoomSlider.value;
 let throttleN=20, frameCounter=0, lastT=performance.now(), fps=0;
 let ccOpen=false, pressLock=false, draggingK=false;
 let lastPaletteKmax=null;
 const KMAX = +kRange.max;
-
-/* Source state */
-let source='camera';             // 'camera' | 'photo'
-let photoBitmap=null;            // ImageBitmap
-let photoZ=1, photoCX=0, photoCY=0; // photo pan/zoom (image px)
 
 /* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
@@ -400,7 +404,7 @@ const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))
 const status=t=>{ try{statusEl.textContent=t;}catch{} };
 function toast(msg){ if(!msg) return; camError.textContent=msg; camError.style.display='block'; setTimeout(()=>camError.style.display='none', 3000); }
 
-/* ===== algo labels/brief ===== */
+/* ===== algo labels/brief (contract) ===== */
 const ALGOS=['kmeans','hist','mediancut'];
 const ALGO_LABEL={kmeans:'K-Means (LAB)',hist:'Histogram',mediancut:'Median-cut'};
 const ALGO_COPY={
@@ -419,20 +423,21 @@ function renderAlgoBrief(){
 }
 function highlightAlgoDesc(a){ document.querySelectorAll('#algoBrief .a').forEach(n=>n.classList.toggle('active',n.dataset.a===a)); }
 
-/* ===== selection + CC behavior ===== */
+/* ===== selection + CC behavior (contract) ===== */
 function lockPressSelection(){ if(pressLock) return; pressLock=true; document.body.classList.add('pressLock'); }
 function unlockPressSelection(){ if(!pressLock) return; pressLock=false; document.body.classList.remove('pressLock'); const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }
 document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault(); },{capture:true});
 document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }});
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen||pressLock) e.preventDefault(); },{capture:true});
 
-/* CC open/close */
+/* CC open/close (contract) */
 function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
 function openCC(){
   hidePressShield(); unlockScroll(); unlockPressSelection();
   try{ video.dataset.prevOpacity = video.style.opacity || ''; video.style.opacity = '0.9999'; }catch{}
   ccWrap.style.display = 'block';
   ccWrap.classList.add('open'); ccOpen=true;
+
   queueMicrotask(()=>{
     const first = cc.querySelector('input, select, textarea, button');
     if(first && first.focus) try{ first.focus({preventScroll:true}); }catch{}
@@ -443,15 +448,21 @@ function closeCC(){
   ccWrap.style.display = 'none';
   try{ video.style.opacity = video.dataset.prevOpacity || ''; }catch{}
 }
+
+/* Stop outside-close bubbling from inside CC */
 cc.addEventListener('pointerdown', e=>e.stopPropagation(), {capture:true});
 cc.addEventListener('click', e=>e.stopPropagation(), {capture:true});
+
+/* Close on ANY outside tap (keep open if composite overlay is up) */
 document.addEventListener('pointerdown', (e)=>{
   if(document.getElementById('compositeOverlay')?.classList.contains('open')) return;
   if(ccOpen && !cc.contains(e.target)) closeCC();
 }, {capture:true});
+
+/* ESC closes CC */
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && ccOpen) closeCC(); });
 
-/* Long-press helpers (unchanged) */
+/* Long-press shield helpers */
 function showPressShieldWithAutoRelease(){
   pressShield.style.display='block';
   const release=()=>{ hidePressShield(); document.removeEventListener('pointerup',release,true); document.removeEventListener('touchend',release,true); document.removeEventListener('mouseup',release,true); };
@@ -462,7 +473,7 @@ function showPressShieldWithAutoRelease(){
   showPressShieldWithAutoRelease._t=setTimeout(hidePressShield,1200);
 }
 
-/* ===== global scroll lock during K-drag ===== */
+/* ===== global scroll lock during K-drag (never when CC is open) ===== */
 function noScroll(e){ if(ccOpen) return; if(e.cancelable) e.preventDefault(); }
 function lockScroll(){
   document.addEventListener('touchmove', noScroll, {passive:false, capture:true});
@@ -473,13 +484,18 @@ function unlockScroll(){
   document.removeEventListener('wheel', noScroll, {capture:true});
 }
 
-/* ===== K-drag + gestures ===== */
+/* ===== K-drag + gestures (instant) ===== */
 let lpTimer=0,movedTooFar=false,longPressed=false;
 const LP_MS=450,MOVE_TOL=10;
 function getKStepPx(){ const h = paletteClickable.clientHeight || 200; return Math.max(14, Math.min(56, Math.round(h / 6))); }
+
+/* instant K application (Option A: slice from lastPaletteKmax) */
 function renderPlaceholders(count){
   for(let i=0;i<count;i++){
-    const d=document.createElement('div'); d.className='swatch'; d.style.background='#222'; swatchesEl.appendChild(d);
+    const d=document.createElement('div');
+    d.className='swatch';
+    d.style.background='#222';
+    swatchesEl.appendChild(d);
   }
 }
 function applyKInstant(newK){
@@ -494,13 +510,14 @@ function applyKInstant(newK){
   }
 }
 
-/* K drag handler (unchanged except photo re-analyze) */
 paletteClickable.addEventListener('pointerdown', (e)=>{
   if(ccOpen) return;
   if(e.pointerType==='mouse' && e.button!==0) return;
+
   movedTooFar=false; longPressed=false;
   const startX=e.clientX, startY=e.clientY;
   let lastX=startX, lastY=startY;
+
   let kDrag=false; draggingK=false;
   let kAccum=0;
   const stepPx=getKStepPx();
@@ -520,6 +537,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   const move=(ev)=>{
     const dx = ev.clientX - startX;
     const dy = ev.clientY - startY;
+
     if(!kDrag){
       if(Math.abs(dx) > MOVE_TOL || Math.abs(dy) > MOVE_TOL){ movedTooFar = true; clearTimeout(lpTimer); }
       if(Math.abs(dy) > MOVE_TOL && Math.abs(dy) > Math.abs(dx) * 0.7){
@@ -529,25 +547,28 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
         kDrag = true; draggingK = true;
       }
     }
+
     if(kDrag){
       const dpx = ev.clientX - lastX;
       const dpy = ev.clientY - lastY;
       const proj = dpx*ax + dpy*ay;
       kAccum += proj * dirSign;
+
       let steps = 0;
       if(kAccum >= stepPx) steps = Math.floor(kAccum / stepPx);
       else if(kAccum <= -stepPx) steps = Math.ceil(kAccum / stepPx);
+
       if(steps){
         const newK = clamp(+kRange.value + steps, +kRange.min, +kRange.max);
         if (newK !== +kRange.value){
           kRange.value = String(newK);
           applyKInstant(newK);
-          if(source==='photo') analyzePhotoSoon(true);
         }
         kAccum -= steps * stepPx;
       }
       if(ev.cancelable) ev.preventDefault();
     }
+
     lastX = ev.clientX; lastY = ev.clientY;
   };
 
@@ -561,7 +582,6 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
     if(!longPressed && !kDrag && !movedTooFar){
       const r=paletteClickable.getBoundingClientRect();
       const isLeft=(ev.clientX-r.left)<(r.width/2); cycleAlgo(isLeft?-1:+1);
-      if(source==='photo') analyzePhotoSoon(true);
     }
     draggingK=false; unlockPressSelection();
   };
@@ -579,29 +599,32 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   paletteClickable.addEventListener('pointerup',finish,{once:true});
   paletteClickable.addEventListener('pointercancel',cancel,{once:true});
 });
+
 paletteClickable.addEventListener('wheel', (e)=>{ e.preventDefault(); }, {passive:false});
 
-/* ===== controls ===== */
-kRange.addEventListener('input',()=>{ applyKInstant(+kRange.value); if(source==='photo') analyzePhotoSoon(true); });
-sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value;sizeVal.textContent=procWidth+' px'; if(source==='photo') analyzePhotoSoon(true);});
+/* ===== controls (contract bindings) ===== */
+kRange.addEventListener('input',()=>applyKInstant(+kRange.value));
+sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value;sizeVal.textContent=procWidth+' px';});
 throttleLog.addEventListener('input',()=>{throttleN=sliderToN(+throttleLog.value);throttleVal.textContent=String(throttleN);});
-rectChk.addEventListener('change',()=>{ renderPalette(lastPaletteKmax?.slice(0,K)||[]); if(source==='photo') analyzePhotoSoon(true); });
-gradChk.addEventListener('change',()=>{ renderPalette(lastPaletteKmax?.slice(0,K)||[]); if(source==='photo') analyzePhotoSoon(true); });
+rectChk.addEventListener('change',()=>renderPalette(lastPaletteKmax?.slice(0,K)||[]));
+gradChk.addEventListener('change',()=>renderPalette(lastPaletteKmax?.slice(0,K)||[]));
 
+/* ===== Zoom: now source-aware ===== */
 function setZoom(v){
   const z = clamp(v,1,10);
   zoomSlider.value = z;
   if(source==='camera'){
-    uiZoom = z; document.documentElement.style.setProperty('--zoom', uiZoom);
+    uiZoom = z;
+    document.documentElement.style.setProperty('--zoom', uiZoom);
   }else{
-    photoZ = z; boundPhotoCenter(); drawPhotoPreview(); analyzePhotoSoon();
+    photoZ = z; boundPhotoCenter(); drawPhotoPreview();
   }
 }
 zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* ===== camera crop ===== */
+/* ===== crop helper (camera) ===== */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw,
@@ -621,12 +644,13 @@ function samplePixels(imgData, step){
   return out;
 }
 
-/* ===== palette algos (unchanged) ===== */
-function kmeansKmax(pixels, Kmax){ /* ...same as your original... */ 
+/* ===== Option A: compute Kmax palette (hierarchical / deterministic) ===== */
+function kmeansKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const idxs = Uint32Array.from({length:pixels.length}, (_,i)=>i);
   let leaves = [{ids:idxs, id:0}];
   let nextId=1;
+
   function centroid(ids){
     let r=0,g=0,b=0; const n=ids.length||ids.byteLength;
     for(let i=0;i<n;i++){ const p=pixels[ids[i]]; r+=p[0]; g+=p[1]; b+=p[2]; }
@@ -639,10 +663,12 @@ function kmeansKmax(pixels, Kmax){ /* ...same as your original... */
     let vr=0,vg=0,vb=0;
     for(let i=0;i<n;i++){ const p=pixels[ids[i]]; const dr=p[0]-mr,dg=p[1]-mg,db=p[2]-mb; vr+=dr*dr; vg+=dg*dg; vb+=db*db; }
     const axis = (vr>=vg && vr>=vb)?0:((vg>=vb)?1:2);
+
     const c=[mr,mg,mb];
     const seedA=c.slice(), seedB=c.slice();
     const j = Math.sqrt((axis===0?vr:(axis===1?vg:vb))/Math.max(1,n)) * 0.5;
     seedA[axis]-=j; seedB[axis]+=j;
+
     let A=[], B=[];
     let ca=seedA, cb=seedB;
     for(let it=0; it<3; it++){
@@ -661,8 +687,9 @@ function kmeansKmax(pixels, Kmax){ /* ...same as your original... */
       }
       ca = centroid(A); cb = centroid(B);
     }
-    return {A:Uint32Array.from(A), B:Uint32Array.from(B)};
+    return {A:Uint32Array.from(A), B:Uint32Array.from(B), ca, cb};
   }
+
   while(leaves.length < Kmax){
     leaves.sort((x,y)=> (y.ids.length - x.ids.length) || (x.id - y.id));
     const node = leaves.shift();
@@ -671,17 +698,18 @@ function kmeansKmax(pixels, Kmax){ /* ...same as your original... */
     leaves.push({ids:A, id:nextId++});
     leaves.push({ids:B, id:nextId++});
   }
-  const reps = leaves.map(l=>{
-    const ids=l.ids; let r=0,g=0,b=0; const n=ids.length||ids.byteLength;
-    for(let i=0;i<n;i++){ const p=pixels[ids[i]]; r+=p[0]; g+=p[1]; b+=p[2]; }
-    const inv=1/Math.max(1,n); return {c:[r*inv,g*inv,b*inv], n, id:l.id};
-  }).sort((a,b)=> (b.n-a.n) || (a.id-b.id)).map(o=>o.c);
+
+  const reps = leaves.map(l=>({c:centroid(l.ids), n:l.ids.length, id:l.id}))
+                     .sort((a,b)=> (b.n-a.n) || (a.id-b.id))
+                     .map(o=>o.c);
   return reps.slice(0, Kmax);
 }
-function medianCutKmax(pixels, Kmax){ /* unchanged */ 
+
+function medianCutKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const allIdx = Uint32Array.from({length:pixels.length}, (_,i)=>i);
   let boxes=[{ids:allIdx, id:0}]; let nextId=1;
+
   function stats(ids){
     let rMin=255,gMin=255,bMin=255, rMax=0,gMax=0,bMax=0;
     let sr=0,sg=0,sb=0, n=ids.length||ids.byteLength;
@@ -693,14 +721,17 @@ function medianCutKmax(pixels, Kmax){ /* unchanged */
     }
     return {rMin,rMax,gMin,gMax,bMin,bMax, mean:[sr/n, sg/n, sb/n], n};
   }
+
   function split(ids){
     const s = stats(ids);
     const rangeR = s.rMax - s.rMin, rangeG = s.gMax - s.gMin, rangeB = s.bMax - s.bMin;
     const axis = (rangeR>=rangeG && rangeR>=rangeB)?0:((rangeG>=rangeB)?1:2);
+
     const sorted = Array.from(ids).sort((i1,i2)=>pixels[i1][axis]-pixels[i2][axis]);
     const mid = sorted.length>>1 || 1;
     return {A:Uint32Array.from(sorted.slice(0,mid)), B:Uint32Array.from(sorted.slice(mid))};
   }
+
   while(boxes.length < Kmax){
     boxes.sort((x,y)=>{
       const sx=stats(x.ids), sy=stats(y.ids);
@@ -715,12 +746,15 @@ function medianCutKmax(pixels, Kmax){ /* unchanged */
     boxes.push({ids:A, id:nextId++});
     boxes.push({ids:B, id:nextId++});
   }
+
   const reps = boxes.map(b=>{
     const s=stats(b.ids); return {c:s.mean, n:s.n, id:b.id};
   }).sort((a,b)=> (b.n-a.n) || (a.id-b.id)).map(o=>o.c);
+
   return reps.slice(0,Kmax);
 }
-function histogramKmax(pixels, Kmax){ /* unchanged */ 
+
+function histogramKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const B=16, gridSize=B*B*B;
   const bins = new Uint32Array(gridSize);
@@ -746,6 +780,7 @@ function histogramKmax(pixels, Kmax){ /* unchanged */
   }
   const candidates=[]; for(let i=0;i<gridSize;i++) if(smooth[i]>0) candidates.push({i, v:smooth[i]});
   candidates.sort((a,b)=>b.v-a.v);
+
   const picked=[], taken = new Uint8Array(gridSize); const NMSr = 1;
   for(const c of candidates){
     if(picked.length>=Kmax) break;
@@ -763,6 +798,7 @@ function histogramKmax(pixels, Kmax){ /* unchanged */
       }
     }
   }
+
   const toCenter = (bin)=> Math.round((bin+0.5)*(255/B));
   return picked.map(i=>{
     const r=(i/(B*B))|0, g=((i%(B*B))/B)|0, b=i%B;
@@ -797,184 +833,182 @@ function renderPalette(pal, skipClear=false){
   }
 }
 
-/* ===== camera processing loop ===== */
-const off=document.getElementById('off');
+/* ======== SOURCE SWITCHING (Camera | Photo) ======== */
+let source = 'camera';      // 'camera' | 'photo'
+let photoBitmap = null;
+let photoZ = 1, photoCX = 0, photoCY = 0;
+
+const photoPreview = document.getElementById('photoPreview');
+const srcCamera = document.getElementById('srcCamera');
+const srcPhoto  = document.getElementById('srcPhoto');
+const pick      = document.getElementById('pick');
+
+function updateSourceChip(){
+  srcCamera?.setAttribute('aria-pressed', String(source==='camera'));
+  srcPhoto ?.setAttribute('aria-pressed', String(source==='photo'));
+}
+updateSourceChip();
+
+srcCamera?.addEventListener('click', ()=>{
+  if(source==='camera') return;
+  source='camera'; updateSourceChip();
+  status('Live');
+  photoBitmap=null; photoPreview.style.display='none';
+});
+
+srcPhoto?.addEventListener('click', ()=> pick?.click());
+pick?.addEventListener('change', async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  try{
+    status('Loading photo…');
+    const bmp = await createImageBitmap(f, { imageOrientation:'from-image' });
+    photoBitmap = bmp;
+    // reset photo crop/zoom
+    photoZ = 1; photoCX = bmp.width/2; photoCY = bmp.height/2; zoomSlider.value='1';
+    source='photo'; updateSourceChip();
+    drawPhotoPreview();
+    status('Photo');
+  }catch(_){ status('Photo load failed'); }
+  finally{ e.target.value=''; }
+});
+
+function boundPhotoCenter(){
+  if(!photoBitmap) return;
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  const baseCrop=Math.min(iw, ih), crop=baseCrop/Math.max(1,photoZ);
+  const half=crop/2;
+  photoCX = Math.max(half, Math.min(iw-half, photoCX));
+  photoCY = Math.max(half, Math.min(ih-half, photoCY));
+}
+function currentPhotoSrcRect(){
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  const baseCrop=Math.min(iw, ih), crop=baseCrop/Math.max(1,photoZ);
+  const sx = Math.max(0, Math.min(iw-crop, photoCX - crop/2));
+  const sy = Math.max(0, Math.min(ih-crop, photoCY - crop/2));
+  return {sx, sy, sw:crop, sh:crop};
+}
+function drawPhotoPreview(){
+  if(source!=='photo' || !photoBitmap) return;
+  const wrap = document.getElementById('videoPane');
+  const w = photoPreview.width  = wrap.clientWidth;
+  const h = photoPreview.height = wrap.clientHeight;
+  const g = photoPreview.getContext('2d');
+  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.clearRect(0,0,w,h);
+  const {sx,sy,sw,sh}=currentPhotoSrcRect();
+  g.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, w,h);
+  photoPreview.style.display='block';
+}
+addEventListener('resize', ()=>{ if(source==='photo' && photoBitmap) drawPhotoPreview(); }, {passive:true});
+
+/* ============== processing loop (source-aware) ============== */
 const offCtx = off.getContext('2d', {willReadFrequently:true});
 function tick(now){
   const dt = now - lastT;
   if(dt>=500){ fps = Math.round((frameCounter*1000)/dt); fpsEl.textContent=String(fps); frameCounter=0; lastT=now; }
   frameCounter++;
 
-  if(source==='camera' && video.readyState>=2){
-    if(tick._skip===undefined) tick._skip=0;
-    if(tick._skip<=0){
-      const {sx,sy,sw,sh} = computeSquareCrop();
-      if(sw>0){
-        off.width = procWidth; off.height = procWidth;
-        offCtx.drawImage(video, sx,sy,sw,sh, 0,0,procWidth,procWidth);
-        const img = offCtx.getImageData(0,0,procWidth,procWidth);
-        const pixels = samplePixels(img, 6);
+  if(tick._skip===undefined) tick._skip=0;
+  if(tick._skip<=0){
+    off.width = procWidth; off.height = procWidth;
 
-        if(algo==='kmeans')      lastPaletteKmax = kmeansKmax(pixels, KMAX);
-        else if(algo==='hist')   lastPaletteKmax = histogramKmax(pixels, KMAX);
-        else                     lastPaletteKmax = medianCutKmax(pixels, KMAX);
-
-        if(lastPaletteKmax && lastPaletteKmax.length){
-          renderPalette(lastPaletteKmax.slice(0, Math.min(K, lastPaletteKmax.length)));
+    if(source==='camera'){
+      if(video.readyState>=2){
+        const {sx,sy,sw,sh} = computeSquareCrop();
+        if(sw>0){
+          offCtx.drawImage(video, sx,sy,sw,sh, 0,0,procWidth,procWidth);
+          resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
         }
-        resEl.textContent = `${procWidth}×${procWidth}`;
       }
-      tick._skip = throttleN;
+    }else if(source==='photo' && photoBitmap){
+      const {sx,sy,sw,sh} = currentPhotoSrcRect();
+      offCtx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0,procWidth,procWidth);
+      resEl.textContent = `${Math.round(sw)}×${Math.round(sh)}`;
     }else{
-      tick._skip--;
+      offCtx.clearRect(0,0,procWidth,procWidth);
     }
+
+    // sample + palette
+    const img = offCtx.getImageData(0,0,procWidth,procWidth);
+    const pixels = samplePixels(img, 6);
+
+    if(algo==='kmeans')      lastPaletteKmax = kmeansKmax(pixels, KMAX);
+    else if(algo==='hist')   lastPaletteKmax = histogramKmax(pixels, KMAX);
+    else                     lastPaletteKmax = medianCutKmax(pixels, KMAX);
+
+    if(lastPaletteKmax && lastPaletteKmax.length){
+      renderPalette(lastPaletteKmax.slice(0, Math.min(K, lastPaletteKmax.length)));
+    }
+
+    tick._skip = throttleN;
+  }else{
+    tick._skip--;
   }
   requestAnimationFrame(tick);
 }
 
-/* ===== camera lifecycle ===== */
+/* ===== camera start (safer on iOS) ===== */
+let _stream;
 async function startCamera(){
   try{
     status('Requesting camera…');
+
     const cstr = {
       audio:false,
-      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:1280}, frameRate:{ideal:30} }
+      video:{
+        facingMode:{ ideal:'environment' },
+        width:  { min:320, ideal:1280, max:1920 },
+        height: { min:320, ideal:1280, max:1920 },
+        frameRate:{ ideal:30, max:60 }
+      }
     };
-    const stream = await navigator.mediaDevices.getUserMedia(cstr);
+
+    _stream?.getTracks?.().forEach(t=>t.stop());
+    _stream = await navigator.mediaDevices.getUserMedia(cstr);
+
     video.setAttribute('playsinline','');
+    video.setAttribute('muted','');
     video.muted = true;
-    video.srcObject = stream;
+    video.srcObject = _stream;
 
     await new Promise((res)=>video.addEventListener('loadedmetadata', res, {once:true}));
-    try{ await video.play(); }catch(_){}
-    resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
-    video.style.visibility=''; // make sure visible when returning from photo
-    status('Live');
+    try{
+      await video.play();
+      status('Live');
+      resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
+    }catch(_){
+      status('Tap to start camera');
+      const resume = async (ev)=>{
+        ev?.preventDefault?.();
+        try{ await video.play(); status('Live'); }
+        catch(e){ status('Camera paused'); }
+        document.removeEventListener('click', resume, true);
+        document.removeEventListener('touchend', resume, true);
+      };
+      document.addEventListener('click', resume, true);
+      document.addEventListener('touchend', resume, true);
+    }
   }catch(err){
     console.error(err);
-    status('Camera error');
+    status(err?.name==='NotAllowedError' ? 'Camera permission denied' :
+           err?.name==='OverconstrainedError' ? 'Camera constraints failed' :
+           'Camera error');
     toast(err?.message || 'Camera failed');
   }
 }
-async function stopCamera(){
-  try{
-    const s = video.srcObject;
-    if (s) { s.getTracks().forEach(t=>t.stop()); video.srcObject=null; }
-    await video.pause().catch(()=>{});
-    video.style.visibility='hidden';
-  }catch{}
-}
 
-/* ===== photo lifecycle ===== */
-function updateSourceChip(){
-  srcCamera.setAttribute('aria-pressed', String(source==='camera'));
-  srcPhoto .setAttribute('aria-pressed', String(source==='photo'));
-}
-function initializePhotoTransform(){
-  if(!photoBitmap) return;
-  photoZ=1; photoCX=photoBitmap.width/2; photoCY=photoBitmap.height/2;
-  zoomSlider.value = 1;
-}
-function boundPhotoCenter(){
-  if(!photoBitmap) return;
-  const iw=photoBitmap.width, ih=photoBitmap.height;
-  const base=Math.min(iw,ih);
-  const crop=base/photoZ, half=crop/2;
-  photoCX=Math.max(half, Math.min(iw-half, photoCX));
-  photoCY=Math.max(half, Math.min(ih-half, photoCY));
-}
-function currentPhotoSrcRect(){
-  const iw=photoBitmap.width, ih=photoBitmap.height;
-  const base=Math.min(iw,ih);
-  const crop=base/photoZ;
-  const sx=Math.max(0, Math.min(iw-crop, photoCX-crop/2));
-  const sy=Math.max(0, Math.min(ih-crop, photoCY-crop/2));
-  return {sx,sy,sw:crop,sh:crop};
-}
-function drawPhotoPreview(){
-  if(source!=='photo' || !photoBitmap) return;
-  const wrap=document.getElementById('videoPane');
-  const w=photoPreview.width = wrap.clientWidth;
-  const h=photoPreview.height= wrap.clientHeight;
-  const g=photoPreview.getContext('2d');
-  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
-  g.clearRect(0,0,w,h);
-  const {sx,sy,sw,sh}=currentPhotoSrcRect();
-  g.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, w,h);
-}
-let photoAnalyzeRaf=0, photoTick=0;
-function analyzePhotoSoon(force=false){
-  if(force) photoTick=0;
-  if(photoAnalyzeRaf) return;
-  photoAnalyzeRaf=requestAnimationFrame(()=>{ photoAnalyzeRaf=0; analyzePhotoNow(); });
-}
-function analyzePhotoNow(){
-  if(source!=='photo' || !photoBitmap) return;
-  if(photoTick++ % Math.max(1, throttleN) !== 0) return;
-
-  const {sx,sy,sw,sh}=currentPhotoSrcRect();
-  off.width=procWidth; off.height=procWidth;
-  offCtx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, procWidth,procWidth);
-  const img=offCtx.getImageData(0,0,procWidth,procWidth);
-  const pixels=samplePixels(img,6);
-
-  if(algo==='kmeans')      lastPaletteKmax = kmeansKmax(pixels, KMAX);
-  else if(algo==='hist')   lastPaletteKmax = histogramKmax(pixels, KMAX);
-  else                     lastPaletteKmax = medianCutKmax(pixels, KMAX);
-
-  if(lastPaletteKmax && lastPaletteKmax.length){
-    renderPalette(lastPaletteKmax.slice(0, Math.min(K, lastPaletteKmax.length)));
+/* Resume on return to tab */
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && source==='camera'){
+    video.play().catch(()=>{});
   }
-  resEl.textContent = `${procWidth}×${procWidth}`;
-}
-
-/* Switchers */
-async function switchToPhotoFromFile(blob){
-  try{
-    const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
-    await stopCamera();
-    photoBitmap = bmp;
-    source='photo'; updateSourceChip();
-    photoPreview.style.display='block';
-    initializePhotoTransform();
-    drawPhotoPreview();
-    analyzePhotoSoon(true);
-    status('Photo');
-  }catch(e){
-    toast('Failed to load image.');
-  }finally{
-    pick.value='';
-  }
-}
-async function stopPhoto(){
-  try{
-    const g=photoPreview.getContext('2d'); g && g.clearRect(0,0,photoPreview.width,photoPreview.height);
-  }catch{}
-  photoPreview.style.display='none';
-  if(photoBitmap && photoBitmap.close) try{ photoBitmap.close(); }catch{}
-  photoBitmap=null;
-}
-async function switchToCamera(){
-  if(source==='camera') return;
-  await stopPhoto();
-  source='camera'; updateSourceChip();
-  await startCamera();
-}
-
-/* Source chip wiring */
-srcCamera.addEventListener('click', switchToCamera);
-srcPhoto .addEventListener('click', ()=> pick.click());
-pick.addEventListener('change', async (e)=>{
-  const f=e.target.files?.[0]; if(!f) return;
-  await switchToPhotoFromFile(f);
 });
 
-/* ===== freeze / unfreeze ===== */
+/* ===== freeze / unfreeze (source-aware) ===== */
 function freezeNow(){
   try{
     const wrap = document.getElementById('videoPane');
     const w = wrap.clientWidth, h = wrap.clientHeight;
-    const compositeCanvas=document.createElement('canvas');
     compositeCanvas.width = w; compositeCanvas.height = h;
     const ctx = compositeCanvas.getContext('2d', {willReadFrequently:true});
 
@@ -992,20 +1026,19 @@ function freezeNow(){
       }
     }else if(source==='photo' && photoBitmap){
       const {sx,sy,sw,sh}=currentPhotoSrcRect();
-      ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
       ctx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, w,h);
     }
 
-    document.getElementById('compositeImg').src = compositeCanvas.toDataURL('image/jpeg', 0.9);
-    document.getElementById('compositeOverlay').classList.add('open');
+    compositeImg.src = compositeCanvas.toDataURL('image/jpeg', 0.9);
+    compositeOverlay.classList.add('open');
     status('Frozen');
   }catch(e){
     toast('Freeze failed: ' + (e?.message||'unknown'));
   }
 }
 function unfreeze(){
-  document.getElementById('compositeOverlay').classList.remove('open');
-  status(source==='camera' ? 'Live' : 'Photo');
+  compositeOverlay.classList.remove('open');
+  status('Live');
 }
 
 /* ===== wire up + start ===== */
@@ -1018,8 +1051,8 @@ throttleLog.value = String(nToSlider(throttleN));
 freezeBtn.addEventListener('click', freezeNow);
 unfreezeBtn.addEventListener('click', unfreeze);
 
-window.addEventListener('pageshow', async ()=>{
-  await startCamera();
+window.addEventListener('pageshow', ()=>{
+  startCamera();
   requestAnimationFrame(tick);
 }, {once:true});
 </script>
