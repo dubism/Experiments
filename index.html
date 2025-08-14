@@ -73,6 +73,7 @@
       "icon title open"
       "meta meta actions";
     column-gap:10px; row-gap:6px;
+    cursor:pointer;
   }
   .card:before{
     content:"";position:absolute;inset:-1px;border-radius:var(--radius);
@@ -244,70 +245,8 @@ function render(items){
     grid.className = 'cards';
 
     list.forEach(it=>{
-      const a = document.createElement('a');
-      a.className = 'card';
-      a.href = it.href;
-
-      const ic = document.createElement('div');
-      ic.className = 'ic';
-      ic.innerHTML = fileIcon();
-
-      const titleWrap = document.createElement('div');
-      titleWrap.className = 'titleWrap';
-      titleWrap.innerHTML = `
-        <div class="name">${prettyName(it.name)}</div>
-        <div class="path">${it.path}</div>
-      `;
-
-      const open = document.createElement('div');
-      open.className = 'openVis';
-      open.innerHTML = `Open ${arrowIcon()}`;
-
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-
-      const when = document.createElement('span');
-      when.className = 'ago';
-      when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
-
-      const exact = document.createElement('span');
-      exact.className = 'exact';
-      exact.textContent = '—';
-
-      if(it.updatedAt){
-        const d = new Date(it.updatedAt);
-        const ag = timeAgoClassAndText(d);
-        when.classList.add(ag.cls);
-        when.querySelector('.t').textContent = ag.text;
-        when.title = `Last updated: ${isoLocal(d)}`;
-        exact.textContent = isoLocal(d);
-      } else {
-        when.classList.add('t9');
-      }
-
-      meta.append(when, exact);
-
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'copyBtn';
-      copyBtn.type = 'button';
-      copyBtn.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-          <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-        </svg>
-        Copy HTML`;
-      copyBtn.addEventListener('click', (ev)=>{
-        ev.preventDefault(); ev.stopPropagation();
-        copyFile(it.path, copyBtn);
-      });
-
-      actions.append(copyBtn);
-
-      a.append(ic, titleWrap, open, meta, actions);
-      grid.appendChild(a);
+      const card = buildCard(it);
+      grid.appendChild(card);
     });
 
     section.appendChild(grid);
@@ -336,69 +275,91 @@ function render(items){
     grid.className = 'cards';
 
     arr.forEach(it=>{
-      const a = document.createElement('a');
-      a.className = 'card';
-      a.href = it.href;
-
-      const ic = document.createElement('div');
-      ic.className = 'ic';
-      ic.innerHTML = fileIcon();
-
-      const titleWrap = document.createElement('div');
-      titleWrap.className = 'titleWrap';
-      titleWrap.innerHTML = `
-        <div class="name">${prettyName(it.name)}</div>
-        <div class="path">${it.path}</div>
-      `;
-
-      const open = document.createElement('div');
-      open.className = 'openVis';
-      open.innerHTML = `Open ${arrowIcon()}`;
-
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-
-      const when = document.createElement('span');
-      when.className = 'ago';
-      when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
-
-      if(it.updatedAt){
-        const d = new Date(it.updatedAt);
-        const ag = timeAgoClassAndText(d);
-        when.classList.add(ag.cls);
-        when.querySelector('.t').textContent = ag.text;
-        when.title = `Last updated: ${isoLocal(d)}`;
-      } else {
-        when.classList.add('t9');
-      }
-      meta.append(when);
-
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'copyBtn';
-      copyBtn.type = 'button';
-      copyBtn.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-          <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-        </svg>
-        Copy HTML`;
-      copyBtn.addEventListener('click', (ev)=>{
-        ev.preventDefault(); ev.stopPropagation();
-        copyFile(it.path, copyBtn);
-      });
-
-      actions.append(copyBtn);
-
-      a.append(ic, titleWrap, open, meta, actions);
-      grid.appendChild(a);
+      const card = buildCard(it);
+      grid.appendChild(card);
     });
 
     section.appendChild(grid);
     listEl.appendChild(section);
   });
+}
+
+function buildCard(it){
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.href = it.href;
+
+  const ic = document.createElement('div');
+  ic.className = 'ic';
+  ic.innerHTML = fileIcon();
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'titleWrap';
+  titleWrap.innerHTML = `
+    <div class="name">${prettyName(it.name)}</div>
+    <div class="path">${it.path}</div>
+  `;
+
+  const open = document.createElement('div');
+  open.className = 'openVis';
+  open.innerHTML = `Open ${arrowIcon()}`;
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+
+  const when = document.createElement('span');
+  when.className = 'ago';
+  when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
+
+  const exact = document.createElement('span');
+  exact.className = 'exact';
+  exact.textContent = '—';
+
+  if(it.updatedAt){
+    const d = new Date(it.updatedAt);
+    const ag = timeAgoClassAndText(d);
+    when.classList.add(ag.cls);
+    when.querySelector('.t').textContent = ag.text;
+    when.title = `Last updated: ${isoLocal(d)}`;
+    exact.textContent = isoLocal(d);
+  } else {
+    when.classList.add('t9');
+  }
+
+  meta.append(when, exact);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'copyBtn';
+  copyBtn.type = 'button';
+  copyBtn.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
+      <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
+    </svg>
+    Copy HTML`;
+
+  // Keep gesture + focus for iOS
+  copyBtn.addEventListener('click', (ev)=>{
+    ev.stopPropagation();
+    ev.preventDefault();
+    copyBtn.focus();
+    copyFile(it.path, copyBtn);
+  });
+
+  actions.append(copyBtn);
+
+  card.append(ic, titleWrap, open, meta, actions);
+
+  // Navigate only if not clicking an interactive control
+  card.addEventListener('click', (e)=>{
+    if(e.target.closest('button,.copyBtn,input,textarea,a,select')) return;
+    window.location.href = card.dataset.href;
+  });
+
+  return card;
 }
 
 function applyFilter(){ render(allItems); }
@@ -439,7 +400,7 @@ async function fetchDates(){
   await Promise.all(Array.from({length:max}, worker));
 }
 
-/* ===== Copy: prefer Pages → Contents API (base64, UTF-8) → download_url → retry Pages ===== */
+/* ===== Copy: Contents API → download_url → Pages ===== */
 function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
 
 function b64ToUint8(b64){
@@ -452,53 +413,44 @@ function b64ToUint8(b64){
 
 async function copyFile(path, btn){
   const original = btn.innerHTML;
-  const pagesUrl = `${BASE}${path}`;
   const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
+  const pagesUrl = `${BASE}${path}`;
 
   btn.disabled = true;
   btn.innerHTML = 'Copying…';
   btn.title = '';
 
   try{
-    // 1) Same-origin GitHub Pages (best for CORS & rate limits)
-    let r = await fetch(pagesUrl, { cache:'no-store' });
-    if(r.ok){
-      const text = await r.text();
-      await writeToClipboard(text);
-      btn.innerHTML = 'Copied ✓';
-      return;
-    }
+    // keep gesture alive a tick on iOS
+    await new Promise(r=>setTimeout(r, 0));
 
-    // 2) GitHub Contents API (base64, untruncated for ≤1MB)
-    r = await fetch(apiUrl, { headers:{ 'Accept':'application/vnd.github+json' }, cache:'no-store' });
+    // 1) Contents API
+    let r = await fetch(apiUrl, { headers:{ 'Accept':'application/vnd.github+json' }, cache:'no-store' });
     if(r.ok){
       const data = await r.json();
 
       if(data?.encoding === 'base64' && data?.content){
-        const bytes = b64ToUint8(data.content.replace(/\n/g,''));
-        const text = new TextDecoder('utf-8').decode(bytes);
-        await writeToClipboard(text);
+        const text = new TextDecoder('utf-8').decode(b64ToUint8(data.content.replace(/\n/g,'')));
+        await writeToClipboard(text, btn);
         btn.innerHTML = 'Copied ✓';
         return;
       }
-
-      // 3) If content omitted (large files), try download_url
       if(data?.download_url){
-        const r2 = await fetch(data.download_url, { cache:'no-store' });
+        const r2 = await fetch(data.download_url, { cache:'no-store', mode:'cors' });
         if(r2.ok){
           const text = await r2.text();
-          await writeToClipboard(text);
+          await writeToClipboard(text, btn);
           btn.innerHTML = 'Copied ✓';
           return;
         }
       }
     }
 
-    // 4) Last resort: retry Pages (transient caches)
-    const r3 = await fetch(pagesUrl, { cache:'reload' });
-    if(r3.ok){
-      const text = await r3.text();
-      await writeToClipboard(text);
+    // 2) Pages (same-origin if hosted on GH Pages)
+    r = await fetch(pagesUrl, { cache:'no-store', mode:'cors' });
+    if(r.ok){
+      const text = await r.text();
+      await writeToClipboard(text, btn);
       btn.innerHTML = 'Copied ✓';
       return;
     }
@@ -507,25 +459,48 @@ async function copyFile(path, btn){
   }catch(err){
     console.error('Copy failed:', err);
     btn.innerHTML = 'Failed ✕';
-    btn.title = String(err && err.message || err);
+    btn.title = String(err?.message||err);
   }finally{
     setTimeout(()=>{ btn.disabled=false; btn.innerHTML = original; btn.title=''; }, 1200);
   }
 }
 
-async function writeToClipboard(text){
-  if(navigator.clipboard?.writeText){
-    return navigator.clipboard.writeText(text);
+/* Robust clipboard with HTML + plain-text fallbacks */
+async function writeToClipboard(text, btn){
+  // Prefer modern API
+  if (window.isSecureContext && navigator.clipboard?.writeText){
+    await navigator.clipboard.writeText(text);
+    return;
   }
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position='fixed';
-  ta.style.left='-9999px';
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  try{ document.execCommand('copy'); }
-  finally{ document.body.removeChild(ta); }
+
+  // Try ClipboardItem (some Chromium)
+  if (window.isSecureContext && navigator.clipboard?.write && window.ClipboardItem){
+    const blob = new Blob([text], {type:'text/plain'});
+    await navigator.clipboard.write([new ClipboardItem({'text/plain': blob})]);
+    return;
+  }
+
+  // Try contenteditable selection (better for iOS than textarea-only)
+  const div = document.createElement('div');
+  div.contentEditable = 'true';
+  div.style.position='fixed';
+  div.style.opacity='0';
+  div.style.pointerEvents='none';
+  div.style.whiteSpace='pre';
+  div.textContent = text;
+  document.body.appendChild(div);
+
+  const range = document.createRange();
+  range.selectNodeContents(div);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(range);
+
+  try{
+    document.execCommand('copy');
+  }finally{
+    sel.removeAllRanges();
+    document.body.removeChild(div);
+  }
 }
 
 fetchTree();
