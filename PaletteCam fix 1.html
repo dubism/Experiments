@@ -95,7 +95,21 @@
     max-height:100%;
     overflow:auto;
     -webkit-touch-callout:none; touch-action:pan-y;
+    opacity:0; transform:scale(.96) translateY(8px);
   }
+  /* Open animation + bounce */
+  #ccWrap.open #cc{
+    animation: ccBounceIn 360ms cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  @keyframes ccBounceIn{
+    0%   { opacity:0; transform:scale(.96) translateY(8px); }
+    60%  { opacity:1; transform:scale(1.015) translateY(0); }
+    100% { opacity:1; transform:scale(1) translateY(0); }
+  }
+  @media (prefers-reduced-motion:reduce){
+    #ccWrap.open #cc{ animation:none; opacity:1; transform:none; }
+  }
+
   /* disable selection inside CC except inputs */
   #cc, #cc *{ -webkit-user-select:none; user-select:none; }
   #cc input, #cc textarea, #cc select{ -webkit-user-select:auto; user-select:auto; }
@@ -131,12 +145,13 @@
     -webkit-touch-callout:none !important;
   }
 
-  /* Transparent shield that absorbs ongoing gesture after CC opens */
+  /* Transparent shield that absorbs the rest of the long-press gesture */
   #pressShield{
     position:fixed; inset:0; z-index:9500;
     background:transparent;
     display:none;
     touch-action:none;
+    pointer-events:auto;
   }
 
   #compositeOverlay{position:fixed;inset:0;background:#000;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:14px}
@@ -238,7 +253,7 @@
     </div>
   </div>
 
-  <!-- transparent shield for absorbing the end of the press -->
+  <!-- transparent shield to absorb ongoing long-press -->
   <div id="pressShield"></div>
 
   <div id="compositeOverlay">
@@ -456,7 +471,7 @@ const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('
 const status=t=>statusEl.textContent=t;
 function updateLpHint(){ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
 
-/* ===== selection + gesture guards ===== */
+/* ===== selection/callout guards ===== */
 function lockPressSelection(){
   if(pressLock) return;
   pressLock=true;
@@ -472,21 +487,6 @@ function unlockPressSelection(){
 document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault(); }, {capture:true});
 document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.getSelection&&window.getSelection(); if(s&&s.removeAllRanges) try{s.removeAllRanges();}catch{} }});
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen || pressLock) e.preventDefault(); }, {capture:true});
-
-/* ===== frozen-canvas hygiene ===== */
-function hardHideFrozenCanvas(){
-  const fc=frozenCanvas, w=fc.width, h=fc.height;
-  if(w&&h){const g=fc.getContext('2d'); g.clearRect(0,0,w,h);}
-  fc.width=0; fc.height=0; fc.style.display='none';
-}
-function forceReflowAndRecalc(){
-  window.recalcSquare&&window.recalcSquare();
-  video.style.visibility='hidden'; void document.body.offsetHeight; video.style.visibility='';
-}
-async function refreshVideoSurface(){
-  const s=video.srcObject; video.srcObject=null; await new Promise(r=>requestAnimationFrame(r));
-  video.srcObject=s; await video.play().catch(()=>{});
-}
 
 /* ===== camera ===== */
 async function getStream(){ try{ return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }catch(_){ return await navigator.mediaDevices.getUserMedia({video:true,audio:false}); } }
@@ -525,6 +525,8 @@ addEventListener('load', ()=>{
 /* ===== CC open/close ===== */
 function openCC(){
   ccWrap.style.display='block';
+  // trigger animation
+  ccWrap.classList.add('open');
   ccOpen=true;
   // force above GPU video layer on older iOS
   video.dataset.prevOpacity = video.style.opacity || '';
@@ -534,17 +536,42 @@ function openCC(){
 }
 function closeCC(){
   ccWrap.style.display='none';
+  ccWrap.classList.remove('open');
   ccOpen=false;
   video.style.opacity = video.dataset.prevOpacity || '';
 }
 
-/* ===== Long-press: open DURING press, shield absorbs remainder ===== */
-let lpTimer = 0, movedTooFar = false, longPressed = false;
+/* ===== Press shield helpers (ensures CC opens DURING press, but UI is usable after release) ===== */
+function showPressShieldWithAutoRelease(){
+  pressShield.style.display='block';
+
+  // Release shield on the very next end of gesture, from top of tree (capture)
+  const release = ()=>{
+    hidePressShield();
+    document.removeEventListener('pointerup', release, true);
+    document.removeEventListener('touchend', release, true);
+    document.removeEventListener('mouseup', release, true);
+  };
+  document.addEventListener('pointerup', release, true);
+  document.addEventListener('touchend', release, true);
+  document.addEventListener('mouseup', release, true);
+
+  // Failsafe: auto remove if somehow no pointerup arrives (older iOS oddities)
+  clearTimeout(showPressShieldWithAutoRelease._t);
+  showPressShieldWithAutoRelease._t = setTimeout(()=>{ hidePressShield(); }, 1200);
+}
+function hidePressShield(){
+  pressShield.style.display='none';
+  clearTimeout(showPressShieldWithAutoRelease._t);
+}
+
+/* ===== Long-press: open DURING press, shield absorbs remainder; ALSO ensure release even if capture quirks ===== */
+let lpTimer = 0, movedTooFar = false, longPressed = false, activePointerId = null;
 const LP_MS = 450, MOVE_TOL = 10;
 
 paletteClickable.addEventListener('pointerdown', (e)=>{
   if(e.pointerType==='mouse' && e.button!==0) return;
-  movedTooFar=false; longPressed=false;
+  movedTooFar=false; longPressed=false; activePointerId = e.pointerId;
   const sx=e.clientX, sy=e.clientY;
   paletteClickable.setPointerCapture(e.pointerId);
   lockPressSelection();
@@ -553,10 +580,10 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   lpTimer = setTimeout(()=>{
     if(movedTooFar) return;
     longPressed = true;
-    // 1) open immediately
-    openCC();
-    // 2) raise transparent shield to swallow the rest of this gesture
-    pressShield.style.display='block';
+    // release capture so document-level pointerup can fire reliably on iOS
+    try{ paletteClickable.releasePointerCapture(activePointerId); }catch{}
+    openCC();                     // 1) open immediately during press
+    showPressShieldWithAutoRelease(); // 2) absorb remainder of this press, auto-remove on release
   }, LP_MS);
 
   const move = (ev)=>{
@@ -565,14 +592,12 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
     }
   };
   const finish = (ev)=>{
-    paletteClickable.releasePointerCapture(e.pointerId);
+    try{ paletteClickable.releasePointerCapture(e.pointerId); }catch{}
     paletteClickable.removeEventListener('pointermove', move);
     paletteClickable.removeEventListener('pointerup', finish);
     paletteClickable.removeEventListener('pointercancel', cancel);
     clearTimeout(lpTimer);
-    // remove shield (if any)
-    pressShield.style.display='none';
-    // If it wasn't a long-press and not a drag: treat as tap → cycle algo
+    hidePressShield();         // in case auto-release missed
     if(!longPressed && !movedTooFar){
       const r = paletteClickable.getBoundingClientRect();
       const isLeft = (ev.clientX - r.left) < (r.width/2);
@@ -582,7 +607,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   };
   const cancel = ()=>{
     clearTimeout(lpTimer);
-    pressShield.style.display='none';
+    hidePressShield();
     unlockPressSelection();
   };
 
@@ -591,8 +616,8 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   paletteClickable.addEventListener('pointercancel', cancel, {once:true});
 });
 
-/* Press shield eats clicks/taps while visible */
-['pointerdown','pointerup','click','touchstart','touchend','mousedown','mouseup'].forEach(evt=>{
+/* Shield eats any events while visible */
+['pointerdown','pointerup','click','touchstart','touchend','mousedown','mouseup','wheel'].forEach(evt=>{
   pressShield.addEventListener(evt, (e)=>{ e.stopPropagation(); e.preventDefault(); }, {capture:true});
 });
 
@@ -727,12 +752,35 @@ function unfreeze(){
   compositeOverlay.classList.remove('open');
   hardHideFrozenCanvas();
   running=true; pending=false; throttleCountdown=1;
-  forceReflowAndRecalc();
-  setTimeout(()=>refreshVideoSurface(),80);
-  updateLpHint();
+  // no need to resume video; it was never paused
+}
+
+/* ===== RAF loop ===== */
+function loop(){
+  requestAnimationFrame(loop);
+  if(video.readyState<2||video.paused||!running) return;
+
+  const now=performance.now();
+  if(now-lastT>=1000){ fpsEl.textContent=String(frameCounter); frameCounter=0; lastT=now; }
+
+  const {sx,sy,sw,sh}=computeSquareCrop(); if(!sw) return;
+  const scale=procWidth/sw, w=Math.max(2,Math.round(sw*scale)), h=w;
+  off.width=w; off.height=h;
+  const ctx=off.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
+  resEl.textContent=w+'×'+h;
+
+  if(--throttleCountdown>0) return;
+  throttleCountdown=Math.max(1,throttleN);
+  if(!pending){
+    pending=true;
+    const img=ctx.getImageData(0,0,w,h);
+    worker.postMessage({pixels:img.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:'live'},[img.data.buffer]);
+  }
 }
 
 /* ===== composite draw ===== */
+const compositeCanvas=document.getElementById('compositeCanvas');
 function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
   const CAM_W=2048, CAM_H=2048;
   const RECT_H=showRects?480:0, GRAD_H=showGrad?240:0, LABEL=showRects?52:0, PAD=24, GUT=24;
@@ -759,6 +807,9 @@ function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
 }
 
 /* ===== overlay hint observer ===== */
+const compositeOverlay=document.getElementById('compositeOverlay');
+const lpHint=document.getElementById('lpHint');
+function updateLpHint(){ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); }
 new MutationObserver(updateLpHint).observe(compositeOverlay,{attributes:true,attributeFilter:['class']});
 document.addEventListener('DOMContentLoaded', updateLpHint);
 </script>
