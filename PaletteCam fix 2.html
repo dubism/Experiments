@@ -13,7 +13,6 @@
   }
   *{box-sizing:border-box}
   html,body{height:100dvh}
-  /* hard lock the page — no scroll, no rubberband */
   html,body{
     margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     user-select:none; overflow:hidden; overscroll-behavior:none; touch-action:none;
@@ -32,7 +31,6 @@
 
   #videoPane{
     position:relative; overflow:hidden; background:#000; z-index:1;
-    /* avoid parent transforms to prevent iOS GPU ghost layers */
     contain:layout paint size; clip-path: inset(0);
     -webkit-user-drag:none;
   }
@@ -42,7 +40,6 @@
     backface-visibility:hidden; will-change:transform;
     -webkit-user-drag:none; pointer-events:none;
   }
-  /* Hide iOS inline start button */
   #video::-webkit-media-controls-start-playback-button{ display:none !important; }
   #frozenCanvas{display:none}
 
@@ -58,7 +55,6 @@
   .title{display:flex;align-items:center;justify-content:space-between;color:#9aa0a6}
   .stack{
     position:relative;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1;cursor:pointer;
-    /* block browser scrolling while dragging here */
     touch-action:none; -webkit-touch-callout:none; -webkit-user-drag:none;
   }
   .swatches,.gradient{border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:60px;background:#000}
@@ -78,13 +74,11 @@
   .btn{padding:12px 18px;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;color:#fff;cursor:pointer}
   .btn.cta{background:#fff;color:#000;font-weight:900;border-color:#fff;font-size:18px}
 
-  /* Fixed CTAs */
   #freezeBtn,#unfreezeBtn{
     position:fixed; left:50%; transform:translateX(-50%) translateZ(0);
     bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
   }
 
-  /* Control Center — overlay (below freeze overlay) */
   #ccWrap{
     position:fixed;
     inset: max(12px, env(safe-area-inset-top))
@@ -102,7 +96,7 @@
     border-radius:14px;
     padding:14px;
     max-height:100%;
-    overflow:auto; overscroll-behavior:contain; /* scroll only here; don’t bubble */
+    overflow:auto; overscroll-behavior:contain;
     -webkit-touch-callout:none;
     opacity:0; transform:scale(.96) translateY(8px);
   }
@@ -116,7 +110,6 @@
     #ccWrap.open #cc{ animation:none; opacity:1; transform:none; }
   }
 
-  /* disable selection inside CC except inputs */
   #cc, #cc *{ -webkit-user-select:none; user-select:none; }
   #cc input, #cc textarea, #cc select{ -webkit-user-select:auto; user-select:auto; }
 
@@ -126,14 +119,12 @@
   #algoBrief .a.active{ opacity:1; font-weight:600; }
   .ccsep{ border:0; border-top:1px solid var(--line); opacity:.6; margin:6px 0 10px 0; }
 
-  /* Long-press guards */
   .pressLock, .pressLock *{ -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }
   #pressShield{
     position:fixed; inset:0; z-index:9500;
     background:transparent; display:none; touch-action:none; pointer-events:auto;
   }
 
-  /* Tiny inline error toast */
   #camError{
     position:fixed; left:50%; transform:translateX(-50%);
     bottom:calc(var(--ctaB) + 64px); background:rgba(255,80,80,.12);
@@ -148,7 +139,6 @@
   #compositeImg{max-width:min(1024px,92vw);max-height:70vh;border-radius:12px;background:#000}
   .smallhint{font-size:12px;color:#9aa0a6;margin-top:6px;text-align:center;user-select:none}
 
-  /* Processing canvases must never layout/paint */
   #off,#capFrame{ display:none !important; width:0 !important; height:0 !important; }
 </style>
 </head>
@@ -187,7 +177,6 @@
     </section>
   </div>
 
-  <!-- CC overlay -->
   <div id="ccWrap" aria-modal="true" role="dialog">
     <div id="cc">
       <section id="algoBrief" class="small"></section>
@@ -200,7 +189,6 @@
     </div>
   </div>
 
-  <!-- press shield + small error toast -->
   <div id="pressShield"></div>
   <div id="camError" role="status"></div>
 
@@ -215,7 +203,7 @@
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ===== guards ===== */
+/* ===== error toast ===== */
 (function(){
   window.addEventListener('error', e=>{
     try{
@@ -258,16 +246,9 @@ function updateCbH(){ const h = Math.round(controlsBar.getBoundingClientRect().h
 new ResizeObserver(updateCbH).observe(controlsBar);
 addEventListener('load', updateCbH);
 
-/* ===== worker ===== */
-const workerBlob = new Blob([`/* worker code unchanged for brevity */`], {type:'application/javascript'});
-const worker = new Worker(URL.createObjectURL(workerBlob), {type:'module'});
-worker.addEventListener('error', e=>console.log('Worker error:', e.message));
-
 /* ===== elements ===== */
 const video=document.getElementById('video');
 const frozenCanvas=document.getElementById('frozenCanvas');
-const off=document.getElementById('off');
-const capFrame=document.getElementById('capFrame');
 const statusEl=document.getElementById('status');
 const fpsEl=document.getElementById('fps');
 const resEl=document.getElementById('res');
@@ -289,28 +270,28 @@ const algoNameEl=document.getElementById('algoName');
 const lpHint=document.getElementById('lpHint');
 const pressShield=document.getElementById('pressShield');
 const camError=document.getElementById('camError');
+const off=document.getElementById('off');
 
 /* ===== state ===== */
-let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, throttleN=20, uiZoom=+zoomSlider.value;
-let frameCounter=0,lastT=performance.now(),pending=false, running=false;
-let throttleCountdown=1; let lastPalette=[]; let ccOpen=false, pressLock=false; let rafStarted=false;
-/* global drag guards */
-let draggingK=false;
+let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, uiZoom=+zoomSlider.value;
+let throttleN=20, frameCounter=0, lastT=performance.now(), fps=0;
+let ccOpen=false, pressLock=false, draggingK=false;
+let lastPalette=[];
 
 /* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
 const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
-const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
 const status=t=>{ try{statusEl.textContent=t;}catch{} };
 function toast(msg){ if(!msg) return; camError.textContent=msg; camError.style.display='block'; setTimeout(()=>camError.style.display='none', 4000); }
 
-/* ===== algo switching ===== */
+/* ===== algo labels (we compute kmeans for all for now) ===== */
 const ALGOS=['kmeans','hist','mediancut'];
 const ALGO_LABEL={kmeans:'K-Means (LAB)',hist:'Histogram',mediancut:'Median-cut'};
 const ALGO_COPY={
-  kmeans:'K-Means (LAB): groups similar colors in human-perceived space. Good general capture of what the eye notices.',
-  hist:'Histogram: picks colors that appear most often. Best when large areas are flat fills or the “ink load” matters.',
-  mediancut:'Median-cut: slices the color range to cover it evenly. Useful when you want a balanced spread across tones.'
+  kmeans:'K-Means (RGB-approx): general capture of dominant hues.',
+  hist:'Histogram (approx via k-means): favors frequently occurring colors.',
+  mediancut:'Median-cut (approx via k-means): balanced spread.'
 };
 function setAlgo(next){ algo=next; algoNameEl.textContent=ALGO_LABEL[algo]; highlightAlgoDesc(algo); }
 function cycleAlgo(dir){ const i=ALGOS.indexOf(algo); setAlgo(ALGOS[(i+(dir>0?1:-1)+ALGOS.length)%ALGOS.length]); }
@@ -343,20 +324,15 @@ function showPressShieldWithAutoRelease(){
 }
 function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
 
-/* ===== global scroll lock while K-dragging ===== */
+/* ===== global scroll lock during K-drag ===== */
 function noScroll(e){ if(e.cancelable) e.preventDefault(); }
 function lockScroll(){ document.addEventListener('touchmove', noScroll, {passive:false, capture:true}); document.addEventListener('wheel', noScroll, {passive:false, capture:true}); }
 function unlockScroll(){ document.removeEventListener('touchmove', noScroll, {capture:true}); document.removeEventListener('wheel', noScroll, {capture:true}); }
 
-/* ===== K-drag + gestures (continuous, diagonal-friendly) ===== */
+/* ===== K-drag + gestures ===== */
 let lpTimer=0,movedTooFar=false,longPressed=false;
 const LP_MS=450,MOVE_TOL=10;
-
-/* step size by height (~6 notches), clamped */
-function getKStepPx(){
-  const h = paletteClickable.clientHeight || 200;
-  return Math.max(14, Math.min(56, Math.round(h / 6)));
-}
+function getKStepPx(){ const h = paletteClickable.clientHeight || 200; return Math.max(14, Math.min(56, Math.round(h / 6))); }
 
 paletteClickable.addEventListener('pointerdown', (e)=>{
   if(e.pointerType==='mouse' && e.button!==0) return;
@@ -365,15 +341,13 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   const startX=e.clientX, startY=e.clientY;
   let lastX=startX, lastY=startY;
 
-  // K-drag state
   let kDrag=false; draggingK=false;
   let kAccum=0;
   const stepPx=getKStepPx();
-  let ax=0, ay=-1, dirSign=+1; // axis + direction sign
+  let ax=0, ay=-1, dirSign=+1;
 
   paletteClickable.setPointerCapture(e.pointerId);
-  lockPressSelection();
-  lockScroll(); // prevent any scroll chain immediately
+  lockPressSelection(); lockScroll();
 
   clearTimeout(lpTimer);
   lpTimer=setTimeout(()=>{
@@ -388,21 +362,16 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
     const dy = ev.clientY - startY;
 
     if(!kDrag){
-      if(Math.abs(dx) > MOVE_TOL || Math.abs(dy) > MOVE_TOL){
-        movedTooFar = true;
-        clearTimeout(lpTimer);
-      }
-      // diagonal-friendly: require only mild vertical dominance (0.7)
+      if(Math.abs(dx) > MOVE_TOL || Math.abs(dy) > MOVE_TOL){ movedTooFar = true; clearTimeout(lpTimer); }
       if(Math.abs(dy) > MOVE_TOL && Math.abs(dy) > Math.abs(dx) * 0.7){
         const len = Math.hypot(dx, dy) || 1;
         ax = dx / len; ay = dy / len;
-        dirSign = (dy < 0) ? +1 : -1; // initial direction defines K++/K--
+        dirSign = (dy < 0) ? +1 : -1;
         kDrag = true; draggingK = true;
       }
     }
 
     if(kDrag){
-      // Project delta onto the locked axis for smooth continuous steps
       const dpx = ev.clientX - lastX;
       const dpy = ev.clientY - lastY;
       const proj = dpx*ax + dpy*ay;
@@ -416,16 +385,15 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
         const newK = Math.max(2, Math.min(10, (+kRange.value) + steps));
         if(newK !== +kRange.value){
           kRange.value = String(newK);
-          kRange.dispatchEvent(new Event('input', {bubbles:true}));
+          kVal.textContent=newK;
+          K=newK;
         }
         kAccum -= steps * stepPx;
       }
-
       if(ev.cancelable) ev.preventDefault();
     }
 
-    lastX = ev.clientX;
-    lastY = ev.clientY;
+    lastX = ev.clientX; lastY = ev.clientY;
   };
 
   const finish=(ev)=>{
@@ -439,8 +407,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
       const r=paletteClickable.getBoundingClientRect();
       const isLeft=(ev.clientX-r.left)<(r.width/2); cycleAlgo(isLeft?-1:+1);
     }
-    draggingK=false;
-    unlockPressSelection();
+    draggingK=false; unlockPressSelection();
   };
 
   const cancel=()=>{
@@ -457,7 +424,6 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   paletteClickable.addEventListener('pointercancel',cancel,{once:true});
 });
 
-/* also block wheel scrolling on the palette area (desktop/laptop) */
 paletteClickable.addEventListener('wheel', (e)=>{ e.preventDefault(); }, {passive:false});
 
 ['pointerdown','pointerup','click','touchstart','touchend','mousedown','mouseup','wheel'].forEach(evt=>{
@@ -470,7 +436,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('keydown',(e)=>{ if(e.key==='Escape'&&ccWrap.style.display==='block') closeCC(); });
 
 /* ===== controls ===== */
-kRange.addEventListener('input',()=>{K=+kRange.value;kVal.textContent=K;renderPalette(lastPalette);});
+kRange.addEventListener('input',()=>{K=+kRange.value;kVal.textContent=K;});
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value;sizeVal.textContent=procWidth+' px';});
 throttleLog.addEventListener('input',()=>{throttleN=sliderToN(+throttleLog.value);throttleVal.textContent=String(throttleN);});
 rectChk.addEventListener('change',()=>renderPalette(lastPalette));
@@ -480,7 +446,7 @@ zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* ===== crop ===== */
+/* ===== crop helper (square, center, obey uiZoom) ===== */
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw,
@@ -488,17 +454,187 @@ function computeSquareCrop(){
   return {sx,sy,sw,sh};
 }
 
-/* ===== worker handler / loop / render etc. — unchanged from your last version ===== */
+/* ===== simple on-thread K-Means palette (fast, few iters) ===== */
+function kmeansPalette(imgData, k=3, maxIter=6, sampleStep=4){
+  const data = imgData.data;
+  const pts = [];
+  for(let i=0;i<data.length;i+=4*sampleStep){
+    const a=data[i+3]; if(a<250) continue;
+    pts.push([data[i], data[i+1], data[i+2]]);
+  }
+  if(pts.length===0){ return []; }
 
-/* =========================================================================
-   ROBUST CAMERA STARTER + AUTO-RECOVERY (unchanged)
-   ========================================================================= */
+  // init: pick k random unique points
+  const cent=[]; const used=new Set();
+  while(cent.length<k && cent.length<pts.length){
+    const idx = (Math.random()*pts.length)|0;
+    if(used.has(idx)) continue; used.add(idx); cent.push(pts[idx].slice());
+  }
+  const assign=new Array(pts.length).fill(0);
 
-/* ===== freeze / unfreeze wiring ===== */
-function freezeNow(){ /* your existing function body */ }
-function unfreeze(){ /* your existing function body */ }
+  for(let it=0; it<maxIter; it++){
+    // assign
+    for(let i=0;i<pts.length;i++){
+      let best=0, bd=1e12;
+      const p=pts[i];
+      for(let c=0;c<cent.length;c++){
+        const d0=p[0]-cent[c][0], d1=p[1]-cent[c][1], d2=p[2]-cent[c][2];
+        const d=d0*d0+d1*d1+d2*d2;
+        if(d<bd){ bd=d; best=c; }
+      }
+      assign[i]=best;
+    }
+    // recompute
+    const sum=Array.from({length:cent.length},()=>[0,0,0,0]);
+    for(let i=0;i<pts.length;i++){
+      const a=assign[i]; const p=pts[i]; const s=sum[a]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]++;
+    }
+    for(let c=0;c<cent.length;c++){
+      if(sum[c][3]>0){
+        cent[c][0]=sum[c][0]/sum[c][3];
+        cent[c][1]=sum[c][1]/sum[c][3];
+        cent[c][2]=sum[c][2]/sum[c][3];
+      }else{
+        // re-seed empty cluster
+        const idx=(Math.random()*pts.length)|0;
+        cent[c]=pts[idx].slice();
+      }
+    }
+  }
+  // population for ordering
+  const pop=new Array(cent.length).fill(0);
+  for(let i=0;i<assign.length;i++) pop[assign[i]]++;
+  const palette = cent.map((c,i)=>({rgb:c, n:pop[i]}))
+                      .sort((a,b)=>b.n-a.n)
+                      .map(o=>o.rgb);
+  return palette;
+}
+
+/* ===== palette render ===== */
+function renderPalette(pal){
+  lastPalette = Array.isArray(pal) ? pal : lastPalette;
+  swatchesEl.innerHTML='';
+  const showRects = rectChk.checked!==false;
+  const showGrad  = gradChk.checked!==false;
+
+  if(showRects){
+    lastPalette.forEach(rgb=>{
+      const d=document.createElement('div');
+      d.className='swatch';
+      d.style.background=toHex(rgb);
+      swatchesEl.appendChild(d);
+    });
+    swatchesEl.style.display='';
+  }else{
+    swatchesEl.style.display='none';
+  }
+
+  if(showGrad && lastPalette.length){
+    const stops = lastPalette.map(rgb=>toHex(rgb)).join(', ');
+    gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
+    gradientEl.hidden = false;
+  }else{
+    gradientEl.hidden = true;
+  }
+}
+
+/* ===== processing loop ===== */
+const offCtx = off.getContext('2d', {willReadFrequently:true});
+function tick(now){
+  // fps
+  const dt = now - lastT;
+  if(dt>=500){ fps = Math.round((frameCounter*1000)/dt); fpsEl.textContent=String(fps); frameCounter=0; lastT=now; }
+  frameCounter++;
+
+  if(video.readyState>=2){
+    // throttle
+    if(tick._skip===undefined) tick._skip=0;
+    if(tick._skip<=0){
+      const {sx,sy,sw,sh} = computeSquareCrop();
+      if(sw>0){
+        off.width = procWidth; off.height = procWidth;
+        offCtx.drawImage(video, sx,sy,sw,sh, 0,0,procWidth,procWidth);
+        const img = offCtx.getImageData(0,0,procWidth,procWidth);
+        const pal = kmeansPalette(img, K, 6, 4);
+        if(pal && pal.length){ renderPalette(pal); }
+      }
+      tick._skip = throttleN;
+    }else{
+      tick._skip--;
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ===== camera start ===== */
+async function startCamera(){
+  try{
+    status('Requesting camera…');
+    const cstr = {
+      audio:false,
+      video:{
+        facingMode:{ideal:'environment'},
+        width:{ideal:1280}, height:{ideal:1280}, frameRate:{ideal:30}
+      }
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(cstr);
+    video.setAttribute('playsinline','');
+    video.muted = true;
+    video.srcObject = stream;
+
+    await new Promise((res)=>video.addEventListener('loadedmetadata', res, {once:true}));
+    try{ await video.play(); }catch(_){}
+    resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
+    status('Live');
+  }catch(err){
+    console.error(err);
+    status('Camera error');
+    toast(err?.message || 'Camera failed');
+  }
+}
+
+/* ===== freeze / unfreeze ===== */
+function freezeNow(){
+  try{
+    const wrap = document.getElementById('videoPane');
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    compositeCanvas.width = w; compositeCanvas.height = h;
+    const ctx = compositeCanvas.getContext('2d', {willReadFrequently:true});
+    const vw = video.videoWidth || 0, vh = video.videoHeight || 0;
+    if(vw && vh){
+      const z = Math.max(1, uiZoom);
+      const base = Math.min(vw, vh);
+      const sw = Math.round(base / z);
+      const sx = Math.floor((vw - sw)/2);
+      const sy = Math.floor((vh - sw)/2);
+      ctx.drawImage(video, sx, sy, sw, sw, 0, 0, w, h);
+    }else{
+      ctx.fillStyle = '#000'; ctx.fillRect(0,0,w,h);
+    }
+    compositeImg.src = compositeCanvas.toDataURL('image/jpeg', 0.9);
+    compositeOverlay.classList.add('open');
+    status('Frozen');
+  }catch(e){
+    toast('Freeze failed: ' + (e?.message||'unknown'));
+  }
+}
+function unfreeze(){
+  compositeOverlay.classList.remove('open');
+  status('Live');
+}
+
+/* ===== wire up + start ===== */
+renderAlgoBrief(); highlightAlgoDesc(algo);
+throttleVal.textContent=String(throttleN);
+sizeVal.textContent=procWidth+' px';
+
 freezeBtn.addEventListener('click', freezeNow);
 unfreezeBtn.addEventListener('click', unfreeze);
+
+window.addEventListener('pageshow', ()=>{
+  startCamera();
+  requestAnimationFrame(tick);
+}, {once:true});
 </script>
 </body>
 </html>
