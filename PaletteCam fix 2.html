@@ -290,10 +290,10 @@ function medianCutPalette(samples,k){
   let boxes=[{colors}];
   const bounds=b=>{b.r=[255,0];b.g=[255,0];b.b=[255,0];for(const c of b.colors){if(c[0]<b.r[0])b.r[0]=c[0];if(c[0]>b.r[1])b.r[1]=c[0];if(c[1]<b.g[0])b.g[0]=c[1];if(c[1]>b.g[1])b.g[1]=c[1];if(c[2]<b.b[0])b.b[0]=c[2];if(c[2]>b.b[1])b.b[1]=c[2];}};
   boxes.forEach(bounds);
-  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b.b[0]);
-  const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b.b[0]];return rs.indexOf(Math.max(...rs));};
+  const range=b=>Math.max(b.r[1]-b.r[0], b.g[1]-b.g[0], b.b[1]-b[0]);
+  const axis=b=>{const rs=[b.r[1]-b.r[0],b.g[1]-b.g[0],b.b[1]-b[0]];return rs.indexOf(Math.max(...rs));};
   while(boxes.length<k){
-    boxes.sort((A,B)=>range(B)-range(A));
+    boxes.sort((A,B)=>Math.max(A.r[1]-A.r[0],A.g[1]-A.g[0],A.b[1]-A.b[0])<Math.max(B.r[1]-B.r[0],B.g[1]-B.g[0],B.b[1]-B.b[0])?1:-1);
     const big=boxes.shift(); if(!big||big.colors.length<=1) break;
     const ax=axis(big);
     big.colors.sort((a,b)=>a[ax]-b[ax]);
@@ -417,7 +417,15 @@ document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen||pressLock) e.preventDefault(); },{capture:true});
 
 /* ===== CC open/close ===== */
-function openCC(){ ccWrap.style.display='block'; ccWrap.classList.add('open'); ccOpen=true; }
+function openCC(){
+  // ensure brief is ready and current algo is highlighted
+  renderAlgoBrief();
+  highlightAlgoDesc(algo);
+
+  ccWrap.style.display='block';
+  ccWrap.classList.add('open');
+  ccOpen=true;
+}
 function closeCC(){ ccWrap.style.display='none'; ccWrap.classList.remove('open'); ccOpen=false; }
 
 /* ===== press shield helpers ===== */
@@ -432,106 +440,43 @@ function showPressShieldWithAutoRelease(){
 }
 function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
 
-/* ===== Long-press to open CC; tap L/R to cycle algo; vertical K-swipe ===== */
+/* ===== Long-press to open CC; tap L/R to cycle algo ===== */
 let lpTimer=0,movedTooFar=false,longPressed=false,activePointerId=null;
 const LP_MS=450,MOVE_TOL=10;
-
-/* helper for K step size */
-function getKStepPx(){
-  const h = paletteClickable.clientHeight || 200;
-  return Math.max(16, Math.min(64, Math.round(h / 6)));
-}
-
 paletteClickable.addEventListener('pointerdown', (e)=>{
-  if(e.pointerType==='mouse' && e.button!==0) return;
-
+  if(e.pointerType==='mouse'&&e.button!==0) return;
   movedTooFar=false; longPressed=false; activePointerId=e.pointerId;
-  const startX=e.clientX, startY=e.clientY;
-  let lastX=startX, lastY=startY;
-
-  // K-swipe state
-  let kSwipeActive=false;
-  let kAccum=0;
-  const stepPx=getKStepPx();
-
+  const sx=e.clientX, sy=e.clientY;
   paletteClickable.setPointerCapture(e.pointerId);
   lockPressSelection();
 
   clearTimeout(lpTimer);
   lpTimer=setTimeout(()=>{
-    if(movedTooFar || kSwipeActive) return;
+    if(movedTooFar) return;
     longPressed=true;
     try{paletteClickable.releasePointerCapture(activePointerId);}catch{}
     openCC(); showPressShieldWithAutoRelease();
   }, LP_MS);
 
-  const move=(ev)=>{
-    const dx = ev.clientX - startX;
-    const dy = ev.clientY - startY;
-
-    // If we haven't committed to a gesture yet, decide when to enter K-swipe
-    if(!kSwipeActive){
-      // If user moves beyond tolerance, suppress long-press arm
-      if(Math.abs(dx) > MOVE_TOL || Math.abs(dy) > MOVE_TOL){
-        movedTooFar = true;
-        clearTimeout(lpTimer);
-      }
-      // Enter K-swipe only if vertical dominates
-      if(Math.abs(dy) > MOVE_TOL && Math.abs(dy) > Math.abs(dx) * 1.15){
-        kSwipeActive = true;
-      }
-    }
-
-    if(kSwipeActive){
-      const dY = ev.clientY - lastY;
-      kAccum -= dY; // up = increase K
-
-      let steps = 0;
-      if(kAccum >= stepPx) steps = Math.floor(kAccum / stepPx);
-      else if(kAccum <= -stepPx) steps = Math.ceil(kAccum / stepPx);
-
-      if(steps !== 0){
-        const newK = Math.max(2, Math.min(10, (+kRange.value) + steps));
-        if(newK !== +kRange.value){
-          kRange.value = String(newK);
-          kRange.dispatchEvent(new Event('input', {bubbles:true}));
-        }
-        kAccum -= steps * stepPx;
-      }
-    }
-
-    lastX = ev.clientX;
-    lastY = ev.clientY;
-  };
-
+  const move=(ev)=>{ if(Math.abs(ev.clientX-sx)>MOVE_TOL||Math.abs(ev.clientY-sy)>MOVE_TOL){ movedTooFar=true; clearTimeout(lpTimer); } };
   const finish=(ev)=>{
     try{paletteClickable.releasePointerCapture(e.pointerId);}catch{}
     paletteClickable.removeEventListener('pointermove',move);
     paletteClickable.removeEventListener('pointerup',finish);
     paletteClickable.removeEventListener('pointercancel',cancel);
     clearTimeout(lpTimer); hidePressShield();
-
-    // Only cycle algos on a clean tap
-    if(!longPressed && !kSwipeActive && !movedTooFar){
+    if(!longPressed && !movedTooFar){
       const r=paletteClickable.getBoundingClientRect();
       const isLeft=(ev.clientX-r.left)<(r.width/2); cycleAlgo(isLeft?-1:+1);
     }
     unlockPressSelection();
   };
-
-  const cancel=()=>{
-    clearTimeout(lpTimer); hidePressShield(); unlockPressSelection();
-    try{paletteClickable.releasePointerCapture(e.pointerId);}catch{}
-    paletteClickable.removeEventListener('pointermove',move);
-    paletteClickable.removeEventListener('pointerup',finish);
-    paletteClickable.removeEventListener('pointercancel',cancel);
-  };
+  const cancel=()=>{ clearTimeout(lpTimer); hidePressShield(); unlockPressSelection(); };
 
   paletteClickable.addEventListener('pointermove',move);
   paletteClickable.addEventListener('pointerup',finish,{once:true});
   paletteClickable.addEventListener('pointercancel',cancel,{once:true});
 });
-
 ['pointerdown','pointerup','click','touchstart','touchend','mousedown','mouseup','wheel'].forEach(evt=>{
   pressShield.addEventListener(evt,(e)=>{ e.stopPropagation(); e.preventDefault(); },{capture:true});
 });
@@ -640,10 +585,8 @@ async function freezeNow(){
     const handler=(ev)=>{ const {jobId,error}=ev.data||{}; if(jobId!==freezeId) return;
       worker.removeEventListener('message',handler); if(settled) return; settled=true; clearTimeout(to);
       if(error){ resolve(lastPalette.length?lastPalette:[[0,0,0]]); return; }
-      const arr=new Uint8Array(ev.data.palette||[]), out=[];
-      for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
-      while(out.length<K) out.push(out[out.length-1]||[128,128,128]);
-      resolve(out.slice(0,K));
+      const arr=new Uint8Array(ev.data.palette||[]), out=[]; for(let i=0;i<arr.length;i+=3) out.push([arr[i],arr[i+1],arr[i+2]]);
+      while(out.length<K) out.push(out[out.length-1]||[128,128,128]); resolve(out.slice(0,K));
     };
     worker.addEventListener('message',handler);
     worker.postMessage({pixels:imgs.data.buffer,width:w,height:h,algo,k:K,stride:2,jobId:freezeId},[imgs.data.buffer]);
@@ -655,6 +598,10 @@ async function freezeNow(){
   compositeImg.src=compositeCanvas.toDataURL('image/png');
 }
 function unfreeze(){ compositeOverlay.classList.remove('open'); frozenCanvas.width=0; frozenCanvas.height=0; frozenCanvas.style.display='none'; running=true; pending=false; throttleCountdown=1; }
+
+/* ===== bind FREEZE / UNFREEZE ===== */
+freezeBtn.addEventListener('click', freezeNow);
+unfreezeBtn.addEventListener('click', unfreeze);
 
 /* ===== composite draw ===== */
 function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
@@ -685,7 +632,14 @@ function renderCompositeFullscreen(hexes, hiCapCanvas, showRects, showGrad){
 /* ===== overlay hint observer ===== */
 new MutationObserver(()=>{ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); })
   .observe(compositeOverlay,{attributes:true,attributeFilter:['class']});
-document.addEventListener('DOMContentLoaded', ()=>{ const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0); lpHint.hidden=!touch||!compositeOverlay.classList.contains('open'); });
+document.addEventListener('DOMContentLoaded', ()=>{
+  // ensure algo brief is present from the start; keep current algo highlighted
+  renderAlgoBrief();
+  highlightAlgoDesc(algo);
+
+  const touch=('ontouchstart'in window)||(navigator.maxTouchPoints>0);
+  lpHint.hidden=!touch||!compositeOverlay.classList.contains('open');
+});
 
 /* =========================================================================
    ROBUST CAMERA STARTER + AUTO-RECOVERY
@@ -770,10 +724,6 @@ window.addEventListener('load', ()=>{ setTimeout(()=> startCameraRobust({maxRetr
   // watchdog: if still "Starting…" after 2s, hint tap-to-start (for very strict iOS builds)
   setTimeout(()=>{ if((statusEl.textContent||'').includes('Starting')){ status('Tap to start camera'); toast('Tap anywhere to enable camera'); bindPlayFallbackOnce(); } }, 2000);
 });
-
-/* ===== freeze / unfreeze wiring ===== */
-freezeBtn.addEventListener('click', freezeNow);
-unfreezeBtn.addEventListener('click', unfreeze);
 </script>
 </body>
 </html>
