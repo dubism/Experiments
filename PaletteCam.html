@@ -79,8 +79,7 @@
     bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
   }
 
-  /* ——— Control Center: full-screen backdrop + fixed dialog ——— */
-  /* Wrapper now owns safe-area & CTA clearance per spec */
+  /* ——— Control Center wrapper ——— */
   #ccWrap{
     position:fixed;
     inset:
@@ -95,7 +94,7 @@
   }
   #ccWrap.open{ display:block; }
 
-  /* Content fills wrapper and scrolls vertically */
+  /* ——— Control Center content (redesigned layout) ——— */
   #cc{
     position:absolute; inset:0;
     background:rgba(0,0,0,.65);
@@ -105,33 +104,44 @@
     padding:14px;
     overflow:auto; overscroll-behavior:contain;
     opacity:0; transform:scale(.96) translateY(8px);
+    touch-action:pan-y; pointer-events:auto; -webkit-overflow-scrolling:touch;
+  }
+  #ccWrap.open #cc{ animation: ccIn 360ms cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes ccIn{0%{opacity:0;transform:scale(.96) translateY(8px)}60%{opacity:1;transform:scale(1.015) translateY(0)}100%{opacity:1;transform:scale(1) translateY(0)}}
+  @media (prefers-reduced-motion:reduce){ #ccWrap.open #cc{ animation:none; opacity:1; transform:none; } }
 
-    /* CC must be interactive regardless of global locks */
-    touch-action:pan-y; 
-    pointer-events:auto;
-    -webkit-overflow-scrolling:touch;
-  }
-  #ccWrap.open #cc{ animation: ccBounceIn 360ms cubic-bezier(.2,.8,.2,1) forwards; }
-  @keyframes ccBounceIn{
-    0%{opacity:0;transform:scale(.96) translateY(8px)}
-    60%{opacity:1;transform:scale(1.015) translateY(0)}
-    100%{opacity:1;transform:scale(1) translateY(0)}
-  }
-  @media (prefers-reduced-motion:reduce){
-    #ccWrap.open #cc{ animation:none; opacity:1; transform:none; }
-  }
+  /* Typography + numbers */
+  .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
+  .secTitle{font-weight:600; letter-spacing:.01em; color:#d0d0d0; margin:14px 2px 8px}
 
-  /* selection rules: allow interaction inside CC */
+  /* Grid rhythm */
+  .ccSection{ padding:6px 2px 4px; }
+  .ccSection + .ccSection{ border-top:1px solid var(--line); margin-top:8px; padding-top:12px; }
+
+  .ccGrid{
+    display:grid;
+    grid-template-columns: 1fr auto;
+    grid-auto-rows:minmax(24px,auto);
+    gap:6px 12px;
+    align-items:center;
+  }
+  .lbl{min-height:24px}
+  .val{justify-self:end; color:#9aa0a6; font-variant-numeric:tabular-nums}
+  .control{grid-column:1 / -1}
+  .control input[type="range"]{width:100%}
+
+  /* Checkbox row alignment */
+  .checkRow{ display:grid; grid-template-columns: 1fr auto; align-items:center; gap:6px 12px; }
+  .checkRow input[type="checkbox"]{ width:22px; height:22px; accent-color:#fff; }
+
+  /* Fine spacing for sliders */
+  .tightTop{ margin-top:-2px }
+
+  /* selection inside CC allowed only for inputs */
   #cc, #cc *{ -webkit-user-select:none; user-select:none; }
   #cc input, #cc textarea, #cc select, #cc button, #cc label{ -webkit-user-select:auto; user-select:auto; pointer-events:auto; }
 
-  .small{font-variant-numeric:tabular-nums;color:#9aa0a6}
-  #algoBrief{ margin:10px 4px 14px; line-height:1.45; }
-  #algoBrief .a{ margin:8px 0 12px; opacity:.85; }
-  #algoBrief .a.active{ opacity:1; font-weight:600; }
-  .ccsep{ border:0; border-top:1px solid var(--line); opacity:.6; margin:6px 0 10px 0; }
-
-  /* long-press shield (kept) */
+  /* long-press shield, error toast, composite overlay (unchanged) */
   .pressLock, .pressLock *{ -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }
   #pressShield{ position:fixed; inset:0; z-index:9500; background:transparent; display:none; touch-action:none; pointer-events:auto; }
 
@@ -188,16 +198,44 @@
     </section>
   </div>
 
-  <!-- CC overlay -->
+  <!-- CC overlay (layout improved) -->
   <div id="ccWrap" aria-modal="true" role="dialog">
     <div id="cc">
-      <section id="algoBrief" class="small"></section>
-      <hr class="ccsep">
-      <div class="field"><div class="field-head"><span class="label">Colors (K)</span><span class="value" id="kVal">3</span></div><div class="field-body"><input type="range" id="k" min="2" max="10" value="3"></div><div class="divider"></div></div>
-      <div class="field"><div class="field-head"><span class="label">Show rectangles</span><input type="checkbox" id="rects" checked></div><div class="divider"></div></div>
-      <div class="field"><div class="field-head"><span class="label">Show gradient</span><input type="checkbox" id="grad" checked></div><div class="divider"></div></div>
-      <div class="field"><div class="field-head"><span class="label">Processing width</span><span class="value" id="sizeVal">240 px</span></div><div class="field-body"><input type="range" id="size" min="120" max="360" step="20" value="240"></div><div class="divider"></div></div>
-      <div class="field"><div class="field-head"><span class="label">Process every N frames</span><span class="value" id="throttleVal">20</span></div><div class="field-body"><input type="range" id="throttleLog" min="0" max="100" value="0"></div><div class="divider"></div></div>
+      <section id="algoBrief" class="small" style="margin:8px 2px 6px; line-height:1.45;"></section>
+
+      <div class="ccSection">
+        <div class="secTitle">Palette</div>
+        <div class="ccGrid">
+          <label class="lbl" for="k">Colors (K)</label>
+          <div class="val" id="kVal">3</div>
+          <div class="control tightTop"><input type="range" id="k" min="2" max="10" value="3"></div>
+        </div>
+      </div>
+
+      <div class="ccSection">
+        <div class="secTitle">Display</div>
+        <div class="checkRow">
+          <label class="lbl" for="rects">Show rectangles</label>
+          <input type="checkbox" id="rects" checked>
+        </div>
+        <div class="checkRow" style="margin-top:6px">
+          <label class="lbl" for="grad">Show gradient</label>
+          <input type="checkbox" id="grad" checked>
+        </div>
+      </div>
+
+      <div class="ccSection">
+        <div class="secTitle">Processing</div>
+        <div class="ccGrid">
+          <label class="lbl" for="size">Processing width</label>
+          <div class="val" id="sizeVal">240 px</div>
+          <div class="control tightTop"><input type="range" id="size" min="120" max="360" step="20" value="240"></div>
+
+          <label class="lbl" for="throttleLog">Process every N frames</label>
+          <div class="val" id="throttleVal">20</div>
+          <div class="control tightTop"><input type="range" id="throttleLog" min="0" max="100" value="0"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -336,13 +374,11 @@ document.addEventListener('contextmenu',(e)=>{ if(ccOpen||pressLock) e.preventDe
 function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
 function openCC(){
   hidePressShield(); unlockScroll(); unlockPressSelection();
-  // iOS GPU video compositing nudge
   try{ video.dataset.prevOpacity = video.style.opacity || ''; video.style.opacity = '0.9999'; }catch{}
   ccWrap.classList.add('open'); ccOpen=true;
 }
 function closeCC(){
   ccOpen=false; ccWrap.classList.remove('open'); hidePressShield();
-  // restore video opacity
   try{ video.style.opacity = video.dataset.prevOpacity || ''; }catch{}
 }
 
@@ -350,7 +386,7 @@ function closeCC(){
 cc.addEventListener('pointerdown', e=>e.stopPropagation(), {capture:true});
 cc.addEventListener('click', e=>e.stopPropagation(), {capture:true});
 
-/* Close on ANY outside tap (capture so nothing can swallow it) */
+/* Close on ANY outside tap */
 document.addEventListener('pointerdown', (e)=>{
   if(document.getElementById('compositeOverlay')?.classList.contains('open')) return;
   if(ccOpen && !cc.contains(e.target)) closeCC();
@@ -428,7 +464,7 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
     if(movedTooFar || kDrag) return;
     longPressed=true;
     try{paletteClickable.releasePointerCapture(e.pointerId);}catch{}
-    openCC(); // opening CC now fully enables interactions
+    openCC();
   }, LP_MS);
 
   const move=(ev)=>{
@@ -514,7 +550,7 @@ zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw,
-        sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sh)/2);
+        sx=Math.floor((vw-sw)/2), sy=Math.floor((vh-sw)/2);
   return {sx,sy,sw,sh};
 }
 
@@ -531,8 +567,6 @@ function samplePixels(imgData, step){
 }
 
 /* ===== Option A: compute Kmax palette (hierarchical / deterministic) ===== */
-
-/* Bisecting K-Means (prefix-stable) */
 function kmeansKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const idxs = Uint32Array.from({length:pixels.length}, (_,i)=>i);
@@ -593,7 +627,6 @@ function kmeansKmax(pixels, Kmax){
   return reps.slice(0, Kmax);
 }
 
-/* Deterministic Median-Cut (prefix-stable) */
 function medianCutKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const allIdx = Uint32Array.from({length:pixels.length}, (_,i)=>i);
@@ -643,59 +676,45 @@ function medianCutKmax(pixels, Kmax){
   return reps.slice(0,Kmax);
 }
 
-/* Fixed-grid Histogram with global peak ranking (NMS) */
 function histogramKmax(pixels, Kmax){
   if(!pixels.length) return [];
-  const B=16;
-  const gridSize=B*B*B;
+  const B=16, gridSize=B*B*B;
   const bins = new Uint32Array(gridSize);
-
   const toBin = (v)=> Math.min(B-1, (v*B/256)|0);
   for(const p of pixels){
     const r=toBin(p[0]), g=toBin(p[1]), b=toBin(p[2]);
     bins[r*B*B + g*B + b]++;
   }
-  const w = [1,2,1];
-  const smooth = new Float32Array(gridSize);
-  for(let r=0;r<B;r++){
-    for(let g=0;g<B;g++){
-      for(let b=0;b<B;b++){
-        let acc=0;
-        for(let dr=-1;dr<=1;dr++){
-          const rr=r+dr; if(rr<0||rr>=B) continue;
-          for(let dg=-1;dg<=1;dg++){
-            const gg=g+dg; if(gg<0||gg>=B) continue;
-            for(let db=-1;db<=1;db++){
-              const bb=b+db; if(bb<0||bb>=B) continue;
-              acc += bins[rr*B*B + gg*B + bb] * w[dr+1]*w[dg+1]*w[db+1];
-            }
-          }
+  const w = [1,2,1], smooth = new Float32Array(gridSize);
+  for(let r=0;r<B;r++) for(let g=0;g<B;g++) for(let b=0;b<B;b++){
+    let acc=0;
+    for(let dr=-1;dr<=1;dr++){
+      const rr=r+dr; if(rr<0||rr>=B) continue;
+      for(let dg=-1;dg<=1;dg++){
+        const gg=g+dg; if(gg<0||gg>=B) continue;
+        for(let db=-1;db<=1;db++){
+          const bb=b+db; if(bb<0||bb>=B) continue;
+          acc += bins[rr*B*B + gg*B + bb] * w[dr+1]*w[dg+1]*w[db+1];
         }
-        smooth[r*B*B + g*B + b] = acc;
       }
     }
+    smooth[r*B*B + g*B + b] = acc;
   }
-  const candidates=[];
-  for(let i=0;i<gridSize;i++) if(smooth[i]>0) candidates.push({i, v:smooth[i]});
+  const candidates=[]; for(let i=0;i<gridSize;i++) if(smooth[i]>0) candidates.push({i, v:smooth[i]});
   candidates.sort((a,b)=>b.v-a.v);
 
-  const picked=[];
-  const taken = new Uint8Array(gridSize);
-  const NMSr = 1;
+  const picked=[], taken = new Uint8Array(gridSize); const NMSr = 1;
   for(const c of candidates){
     if(picked.length>=Kmax) break;
     if(taken[c.i]) continue;
     picked.push(c.i);
-    const bi = c.i;
-    const br = (bi/(B*B))|0;
-    const bg = ((bi%(B*B))/B)|0;
-    const bb = bi%B;
+    const bi = c.i, br = (bi/(B*B))|0, bg = ((bi%(B*B))/B)|0, bb = bi%B;
     for(let dr=-NMSr; dr<=NMSr; dr++){
       const rr=br+dr; if(rr<0||rr>=B) continue;
       for(let dg=-NMSr; dg<=NMSr; dg++){
         const gg=bg+dg; if(gg<0||gg>=B) continue;
         for(let db=-NMSr; db<=NMSr; db++){
-          const bb2=bb+db; if(bb2<0||bb2>=B) continue;
+          const bb2=bb+db; if(bb2<0||bb>=B) continue;
           taken[rr*B*B + gg*B + bb2] = 1;
         }
       }
@@ -703,11 +722,10 @@ function histogramKmax(pixels, Kmax){
   }
 
   const toCenter = (bin)=> Math.round((bin+0.5)*(255/B));
-  const palette = picked.map(i=>{
+  return picked.map(i=>{
     const r=(i/(B*B))|0, g=((i%(B*B))/B)|0, b=i%B;
     return [toCenter(r), toCenter(g), toCenter(b)];
   });
-  return palette;
 }
 
 /* render */
@@ -776,10 +794,7 @@ async function startCamera(){
     status('Requesting camera…');
     const cstr = {
       audio:false,
-      video:{
-        facingMode:{ideal:'environment'},
-        width:{ideal:1280}, height:{ideal:1280}, frameRate:{ideal:30}
-      }
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:1280}, frameRate:{ideal:30} }
     };
     const stream = await navigator.mediaDevices.getUserMedia(cstr);
     video.setAttribute('playsinline','');
