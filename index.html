@@ -8,11 +8,11 @@
   :root{
     --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
     --card:#0f1117; --card2:#10131a; --line:#1a2130;
+    --cardSub:#121823; --card2Sub:#141d2a;
     --shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 0 0 1px #1a2130, 0 8px 18px rgba(0,0,0,.45);
     --shadow-hover:0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 14px 28px rgba(0,0,0,.6);
     --radius:14px;
 
-    /* Green → Bluish → Grey (grey only after 3 days) */
     --t0:#82FFB5; --t1:#66F5C8; --t2:#4FDEDE; --t3:#4BC5F2; --t4:#5AAAF5;
     --t5:#7D96F0; --t6:#9CA6CC; --t7:#A9B6E0; --t8:#B9C2E0; --t9:#B8B8B8;
   }
@@ -59,10 +59,14 @@
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 
   .card{
-    display:grid;color:inherit;background:linear-gradient(180deg,var(--card),var(--card2));
-    border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;
-    box-shadow:var(--shadow);transition:transform .18s, box-shadow .22s, border-color .2s, background .25s;
-    position:relative;overflow:hidden;cursor:pointer;
+    display:grid;text-decoration:none;color:inherit;
+    background:linear-gradient(180deg,var(--card),var(--card2));
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 14px;
+    box-shadow:var(--shadow);
+    transition:transform .18s, box-shadow .22s, border-color .2s, background .25s;
+    position:relative;overflow:hidden;
+
     grid-template-columns: 28px 1fr auto;
     grid-template-rows: auto auto;
     grid-template-areas:
@@ -70,6 +74,7 @@
       "meta meta actions";
     column-gap:10px; row-gap:6px;
   }
+  .card.sub{background:linear-gradient(180deg,var(--cardSub),var(--card2Sub));border-color:#22314a}
   .card:before{
     content:"";position:absolute;inset:-1px;border-radius:var(--radius);
     background:radial-gradient(90px 60px at 0% 0%, rgba(74,163,255,.08), transparent 60%),
@@ -140,6 +145,15 @@
           Refresh
         </span>
       </button>
+      <button id="copySelf" aria-label="Copy this page’s HTML">
+        <span style="display:inline-flex;gap:8px;align-items:center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
+            <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
+          </svg>
+          Copy This Page
+        </span>
+      </button>
       <span id="status" class="status">Loading…</span>
     </div>
   </div>
@@ -161,23 +175,13 @@ const listEl = document.getElementById('list');
 const qEl = document.getElementById('q');
 const sortTimeBtn = document.getElementById('sortTime');
 const sortNameBtn = document.getElementById('sortName');
+const copySelfBtn = document.getElementById('copySelf');
 document.getElementById('refresh').onclick = fetchTree;
 qEl.oninput = applyFilter;
+copySelfBtn.onclick = copySelf;
 
 let allItems = [];
 let sortMode = 'time';
-
-/* --- content cache for prefetch & instant copy --- */
-const contentCache = new Map(); // path -> {state:'ok'|'err'|'loading', text?:string, err?:any, p?:Promise}
-const io = new IntersectionObserver((entries)=>{
-  for(const e of entries){
-    if(e.isIntersecting){
-      const path = e.target.dataset.path;
-      prefetch(path);
-      io.unobserve(e.target);
-    }
-  }
-},{root:null, rootMargin:'200px', threshold:0});
 
 sortTimeBtn.onclick = () => setSort('time');
 sortNameBtn.onclick = () => setSort('name');
@@ -210,7 +214,6 @@ function isoLocal(d){
          `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 
-/* Buckets (green → bluish → grey; grey only after 72h) */
 function timeAgoClassAndText(d){
   let secs = Math.max(0,(Date.now()-d.getTime())/1000);
   if(secs < 60)  return {cls:'t0', text:`${Math.floor(secs)}s ago`};
@@ -251,14 +254,79 @@ function render(items){
     const grid = document.createElement('div');
     grid.className = 'cards';
 
-    list.forEach(it=> grid.appendChild(buildCard(it)));
+    list.forEach(it=>{
+      const a = document.createElement('a');
+      a.className = 'card';
+      if(it.depth === 2) a.classList.add('sub');
+      a.href = it.href;
+
+      const ic = document.createElement('div');
+      ic.className = 'ic';
+      ic.innerHTML = fileIcon();
+
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'titleWrap';
+      titleWrap.innerHTML = `
+        <div class="name">${prettyName(it.name)}</div>
+        <div class="path">${it.path}</div>
+      `;
+
+      const open = document.createElement('div');
+      open.className = 'openVis';
+      open.innerHTML = `Open ${arrowIcon()}`;
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+
+      const when = document.createElement('span');
+      when.className = 'ago';
+      when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
+
+      const exact = document.createElement('span');
+      exact.className = 'exact';
+      exact.textContent = '—';
+
+      if(it.updatedAt){
+        const d = new Date(it.updatedAt);
+        const ag = timeAgoClassAndText(d);
+        when.classList.add(ag.cls);
+        when.querySelector('.t').textContent = ag.text;
+        when.title = `Last updated: ${isoLocal(d)}`;
+        exact.textContent = isoLocal(d);
+      } else {
+        when.classList.add('t9');
+      }
+
+      meta.append(when, exact);
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copyBtn';
+      copyBtn.type = 'button';
+      copyBtn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
+          <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
+        </svg>
+        Copy HTML`;
+      copyBtn.addEventListener('click', (ev)=>{
+        ev.preventDefault(); ev.stopPropagation();
+        copyFile(it.path, copyBtn);
+      });
+
+      actions.append(copyBtn);
+
+      a.append(ic, titleWrap, open, meta, actions);
+      grid.appendChild(a);
+    });
 
     section.appendChild(grid);
     listEl.appendChild(section);
     return;
   }
 
-  // Name sort (grouped)
   const groups = new Map();
   list.forEach(it=>{
     const key = folderOf(it.path);
@@ -278,131 +346,71 @@ function render(items){
     const grid = document.createElement('div');
     grid.className = 'cards';
 
-    arr.forEach(it=> grid.appendChild(buildCard(it)));
+    arr.forEach(it=>{
+      const a = document.createElement('a');
+      a.className = 'card';
+      if(it.depth === 2) a.classList.add('sub');
+      a.href = it.href;
+
+      const ic = document.createElement('div');
+      ic.className = 'ic';
+      ic.innerHTML = fileIcon();
+
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'titleWrap';
+      titleWrap.innerHTML = `
+        <div class="name">${prettyName(it.name)}</div>
+        <div class="path">${it.path}</div>
+      `;
+
+      const open = document.createElement('div');
+      open.className = 'openVis';
+      open.innerHTML = `Open ${arrowIcon()}`;
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+
+      const when = document.createElement('span');
+      when.className = 'ago';
+      when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
+
+      if(it.updatedAt){
+        const d = new Date(it.updatedAt);
+        const ag = timeAgoClassAndText(d);
+        when.classList.add(ag.cls);
+        when.querySelector('.t').textContent = ag.text;
+        when.title = `Last updated: ${isoLocal(d)}`;
+      } else {
+        when.classList.add('t9');
+      }
+      meta.append(when);
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copyBtn';
+      copyBtn.type = 'button';
+      copyBtn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
+          <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
+        </svg>
+        Copy HTML`;
+      copyBtn.addEventListener('click', (ev)=>{
+        ev.preventDefault(); ev.stopPropagation();
+        copyFile(it.path, copyBtn);
+      });
+
+      actions.append(copyBtn);
+
+      a.append(ic, titleWrap, open, meta, actions);
+      grid.appendChild(a);
+    });
 
     section.appendChild(grid);
     listEl.appendChild(section);
   });
-}
-
-function buildCard(it){
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.dataset.href = it.href;
-  card.dataset.path = it.path;
-
-  const ic = document.createElement('div');
-  ic.className = 'ic';
-  ic.innerHTML = fileIcon();
-
-  const titleWrap = document.createElement('div');
-  titleWrap.className = 'titleWrap';
-  titleWrap.innerHTML = `
-    <div class="name">${prettyName(it.name)}</div>
-    <div class="path">${it.path}</div>
-  `;
-
-  const open = document.createElement('div');
-  open.className = 'openVis';
-  open.innerHTML = `Open ${arrowIcon()}`;
-
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-
-  const when = document.createElement('span');
-  when.className = 'ago';
-  when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
-
-  const exact = document.createElement('span');
-  exact.className = 'exact';
-  exact.textContent = '—';
-
-  if(it.updatedAt){
-    const d = new Date(it.updatedAt);
-    const ag = timeAgoClassAndText(d);
-    when.classList.add(ag.cls);
-    when.querySelector('.t').textContent = ag.text;
-    when.title = `Last updated: ${isoLocal(d)}`;
-    exact.textContent = isoLocal(d);
-  } else {
-    when.classList.add('t9');
-  }
-
-  meta.append(when, exact);
-
-  const actions = document.createElement('div');
-  actions.className = 'actions';
-
-  const copyBtn = document.createElement('button');
-  copyBtn.className = 'copyBtn';
-  copyBtn.type = 'button';
-  copyBtn.innerHTML = `
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-      <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-    </svg>
-    Copy HTML`;
-
-  // Prefetch as early as possible
-  copyBtn.addEventListener('pointerdown', ()=> prefetch(it.path));
-  copyBtn.addEventListener('mouseenter', ()=> prefetch(it.path), {passive:true});
-
-  copyBtn.addEventListener('click', async (ev)=>{
-    ev.stopPropagation(); ev.preventDefault();
-    copyBtn.focus();
-
-    // 1) Gesture-preserving async ClipboardItem path
-    if (window.isSecureContext && navigator.clipboard?.write && window.ClipboardItem){
-      try{
-        const item = new ClipboardItem({
-          'text/plain': (async ()=>{
-            const txt = await getText(it.path);
-            return new Blob([txt], {type:'text/plain'});
-          })()
-        });
-        await navigator.clipboard.write([item]);
-        flashCopied(copyBtn);
-        return;
-      }catch(e){
-        // fall through to cached/plain-text path
-      }
-    }
-
-    // 2) Cached text → writeText/execCommand (should still be ok on iOS if quick)
-    try{
-      const txt = await getText(it.path); // likely resolved from cache/prefetch
-      await writeToClipboard(txt);
-      flashCopied(copyBtn);
-    }catch(err){
-      console.error('Copy failed:', err);
-      flashFailed(copyBtn, String(err?.message||err));
-    }
-  });
-
-  actions.append(copyBtn);
-  card.append(ic, titleWrap, open, meta, actions);
-
-  // navigate only if not clicking an interactive
-  card.addEventListener('click', (e)=>{
-    if(e.target.closest('button,input,textarea,a,select')) return;
-    window.location.href = card.dataset.href;
-  });
-
-  // Observe for viewport prefetch
-  io.observe(card);
-  return card;
-}
-
-function flashCopied(btn){
-  const html = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = 'Copied ✓';
-  setTimeout(()=>{ btn.disabled=false; btn.innerHTML = html; }, 900);
-}
-function flashFailed(btn, title){
-  const html = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = 'Failed ✕';
-  if(title) btn.title = title;
-  setTimeout(()=>{ btn.disabled=false; btn.innerHTML = html; btn.title = ''; }, 1400);
 }
 
 function applyFilter(){ render(allItems); }
@@ -414,15 +422,25 @@ async function fetchTree(){
     if(!r.ok) throw new Error();
     const data = await r.json();
     allItems = data.tree
-      .filter(n => n.type==="blob" && /\.html?$/i.test(n.path) && !/index\.html?$/i.test(n.path))
-      .map(n => ({ path:n.path, name:n.path.split('/').pop(), href:BASE+n.path, updatedAt:null }));
+      .filter(n => {
+        if(n.type !== "blob") return false;
+        if(!/\.html?$/i.test(n.path)) return false;
+        if(/(^|\/)index\.html?$/i.test(n.path)) return false;
+        const depth = n.path.split('/').length;
+        return depth <= 2;
+      })
+      .map(n => ({
+        path:n.path,
+        name:n.path.split('/').pop(),
+        href:BASE+n.path,
+        updatedAt:null,
+        depth:n.path.split('/').length
+      }));
     render(allItems);
     statusEl.textContent = `Found ${allItems.length} file(s), fetching dates…`;
     await fetchDates();
     render(allItems);
     statusEl.textContent = `Found ${allItems.length} file(s)`;
-    // kick off prefetch for first 12 visible
-    document.querySelectorAll('.card').forEach((el,i)=>{ if(i<12) prefetch(el.dataset.path); });
   }catch(e){
     statusEl.textContent = "Error fetching data";
   }
@@ -445,101 +463,99 @@ async function fetchDates(){
   await Promise.all(Array.from({length:max}, worker));
 }
 
-/* ---------------- copy plumbing ---------------- */
 function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
-function b64ToUint8(b64){
-  const bin = atob(b64); const len = bin.length; const out = new Uint8Array(len);
-  for(let i=0;i<len;i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
 
-function getText(path){
-  // cache hit
-  const c = contentCache.get(path);
-  if(c?.state === 'ok') return Promise.resolve(c.text);
-  if(c?.state === 'loading') return c.p;
-  // miss → start fetch
-  return prefetch(path);
-}
+async function copyFile(path, btn){
+  const original = btn.innerHTML;
+  try{
+    btn.disabled = true;
+    btn.innerHTML = 'Copying…';
 
-function prefetch(path){
-  // already loading/loaded?
-  const c = contentCache.get(path);
-  if(c?.state === 'ok' || c?.state === 'loading') return c.p || Promise.resolve(c.text);
+    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
+    const resp = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' } });
 
-  const p = (async ()=>{
-    // Try same-origin Pages first
-    const pagesUrl = `${BASE}${path}`;
-    try{
-      let r = await fetch(pagesUrl, {cache:'no-store'});
-      if(r.ok){
-        const t = await r.text();
-        contentCache.set(path, {state:'ok', text:t});
-        return t;
+    let content = '';
+
+    if(resp.ok){
+      const data = await resp.json();
+
+      if(data && data.content && data.encoding === 'base64'){
+        const b64 = data.content.replace(/\n/g,'');
+        content = atob(b64);
+      }else if(data && data.download_url){
+        const r2 = await fetch(data.download_url);
+        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
+        content = await r2.text();
+      }else{
+        const r3 = await fetch(`${BASE}${path}`);
+        if(!r3.ok) throw new Error(`Pages HTTP ${r3.status}`);
+        content = await r3.text();
       }
-    }catch(_){}
+    }else{
+      const r = await fetch(`${BASE}${path}`);
+      if(!r.ok) throw new Error(`Pages HTTP ${r.status}`);
+      content = await r.text();
+    }
 
-    // Fallback: GitHub contents API
-    try{
-      const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
-      const r = await fetch(apiUrl, { headers:{ 'Accept':'application/vnd.github+json' }, cache:'no-store' });
-      if(r.ok){
-        const data = await r.json();
-        if(data?.encoding === 'base64' && data?.content){
-          const t = new TextDecoder('utf-8').decode(b64ToUint8(data.content.replace(/\n/g,'')));
-          contentCache.set(path, {state:'ok', text:t});
-          return t;
-        }
-        if(data?.download_url){
-          const r2 = await fetch(data.download_url, {cache:'no-store'});
-          if(r2.ok){
-            const t = await r2.text();
-            contentCache.set(path, {state:'ok', text:t});
-            return t;
-          }
-        }
-      }
-    }catch(_){}
-
-    // Last resort retry Pages (transient)
-    try{
-      const r3 = await fetch(pagesUrl, {cache:'reload'});
-      if(r3.ok){
-        const t = await r3.text();
-        contentCache.set(path, {state:'ok', text:t});
-        return t;
-      }
-    }catch(_){}
-
-    const err = new Error('Unable to fetch file content');
-    contentCache.set(path, {state:'err', err});
-    throw err;
-  })();
-
-  contentCache.set(path, {state:'loading', p});
-  return p;
+    await writeToClipboard(content);
+    btn.innerHTML = 'Copied ✓';
+  }catch(err){
+    console.error('Copy failed:', err);
+    btn.innerHTML = 'Failed ✕';
+  }finally{
+    setTimeout(()=>{ btn.disabled=false; btn.innerHTML = original; }, 1200);
+  }
 }
 
 async function writeToClipboard(text){
-  if (window.isSecureContext && navigator.clipboard?.writeText){
+  if(navigator.clipboard && navigator.clipboard.writeText){
     return navigator.clipboard.writeText(text);
   }
-  if (window.isSecureContext && navigator.clipboard?.write && window.ClipboardItem){
-    const blob = new Blob([text], {type:'text/plain'});
-    return navigator.clipboard.write([new ClipboardItem({'text/plain': blob})]);
-  }
-  // contenteditable fallback (iOS friendly)
-  const div = document.createElement('div');
-  div.contentEditable = 'true';
-  div.style.position='fixed'; div.style.opacity='0'; div.style.pointerEvents='none'; div.style.whiteSpace='pre';
-  div.textContent = text;
-  document.body.appendChild(div);
-  const range = document.createRange(); range.selectNodeContents(div);
-  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-  try{ document.execCommand('copy'); } finally{ sel.removeAllRanges(); document.body.removeChild(div); }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position='fixed'; ta.style.left='-9999px';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try{ document.execCommand('copy'); }
+  finally{ document.body.removeChild(ta); }
 }
 
-/* ---------------- boot ---------------- */
+async function copySelf(){
+  const btn = copySelfBtn;
+  const original = btn.innerHTML;
+  try{
+    btn.disabled = true;
+    btn.innerHTML = 'Copying…';
+    const SELF_PATH = 'index.html';
+    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(SELF_PATH)}?ref=HEAD`;
+
+    let text = '';
+    const r = await fetch(apiUrl, { headers: { 'Accept':'application/vnd.github+json' } });
+    if(r.ok){
+      const data = await r.json();
+      if(data && data.content && data.encoding === 'base64'){
+        text = atob(data.content.replace(/\n/g,''));
+      }else if(data && data.download_url){
+        const r2 = await fetch(data.download_url);
+        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
+        text = await r2.text();
+      }
+    }
+
+    if(!text){
+      text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    }
+
+    await writeToClipboard(text);
+    btn.innerHTML = 'Copied ✓';
+  }catch(e){
+    console.error(e);
+    btn.innerHTML = 'Failed ✕';
+  }finally{
+    setTimeout(()=>{ btn.disabled=false; btn.innerHTML=original; }, 1200);
+  }
+}
+
 fetchTree();
 </script>
 </body>
