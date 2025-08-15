@@ -1,693 +1,359 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Experiments — Auto Index</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Experiments — HTML Index (Copy & Replace Fix)</title>
 <style>
   :root{
     --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
     --card:#0f1117; --card2:#10131a; --line:#1a2130;
-    --cardSub:#121823; --card2Sub:#141d2a;
-    --shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 0 0 1px #1a2130, 0 8px 18px rgba(0,0,0,.45);
-    --shadow-hover:0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 14px 28px rgba(0,0,0,.6);
-    --radius:14px;
-
-    --t0:#82FFB5; --t1:#66F5C8; --t2:#4FDEDE; --t3:#4BC5F2; --t4:#5AAAF5;
-    --t5:#7D96F0; --t6:#9CA6CC; --t7:#A9B6E0; --t8:#B9C2E0; --t9:#B8B8B8;
+    --accent:#6ea8fe; --ok:#37d67a; --warn:#ffb020; --bad:#ff6b6b;
   }
-
   *{box-sizing:border-box}
-  html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-
-  header{position:sticky;top:0;z-index:10;background:linear-gradient(#10131a,#0c0f15);border-bottom:1px solid #1c2537}
-  .wrap{max-width:1100px;margin:0 auto;padding:12px 14px}
-  h1{margin:0;font-size:16px;letter-spacing:.3px}
-  main{max-width:1100px;margin:0 auto;padding:14px}
-
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  input[type=search]{
-    flex:1;min-width:220px;background:#0b0f16;border:1px solid #1e293e;border-radius:10px;
-    padding:.55rem .7rem;color:var(--ink);outline:none;
-    transition:border-color .2s, background .2s, box-shadow .25s;
-    box-shadow:0 0 0 0 rgba(74,163,255,.0);
+  html,body{height:100dvh}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   }
-  input[type=search]::placeholder{color:#8e97a6}
-  input[type=search]:focus{border-color:#2b3f65;background:#0d1220;box-shadow:0 0 0 5px rgba(74,163,255,.06)}
-
-  button{
-    border:1px solid #25324a;background:#131a26;color:var(--ink);
-    padding:.5rem .7rem;border-radius:10px;cursor:pointer;font-weight:650;letter-spacing:.2px;
-    transition:transform .15s, box-shadow .2s, border-color .2s, background .2s;
-    box-shadow:var(--shadow);
+  .wrap{max-width:1100px;margin:0 auto;padding:18px 14px 28px}
+  header{
+    display:grid;gap:10px;align-items:center;
+    grid-template-columns:repeat(12,1fr);
+    background:linear-gradient(180deg,rgba(255,255,255,.02),transparent);
+    padding:10px;border-radius:12px;border:1px solid var(--line);
+    position:sticky;top:0;backdrop-filter:saturate(120%) blur(6px); z-index:5;
   }
-  button:hover{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#31456b;background:#141e2c}
-  .status{font-size:12px;color:#9aa3b2}
+  header .field{grid-column: span 3; display:flex; gap:8px; align-items:center}
+  header .field.wide{grid-column: span 4}
+  header label{font-size:12px;color:var(--muted)}
+  header input{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+    background:var(--card2); color:var(--ink); outline:none;
+  }
+  header .actions{grid-column: span 12; display:flex; gap:8px; flex-wrap:wrap}
+  button,a.btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+    background:var(--card2); color:var(--ink); text-decoration:none; cursor:pointer;
+    transition:transform .06s ease, background .2s ease, border-color .2s ease;
+    user-select:none;
+  }
+  button:hover, a.btn:hover{transform:translateY(-1px); background:rgba(255,255,255,.02)}
+  .primary{background:rgba(110,168,254,.15); border-color:#2a3b63}
+  .ok{background:rgba(55,214,122,.12); border-color:#1d3a2b}
+  .warn{background:rgba(255,176,32,.12); border-color:#3d2e14}
+  .bad{background:rgba(255,107,107,.12); border-color:#3d1919}
 
-  .seg{display:inline-flex;border:1px solid #27324a;border-radius:10px;overflow:hidden}
-  .seg button{border:0;border-right:1px solid #27324a;background:#101622;padding:.45rem .65rem}
-  .seg button:last-child{border-right:0}
-  .seg button[aria-pressed="true"]{background:#162133}
-  .seg button[aria-pressed="true"] span{opacity:1}
-  .seg button span{opacity:.85}
-
-  .grp{margin-top:14px}
-  .grp h2{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa3b2;margin:6px 2px 8px;letter-spacing:.25px}
-  .grp h2 .folder-ic{opacity:.85}
-
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+  .grid{display:grid; gap:12px; margin-top:16px}
+  @media (min-width:720px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (min-width:1024px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr))} }
 
   .card{
-    display:grid;text-decoration:none;color:inherit;
-    background:linear-gradient(180deg,var(--card),var(--card2));
-    border:1px solid var(--line);border-radius:var(--radius);
-    padding:12px 14px;
-    box-shadow:var(--shadow);
-    transition:transform .18s, box-shadow .22s, border-color .2s, background .25s;
-    position:relative;overflow:hidden;
-
-    grid-template-columns: 28px 1fr auto;
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "icon title open"
-      "meta meta actions";
-    column-gap:10px; row-gap:6px;
+    display:flex; flex-direction:column; gap:10px; padding:14px;
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);
   }
-  .card.sub{background:linear-gradient(180deg,var(--cardSub),var(--card2Sub));border-color:#22314a}
-  .card:before{
-    content:"";position:absolute;inset:-1px;border-radius:var(--radius);
-    background:radial-gradient(90px 60px at 0% 0%, rgba(74,163,255,.08), transparent 60%),
-               radial-gradient(120px 80px at 100% 0%, rgba(39,255,136,.05), transparent 60%);
-    pointer-events:none;
+  .card.folder{ background:#121621 }            /* slightly lighter for files found in a folder */
+  .card .path{ font:600 14px/1.4 ui-sans-serif,system-ui; word-break:break-all }
+  .card .sub{ color:var(--muted); font-size:12px }
+  .row{ display:flex; gap:8px; flex-wrap:wrap }
+  .row .spacer{ flex:1 }
+
+  .toast{
+    position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+    background:var(--card2); color:var(--ink); border:1px solid var(--line);
+    padding:10px 14px; border-radius:12px; opacity:0; pointer-events:none;
+    transition:opacity .2s ease, transform .15s ease;
   }
-  .card:hover,.card:focus-visible{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#2a3755;outline:none}
-
-  .ic{grid-area:icon;width:28px;height:28px;display:grid;place-items:center;background:#0c1119;border:1px solid #1f2a42;border-radius:8px}
-  .titleWrap{grid-area:title;min-width:0;display:flex;flex-direction:column;gap:2px}
-  .name{font-weight:750;letter-spacing:.2px;line-height:1.2;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .path{font-size:11px;color:#97a1b1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-  .openVis{grid-area:open;align-self:start;justify-self:end;font-size:12px;color:#cfd5df;opacity:.9;display:inline-flex;gap:6px;align-items:center;pointer-events:none}
-  .openVis svg{opacity:.9}
-
-  .meta{grid-area:meta;display:flex;align-items:center;gap:10px;min-width:0}
-  .actions{grid-area:actions;display:flex;align-items:center;gap:8px;justify-self:end}
-
-  .ago{font-size:11px;font-weight:700;letter-spacing:.3px;display:inline-flex;align-items:center;gap:6px}
-  .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.95}
-  .ago.t0{color:var(--t0)} .ago.t1{color:var(--t1)} .ago.t2{color:var(--t2)}
-  .ago.t3{color:var(--t3)} .ago.t4{color:var(--t4)} .ago.t5{color:var(--t5)}
-  .ago.t6{color:var(--t6)} .ago.t7{color:var(--t7)} .ago.t8{color:var(--t8)} .ago.t9{color:var(--t9)}
-
-  .exact{font-size:11px;color:#cfd5df;opacity:.85;white-space:nowrap}
-
-  .copyBtn{
-    border:1px dashed #2a3755;background:#101622;color:#d9e1ee;
-    padding:.35rem .55rem;border-radius:9px;font-size:11px;letter-spacing:.2px;
-    display:inline-flex;align-items:center;gap:6px;box-shadow:none;
-  }
-  .copyBtn:hover{background:#12203a;border-color:#35507d}
-  .copyBtn svg{opacity:.9}
-
-  footer{color:#9aa3b2;text-align:center;padding:16px;border-top:1px solid #161b25}
-
-  @media (max-width:480px){
-    .card{
-      grid-template-columns:28px 1fr auto;
-      grid-template-rows:auto auto auto;
-      grid-template-areas:
-        "icon title open"
-        "meta  meta  meta"
-        "actions actions actions";
-    }
-    .actions{justify-self:start}
-  }
-  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(-2px) }
+  textarea#__clip_fallback{position:fixed;left:-9999px;top:-9999px}
+  .help{color:var(--muted); font-size:12px; margin-top:6px}
 </style>
 </head>
 <body>
-<header>
   <div class="wrap">
-    <h1>🧪 Experiments — Auto Index</h1>
-    <div class="row" style="margin-top:8px">
-      <input id="q" type="search" placeholder="Filter by name or path…" />
-      <div class="seg" role="group" aria-label="Sort">
-        <button id="sortTime" aria-pressed="true" title="Newest → Oldest"><span>Time</span></button>
-        <button id="sortName" aria-pressed="false" title="A → Z by name"><span>Name</span></button>
+    <header>
+      <div class="field"><label>Owner</label><input id="owner" placeholder="e.g. dubism"></div>
+      <div class="field"><label>Repo</label><input id="repo"  placeholder="e.g. Experiments"></div>
+      <div class="field"><label>Branch (for files)</label><input id="branch" placeholder="e.g. main"></div>
+      <div class="field wide"><label>Token (only needed for commit replace)</label><input id="token" type="password" placeholder="GitHub token with repo/public_repo scope"></div>
+      <div class="actions">
+        <button id="load" class="primary">Load HTML Files</button>
+        <button id="clearLocal" class="">Clear Local Overrides</button>
+        <a id="pagesLink" class="btn" target="_blank" rel="noopener">Open GitHub Pages</a>
       </div>
-      <button id="refresh" aria-label="Refresh list">
-        <span style="display:inline-flex;gap:8px;align-items:center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M20 12a 8 8 0 1 1-2.34-5.66" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round"/>
-            <path d="M20 4v6h-6" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Refresh
-        </span>
-      </button>
-      <button id="copySelf" aria-label="Copy this page’s HTML">
-        <span style="display:inline-flex;gap:8px;align-items:center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-            <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-          </svg>
-          Copy This Page
-        </span>
-      </button>
-      <span id="status" class="status">Loading…</span>
-    </div>
+    </header>
+
+    <div id="grid" class="grid"></div>
+    <div class="help">Tip: “Copy HTML” uses a reliable clipboard path for iOS. “Replace (commit)” uses the GitHub API if a token is provided. “Replace (local)” only updates your local preview and lets you download the file.</div>
   </div>
-</header>
 
-<main>
-  <div id="list"></div>
-</main>
-
-<footer>Generated from <code>dubism/Experiments</code> via GitHub API</footer>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <textarea id="__clip_fallback"></textarea>
 
 <script>
-const USER = "dubism";
-const REPO = "Experiments";
-const BASE = `https://${USER}.github.io/${REPO}/`;
+const D = document;
+const byId = id => D.getElementById(id);
+const grid = byId('grid');
+const toastEl = byId('toast');
 
-const statusEl = document.getElementById('status');
-const listEl = document.getElementById('list');
-const qEl = document.getElementById('q');
-const sortTimeBtn = document.getElementById('sortTime');
-const sortNameBtn = document.getElementById('sortName');
-const copySelfBtn = document.getElementById('copySelf');
-document.getElementById('refresh').onclick = fetchTree;
-qEl.oninput = applyFilter;
-copySelfBtn.onclick = copySelf;
+let FILES = new Map(); // path -> {content, sha, depth, urlPages}
+let LOCAL_OVERRIDES = new Map(); // path -> string
 
-let allItems = [];
-let sortMode = 'time';
-
-sortTimeBtn.onclick = () => setSort('time');
-sortNameBtn.onclick = () => setSort('name');
-
-function setSort(mode){
-  sortMode = mode;
-  sortTimeBtn.setAttribute('aria-pressed', mode==='time' ? 'true' : 'false');
-  sortNameBtn.setAttribute('aria-pressed', mode==='name' ? 'true' : 'false');
-  applyFilter();
+function status(msg){
+  console.log(msg);
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(status._t);
+  status._t = setTimeout(()=>toastEl.classList.remove('show'), 1800);
 }
 
-function folderOf(path){const i=path.lastIndexOf('/');return i===-1?"":path.slice(0,i);}
-function fileIcon(){return `
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.3" />
-    <path d="M13 3v5h5" stroke="#9fb3d6" stroke-width="1.3"/>
-  </svg>`;}
-function folderIcon(){return `
-  <svg class="folder-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M3 8h7l2 2h9v9H3z" stroke="#8ea2c6" stroke-width="1.3"/>
-  </svg>`;}
-function arrowIcon(){return `
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M7 17l7-7M10 7h7v7" stroke="#cdd7e6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;}
-
-function prettyName(name){return name.replace(/\.html?$/i,'').replace(/[-_]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase());}
-function isoLocal(d){
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ` +
-         `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+async function copyTextReliable(text){
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch(e){ /* fall back */ }
+  }
+  const ta = byId('__clip_fallback');
+  ta.value = text; ta.focus(); ta.select();
+  const ok = document.execCommand('copy');
+  ta.value = '';
+  return ok;
 }
 
-function timeAgoClassAndText(d){
-  let secs = Math.max(0,(Date.now()-d.getTime())/1000);
-  if(secs < 60)  return {cls:'t0', text:`${Math.floor(secs)}s ago`};
-  let mins = secs/60;
-  if(mins < 5)   return {cls:'t1', text:`${Math.floor(mins)}m ago`};
-  if(mins < 15)  return {cls:'t2', text:`${Math.floor(mins)}m ago`};
-  if(mins < 30)  return {cls:'t3', text:`${Math.floor(mins)}m ago`};
-  if(mins < 60)  return {cls:'t4', text:`${Math.floor(mins)}m ago`};
-  let hours = mins/60;
-  if(hours < 4)   return {cls:'t5', text:`${Math.floor(hours)}h ago`};
-  if(hours < 12)  return {cls:'t6', text:`${Math.floor(hours)}h ago`};
-  if(hours < 24)  return {cls:'t7', text:`${Math.floor(hours)}h ago`};
-  if(hours < 72)  return {cls:'t8', text:`${Math.floor(hours)}h ago`};
-  let days = Math.floor(hours/24);
-  return {cls:'t9', text: days < 365 ? `${days}d ago` : `${Math.floor(days/365)}y ago`};
+function b64utf8(str){ return btoa(unescape(encodeURIComponent(str))); }
+
+function pagesBase(owner, repo){
+  // project pages
+  return `https://${owner}.github.io/${repo}`;
 }
 
-function render(items){
-  const q = qEl.value.trim().toLowerCase();
-  let list = !q ? items : items.filter(it =>
-    it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
-  );
-  listEl.innerHTML = "";
+function rawApiUrl(owner, repo, path, ref){
+  return `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}${ref?`?ref=${encodeURIComponent(ref)}`:''}`;
+}
 
-  if(sortMode === 'time'){
-    list.sort((a,b)=>{
-      const ad = a.updatedAt ? new Date(a.updatedAt).getTime() : -Infinity;
-      const bd = b.updatedAt ? new Date(b.updatedAt).getTime() : -Infinity;
-      return bd - ad;
+async function ghGetFileMeta(owner, repo, path, ref, token){
+  const r = await fetch(rawApiUrl(owner,repo,path,ref), {
+    headers:{
+      'Accept':'application/vnd.github+json',
+      ...(token? {'Authorization':`Bearer ${token}`} : {})
+    }
+  });
+  if(!r.ok) throw new Error(`GET ${path} ${r.status}`);
+  return r.json();
+}
+
+async function ghPutFile(owner, repo, path, token, contentBase64, sha, message){
+  const r = await fetch(rawApiUrl(owner,repo,path,''), {
+    method:'PUT',
+    headers:{
+      'Accept':'application/vnd.github+json',
+      'Authorization':`Bearer ${token}`,
+      'Content-Type':'application/json'
+    },
+    body: JSON.stringify({ message, content: contentBase64, sha })
+  });
+  if(!r.ok) throw new Error(`PUT ${path} ${r.status}`);
+  return r.json();
+}
+
+async function listDir(owner, repo, path='', token){
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+  const r = await fetch(url, {
+    headers:{
+      'Accept':'application/vnd.github+json',
+      ...(token? {'Authorization':`Bearer ${token}`} : {})
+    }
+  });
+  if(!r.ok) throw new Error(`List ${path||'/'} ${r.status}`);
+  return r.json();
+}
+
+function isHtml(name){ return /\.html?$/i.test(name); }
+
+async function preloadFile(owner, repo, branch, path, depth, token){
+  try{
+    const j = await ghGetFileMeta(owner, repo, path, branch, token);
+    let content = j.content ? atob(j.content.replace(/\n/g,'')) : '';
+    const urlPages = `${pagesBase(owner,repo)}/${path}`;
+    FILES.set(path, { content, sha:j.sha, depth, urlPages });
+  }catch(e){
+    console.warn('Preload failed', path, e);
+  }
+}
+
+function renderCards(owner, repo){
+  grid.innerHTML = '';
+  const paths = [...FILES.keys()].sort((a,b)=> a.localeCompare(b, undefined, {numeric:true}));
+  for(const p of paths){
+    const meta = FILES.get(p) || {};
+    const card = D.createElement('div');
+    card.className = 'card' + (meta.depth>0 ? ' folder' : '');
+    const head = D.createElement('div');
+    head.className = 'path';
+    head.textContent = p;
+    const sub = D.createElement('div');
+    sub.className = 'sub';
+    sub.textContent = meta.urlPages || '';
+
+    const row1 = D.createElement('div'); row1.className='row';
+    const open = D.createElement('a'); open.className='btn'; open.textContent='Open'; open.target='_blank'; open.rel='noopener';
+    open.href = meta.urlPages || '#';
+    const download = D.createElement('button'); download.textContent='Download';
+    const copy = D.createElement('button'); copy.textContent='Copy HTML';
+    const replCommit = D.createElement('button'); replCommit.textContent='Replace (commit)'; replCommit.classList.add('warn');
+    const replLocal  = D.createElement('button'); replLocal.textContent='Replace (local)';
+    row1.append(open, copy, replCommit, replLocal, download);
+
+    card.append(head, sub, row1);
+    grid.append(card);
+
+    copy.addEventListener('click', async ()=>{
+      const cached = FILES.get(p);
+      const text = cached?.content ?? '';
+      const ok = await copyTextReliable(text);
+      status(ok ? 'Copied' : 'Copy failed');
     });
 
-    const section = document.createElement('section');
-    section.className = 'grp';
-    const h2 = document.createElement('h2');
-    h2.textContent = "All files — Newest → Oldest";
-    section.appendChild(h2);
+    download.addEventListener('click', ()=>{
+      const override = LOCAL_OVERRIDES.get(p);
+      const text = override ?? (FILES.get(p)?.content ?? '');
+      if(!text){ status('No content'); return; }
+      const blob = new Blob([text], {type:'text/html'});
+      const a = D.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = p.split('/').pop() || 'index.html';
+      D.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    });
 
-    const grid = document.createElement('div');
-    grid.className = 'cards';
+    replLocal.addEventListener('click', async ()=>{
+      let txt = '';
+      try{ txt = await navigator.clipboard.readText(); }
+      catch(e){ txt=''; }
+      if(!txt){ status('No HTML on clipboard'); return; }
+      LOCAL_OVERRIDES.set(p, txt);
+      try{ localStorage.setItem('localOverride:'+p, txt); }catch(_){}
+      status('Replaced locally. Use “Download” to save.');
+    });
 
-    list.forEach(it=>{
-      const a = document.createElement('a');
-      a.className = 'card';
-      a.dataset.path = it.path;
-      if(it.depth === 2) a.classList.add('sub');
-      a.href = it.href;
+    replCommit.addEventListener('click', async ()=>{
+      const token = byId('token').value.trim();
+      const owner = byId('owner').value.trim();
+      const repo  = byId('repo').value.trim();
+      const branch= byId('branch').value.trim();
+      if(!token || !owner || !repo){ status('Missing token/owner/repo'); return; }
 
-      const ic = document.createElement('div');
-      ic.className = 'ic';
-      ic.innerHTML = fileIcon();
+      let newHtml='';
+      try{ newHtml = await navigator.clipboard.readText(); }
+      catch(e){ newHtml=''; }
+      if(!newHtml){ status('No HTML on clipboard'); return; }
 
-      const titleWrap = document.createElement('div');
-      titleWrap.className = 'titleWrap';
-      titleWrap.innerHTML = `
-        <div class="name">${prettyName(it.name)}</div>
-        <div class="path">${it.path}</div>
-      `;
-
-      const open = document.createElement('div');
-      open.className = 'openVis';
-      open.innerHTML = `Open ${arrowIcon()}`;
-
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-
-      const when = document.createElement('span');
-      when.className = 'ago';
-      when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
-
-      const exact = document.createElement('span');
-      exact.className = 'exact';
-      exact.textContent = '—';
-
-      if(it.updatedAt){
-        const d = new Date(it.updatedAt);
-        const ag = timeAgoClassAndText(d);
-        when.classList.add(ag.cls);
-        when.querySelector('.t').textContent = ag.text;
-        when.title = `Last updated: ${isoLocal(d)}`;
-        exact.textContent = isoLocal(d);
-      } else {
-        when.classList.add('t9');
+      try{
+        const fresh = await ghGetFileMeta(owner,repo,p,branch,token);
+        const sha = fresh.sha;
+        await ghPutFile(owner,repo,p,token,b64utf8(newHtml),sha,`Replace ${p} via web index`);
+        FILES.set(p, { ...FILES.get(p), content:newHtml, sha, urlPages: FILES.get(p)?.urlPages, depth: FILES.get(p)?.depth });
+        status('Replaced. Pages will rebuild.');
+      }catch(e){
+        status('Replace failed: '+ e.message);
       }
-
-      meta.append(when, exact);
-
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'copyBtn';
-      copyBtn.type = 'button';
-      copyBtn.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-          <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-        </svg>
-        Copy HTML`;
-      copyBtn.addEventListener('click', (ev)=>{
-        ev.preventDefault(); ev.stopPropagation();
-        copyFile(it.path, copyBtn);
-      });
-
-      const replaceBtn = document.createElement('button');
-      replaceBtn.className = 'js-replace-btn'; // Use class for delegation
-      replaceBtn.type = 'button';
-      replaceBtn.innerHTML = `Replace`;
-      actions.append(copyBtn, replaceBtn);
-
-      a.append(ic, titleWrap, open, meta, actions);
-      grid.appendChild(a);
     });
+  }
+}
 
-    section.appendChild(grid);
-    listEl.appendChild(section);
+async function loadAll(){
+  const owner = byId('owner').value.trim();
+  const repo  = byId('repo').value.trim();
+  const branchInput = byId('branch').value.trim();
+  const token = byId('token').value.trim() || null;
+
+  if(!owner || !repo){ status('Fill owner and repo'); return; }
+
+  byId('pagesLink').href = pagesBase(owner,repo);
+  byId('pagesLink').textContent = 'Open GitHub Pages';
+
+  FILES.clear();
+  grid.innerHTML = '';
+
+  let root = [];
+  try{
+    root = await listDir(owner,repo,'',token);
+  }catch(e){
+    status('Could not list repo: '+e.message);
     return;
   }
 
-  const groups = new Map();
-  list.forEach(it=>{
-    const key = folderOf(it.path);
-    if(!groups.has(key)) groups.set(key,[]);
-    groups.get(key).push(it);
-  });
-
-  [...groups.entries()].sort().forEach(([folder,arr])=>{
-    arr.sort((a,b)=>a.name.localeCompare(b.name));
-
-    const section = document.createElement('section');
-    section.className = 'grp';
-    const h2 = document.createElement('h2');
-    h2.innerHTML = `${folderIcon()} ${folder?`/${folder}`:"/"}`;
-    section.appendChild(h2);
-
-    const grid = document.createElement('div');
-    grid.className = 'cards';
-
-    arr.forEach(it=>{
-      const a = document.createElement('a');
-      a.className = 'card';
-      a.dataset.path = it.path;
-      if(it.depth === 2) a.classList.add('sub');
-      a.href = it.href;
-
-      const ic = document.createElement('div');
-      ic.className = 'ic';
-      ic.innerHTML = fileIcon();
-
-      const titleWrap = document.createElement('div');
-      titleWrap.className = 'titleWrap';
-      titleWrap.innerHTML = `
-        <div class="name">${prettyName(it.name)}</div>
-        <div class="path">${it.path}</div>
-      `;
-
-      const open = document.createElement('div');
-      open.className = 'openVis';
-      open.innerHTML = `Open ${arrowIcon()}`;
-
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-
-      const when = document.createElement('span');
-      when.className = 'ago';
-      when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
-
-      if(it.updatedAt){
-        const d = new Date(it.updatedAt);
-        const ag = timeAgoClassAndText(d);
-        when.classList.add(ag.cls);
-        when.querySelector('.t').textContent = ag.text;
-        when.title = `Last updated: ${isoLocal(d)}`;
-      } else {
-        when.classList.add('t9');
-      }
-      meta.append(when);
-
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'copyBtn';
-      copyBtn.type = 'button';
-      copyBtn.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-          <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-        </svg>
-        Copy HTML`;
-      copyBtn.addEventListener('click', (ev)=>{
-        ev.preventDefault(); ev.stopPropagation();
-        copyFile(it.path, copyBtn);
+  // Detect default branch if not provided
+  let branch = branchInput;
+  if(!branch){
+    try{
+      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers:{ 'Accept':'application/vnd.github+json', ...(token? {'Authorization':`Bearer ${token}`} : {}) }
       });
-
-      const replaceBtn = document.createElement('button');
-      replaceBtn.className = 'js-replace-btn'; // Use class for delegation
-      replaceBtn.type = 'button';
-      replaceBtn.innerHTML = `Replace`;
-      actions.append(copyBtn, replaceBtn);
-
-      a.append(ic, titleWrap, open, meta, actions);
-      grid.appendChild(a);
-    });
-
-    section.appendChild(grid);
-    listEl.appendChild(section);
-  });
-}
-
-function applyFilter(){ render(allItems); }
-
-async function fetchTree(){
-  statusEl.textContent = "Loading…";
-  try{
-    const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/HEAD?recursive=1`);
-    if(!r.ok) throw new Error();
-    const data = await r.json();
-    allItems = data.tree
-      .filter(n => {
-        if(n.type !== "blob") return false;
-        if(!/\.html?$/i.test(n.path)) return false;
-        if(/(^|\/)index\.html?$/i.test(n.path)) return false;
-        const depth = n.path.split('/').length;
-        return depth <= 2;
-      })
-      .map(n => ({
-        path:n.path,
-        name:n.path.split('/').pop(),
-        href:BASE+n.path,
-        updatedAt:null,
-        depth:n.path.split('/').length
-      }));
-    render(allItems);
-    statusEl.textContent = `Found ${allItems.length} file(s), fetching dates…`;
-    await fetchDates();
-    render(allItems);
-    statusEl.textContent = `Found ${allItems.length} file(s)`;
-  }catch(e){
-    statusEl.textContent = "Error fetching data";
+      if(r.ok){ const j = await r.json(); branch = j.default_branch || 'main'; }
+      else branch = 'main';
+    }catch{ branch = 'main'; }
+    byId('branch').value = branch;
   }
-}
 
-async function fetchDates(){
-  let i = 0, max = 4;
-  async function worker(){
-    while(i < allItems.length){
-      const idx = i++;
-      try{
-        const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(allItems[idx].path)}&per_page=1`);
-        if(r.ok){
-          const c = await r.json();
-          allItems[idx].updatedAt = c[0]?.commit?.committer?.date || null;
-        }
-      }catch(_){}
+  const topFiles = root.filter(it => it.type==='file' && isHtml(it.name)).map(it => it.path);
+  const topDirs  = root.filter(it => it.type==='dir').map(it => it.path);
+
+  for(const p of topFiles){ await preloadFile(owner,repo,branch,p,0,token); }
+
+  for(const dir of topDirs){
+    try{
+      const items = await listDir(owner,repo,dir,token);
+      const htmls = items.filter(it => it.type==='file' && isHtml(it.name)).map(it=>it.path);
+      for(const p of htmls){ await preloadFile(owner,repo,branch,p,1,token); }
+    }catch(e){
+      console.warn('Skip dir', dir, e);
     }
   }
-  await Promise.all(Array.from({length:max}, worker));
-}
 
-function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
-
-async function copyFile(path, btn){
-  const original = btn.innerHTML;
+  // Restore local overrides
+  LOCAL_OVERRIDES.clear();
   try{
-    btn.disabled = true;
-    btn.innerHTML = 'Copying…';
-
-    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
-    const resp = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' } });
-
-    let content = '';
-
-    if(resp.ok){
-      const data = await resp.json();
-
-      if(data && data.content && data.encoding === 'base64'){
-        const b64 = data.content.replace(/\n/g,'');
-        content = atob(b64);
-      }else if(data && data.download_url){
-        const r2 = await fetch(data.download_url);
-        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
-        content = await r2.text();
-      }else{
-        const r3 = await fetch(`${BASE}${path}`);
-        if(!r3.ok) throw new Error(`Pages HTTP ${r3.status}`);
-        content = await r3.text();
-      }
-    }else{
-      const r = await fetch(`${BASE}${path}`);
-      if(!r.ok) throw new Error(`Pages HTTP ${r.status}`);
-      content = await r.text();
-    }
-
-    await writeToClipboard(content);
-    btn.innerHTML = 'Copied ✓';
-  }catch(err){
-    console.error('Copy failed:', err);
-    btn.innerHTML = 'Failed ✕';
-  }finally{
-    setTimeout(()=>{ btn.disabled=false; btn.innerHTML = original; }, 1200);
-  }
-}
-
-async function writeToClipboard(text){
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    return navigator.clipboard.writeText(text);
-  }
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position='fixed'; ta.style.left='-9999px';
-  document.body.appendChild(ta);
-  ta.focus(); ta.select();
-  try{ document.execCommand('copy'); }
-  finally{ document.body.removeChild(ta); }
-}
-
-async function copySelf(){
-  const btn = copySelfBtn;
-  const original = btn.innerHTML;
-  try{
-    btn.disabled = true;
-    btn.innerHTML = 'Copying…';
-    const SELF_PATH = 'index.html';
-    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(SELF_PATH)}?ref=HEAD`;
-
-    let text = '';
-    const r = await fetch(apiUrl, { headers: { 'Accept':'application/vnd.github+json' } });
-    if(r.ok){
-      const data = await r.json();
-      if(data && data.content && data.encoding === 'base64'){
-        text = atob(data.content.replace(/\n/g,''));
-      }else if(data && data.download_url){
-        const r2 = await fetch(data.download_url);
-        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
-        text = await r2.text();
+    for(const key in localStorage){
+      if(key && key.startsWith && key.startsWith('localOverride:')){
+        const path = key.slice('localOverride:'.length);
+        const val = localStorage.getItem(key);
+        if(val) LOCAL_OVERRIDES.set(path, val);
       }
     }
+  }catch(_){}
 
-    if(!text){
-      text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-    }
-
-    await writeToClipboard(text);
-    btn.innerHTML = 'Copied ✓';
-  }catch(e){
-    console.error(e);
-    btn.innerHTML = 'Failed ✕';
-  }finally{
-    setTimeout(()=>{ btn.disabled=false; btn.innerHTML=original; }, 1200);
-  }
+  renderCards(owner,repo);
+  status('Loaded');
 }
 
-fetchTree();
+function inferFromLocation(){
+  try{
+    const host = location.host;
+    const path = location.pathname.replace(/^\/+/,'');
+    if(/\.github\.io$/i.test(host)){
+      const owner = host.split('.')[0];
+      const parts = path.split('/').filter(Boolean);
+      const repo  = parts[0] || '';
+      if(owner && repo){
+        byId('owner').value = byId('owner').value || owner;
+        byId('repo').value  = byId('repo').value  || repo;
+      }
+    }
+  }catch(_){}
+}
+
+byId('load').addEventListener('click', loadAll);
+byId('clearLocal').addEventListener('click', ()=>{
+  for(const k of Object.keys(localStorage)){
+    if(k.startsWith('localOverride:')) localStorage.removeItem(k);
+  }
+  LOCAL_OVERRIDES.clear();
+  status('Local overrides cleared');
+});
+
+inferFromLocation();
 </script>
-
-<!-- ======================================================================= -->
-<!-- ============= START OF NEW CODE FOR CLIPBOARD REPLACE ================= -->
-<!-- ======================================================================= -->
-
-<!-- Modal once per page -->
-<div id="replace-modal" hidden>
-  <div class="rm-backdrop"></div>
-  <div class="rm-dialog" role="dialog" aria-modal="true" aria-labelledby="rm-title">
-    <h3 id="rm-title">Replace file?</h3>
-    <p id="rm-path" class="rm-path"></p>
-    <p class="rm-note">Your clipboard text will overwrite this file in GitHub.</p>
-    <div class="rm-actions">
-      <button class="btn btn-neutral" data-rm="cancel" autofocus>Cancel</button>
-      <button class="btn btn-danger" data-rm="confirm">Replace</button>
-    </div>
-  </div>
-</div>
-
-<style>
-/* Add some styling for the new button and modal */
-.js-replace-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  /* --- NEW "WARNING" COLORS --- */
-  background: #2a0f12; /* Dark red background */
-  border: 1px dashed #4a1f22; /* Slightly brighter dashed red border */
-  color: #f3d4d6; /* Faintly reddish-white text */
-  /* --- END OF NEW COLORS --- */
-  padding: .35rem .55rem; border-radius: 9px; font-size: 11px; letter-spacing: .2px;
-}
-.js-replace-btn:hover {
-  background: #3a1418; /* Brighter red background on hover */
-  border-color: #68282c; /* Brighter red border on hover */
-}
-.btn + .btn{margin-left:.5rem}
-.btn-danger{border-color:#4a1f22;background:#2a0f12}
-.btn-danger:hover{background:#3a1418}
-.btn-neutral{background:#0f1117}
-.btn[disabled]{opacity:.5;pointer-events:none}
-#replace-modal[hidden]{display:none}
-#replace-modal{position:fixed;inset:0;z-index:9999}
-.rm-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.6)}
-.rm-dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  width:min(92vw,520px);background:var(--card,#0f1117);color:var(--ink,#f5f6f8);
-  border:1px solid var(--line,#1a2130);border-radius:16px;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-.rm-path{font-family:ui-monospace,Menlo,monospace;opacity:.85;word-break:break-all}
-.rm-note{opacity:.75}
-.rm-actions{display:flex;justify-content:flex-end;gap:.5rem;margin-top:12px}
-</style>
-
-<script>
-/* ---- CONFIG ---- */
-const PROXY_URL  = 'https://experiments-updater-dubism.jxpfrhry6m.workers.dev/'; // ← SET THIS
-const BRANCH     = 'main';
-const CLIENT_KEY = '23046386'; // ← SET THIS
-/* --------------- */
-
-(function(){
-  const modal = document.getElementById('replace-modal');
-  const pathEl = document.getElementById('rm-path');
-  let pendingPath = null;
-
-  function openModal(path){ pendingPath = path; pathEl.textContent = path; modal.hidden = false;
-    modal.querySelector('[data-rm="cancel"]').focus(); }
-  function closeModal(){ modal.hidden = true; pendingPath = null; }
-
-  async function readClipboard(){
-    try { return await navigator.clipboard.readText(); }
-    catch { return prompt('Paste content here:') || ''; } // fallback for blocked clipboard
-  }
-  async function replaceFile(path, text){
-    const res = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(CLIENT_KEY?{'X-Client-Key':CLIENT_KEY}:{}) },
-      body: JSON.stringify({ owner: USER, repo: REPO, branch: BRANCH, path, text })
-    });
-    const t = await res.text();
-    alert((res.ok ? '✅ Replaced ' : '❌ Failed '+res.status+' — ') + path + '\n' + t);
-  }
-
-  // Wire all buttons with class .js-replace-btn
-  document.addEventListener('click', (e)=>{
-    const btn  = e.target.closest('.js-replace-btn');
-    if(!btn) return;
-
-    // =======================================================================
-    // ============================= FIX APPLIED =============================
-    // =======================================================================
-    // Prevent the parent <a> tag from navigating. This stops the button
-    // click from also triggering a click on the card itself.
-    e.preventDefault();
-    e.stopPropagation();
-    // =======================================================================
-
-    const path = (btn.closest('[data-path]')?.dataset.path || '').trim();
-    if(!path) {
-        console.error("Could not find data-path attribute on the button or its parent card.", btn);
-        alert('No file path for this card.');
-        return;
-    }
-    openModal(path);
-  });
-
-  // Modal interactions
-  modal.addEventListener('click', async (e)=>{
-    if (e.target.classList.contains('rm-backdrop') || e.target.dataset.rm === 'cancel') return closeModal();
-    if (e.target.dataset.rm === 'confirm') {
-      const path = pendingPath; closeModal();
-      const text = await readClipboard();
-      if(!text) return alert('Clipboard empty. Aborted.');
-      await replaceFile(path, text);
-    }
-  });
-  document.addEventListener('keydown', (e)=>{ if(!modal.hidden && e.key==='Escape') closeModal(); });
-})();
-</script>
-
-<!-- ======================================================================= -->
-<!-- ============== END OF NEW CODE FOR CLIPBOARD REPLACE ================== -->
-<!-- ======================================================================= -->
-
 </body>
 </html>
