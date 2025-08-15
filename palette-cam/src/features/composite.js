@@ -1,3 +1,4 @@
+import { on } from '../ui/dom.js'; // <-- THIS IS THE FIX!
 import { play } from '../sound/sfx.js';
 import { getSource, getVideoElement, getPhotoBitmap, computeSquareCrop, currentPhotoSrcRect } from '../core/camera.js';
 import * as C from '../core/constants.js';
