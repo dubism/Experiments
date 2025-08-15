@@ -257,6 +257,7 @@ function render(items){
     list.forEach(it=>{
       const a = document.createElement('a');
       a.className = 'card';
+      a.dataset.path = it.path; // MODIFICATION: Add path for replace button
       if(it.depth === 2) a.classList.add('sub');
       a.href = it.href;
 
@@ -316,7 +317,12 @@ function render(items){
         copyFile(it.path, copyBtn);
       });
 
-      actions.append(copyBtn);
+      // MODIFICATION: Create and add the new "Replace" button
+      const replaceBtn = document.createElement('button');
+      replaceBtn.className = 'js-replace-btn';
+      replaceBtn.type = 'button';
+      replaceBtn.innerHTML = `Replace`;
+      actions.append(copyBtn, replaceBtn);
 
       a.append(ic, titleWrap, open, meta, actions);
       grid.appendChild(a);
@@ -349,6 +355,7 @@ function render(items){
     arr.forEach(it=>{
       const a = document.createElement('a');
       a.className = 'card';
+      a.dataset.path = it.path; // MODIFICATION: Add path for replace button
       if(it.depth === 2) a.classList.add('sub');
       a.href = it.href;
 
@@ -402,7 +409,12 @@ function render(items){
         copyFile(it.path, copyBtn);
       });
 
-      actions.append(copyBtn);
+      // MODIFICATION: Create and add the new "Replace" button
+      const replaceBtn = document.createElement('button');
+      replaceBtn.className = 'js-replace-btn';
+      replaceBtn.type = 'button';
+      replaceBtn.innerHTML = `Replace`;
+      actions.append(copyBtn, replaceBtn);
 
       a.append(ic, titleWrap, open, meta, actions);
       grid.appendChild(a);
@@ -558,5 +570,109 @@ async function copySelf(){
 
 fetchTree();
 </script>
+
+<!-- ======================================================================= -->
+<!-- ============= START OF NEW CODE FOR CLIPBOARD REPLACE ================= -->
+<!-- ======================================================================= -->
+
+<!-- Modal once per page -->
+<div id="replace-modal" hidden>
+  <div class="rm-backdrop"></div>
+  <div class="rm-dialog" role="dialog" aria-modal="true" aria-labelledby="rm-title">
+    <h3 id="rm-title">Replace file?</h3>
+    <p id="rm-path" class="rm-path"></p>
+    <p class="rm-note">Your clipboard text will overwrite this file in GitHub.</p>
+    <div class="rm-actions">
+      <button class="btn btn-neutral" data-rm="cancel" autofocus>Cancel</button>
+      <button class="btn btn-danger" data-rm="confirm">Replace</button>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Add some styling for the new button and modal */
+.js-replace-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px dashed #2a3755; background: #101622; color: #d9e1ee;
+  padding: .35rem .55rem; border-radius: 9px; font-size: 11px; letter-spacing: .2px;
+}
+.js-replace-btn:hover { background: #12203a; border-color: #35507d; }
+.btn{font:14px/1 system-ui;padding:.55rem .8rem;border:1px solid var(--line,#1a2130);
+  background:var(--card2,#10131a);color:var(--ink,#f5f6f8);border-radius:10px;cursor:pointer}
+.btn + .btn{margin-left:.5rem}
+.btn-danger{border-color:#4a1f22;background:#2a0f12}
+.btn-danger:hover{background:#3a1418}
+.btn-neutral{background:#0f1117}
+.btn[disabled]{opacity:.5;pointer-events:none}
+#replace-modal[hidden]{display:none}
+#replace-modal{position:fixed;inset:0;z-index:9999}
+.rm-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+.rm-dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(92vw,520px);background:var(--card,#0f1117);color:var(--ink,#f5f6f8);
+  border:1px solid var(--line,#1a2130);border-radius:16px;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.rm-path{font-family:ui-monospace,Menlo,monospace;opacity:.85;word-break:break-all}
+.rm-note{opacity:.75}
+.rm-actions{display:flex;justify-content:flex-end;gap:.5rem;margin-top:12px}
+</style>
+
+<script>
+/* ---- CONFIG ---- */
+const PROXY_URL  = 'https://experiments-updater-dubism.jxpfrhry6m.workers.dev/'; // ← SET THIS
+const OWNER      = 'dubism';
+const REPO       = 'Experiments';
+const BRANCH     = 'main';
+const CLIENT_KEY = '23046386'; // ← SET THIS
+/* --------------- */
+
+(function(){
+  const modal = document.getElementById('replace-modal');
+  const pathEl = document.getElementById('rm-path');
+  let pendingPath = null;
+
+  function openModal(path){ pendingPath = path; pathEl.textContent = path; modal.hidden = false;
+    modal.querySelector('[data-rm="cancel"]').focus(); }
+  function closeModal(){ modal.hidden = true; pendingPath = null; }
+
+  async function readClipboard(){
+    try { return await navigator.clipboard.readText(); }
+    catch { return prompt('Paste content here:') || ''; } // fallback for blocked clipboard
+  }
+  async function replaceFile(path, text){
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(CLIENT_KEY?{'X-Client-Key':CLIENT_KEY}:{}) },
+      body: JSON.stringify({ owner: OWNER, repo: REPO, branch: BRANCH, path, text })
+    });
+    const t = await res.text();
+    alert((res.ok ? '✅ Replaced ' : '❌ Failed '+res.status+' — ') + path + '\n' + t);
+  }
+
+  // Wire all buttons with class .js-replace-btn
+  document.addEventListener('click', (e)=>{
+    const btn  = e.target.closest('.js-replace-btn');
+    if(!btn) return;
+    const path = (btn.dataset.path || btn.closest('[data-path]')?.dataset.path || '').trim();
+    if(!path) return alert('No file path for this card.');
+    openModal(path);
+  });
+
+  // Modal interactions
+  modal.addEventListener('click', async (e)=>{
+    if (e.target.classList.contains('rm-backdrop') || e.target.dataset.rm === 'cancel') return closeModal();
+    if (e.target.dataset.rm === 'confirm') {
+      const path = pendingPath; closeModal();
+      const text = await readClipboard();
+      if(!text) return alert('Clipboard empty. Aborted.');
+      await replaceFile(path, text);
+    }
+  });
+  document.addEventListener('keydown', (e)=>{ if(!modal.hidden && e.key==='Escape') closeModal(); });
+})();
+</script>
+
+<!-- ======================================================================= -->
+<!-- ============== END OF NEW CODE FOR CLIPBOARD REPLACE ================== -->
+<!-- ======================================================================= -->
+
 </body>
 </html>
