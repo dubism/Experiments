@@ -623,8 +623,6 @@ fetchTree();
 <script>
 /* ---- CONFIG ---- */
 const PROXY_URL  = 'https://experiments-updater-dubism.jxpfrhry6m.workers.dev/'; // ← SET THIS
-const OWNER      = 'dubism';
-const REPO       = 'Experiments';
 const BRANCH     = 'main';
 const CLIENT_KEY = '23046386'; // ← SET THIS
 /* --------------- */
@@ -646,7 +644,7 @@ const CLIENT_KEY = '23046386'; // ← SET THIS
     const res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(CLIENT_KEY?{'X-Client-Key':CLIENT_KEY}:{}) },
-      body: JSON.stringify({ owner: OWNER, repo: REPO, branch: BRANCH, path, text })
+      body: JSON.stringify({ owner: USER, repo: REPO, branch: BRANCH, path, text })
     });
     const t = await res.text();
     alert((res.ok ? '✅ Replaced ' : '❌ Failed '+res.status+' — ') + path + '\n' + t);
