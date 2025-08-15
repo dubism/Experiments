@@ -257,7 +257,7 @@ function render(items){
     list.forEach(it=>{
       const a = document.createElement('a');
       a.className = 'card';
-      a.dataset.path = it.path; // MODIFICATION: Add path for replace button
+      a.dataset.path = it.path;
       if(it.depth === 2) a.classList.add('sub');
       a.href = it.href;
 
@@ -317,11 +317,10 @@ function render(items){
         copyFile(it.path, copyBtn);
       });
 
-      // MODIFICATION: Create and add the new "Replace" button
       const replaceBtn = document.createElement('button');
-      replaceBtn.className = 'js-replace-btn';
+      replaceBtn.className = 'js-replace-btn'; // Use class for delegation
       replaceBtn.type = 'button';
-      replaceBtn.innerHTML = `Replace from clipboard`;
+      replaceBtn.innerHTML = `Replace`;
       actions.append(copyBtn, replaceBtn);
 
       a.append(ic, titleWrap, open, meta, actions);
@@ -355,7 +354,7 @@ function render(items){
     arr.forEach(it=>{
       const a = document.createElement('a');
       a.className = 'card';
-      a.dataset.path = it.path; // MODIFICATION: Add path for replace button
+      a.dataset.path = it.path;
       if(it.depth === 2) a.classList.add('sub');
       a.href = it.href;
 
@@ -409,9 +408,8 @@ function render(items){
         copyFile(it.path, copyBtn);
       });
 
-      // MODIFICATION: Create and add the new "Replace" button
       const replaceBtn = document.createElement('button');
-      replaceBtn.className = 'js-replace-btn';
+      replaceBtn.className = 'js-replace-btn'; // Use class for delegation
       replaceBtn.type = 'button';
       replaceBtn.innerHTML = `Replace`;
       actions.append(copyBtn, replaceBtn);
@@ -654,8 +652,22 @@ const CLIENT_KEY = '23046386'; // ← SET THIS
   document.addEventListener('click', (e)=>{
     const btn  = e.target.closest('.js-replace-btn');
     if(!btn) return;
-    const path = (btn.dataset.path || btn.closest('[data-path]')?.dataset.path || '').trim();
-    if(!path) return alert('No file path for this card.');
+
+    // =======================================================================
+    // ============================= FIX APPLIED =============================
+    // =======================================================================
+    // Prevent the parent <a> tag from navigating. This stops the button
+    // click from also triggering a click on the card itself.
+    e.preventDefault();
+    e.stopPropagation();
+    // =======================================================================
+
+    const path = (btn.closest('[data-path]')?.dataset.path || '').trim();
+    if(!path) {
+        console.error("Could not find data-path attribute on the button or its parent card.", btn);
+        alert('No file path for this card.');
+        return;
+    }
     openModal(path);
   });
 
