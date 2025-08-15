@@ -3,357 +3,235 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Experiments — HTML Index (Copy & Replace Fix)</title>
+<title>Experiments — Auto Index (Real Replace + True Feedback)</title>
 <style>
   :root{
     --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
     --card:#0f1117; --card2:#10131a; --line:#1a2130;
-    --accent:#6ea8fe; --ok:#37d67a; --warn:#ffb020; --bad:#ff6b6b;
+    --ok:#35d07f; --bad:#ff6b6b; --warn:#ffb020;
   }
   *{box-sizing:border-box}
   html,body{height:100dvh}
   body{
     margin:0;background:var(--bg);color:var(--ink);
     font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
-    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
   }
-  .wrap{max-width:1100px;margin:0 auto;padding:18px 14px 28px}
-  header{
-    display:grid;gap:10px;align-items:center;
-    grid-template-columns:repeat(12,1fr);
-    background:linear-gradient(180deg,rgba(255,255,255,.02),transparent);
-    padding:10px;border-radius:12px;border:1px solid var(--line);
-    position:sticky;top:0;backdrop-filter:saturate(120%) blur(6px); z-index:5;
+  .wrap{max-width:1100px;margin:0 auto;padding:16px 14px 28px}
+  h1{
+    margin:0 0 10px;font:600 16px/1.2 ui-sans-serif,system-ui;
+    letter-spacing:.2px;color:var(--ink)
   }
-  header .field{grid-column: span 3; display:flex; gap:8px; align-items:center}
-  header .field.wide{grid-column: span 4}
-  header label{font-size:12px;color:var(--muted)}
-  header input{
-    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
-    background:var(--card2); color:var(--ink); outline:none;
+  .bar{
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+    padding:8px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)
   }
-  header .actions{grid-column: span 12; display:flex; gap:8px; flex-wrap:wrap}
+  .bar input{
+    min-width:200px;max-width:360px;width:100%;
+    padding:10px 12px;border-radius:10px;border:1px solid var(--line);
+    background:var(--card2);color:var(--ink);outline:none
+  }
+  .bar .sp{flex:1}
   button,a.btn{
-    display:inline-flex; align-items:center; justify-content:center; gap:8px;
-    padding:10px 12px; border-radius:10px; border:1px solid var(--line);
-    background:var(--card2); color:var(--ink); text-decoration:none; cursor:pointer;
-    transition:transform .06s ease, background .2s ease, border-color .2s ease;
-    user-select:none;
+    display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;
+    border:1px solid var(--line);background:var(--card2);color:var(--ink);text-decoration:none;cursor:pointer;
+    transition:transform .06s ease,background .2s ease,border-color .2s ease;user-select:none
   }
-  button:hover, a.btn:hover{transform:translateY(-1px); background:rgba(255,255,255,.02)}
-  .primary{background:rgba(110,168,254,.15); border-color:#2a3b63}
-  .ok{background:rgba(55,214,122,.12); border-color:#1d3a2b}
-  .warn{background:rgba(255,176,32,.12); border-color:#3d2e14}
-  .bad{background:rgba(255,107,107,.12); border-color:#3d1919}
-
-  .grid{display:grid; gap:12px; margin-top:16px}
+  button:hover,a.btn:hover{transform:translateY(-1px)}
+  .grid{display:grid;gap:12px;margin-top:16px}
   @media (min-width:720px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
   @media (min-width:1024px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr))} }
-
-  .card{
-    display:flex; flex-direction:column; gap:10px; padding:14px;
-    background:var(--card); border:1px solid var(--line); border-radius:14px;
-    box-shadow:0 10px 30px rgba(0,0,0,.25);
-  }
-  .card.folder{ background:#121621 }            /* slightly lighter for files found in a folder */
-  .card .path{ font:600 14px/1.4 ui-sans-serif,system-ui; word-break:break-all }
-  .card .sub{ color:var(--muted); font-size:12px }
-  .row{ display:flex; gap:8px; flex-wrap:wrap }
-  .row .spacer{ flex:1 }
-
+  .card{display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+  .card.folder{background:#121621} /* slightly lighter for files in a folder */
+  .path{font:600 14px/1.4 ui-sans-serif,system-ui;word-break:break-all}
+  .sub{color:var(--muted);font-size:12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
   .toast{
-    position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
-    background:var(--card2); color:var(--ink); border:1px solid var(--line);
-    padding:10px 14px; border-radius:12px; opacity:0; pointer-events:none;
-    transition:opacity .2s ease, transform .15s ease;
+    position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+    background:var(--card2);color:var(--ink);border:1px solid var(--line);
+    padding:10px 14px;border-radius:12px;opacity:0;pointer-events:none;z-index:9999;
+    transition:opacity .2s ease,transform .15s ease
   }
-  .toast.show{ opacity:1; transform:translateX(-50%) translateY(-2px) }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-2px)}
   textarea#__clip_fallback{position:fixed;left:-9999px;top:-9999px}
-  .help{color:var(--muted); font-size:12px; margin-top:6px}
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="field"><label>Owner</label><input id="owner" placeholder="e.g. dubism"></div>
-      <div class="field"><label>Repo</label><input id="repo"  placeholder="e.g. Experiments"></div>
-      <div class="field"><label>Branch (for files)</label><input id="branch" placeholder="e.g. main"></div>
-      <div class="field wide"><label>Token (only needed for commit replace)</label><input id="token" type="password" placeholder="GitHub token with repo/public_repo scope"></div>
-      <div class="actions">
-        <button id="load" class="primary">Load HTML Files</button>
-        <button id="clearLocal" class="">Clear Local Overrides</button>
-        <a id="pagesLink" class="btn" target="_blank" rel="noopener">Open GitHub Pages</a>
-      </div>
-    </header>
-
-    <div id="grid" class="grid"></div>
-    <div class="help">Tip: “Copy HTML” uses a reliable clipboard path for iOS. “Replace (commit)” uses the GitHub API if a token is provided. “Replace (local)” only updates your local preview and lets you download the file.</div>
+<div class="wrap">
+  <h1>Experiments — Auto Index</h1>
+  <div class="bar">
+    <input id="owner" placeholder="owner (auto on Pages)">
+    <input id="repo" placeholder="repo (auto on Pages)">
+    <input id="branch" placeholder="branch (auto)">
+    <div class="sp"></div>
+    <input id="token" type="password" placeholder="GitHub token for commit replace (repo/public_repo)">
+    <button id="load">Load HTML Files</button>
+    <a id="pagesLink" class="btn" target="_blank" rel="noopener">Open Pages</a>
   </div>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <textarea id="__clip_fallback"></textarea>
+  <div id="grid" class="grid"></div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<textarea id="__clip_fallback"></textarea>
 
 <script>
-const D = document;
-const byId = id => D.getElementById(id);
-const grid = byId('grid');
-const toastEl = byId('toast');
-
-let FILES = new Map(); // path -> {content, sha, depth, urlPages}
-let LOCAL_OVERRIDES = new Map(); // path -> string
-
-function status(msg){
-  console.log(msg);
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
-  clearTimeout(status._t);
-  status._t = setTimeout(()=>toastEl.classList.remove('show'), 1800);
-}
-
+/* ---------- tiny helpers ---------- */
+const D=document, $=id=>D.getElementById(id), grid=$('grid'), toast=$('toast');
+function status(msg,isErr=false){ console.log(msg); toast.textContent=msg; toast.style.borderColor=isErr?'#3a1d1d':'var(--line)';
+  toast.classList.add('show'); clearTimeout(status._t); status._t=setTimeout(()=>toast.classList.remove('show'), 2000); }
 async function copyTextReliable(text){
-  if (navigator.clipboard && navigator.clipboard.writeText){
-    try { await navigator.clipboard.writeText(text); return true; }
-    catch(e){ /* fall back */ }
-  }
-  const ta = byId('__clip_fallback');
-  ta.value = text; ta.focus(); ta.select();
-  const ok = document.execCommand('copy');
-  ta.value = '';
-  return ok;
+  if(navigator.clipboard && navigator.clipboard.writeText){ try{ await navigator.clipboard.writeText(text); return true; }catch(e){} }
+  const ta=$('__clip_fallback'); ta.value=text; ta.focus(); ta.select(); const ok=document.execCommand('copy'); ta.value=''; return ok;
 }
+function b64utf8(s){ return btoa(unescape(encodeURIComponent(s))); }
+function pagesBase(owner,repo){ return `https://${owner}.github.io/${repo}`; }
+function apiRepo(owner,repo){ return `https://api.github.com/repos/${owner}/${repo}`; }
+function apiContents(owner,repo,path,ref){ return `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}${ref?`?ref=${encodeURIComponent(ref)}`:''}`; }
 
-function b64utf8(str){ return btoa(unescape(encodeURIComponent(str))); }
+/* ---------- state ---------- */
+let FILES=new Map(); // path -> {content, sha, depth, urlPages}
+let OWNER='', REPO='', BRANCH='', TOKEN='';
 
-function pagesBase(owner, repo){
-  // project pages
-  return `https://${owner}.github.io/${repo}`;
+/* ---------- github api ---------- */
+async function ghGetRepoDefaultBranch(owner,repo,token){
+  const r=await fetch(apiRepo(owner,repo),{headers:{'Accept':'application/vnd.github+json',...(token?{'Authorization':`Bearer ${token}`}:{})}});
+  const j=await r.json(); if(!r.ok) throw new Error(`${r.status} ${j.message||''}`); return j.default_branch||'main';
 }
-
-function rawApiUrl(owner, repo, path, ref){
-  return `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}${ref?`?ref=${encodeURIComponent(ref)}`:''}`;
+async function ghListDir(owner,repo,path='',token){
+  const r=await fetch(apiContents(owner,repo,path,''),{headers:{'Accept':'application/vnd.github+json',...(token?{'Authorization':`Bearer ${token}`}:{})}});
+  const j=await r.json(); if(!r.ok) throw new Error(`${r.status} ${j.message||''}`); return j;
 }
-
-async function ghGetFileMeta(owner, repo, path, ref, token){
-  const r = await fetch(rawApiUrl(owner,repo,path,ref), {
-    headers:{
-      'Accept':'application/vnd.github+json',
-      ...(token? {'Authorization':`Bearer ${token}`} : {})
-    }
-  });
-  if(!r.ok) throw new Error(`GET ${path} ${r.status}`);
-  return r.json();
+async function ghGetFile(owner,repo,path,ref,token){
+  const r=await fetch(apiContents(owner,repo,path,ref),{headers:{'Accept':'application/vnd.github+json',...(token?{'Authorization':`Bearer ${token}`}:{})}});
+  const j=await r.json(); if(!r.ok) throw new Error(`${r.status} ${j.message||''}`); return j; // has .content (b64) and .sha
 }
-
-async function ghPutFile(owner, repo, path, token, contentBase64, sha, message){
-  const r = await fetch(rawApiUrl(owner,repo,path,''), {
+async function ghPutFile(owner,repo,path,token,contentBase64,sha,message){
+  const r=await fetch(apiContents(owner,repo,path,''),{
     method:'PUT',
-    headers:{
-      'Accept':'application/vnd.github+json',
-      'Authorization':`Bearer ${token}`,
-      'Content-Type':'application/json'
-    },
-    body: JSON.stringify({ message, content: contentBase64, sha })
+    headers:{'Accept':'application/vnd.github+json','Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+    body:JSON.stringify({message,content:contentBase64,sha})
   });
-  if(!r.ok) throw new Error(`PUT ${path} ${r.status}`);
-  return r.json();
+  const j=await r.json(); if(!r.ok) throw new Error(`${r.status} ${j.message||''}`); return j; // has .commit.sha and .content.sha
 }
 
-async function listDir(owner, repo, path='', token){
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
-  const r = await fetch(url, {
-    headers:{
-      'Accept':'application/vnd.github+json',
-      ...(token? {'Authorization':`Bearer ${token}`} : {})
-    }
-  });
-  if(!r.ok) throw new Error(`List ${path||'/'} ${r.status}`);
-  return r.json();
-}
-
+/* ---------- ui ---------- */
 function isHtml(name){ return /\.html?$/i.test(name); }
-
-async function preloadFile(owner, repo, branch, path, depth, token){
-  try{
-    const j = await ghGetFileMeta(owner, repo, path, branch, token);
-    let content = j.content ? atob(j.content.replace(/\n/g,'')) : '';
-    const urlPages = `${pagesBase(owner,repo)}/${path}`;
-    FILES.set(path, { content, sha:j.sha, depth, urlPages });
-  }catch(e){
-    console.warn('Preload failed', path, e);
-  }
-}
-
-function renderCards(owner, repo){
-  grid.innerHTML = '';
-  const paths = [...FILES.keys()].sort((a,b)=> a.localeCompare(b, undefined, {numeric:true}));
+function renderCards(){
+  grid.innerHTML=''; const paths=[...FILES.keys()].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
   for(const p of paths){
-    const meta = FILES.get(p) || {};
-    const card = D.createElement('div');
-    card.className = 'card' + (meta.depth>0 ? ' folder' : '');
-    const head = D.createElement('div');
-    head.className = 'path';
-    head.textContent = p;
-    const sub = D.createElement('div');
-    sub.className = 'sub';
-    sub.textContent = meta.urlPages || '';
+    const meta=FILES.get(p)||{};
+    const card=D.createElement('div'); card.className='card'+(meta.depth>0?' folder':'');
+    const pathEl=D.createElement('div'); pathEl.className='path'; pathEl.textContent=p;
+    const sub=D.createElement('div'); sub.className='sub'; sub.textContent=meta.urlPages||'';
+    const row=D.createElement('div'); row.className='row';
 
-    const row1 = D.createElement('div'); row1.className='row';
-    const open = D.createElement('a'); open.className='btn'; open.textContent='Open'; open.target='_blank'; open.rel='noopener';
-    open.href = meta.urlPages || '#';
-    const download = D.createElement('button'); download.textContent='Download';
-    const copy = D.createElement('button'); copy.textContent='Copy HTML';
-    const replCommit = D.createElement('button'); replCommit.textContent='Replace (commit)'; replCommit.classList.add('warn');
-    const replLocal  = D.createElement('button'); replLocal.textContent='Replace (local)';
-    row1.append(open, copy, replCommit, replLocal, download);
+    const open=D.createElement('a'); open.className='btn'; open.textContent='Open'; open.target='_blank'; open.rel='noopener'; open.href=meta.urlPages||'#';
+    const copy=D.createElement('button'); copy.textContent='Copy HTML';
+    const replace=D.createElement('button'); replace.textContent='Replace (commit)'; replace.style.borderColor='#3d2e14'; replace.style.background='rgba(255,176,32,.12)';
+    const download=D.createElement('button'); download.textContent='Download';
 
-    card.append(head, sub, row1);
-    grid.append(card);
+    row.append(open,copy,replace,download);
+    card.append(pathEl,sub,row); grid.append(card);
 
     copy.addEventListener('click', async ()=>{
-      const cached = FILES.get(p);
-      const text = cached?.content ?? '';
+      const text = FILES.get(p)?.content || '';
       const ok = await copyTextReliable(text);
-      status(ok ? 'Copied' : 'Copy failed');
+      if(!ok){ status('Copy failed',true); return; }
+      // Optional verification with user consent (true confirm)
+      if(confirm('Copied. Verify clipboard? (needs “Allow Paste”)')){
+        try{
+          const pasted = await navigator.clipboard.readText();
+          status(pasted===text ? 'Clipboard verified ✓' : 'Clipboard mismatch', pasted!==text);
+        }catch{ status('Verification skipped'); }
+      }else{ status('Copied'); }
     });
 
     download.addEventListener('click', ()=>{
-      const override = LOCAL_OVERRIDES.get(p);
-      const text = override ?? (FILES.get(p)?.content ?? '');
-      if(!text){ status('No content'); return; }
-      const blob = new Blob([text], {type:'text/html'});
-      const a = D.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = p.split('/').pop() || 'index.html';
-      D.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+      const text=FILES.get(p)?.content||''; if(!text){ status('No content',true); return; }
+      const a=D.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/html'}));
+      a.download=p.split('/').pop()||'index.html'; D.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+      status('Download ready');
     });
 
-    replLocal.addEventListener('click', async ()=>{
-      let txt = '';
-      try{ txt = await navigator.clipboard.readText(); }
-      catch(e){ txt=''; }
-      if(!txt){ status('No HTML on clipboard'); return; }
-      LOCAL_OVERRIDES.set(p, txt);
-      try{ localStorage.setItem('localOverride:'+p, txt); }catch(_){}
-      status('Replaced locally. Use “Download” to save.');
-    });
+    replace.addEventListener('click', async ()=>{
+      TOKEN = $('token').value.trim();
+      if(!TOKEN){ status('Token required',true); return; }
+      if(!confirm(`Replace\n${OWNER}/${REPO}:${BRANCH}\n${p}\nwith clipboard content?\nThis creates a commit.`)) return;
 
-    replCommit.addEventListener('click', async ()=>{
-      const token = byId('token').value.trim();
-      const owner = byId('owner').value.trim();
-      const repo  = byId('repo').value.trim();
-      const branch= byId('branch').value.trim();
-      if(!token || !owner || !repo){ status('Missing token/owner/repo'); return; }
-
-      let newHtml='';
-      try{ newHtml = await navigator.clipboard.readText(); }
-      catch(e){ newHtml=''; }
-      if(!newHtml){ status('No HTML on clipboard'); return; }
+      let newHtml=''; try{ newHtml=await navigator.clipboard.readText(); }catch(_){}
+      if(!newHtml){ status('No HTML on clipboard',true); return; }
 
       try{
-        const fresh = await ghGetFileMeta(owner,repo,p,branch,token);
-        const sha = fresh.sha;
-        await ghPutFile(owner,repo,p,token,b64utf8(newHtml),sha,`Replace ${p} via web index`);
-        FILES.set(p, { ...FILES.get(p), content:newHtml, sha, urlPages: FILES.get(p)?.urlPages, depth: FILES.get(p)?.depth });
-        status('Replaced. Pages will rebuild.');
+        // get latest sha on target branch (true read-before-write)
+        const metaFresh = await ghGetFile(OWNER,REPO,p,BRANCH,TOKEN);
+        const put = await ghPutFile(OWNER,REPO,p,TOKEN,b64utf8(newHtml),metaFresh.sha,`Replace ${p} via index`);
+        const commitSha = put?.commit?.sha || '';
+        const contentSha = put?.content?.sha || '';
+        // Update local cache so subsequent Copy/Download uses new content
+        FILES.set(p,{...FILES.get(p),content:newHtml,sha:contentSha});
+        status(commitSha ? `Committed ${commitSha.slice(0,7)} ✓` : 'Committed ✓');
       }catch(e){
-        status('Replace failed: '+ e.message);
+        // True failure surfaced (401/403/422/409 etc.)
+        status(`Replace failed: ${e.message||e}`,true);
       }
     });
   }
 }
 
-async function loadAll(){
-  const owner = byId('owner').value.trim();
-  const repo  = byId('repo').value.trim();
-  const branchInput = byId('branch').value.trim();
-  const token = byId('token').value.trim() || null;
-
-  if(!owner || !repo){ status('Fill owner and repo'); return; }
-
-  byId('pagesLink').href = pagesBase(owner,repo);
-  byId('pagesLink').textContent = 'Open GitHub Pages';
-
+/* ---------- load ---------- */
+async function preload(owner,repo,branch,token){
   FILES.clear();
-  grid.innerHTML = '';
-
-  let root = [];
-  try{
-    root = await listDir(owner,repo,'',token);
-  }catch(e){
-    status('Could not list repo: '+e.message);
-    return;
+  // list root
+  const root = await ghListDir(owner,repo,'',token);
+  const topFiles = root.filter(x=>x.type==='file' && isHtml(x.name)).map(x=>x.path);
+  const topDirs  = root.filter(x=>x.type==='dir').map(x=>x.path);
+  for(const p of topFiles){
+    const j = await ghGetFile(owner,repo,p,branch,token);
+    const text = j.content ? atob(j.content.replace(/\n/g,'')) : '';
+    FILES.set(p,{content:text,sha:j.sha,depth:0,urlPages:`${pagesBase(owner,repo)}/${p}`});
   }
-
-  // Detect default branch if not provided
-  let branch = branchInput;
-  if(!branch){
-    try{
-      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-        headers:{ 'Accept':'application/vnd.github+json', ...(token? {'Authorization':`Bearer ${token}`} : {}) }
-      });
-      if(r.ok){ const j = await r.json(); branch = j.default_branch || 'main'; }
-      else branch = 'main';
-    }catch{ branch = 'main'; }
-    byId('branch').value = branch;
-  }
-
-  const topFiles = root.filter(it => it.type==='file' && isHtml(it.name)).map(it => it.path);
-  const topDirs  = root.filter(it => it.type==='dir').map(it => it.path);
-
-  for(const p of topFiles){ await preloadFile(owner,repo,branch,p,0,token); }
-
   for(const dir of topDirs){
     try{
-      const items = await listDir(owner,repo,dir,token);
-      const htmls = items.filter(it => it.type==='file' && isHtml(it.name)).map(it=>it.path);
-      for(const p of htmls){ await preloadFile(owner,repo,branch,p,1,token); }
-    }catch(e){
-      console.warn('Skip dir', dir, e);
-    }
-  }
-
-  // Restore local overrides
-  LOCAL_OVERRIDES.clear();
-  try{
-    for(const key in localStorage){
-      if(key && key.startsWith && key.startsWith('localOverride:')){
-        const path = key.slice('localOverride:'.length);
-        const val = localStorage.getItem(key);
-        if(val) LOCAL_OVERRIDES.set(path, val);
+      const items = await ghListDir(owner,repo,dir,token);
+      const htmls = items.filter(x=>x.type==='file' && isHtml(x.name)).map(x=>x.path);
+      for(const p of htmls){
+        const j = await ghGetFile(owner,repo,p,branch,token);
+        const text = j.content ? atob(j.content.replace(/\n/g,'')) : '';
+        FILES.set(p,{content:text,sha:j.sha,depth:1,urlPages:`${pagesBase(owner,repo)}/${p}`});
       }
-    }
-  }catch(_){}
-
-  renderCards(owner,repo);
-  status('Loaded');
+    }catch(e){ console.warn('Skip dir',dir,e); }
+  }
 }
 
-function inferFromLocation(){
+function inferFromPages(){
   try{
-    const host = location.host;
-    const path = location.pathname.replace(/^\/+/,'');
-    if(/\.github\.io$/i.test(host)){
-      const owner = host.split('.')[0];
-      const parts = path.split('/').filter(Boolean);
-      const repo  = parts[0] || '';
-      if(owner && repo){
-        byId('owner').value = byId('owner').value || owner;
-        byId('repo').value  = byId('repo').value  || repo;
-      }
+    if(/\.github\.io$/i.test(location.host)){
+      const owner = location.host.split('.')[0];
+      const parts = location.pathname.split('/').filter(Boolean);
+      const repo = parts[0]||'';
+      if(owner && repo){ $('owner').value=owner; $('repo').value=repo; }
     }
   }catch(_){}
 }
 
-byId('load').addEventListener('click', loadAll);
-byId('clearLocal').addEventListener('click', ()=>{
-  for(const k of Object.keys(localStorage)){
-    if(k.startsWith('localOverride:')) localStorage.removeItem(k);
-  }
-  LOCAL_OVERRIDES.clear();
-  status('Local overrides cleared');
+$('load').addEventListener('click', async ()=>{
+  try{
+    OWNER = $('owner').value.trim(); REPO = $('repo').value.trim(); TOKEN = $('token').value.trim();
+    if(!OWNER||!REPO){ status('Fill owner and repo',true); return; }
+    $('pagesLink').href = pagesBase(OWNER,REPO);
+    if(!$('branch').value){ BRANCH = await ghGetRepoDefaultBranch(OWNER,REPO,TOKEN); $('branch').value=BRANCH; } else { BRANCH = $('branch').value.trim(); }
+    status('Loading…');
+    await preload(OWNER,REPO,BRANCH,TOKEN);
+    renderCards();
+    status('Loaded');
+  }catch(e){ status(`Load failed: ${e.message||e}`,true); }
 });
 
-inferFromLocation();
+document.addEventListener('DOMContentLoaded', async ()=>{
+  inferFromPages();
+  if($('owner').value && $('repo').value){ $('load').click(); }
+});
 </script>
 </body>
 </html>
