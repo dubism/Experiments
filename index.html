@@ -321,7 +321,7 @@ function render(items){
       const replaceBtn = document.createElement('button');
       replaceBtn.className = 'js-replace-btn';
       replaceBtn.type = 'button';
-      replaceBtn.innerHTML = `Replace`;
+      replaceBtn.innerHTML = `Replace from clipboard`;
       actions.append(copyBtn, replaceBtn);
 
       a.append(ic, titleWrap, open, meta, actions);
@@ -593,12 +593,17 @@ fetchTree();
 /* Add some styling for the new button and modal */
 .js-replace-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  border: 1px dashed #2a3755; background: #101622; color: #d9e1ee;
+  /* --- NEW "WARNING" COLORS --- */
+  background: #2a0f12; /* Dark red background */
+  border: 1px dashed #4a1f22; /* Slightly brighter dashed red border */
+  color: #f3d4d6; /* Faintly reddish-white text */
+  /* --- END OF NEW COLORS --- */
   padding: .35rem .55rem; border-radius: 9px; font-size: 11px; letter-spacing: .2px;
 }
-.js-replace-btn:hover { background: #12203a; border-color: #35507d; }
-.btn{font:14px/1 system-ui;padding:.55rem .8rem;border:1px solid var(--line,#1a2130);
-  background:var(--card2,#10131a);color:var(--ink,#f5f6f8);border-radius:10px;cursor:pointer}
+.js-replace-btn:hover {
+  background: #3a1418; /* Brighter red background on hover */
+  border-color: #68282c; /* Brighter red border on hover */
+}
 .btn + .btn{margin-left:.5rem}
 .btn-danger{border-color:#4a1f22;background:#2a0f12}
 .btn-danger:hover{background:#3a1418}
