@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Live Camera Palette — Stable Freeze + Immediate Palettes</title>
+<title>Live Camera Palette — Freeze Composite</title>
 <style>
   :root{
     --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
@@ -43,7 +43,6 @@
   #video::-webkit-media-controls-start-playback-button{ display:none !important; }
   #frozenCanvas{display:none}
 
-  /* Source chip + photo preview */
   #sourceChip{
     position:absolute; top:10px; left:10px; z-index:5; display:flex; gap:6px; align-items:center;
     background:rgba(0,0,0,.45); backdrop-filter:blur(6px);
@@ -97,7 +96,6 @@
     bottom:var(--ctaB); width:var(--ctaW); z-index:5000;
   }
 
-  /* CC wrapper/card + open animation */
   #ccWrap{
     position:fixed;
     inset:
@@ -205,7 +203,6 @@
     </section>
   </div>
 
-  <!-- CC -->
   <div id="ccWrap" role="dialog" aria-modal="true">
     <div id="cc">
       <section id="algoBrief" class="small"></section>
@@ -276,18 +273,14 @@
   <canvas id="capFrame"></canvas>
 
 <script>
-/* ===== error toast ===== */
-(function(){
-  window.addEventListener('error', e=>{
-    try{
-      const box=document.getElementById('camError');
-      box.textContent = 'Script error: ' + (e.message||'unknown');
-      box.style.display='block';
-    }catch{}
-  }, {once:true});
-})();
+window.addEventListener('error', e=>{
+  try{
+    const box=document.getElementById('camError');
+    box.textContent = 'Script error: ' + (e.message||'unknown');
+    box.style.display='block';
+  }catch{}
+},{once:true});
 
-/* ===== square sizing ===== */
 (function(){
   function recalcSquare(){
     const vv = window.visualViewport;
@@ -321,7 +314,6 @@
   window.visualViewport && window.visualViewport.addEventListener('resize', kick,{passive:true});
 })();
 
-/* ===== measure CTA / bar ===== */
 const controlsBar = document.getElementById('controlsBar');
 const freezeBtnEl = document.getElementById('freezeBtn');
 function updateCbH(){
@@ -336,7 +328,6 @@ new ResizeObserver(updateCbH).observe(controlsBar);
 freezeBtnEl && new ResizeObserver(updateCbH).observe(freezeBtnEl);
 addEventListener('load', updateCbH);
 
-/* ===== elements ===== */
 const video=document.getElementById('video');
 const frozenCanvas=document.getElementById('frozenCanvas');
 const statusEl=document.getElementById('status');
@@ -363,23 +354,19 @@ const pressShield=document.getElementById('pressShield');
 const camError=document.getElementById('camError');
 const off=document.getElementById('off');
 
-/* ===== state ===== */
 let algo='kmeans', K=+kRange.value, procWidth=+sizeRange.value, uiZoom=+zoomSlider.value;
 let throttleN=20, frameCounter=0, lastT=performance.now(), fps=0;
 let ccOpen=false, pressLock=false, draggingK=false;
 let lastPaletteKmax=null;
 const KMAX = +kRange.max;
 
-/* ===== helpers ===== */
 const TH_MIN=1, TH_MAX=150;
 const sliderToN=v=>Math.max(TH_MIN,Math.min(TH_MAX,Math.round(TH_MIN*Math.exp((v/100)*Math.log(TH_MAX/TH_MIN)))));
 const nToSlider=n=>Math.round((Math.log(Math.max(TH_MIN,Math.min(TH_MAX,n))/TH_MIN)/Math.log(TH_MAX/TH_MIN))*100);
 const clamp=(v,min,max)=>v<min?min:(v>max?max:v);
-const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
 const status=t=>{ try{statusEl.textContent=t;}catch{} };
-function toast(msg){ if(!msg) return; camError.textContent=msg; camError.style.display='block'; setTimeout(()=>camError.style.display='none', 3000); }
+function toast(msg){ if(!msg) return; camError.textContent=msg; camError.style.display='block'; setTimeout(()=>camError.style.display='none', 2600); }
 
-/* ===== algo labels/brief ===== */
 const ALGOS=['kmeans','hist','mediancut'];
 const ALGO_LABEL={kmeans:'K-Means (LAB)',hist:'Histogram',mediancut:'Median-cut'};
 const ALGO_COPY={
@@ -398,30 +385,14 @@ function renderAlgoBrief(){
 }
 function highlightAlgoDesc(a){ document.querySelectorAll('#algoBrief .a').forEach(n=>n.classList.toggle('active',n.dataset.a===a)); }
 
-/* ===== selection + CC ===== */
 function lockPressSelection(){ if(pressLock) return; pressLock=true; document.body.classList.add('pressLock'); }
 function unlockPressSelection(){ if(!pressLock) return; pressLock=false; document.body.classList.remove('pressLock'); const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }
 document.addEventListener('selectstart',(e)=>{ if(pressLock) e.preventDefault(); },{capture:true});
 document.addEventListener('selectionchange',()=>{ if(pressLock){ const s=window.getSelection?.(); try{ s && s.removeAllRanges(); }catch{} }});
 document.addEventListener('contextmenu',(e)=>{ if(ccOpen||pressLock) e.preventDefault(); },{capture:true});
-
-/* CC open/close */
 function hidePressShield(){ pressShield.style.display='none'; clearTimeout(showPressShieldWithAutoRelease._t); }
-function openCC(){
-  hidePressShield(); unlockScroll(); unlockPressSelection();
-  try{ video.dataset.prevOpacity = video.style.opacity || ''; video.style.opacity = '0.9999'; }catch{}
-  ccWrap.style.display = 'block';
-  ccWrap.classList.add('open'); ccOpen=true;
-  queueMicrotask(()=>{
-    const first = cc.querySelector('input, select, textarea, button');
-    if(first && first.focus) try{ first.focus({preventScroll:true}); }catch{}
-  });
-}
-function closeCC(){
-  ccOpen=false; ccWrap.classList.remove('open'); hidePressShield();
-  ccWrap.style.display = 'none';
-  try{ video.style.opacity = video.dataset.prevOpacity || ''; }catch{}
-}
+function openCC(){ hidePressShield(); unlockScroll(); unlockPressSelection(); ccWrap.style.display='block'; ccWrap.classList.add('open'); ccOpen=true; }
+function closeCC(){ ccOpen=false; ccWrap.classList.remove('open'); hidePressShield(); ccWrap.style.display='none'; }
 cc.addEventListener('pointerdown', e=>e.stopPropagation(), {capture:true});
 cc.addEventListener('click', e=>e.stopPropagation(), {capture:true});
 document.addEventListener('pointerdown', (e)=>{
@@ -430,7 +401,6 @@ document.addEventListener('pointerdown', (e)=>{
 }, {capture:true});
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && ccOpen) closeCC(); });
 
-/* Long-press shield helpers */
 function showPressShieldWithAutoRelease(){
   pressShield.style.display='block';
   const release=()=>{ hidePressShield(); document.removeEventListener('pointerup',release,true); document.removeEventListener('touchend',release,true); document.removeEventListener('mouseup',release,true); };
@@ -441,23 +411,13 @@ function showPressShieldWithAutoRelease(){
   showPressShieldWithAutoRelease._t=setTimeout(hidePressShield,1200);
 }
 
-/* ===== global scroll lock during K-drag ===== */
 function noScroll(e){ if(ccOpen) return; if(e.cancelable) e.preventDefault(); }
-function lockScroll(){
-  document.addEventListener('touchmove', noScroll, {passive:false, capture:true});
-  document.addEventListener('wheel', noScroll, {passive:false, capture:true});
-}
-function unlockScroll(){
-  document.removeEventListener('touchmove', noScroll, {capture:true});
-  document.removeEventListener('wheel', noScroll, {capture:true});
-}
+function lockScroll(){ document.addEventListener('touchmove', noScroll, {passive:false, capture:true}); document.addEventListener('wheel', noScroll, {passive:false, capture:true}); }
+function unlockScroll(){ document.removeEventListener('touchmove', noScroll, {capture:true}); document.removeEventListener('wheel', noScroll, {capture:true}); }
 
-/* ===== K-drag + gestures ===== */
 let lpTimer=0,movedTooFar=false,longPressed=false;
 const LP_MS=450,MOVE_TOL=10;
 function getKStepPx(){ const h = paletteClickable.clientHeight || 200; return Math.max(14, Math.min(56, Math.round(h / 6))); }
-
-/* instant K application (Option A) */
 function renderPlaceholders(count){
   for(let i=0;i<count;i++){
     const d=document.createElement('div');
@@ -468,6 +428,7 @@ function renderPlaceholders(count){
 }
 function applyKInstant(newK){
   K = newK; kVal.textContent = newK;
+  if(newK!==applyKInstant._lastK){ if(performance.now()-(applyKInstant._lastKSnd||0)>35){ snd.k(); applyKInstant._lastKSnd=performance.now(); } applyKInstant._lastK=newK; }
   swatchesEl.innerHTML='';
   if(lastPaletteKmax && lastPaletteKmax.length){
     const have = Math.min(K, lastPaletteKmax.length);
@@ -477,7 +438,6 @@ function applyKInstant(newK){
     renderPlaceholders(K);
   }
 }
-
 paletteClickable.addEventListener('pointerdown', (e)=>{
   if(ccOpen) return;
   if(e.pointerType==='mouse' && e.button!==0) return;
@@ -567,17 +527,14 @@ paletteClickable.addEventListener('pointerdown', (e)=>{
   paletteClickable.addEventListener('pointerup',finish,{once:true});
   paletteClickable.addEventListener('pointercancel',cancel,{once:true});
 });
-
 paletteClickable.addEventListener('wheel', (e)=>{ e.preventDefault(); }, {passive:false});
 
-/* ===== controls ===== */
 kRange.addEventListener('input',()=>applyKInstant(+kRange.value));
 sizeRange.addEventListener('input',()=>{procWidth=+sizeRange.value;sizeVal.textContent=procWidth+' px';});
 throttleLog.addEventListener('input',()=>{throttleN=sliderToN(+throttleLog.value);throttleVal.textContent=String(throttleN);});
 rectChk.addEventListener('change',()=>renderPalette(lastPaletteKmax?.slice(0,K)||[]));
 gradChk.addEventListener('change',()=>renderPalette(lastPaletteKmax?.slice(0,K)||[]));
 
-/* ===== Zoom: source-aware ===== */
 function setZoom(v){
   const z = clamp(v,1,10);
   zoomSlider.value = z;
@@ -592,7 +549,70 @@ zoomSlider.addEventListener('input',()=>setZoom(+zoomSlider.value));
 zoomMinus.addEventListener('click',()=>setZoom(+zoomSlider.value-0.25));
 zoomPlus .addEventListener('click',()=>setZoom(+zoomSlider.value+0.25));
 
-/* ===== crop helper (camera) ===== */
+let source = 'camera';
+let photoBitmap = null;
+let photoZ = 1, photoCX = 0, photoCY = 0;
+
+const photoPreview = document.getElementById('photoPreview');
+const srcCamera = document.getElementById('srcCamera');
+const srcPhoto  = document.getElementById('srcPhoto');
+const pick      = document.getElementById('pick');
+
+function updateSourceChip(){
+  srcCamera?.setAttribute('aria-pressed', String(source==='camera'));
+  srcPhoto ?.setAttribute('aria-pressed', String(source==='photo'));
+}
+updateSourceChip();
+
+srcCamera?.addEventListener('click', ()=>{
+  if(source==='camera') return;
+  source='camera'; updateSourceChip();
+  status('Live');
+  photoBitmap=null; photoPreview.style.display='none';
+});
+srcPhoto?.addEventListener('click', ()=> pick?.click());
+pick?.addEventListener('change', async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  try{
+    status('Loading photo…');
+    const bmp = await createImageBitmap(f, { imageOrientation:'from-image' });
+    photoBitmap = bmp;
+    photoZ = 1; photoCX = bmp.width/2; photoCY = bmp.height/2; zoomSlider.value='1';
+    source='photo'; updateSourceChip();
+    drawPhotoPreview();
+    status('Photo');
+  }catch(_){ status('Photo load failed'); }
+  finally{ e.target.value=''; }
+});
+function boundPhotoCenter(){
+  if(!photoBitmap) return;
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  const baseCrop=Math.min(iw, ih), crop=baseCrop/Math.max(1,photoZ);
+  const half=crop/2;
+  photoCX = Math.max(half, Math.min(iw-half, photoCX));
+  photoCY = Math.max(half, Math.min(ih-half, photoCY));
+}
+function currentPhotoSrcRect(){
+  const iw=photoBitmap.width, ih=photoBitmap.height;
+  const baseCrop=Math.min(iw, ih), crop=baseCrop/Math.max(1,photoZ);
+  const sx = Math.max(0, Math.min(iw-crop, photoCX - crop/2));
+  const sy = Math.max(0, Math.min(ih-crop, photoCY - crop/2));
+  return {sx, sy, sw:crop, sh:crop};
+}
+function drawPhotoPreview(){
+  if(source!=='photo' || !photoBitmap) return;
+  const wrap = document.getElementById('videoPane');
+  const w = photoPreview.width  = wrap.clientWidth;
+  const h = photoPreview.height = wrap.clientHeight;
+  const g = photoPreview.getContext('2d');
+  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.clearRect(0,0,w,h);
+  const {sx,sy,sw,sh}=currentPhotoSrcRect();
+  g.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, w,h);
+  photoPreview.style.display='block';
+}
+addEventListener('resize', ()=>{ if(source==='photo' && photoBitmap) drawPhotoPreview(); }, {passive:true});
+
 function computeSquareCrop(){
   const vw=video.videoWidth||0, vh=video.videoHeight||0; if(!vw||!vh) return {sx:0,sy:0,sw:0,sh:0};
   const z=Math.max(1,uiZoom), base=Math.min(vw,vh), sw=Math.round(base/z), sh=sw,
@@ -600,19 +620,16 @@ function computeSquareCrop(){
   return {sx,sy,sw,sh};
 }
 
-/* ===== sampling ===== */
-function samplePixels(imgData, step){
+function samplePixels(imgData, stride){
   const d = imgData.data;
   const n = d.length;
   const out=[];
-  for(let i=0;i<n;i+=4*step){
+  for(let i=0;i<n;i+=4*stride){
     if(d[i+3] < 250) continue;
     out.push([d[i], d[i+1], d[i+2]]);
   }
   return out;
 }
-
-/* ===== Kmax algos ===== */
 function kmeansKmax(pixels, Kmax){
   if(!pixels.length) return [];
   const idxs = Uint32Array.from({length:pixels.length}, (_,i)=>i);
@@ -634,11 +651,7 @@ function kmeansKmax(pixels, Kmax){
 
     const c=[mr,mg,mb];
     const seedA=c.slice(), seedB=c.slice();
-    const j = Math.sqrt((axis===0?vr:(axis===1?vg:vb))/Math.max(1,n)) * 0.5;
-    seedA[axis]-=j; seedB[axis]+=j;
-
-    let A=[], B=[];
-    let ca=seedA, cb=seedB;
+    let A=[], B=[]; let ca=seedA, cb=seedB;
     for(let it=0; it<3; it++){
       A.length=0; B.length=0;
       for(let i=0;i<n;i++){
@@ -743,7 +756,7 @@ function histogramKmax(pixels, Kmax){
   candidates.sort((a,b)=>b.v-a.v);
   const picked=[], taken = new Uint8Array(gridSize); const NMSr = 1;
   for(const c of candidates){
-    if(picked.length>=Kmax) break;
+    if(picked.length>=KMAX) break;
     if(taken[c.i]) continue;
     picked.push(c.i);
     const bi = c.i, br = (bi/(B*B))|0, bg = ((bi%(B*B))/B)|0, bb = bi%B;
@@ -765,7 +778,10 @@ function histogramKmax(pixels, Kmax){
   });
 }
 
-/* render swatches/gradient to UI */
+function toHexLower([r,g,b]){
+  const h = (v)=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0');
+  return '#'+h(r)+h(g)+h(b);
+}
 function renderPalette(pal, skipClear=false){
   if(!skipClear) swatchesEl.innerHTML='';
   const showRects = rectChk.checked!==false;
@@ -775,7 +791,7 @@ function renderPalette(pal, skipClear=false){
     for(const rgb of pal){
       const d=document.createElement('div');
       d.className='swatch';
-      d.style.background=toHex(rgb);
+      d.style.background=toHexLower(rgb);
       swatchesEl.appendChild(d);
     }
     swatchesEl.style.display='';
@@ -784,7 +800,7 @@ function renderPalette(pal, skipClear=false){
   }
 
   if(showGrad && pal.length){
-    const stops = pal.map(rgb=>toHex(rgb)).join(', ');
+    const stops = pal.map(rgb=>toHexLower(rgb)).join(', ');
     gradientEl.style.background = `linear-gradient(90deg, ${stops})`;
     gradientEl.hidden = false;
   }else{
@@ -792,73 +808,7 @@ function renderPalette(pal, skipClear=false){
   }
 }
 
-/* ======== SOURCE SWITCHING ======== */
-let source = 'camera';
-let photoBitmap = null;
-let photoZ = 1, photoCX = 0, photoCY = 0;
-
-const photoPreview = document.getElementById('photoPreview');
-const srcCamera = document.getElementById('srcCamera');
-const srcPhoto  = document.getElementById('srcPhoto');
-const pick      = document.getElementById('pick');
-
-function updateSourceChip(){
-  srcCamera?.setAttribute('aria-pressed', String(source==='camera'));
-  srcPhoto ?.setAttribute('aria-pressed', String(source==='photo'));
-}
-updateSourceChip();
-
-srcCamera?.addEventListener('click', ()=>{
-  if(source==='camera') return;
-  source='camera'; updateSourceChip();
-  status('Live');
-  photoBitmap=null; photoPreview.style.display='none';
-});
-
-srcPhoto?.addEventListener('click', ()=> pick?.click());
-pick?.addEventListener('change', async (e)=>{
-  const f=e.target.files?.[0]; if(!f) return;
-  try{
-    status('Loading photo…');
-    const bmp = await createImageBitmap(f, { imageOrientation:'from-image' });
-    photoBitmap = bmp;
-    photoZ = 1; photoCX = bmp.width/2; photoCY = bmp.height/2; zoomSlider.value='1';
-    source='photo'; updateSourceChip();
-    drawPhotoPreview();
-    status('Photo');
-  }catch(_){ status('Photo load failed'); }
-  finally{ e.target.value=''; }
-});
-function boundPhotoCenter(){
-  if(!photoBitmap) return;
-  const iw=photoBitmap.width, ih=photoBitmap.height;
-  const baseCrop=Math.min(iw, ih), crop=baseCrop/Math.max(1,photoZ);
-  const half=crop/2;
-  photoCX = Math.max(half, Math.min(iw-half, photoCX));
-  photoCY = Math.max(half, Math.min(ih-half, photoCY));
-}
-function currentPhotoSrcRect(){
-  const iw=photoBitmap.width, ih=photoBitmap.height;
-  const baseCrop=Math.min(iw, ih), crop=baseCrop/Math.max(1,photoZ);
-  const sx = Math.max(0, Math.min(iw-crop, photoCX - crop/2));
-  const sy = Math.max(0, Math.min(ih-crop, photoCY - crop/2));
-  return {sx, sy, sw:crop, sh:crop};
-}
-function drawPhotoPreview(){
-  if(source!=='photo' || !photoBitmap) return;
-  const wrap = document.getElementById('videoPane');
-  const w = photoPreview.width  = wrap.clientWidth;
-  const h = photoPreview.height = wrap.clientHeight;
-  const g = photoPreview.getContext('2d');
-  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
-  g.clearRect(0,0,w,h);
-  const {sx,sy,sw,sh}=currentPhotoSrcRect();
-  g.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, w,h);
-  photoPreview.style.display='block';
-}
-addEventListener('resize', ()=>{ if(source==='photo' && photoBitmap) drawPhotoPreview(); }, {passive:true});
-
-/* ============== processing loop (source-aware) ============== */
+const off=document.getElementById('off');
 const offCtx = off.getContext('2d', {willReadFrequently:true});
 function tick(now){
   const dt = now - lastT;
@@ -903,7 +853,6 @@ function tick(now){
   requestAnimationFrame(tick);
 }
 
-/* ===== camera start ===== */
 let _stream;
 async function startCamera(){
   try{
@@ -912,11 +861,12 @@ async function startCamera(){
       audio:false,
       video:{
         facingMode:{ ideal:'environment' },
-        width:  { min:320, ideal:1280, max:1920 },
-        height: { min:320, ideal:1280, max:1920 },
+        width:{ min:320, ideal:1280, max:1920 },
+        height:{ min:320, ideal:1280, max:1920 },
         frameRate:{ ideal:30, max:60 }
       }
     };
+
     _stream?.getTracks?.().forEach(t=>t.stop());
     _stream = await navigator.mediaDevices.getUserMedia(cstr);
 
@@ -926,22 +876,22 @@ async function startCamera(){
     video.srcObject = _stream;
 
     await new Promise((res)=>video.addEventListener('loadedmetadata', res, {once:true}));
-    try{
-      await video.play();
-      status('Live');
-      resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
-    }catch(_){
+
+    await video.play().catch(()=>{
       status('Tap to start camera');
-      const resume = async (ev)=>{
-        ev?.preventDefault?.();
-        try{ await video.play(); status('Live'); }
-        catch(e){ status('Camera paused'); }
-        document.removeEventListener('click', resume, true);
-        document.removeEventListener('touchend', resume, true);
+      const resume = ()=>{
+        video.play().finally(()=>{
+          status('Live');
+          document.removeEventListener('click', resume, true);
+          document.removeEventListener('touchend', resume, true);
+        });
       };
       document.addEventListener('click', resume, true);
       document.addEventListener('touchend', resume, true);
-    }
+    });
+
+    resEl.textContent = `${video.videoWidth}×${video.videoHeight}`;
+    if(statusEl.textContent!=='Live') status('Live');
   }catch(err){
     console.error(err);
     status(err?.name==='NotAllowedError' ? 'Camera permission denied' :
@@ -950,169 +900,187 @@ async function startCamera(){
     toast(err?.message || 'Camera failed');
   }
 }
+
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='visible' && source==='camera'){
     video.play().catch(()=>{});
   }
 });
 
-/* ======== >>> FREEZE COMPOSITE: image + palette from SAME FRAME ======== */
-function drawPaletteOnCanvas(ctx, pal, W, H){
-  // layout
-  const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const pad = 12 * DPR;
-  const metaH = 18 * DPR;
-  const gap = 8 * DPR;
+const CAM_W = 2048, CAM_H = 2048;
+const RECT_H = 480, GRAD_H = 240, LABEL_H = 52;
+const PAD = 24, GUT = 24;
 
-  const barH = Math.max(44 * DPR, Math.round(Math.min(W, H) * 0.10));
-  const barY = H - pad - barH;
-  const rectRadius = 10 * DPR;
-
-  // swatches (if enabled)
-  const showRects = rectChk.checked !== false;
-  const showGrad  = gradChk.checked !== false;
-
-  if(showRects && pal.length){
-    const n = pal.length;
-    const segW = Math.floor((W - pad*2) / n);
-    for(let i=0;i<n;i++){
-      const [r,g,b]=pal[i];
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      const x = pad + i*segW;
-      const y = barY;
-      const w = (i===n-1) ? (W - pad - x) : segW; // last segment fills remainder
-
-      // rounded rect
-      const rr = rectRadius;
-      ctx.beginPath();
-      ctx.moveTo(x+rr, y);
-      ctx.lineTo(x+w-rr, y);
-      ctx.quadraticCurveTo(x+w, y, x+w, y+rr);
-      ctx.lineTo(x+w, y+barH-rr);
-      ctx.quadraticCurveTo(x+w, y+barH, x+w-rr, y+barH);
-      ctx.lineTo(x+rr, y+barH);
-      ctx.quadraticCurveTo(x, y+barH, x, y+barH-rr);
-      ctx.lineTo(x, y+rr);
-      ctx.quadraticCurveTo(x, y, x+rr, y);
-      ctx.closePath();
-      ctx.fill();
-    }
-    // stroke line to separate from photo slightly
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-    ctx.lineWidth = Math.max(1, Math.round(1 * DPR));
-    ctx.strokeRect(pad-0.5, barY-0.5, W-pad*2+1, barH+1);
-  }
-
-  // gradient line (above swatches)
-  if(showGrad && pal.length){
-    const gradH = 10 * DPR;
-    const gy = barY - gap - gradH;
-    const g = ctx.createLinearGradient(pad, gy, W - pad, gy);
-    const n = pal.length;
-    for(let i=0;i<n;i++){
-      const t = n <= 1 ? 0 : i/(n-1);
-      const [r,gc,b]=pal[i];
-      g.addColorStop(t, `rgb(${r},${gc},${b})`);
-    }
-    ctx.fillStyle = g;
-    ctx.fillRect(pad, gy, W - pad*2, gradH);
-  }
-
-  // meta text
-  const ts = 12 * DPR;
-  ctx.font = `${ts}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  const meta = `${ALGO_LABEL[algo]} · K=${K} · ${new Date().toLocaleString()} · ${compositeCanvas.dataset.srcRes||''}`;
-  ctx.fillText(meta, pad, H - pad - barH - gap*2);
+function rgbToHexLower([r,g,b]){
+  const h = (v)=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0');
+  return '#'+h(r)+h(g)+h(b);
+}
+function padToK(hexes, K){
+  if(hexes.length===0) return Array(K).fill('#000000');
+  while(hexes.length<K) hexes.push(hexes[hexes.length-1]);
+  return hexes.slice(0,K);
 }
 
-/**
- * Compute palette from an ImageData using current algo and KMAX, then slice to K.
- */
-function computePaletteForImageData(imgData){
-  const pixels = samplePixels(imgData, 6); // same step as live loop
+function computeFreezeHexesFromCrop(cropImg, sx, sy, sw, sh){
+  const w = Math.max(1, procWidth), h = w;
+  const work = document.createElement('canvas');
+  work.width = w; work.height = h;
+  const ctx = work.getContext('2d', {willReadFrequently:true});
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(cropImg, sx, sy, sw, sh, 0, 0, w, h);
+  const img = ctx.getImageData(0,0,w,h);
+  const pixels = samplePixels(img, 2);
+
   let pal;
   if(algo==='kmeans')      pal = kmeansKmax(pixels, KMAX);
   else if(algo==='hist')   pal = histogramKmax(pixels, KMAX);
   else                     pal = medianCutKmax(pixels, KMAX);
-  return pal.slice(0, Math.min(K, pal.length));
+
+  const sliced = pal.slice(0, Math.min(K, pal.length));
+  const hexes = sliced.map(rgbToHexLower);
+  return padToK(hexes, K);
+}
+
+function buildHiCap(){
+  if(source==='camera'){
+    if(!(video.readyState>=2 && video.videoWidth>0 && video.videoHeight>0)) return null;
+    const c = computeSquareCrop();
+    if(c.sw<=0) return null;
+    const hi = document.createElement('canvas');
+    hi.width = c.sw; hi.height = c.sh;
+    const g = hi.getContext('2d', {willReadFrequently:true});
+    g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+    g.drawImage(video, c.sx, c.sy, c.sw, c.sh, 0, 0, c.sw, c.sh);
+    hi._crop = c; hi._src = 'camera';
+    return hi;
+  }else if(source==='photo' && photoBitmap){
+    const r = currentPhotoSrcRect();
+    const HI = Math.min(2048, r.sw|0);
+    if(HI<=0) return null;
+    const hi = document.createElement('canvas');
+    hi.width = HI; hi.height = HI;
+    const g = hi.getContext('2d', {willReadFrequently:true});
+    g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+    g.drawImage(photoBitmap, r.sx, r.sy, r.sw, r.sh, 0, 0, HI, HI);
+    hi._crop = r; hi._src = 'photo';
+    return hi;
+  }
+  return null;
+}
+
+function paintFrozenPreview(){
+  const pane = document.getElementById('videoPane');
+  const w = pane.clientWidth, h = pane.clientHeight;
+  if(w<=0||h<=0) return;
+  const c = computeSquareCrop();
+  if(!(video.readyState>=2 && c.sw>0)) return;
+  frozenCanvas.width = w; frozenCanvas.height = h;
+  const g = frozenCanvas.getContext('2d');
+  g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.drawImage(video, c.sx, c.sy, c.sw, c.sh, 0, 0, w, h);
+  frozenCanvas.style.display='block';
+  video.style.visibility='hidden';
+}
+
+function renderCompositePNG(hiCap, hexes){
+  const hasRects = !!rectChk.checked;
+  const hasGrad  = !!gradChk.checked;
+  const hasLower = hasRects || hasGrad;
+
+  const W = PAD + CAM_W + PAD;
+  const H = PAD
+          + CAM_H
+          + (hasLower ? GUT : 0)
+          + (hasRects ? RECT_H + LABEL_H : 0)
+          + (hasRects && hasGrad ? GUT : 0)
+          + (hasGrad ? GRAD_H : 0)
+          + PAD;
+
+  const out = compositeCanvas;
+  out.width = W; out.height = H;
+  const ctx = out.getContext('2d', {willReadFrequently:true});
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.drawImage(hiCap, 0, 0, hiCap.width, hiCap.height, PAD, PAD, CAM_W, CAM_H);
+
+  let y = PAD + CAM_H + (hasLower ? GUT : 0);
+  if(hasRects){
+    const N = hexes.length;
+    const cellW = Math.ceil(CAM_W / Math.max(1,N));
+    for(let i=0;i<N;i++){
+      const x = PAD + i * cellW;
+      ctx.fillStyle = hexes[i];
+      ctx.fillRect(x, y, cellW, RECT_H);
+    }
+
+    ctx.font = '30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    ctx.fillStyle = '#d0d0d0';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const yLabel = y + RECT_H + 8;
+    const cellW2 = Math.ceil(CAM_W / Math.max(1,hexes.length));
+    for(let i=0;i<hexes.length;i++){
+      const cx = PAD + Math.round(i*cellW2 + cellW2/2);
+      ctx.fillText(hexes[i].toUpperCase(), cx, yLabel);
+    }
+    y = y + RECT_H + LABEL_H;
+  }
+
+  if(hasGrad){
+    if(hasRects) y += GUT;
+    if(hexes.length<=1){
+      ctx.fillStyle = hexes[0] || '#000000';
+      ctx.fillRect(PAD, y, CAM_W, GRAD_H);
+    }else{
+      const g = ctx.createLinearGradient(PAD, 0, PAD + CAM_W, 0);
+      for(let i=0;i<hexes.length;i++){
+        g.addColorStop(i/(hexes.length-1), hexes[i]);
+      }
+      ctx.fillStyle = g;
+      ctx.fillRect(PAD, y, CAM_W, GRAD_H);
+    }
+  }
+
+  compositeImg.src = out.toDataURL('image/png');
+  compositeOverlay.classList.add('open');
 }
 
 function freezeNow(){
-  // Ensure layout is ready
   if (typeof window.recalcSquare === 'function') window.recalcSquare();
 
-  const wrap = document.getElementById('videoPane');
-  const cssW = wrap.clientWidth, cssH = wrap.clientHeight;
-  if(cssW<=0 || cssH<=0){ toast('Freeze failed (layout not ready)'); return; }
+  if(source==='camera'){ paintFrozenPreview(); }
 
-  // Hi-DPI canvas setup
-  const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const W = cssW * DPR, H = cssH * DPR;
-  compositeCanvas.width = W; compositeCanvas.height = H;
-  compositeCanvas.style.width = cssW + 'px';
-  compositeCanvas.style.height = cssH + 'px';
-  const ctx = compositeCanvas.getContext('2d', {willReadFrequently:true});
-  ctx.setTransform(DPR,0,0,DPR,0,0); // draw in CSS pixels
+  const hiCap = buildHiCap();
+  if(!hiCap){ toast('Nothing to capture'); return; }
 
-  // draw the visual (camera/photo) at current zoom/crop
-  let srcOK=false;
-  let srcRes = '';
-  if(source==='camera'){
-    if(!(video.readyState>=2 && video.videoWidth>0 && video.videoHeight>0)){
-      toast('No camera frame to capture'); return;
-    }
-    const vw = video.videoWidth, vh = video.videoHeight;
-    const z = Math.max(1, uiZoom);
-    const base = Math.min(vw, vh);
-    const sw = Math.round(base / z);
-    const sx = Math.floor((vw - sw)/2);
-    const sy = Math.floor((vh - sw)/2);
-    ctx.drawImage(video, sx, sy, sw, sw, 0, 0, cssW, cssH);
-    srcOK = true;
-    srcRes = `${vw}×${vh}`;
-  }else if(source==='photo' && photoBitmap){
-    const {sx,sy,sw,sh}=currentPhotoSrcRect();
-    ctx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, cssW, cssH);
-    srcOK = true;
-    srcRes = `${Math.round(sw)}×${Math.round(sh)}`;
-  }
-  if(!srcOK){ toast('Nothing to capture'); return; }
-
-  // compute palette from the SAME pixels we just drew
-  // make a temp buffer matching processing size to keep palette clean
-  const tmp = document.createElement('canvas');
-  tmp.width = procWidth; tmp.height = procWidth;
-  const tctx = tmp.getContext('2d', {willReadFrequently:true});
-
-  if(source==='camera'){
-    const {sx,sy,sw,sh} = computeSquareCrop();
-    tctx.drawImage(video, sx,sy,sw,sh, 0,0, procWidth,procWidth);
+  let hexes;
+  if(hiCap._src==='camera'){
+    const c = computeSquareCrop();
+    if(!(video.readyState>=2 && c.sw>0)){ toast('No camera frame to capture'); return; }
+    hexes = computeFreezeHexesFromCrop(video, c.sx, c.sy, c.sw, c.sh);
   }else{
-    const {sx,sy,sw,sh} = currentPhotoSrcRect();
-    tctx.drawImage(photoBitmap, sx,sy,sw,sh, 0,0, procWidth,procWidth);
+    const r = currentPhotoSrcRect();
+    hexes = computeFreezeHexesFromCrop(photoBitmap, r.sx, r.sy, r.sw, r.sh);
   }
-  const imgData = tctx.getImageData(0,0,procWidth,procWidth);
-  const pal = computePaletteForImageData(imgData);
 
-  // draw palette + metadata on the composite
-  compositeCanvas.dataset.srcRes = srcRes;
-  drawPaletteOnCanvas(ctx, pal, cssW, cssH);
-
-  // export and show
-  compositeImg.src = compositeCanvas.toDataURL('image/jpeg', 0.95);
-  compositeOverlay.classList.add('open');
+  renderCompositePNG(hiCap, hexes);
   status('Frozen');
 }
-/* ======== <<< FREEZE COMPOSITE ======== */
-
 function unfreeze(){
   compositeOverlay.classList.remove('open');
   status('Live');
+  if(source==='camera'){
+    const g = frozenCanvas.getContext('2d');
+    g.clearRect(0,0,frozenCanvas.width,frozenCanvas.height);
+    frozenCanvas.style.display='none';
+    video.style.visibility='';
+    video.play().catch(()=>{});
+  }
 }
 
-/* ===== wire up + start ===== */
 renderAlgoBrief(); highlightAlgoDesc(algo);
 sizeVal.textContent=procWidth+' px';
 kVal.textContent=String(K);
@@ -1121,6 +1089,35 @@ throttleLog.value = String(nToSlider(throttleN));
 
 freezeBtn.addEventListener('click', freezeNow);
 unfreezeBtn.addEventListener('click', unfreeze);
+
+const snd=(function(){
+  let ctx=null;
+  function ensure(){ if(!ctx){ try{ ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } return ctx; }
+  function envGain(g, t, a, d){ g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(a,t+0.006); g.gain.exponentialRampToValueAtTime(0.0001, t+d); }
+  function tone(freq, dur, type='triangle', amp=0.03, detune=0){
+    const c=ensure(); if(!c) return;
+    const t=c.currentTime;
+    const o=c.createOscillator(); const g=c.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,t); if(detune) o.detune.setValueAtTime(detune,t);
+    envGain(g,t,amp,dur);
+    o.connect(g).connect(c.destination);
+    o.start(t); o.stop(t+dur+0.02);
+  }
+  function click(){ tone(480,0.055,'triangle',0.04); }
+  function unclick(){ tone(360,0.07,'triangle',0.045); }
+  function switchFx(){ const c=ensure(); if(!c) return; const t=c.currentTime; tone(640,0.04,'triangle',0.03); setTimeout(()=>tone(860,0.04,'triangle',0.028),60); }
+  function k(){ tone(1150,0.022,'triangle',0.02); }
+  document.addEventListener('pointerdown',()=>{ ensure(); },{once:true,capture:true});
+  return {click,unclick,switchFx,k};
+})();
+
+const origCycleAlgo = cycleAlgo;
+cycleAlgo = function(dir){
+  snd.switchFx();
+  return origCycleAlgo(dir);
+};
+freezeBtn.addEventListener('click', ()=> snd.click());
+unfreezeBtn.addEventListener('click', ()=> snd.unclick());
 
 window.addEventListener('pageshow', ()=>{
   startCamera();
