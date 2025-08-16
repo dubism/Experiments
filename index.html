@@ -168,7 +168,7 @@
 <script>
 const USER = "dubism";
 const REPO = "Experiments";
-  const BASE = `https://${USER}.github.io/${REPO}/`;
+const BASE = `https://${USER}.github.io/${REPO}/`;
 
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('list');
@@ -231,13 +231,12 @@ function timeAgoClassAndText(d){
   return {cls:'t9', text: days < 365 ? `${days}d ago` : `${Math.floor(days/365)}y ago`};
 }
 
-// *** MODIFICATION: This function now creates the new "Replace" button as well ***
 function createCard(it) {
   const a = document.createElement('a');
   a.className = 'card';
   if (it.depth === 2) a.classList.add('sub');
   a.href = it.href;
-  a.dataset.path = it.path; // Important: Add data-path to the card
+  a.dataset.path = it.path;
 
   const ic = document.createElement('div');
   ic.className = 'ic';
@@ -278,7 +277,6 @@ function createCard(it) {
   }
 
   meta.append(when);
-  // Add the exact date only for time sort view for simplicity
   if (sortMode === 'time') {
       meta.append(exact);
   }
@@ -301,14 +299,12 @@ function createCard(it) {
     copyFile(it.path, copyBtn);
   });
 
-  // *** NEW: Create the "Replace" button ***
   const replaceBtn = document.createElement('button');
-  replaceBtn.className = 'btn btn-replace js-replace-btn'; // Use classes from instructions
+  replaceBtn.className = 'btn btn-replace js-replace-btn';
   replaceBtn.type = 'button';
   replaceBtn.textContent = 'Replace';
-  // Note: The path is on the card (a.dataset.path), so we don't need it on the button.
   
-  actions.append(copyBtn, replaceBtn); // Add both buttons
+  actions.append(copyBtn, replaceBtn);
 
   a.append(ic, titleWrap, open, meta, actions);
   return a;
@@ -336,7 +332,7 @@ function render(items){
 
     const grid = document.createElement('div');
     grid.className = 'cards';
-    list.forEach(it => grid.appendChild(createCard(it))); // Use the new card factory
+    list.forEach(it => grid.appendChild(createCard(it)));
 
     section.appendChild(grid);
     listEl.appendChild(section);
@@ -361,7 +357,7 @@ function render(items){
 
     const grid = document.createElement('div');
     grid.className = 'cards';
-    arr.forEach(it => grid.appendChild(createCard(it))); // Use the new card factory
+    arr.forEach(it => grid.appendChild(createCard(it)));
 
     section.appendChild(grid);
     listEl.appendChild(section);
@@ -374,7 +370,7 @@ async function fetchTree(){
   statusEl.textContent = "Loading…";
   try{
     const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/HEAD?recursive=1`);
-    if(!r.ok) throw new Error();
+    if(!r.ok) throw new Error(`GitHub tree API failed: ${r.status}`);
     const data = await r.json();
     allItems = data.tree
       .filter(n => {
@@ -397,6 +393,7 @@ async function fetchTree(){
     render(allItems);
     statusEl.textContent = `Found ${allItems.length} file(s)`;
   }catch(e){
+    console.error(e);
     statusEl.textContent = "Error fetching data";
   }
 }
@@ -420,59 +417,58 @@ async function fetchDates(){
 
 function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
 
+// *** FIX 1: REVISED copyFile function to be more resilient ***
 async function copyFile(path, btn){
   const original = btn.innerHTML;
-  try{
-    btn.disabled = true;
-    btn.innerHTML = 'Copying…';
+  btn.disabled = true;
+  btn.innerHTML = 'Copying…';
 
-    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
-    const resp = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' } });
-
+  try {
     let content = '';
+    // First, try fetching directly from the public GitHub Pages URL.
+    // This is not rate-limited and is much more reliable.
+    const pagesUrl = `${BASE}${path}`;
+    const rPages = await fetch(pagesUrl);
 
-    if(resp.ok){
-      const data = await resp.json();
-
-      if(data && data.content && data.encoding === 'base64'){
-        const b64 = data.content.replace(/\n/g,'');
-        content = atob(b64);
-      }else if(data && data.download_url){
-        const r2 = await fetch(data.download_url);
-        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
-        content = await r2.text();
-      }else{
-        const r3 = await fetch(`${BASE}${path}`);
-        if(!r3.ok) throw new Error(`Pages HTTP ${r3.status}`);
-        content = await r3.text();
-      }
-    }else{
-      const r = await fetch(`${BASE}${path}`);
-      if(!r.ok) throw new Error(`Pages HTTP ${r.status}`);
-      content = await r.text();
+    if (rPages.ok) {
+      content = await rPages.text();
+    } else {
+      // As a fallback, try the GitHub API. This might fail due to rate limits.
+      const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
+      const rApi = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github.v3.raw' } });
+      if (!rApi.ok) throw new Error(`Both Pages and API fetch failed. API status: ${rApi.status}`);
+      content = await rApi.text();
     }
 
     await writeToClipboard(content);
     btn.innerHTML = 'Copied ✓';
-  }catch(err){
+  } catch(err) {
     console.error('Copy failed:', err);
     btn.innerHTML = 'Failed ✕';
-  }finally{
+  } finally {
     setTimeout(()=>{ btn.disabled=false; btn.innerHTML = original; }, 1200);
   }
 }
 
 async function writeToClipboard(text){
-  if(navigator.clipboard && navigator.clipboard.writeText){
+  // Modern async clipboard API is preferred
+  if(navigator.clipboard && window.isSecureContext){
     return navigator.clipboard.writeText(text);
   }
+  // Fallback for older browsers or insecure contexts
   const ta = document.createElement('textarea');
   ta.value = text;
-  ta.style.position='fixed'; ta.style.left='-9999px';
+  ta.style.position='fixed'; ta.style.left='-9999px'; ta.style.opacity = '0';
   document.body.appendChild(ta);
-  ta.focus(); ta.select();
-  try{ document.execCommand('copy'); }
-  finally{ document.body.removeChild(ta); }
+  ta.focus();
+  ta.select();
+  try{
+    document.execCommand('copy');
+  } catch(err) {
+    console.error("Fallback copy failed", err);
+  } finally {
+    document.body.removeChild(ta);
+  }
 }
 
 async function copySelf(){
@@ -481,26 +477,7 @@ async function copySelf(){
   try{
     btn.disabled = true;
     btn.innerHTML = 'Copying…';
-    const SELF_PATH = 'index.html';
-    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(SELF_PATH)}?ref=HEAD`;
-
-    let text = '';
-    const r = await fetch(apiUrl, { headers: { 'Accept':'application/vnd.github+json' } });
-    if(r.ok){
-      const data = await r.json();
-      if(data && data.content && data.encoding === 'base64'){
-        text = atob(data.content.replace(/\n/g,''));
-      }else if(data && data.download_url){
-        const r2 = await fetch(data.download_url);
-        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
-        text = await r2.text();
-      }
-    }
-
-    if(!text){
-      text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-    }
-
+    const text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
     await writeToClipboard(text);
     btn.innerHTML = 'Copied ✓';
   }catch(e){
@@ -514,9 +491,7 @@ async function copySelf(){
 fetchTree();
 </script>
 
-<!-- NEW: Replace modal and script added below -->
-
-<!-- Replace modal -->
+<!-- Replace modal and script -->
 <div id="replace-modal" hidden>
   <div class="rm-backdrop"></div>
   <div class="rm-dialog" role="dialog" aria-modal="true" aria-labelledby="rm-title">
@@ -551,11 +526,11 @@ fetchTree();
 
 <script>
 /* ---- CONFIG: set these 5 values ---- */
-const PROXY_URL  = 'https://experiments-updater-dubism.jxpfrhry6m.workers.dev/'; // <-- EDIT THIS: paste your Worker URL
+const PROXY_URL  = 'https://YOUR-WORKER.workers.dev'; // <-- EDIT THIS: paste your Worker URL
 const OWNER      = 'dubism';                          // This is correct for your repo
 const REPO       = 'Experiments';                     // This is correct for your repo
 const BRANCH     = 'main';                            // <-- EDIT THIS: if your branch is not 'main'
-const CLIENT_KEY = '23046386';               // <-- EDIT THIS: must match Worker SECRET_KEY
+const CLIENT_KEY = 'matej-clipboard-1';               // <-- EDIT THIS: must match Worker SECRET_KEY
 /* ------------------------------------ */
 
 (function(){
@@ -569,7 +544,7 @@ const CLIENT_KEY = '23046386';               // <-- EDIT THIS: must match Worker
 
   async function readClipboard(){
     try { return await navigator.clipboard.readText(); }
-    catch { return prompt('Paste content here:') || ''; } // iOS fallback if needed
+    catch { return prompt('Paste content here:') || ''; }
   }
   async function replaceFile(path, text){
     const res = await fetch(PROXY_URL, {
@@ -585,6 +560,10 @@ const CLIENT_KEY = '23046386';               // <-- EDIT THIS: must match Worker
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.js-replace-btn');
     if(!btn) return;
+
+    // *** FIX 2: Prevent the parent link from navigating ***
+    e.preventDefault();
+
     const path = (btn.dataset.path || btn.closest('[data-path]')?.dataset.path || '').trim();
     if(!path) return alert('No file path for this card.');
     openModal(path);
@@ -596,7 +575,7 @@ const CLIENT_KEY = '23046386';               // <-- EDIT THIS: must match Worker
     if (e.target.dataset.rm === 'confirm') {
       const path = pendingPath; closeModal();
       const text = await readClipboard();
-      if(!text) return alert('Clipboard empty. Aborted.');
+      if(!text && text !== "") return alert('Clipboard empty or could not be read. Aborted.');
       await replaceFile(path, text);
     }
   });
@@ -607,4 +586,4 @@ const CLIENT_KEY = '23046386';               // <-- EDIT THIS: must match Worker
 </script>
 
 </body>
-</html>```
+</html>
