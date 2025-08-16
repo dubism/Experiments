@@ -51,7 +51,7 @@ export function initManualPicker(elements, state, offCtx) {
   function srgbToLin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
   function linToSrgb(c) { c = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; return Math.max(0, Math.min(255, Math.round(c * 255))); }
 
-  // Averaging
+  // Averaging (disk kernel in linear RGB)
   function sampleAverageAt(ctx, ox, oy, radiusPx) {
     const r = Math.max(1, Math.round(radiusPx));
     const x0 = Math.max(0, ox - r), y0 = Math.max(0, oy - r);
@@ -146,8 +146,9 @@ export function initManualPicker(elements, state, offCtx) {
     if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
     // Prevent Safari gesture events when starting inside #cc
     document.addEventListener('gesturestart', (ge) => {
-    if (elements.cc.contains(ge.target)) ge.preventDefault();
+      if (elements.cc.contains(ge.target)) ge.preventDefault();
     }, { passive: false });
+
     const touch = e.touches ? e.touches[0] : e;
     pressStartX = touch.clientX; pressStartY = touch.clientY;
     pressing = true;
@@ -201,9 +202,13 @@ export function initManualPicker(elements, state, offCtx) {
   elements.cc.addEventListener('touchmove',   onPointerMove, { passive: false });
   elements.cc.addEventListener('touchend',    onPointerUp,   { passive: false });
   elements.cc.addEventListener('touchcancel', onPointerUp,   { passive: false });
-  
+
   // Block iOS context menu on long-press inside the square
   elements.cc.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Prevent native drag/select stealing interactions
+  elements.cc.addEventListener('dragstart',   (e) => e.preventDefault());
+  elements.cc.addEventListener('selectstart', (e) => e.preventDefault());
 
   // Optional mouse support
   elements.cc.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') onPointerDown(e); }, { passive: false });
