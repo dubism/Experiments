@@ -7,6 +7,7 @@ import { medianCutKmax } from './algos/mediancut.js';
 import { initCamera, startCamera, getSource, getVideoElement, getPhotoBitmap, computeSquareCrop, currentPhotoSrcRect, drawPhotoPreview } from './core/camera.js';
 import { initControls } from './ui/controls.js';
 import { initComposite } from './features/composite.js';
+import { initManualPicker } from './features/manualPicker.js'; // <-- [ADD]
 
 // --- Element Querying ---
 // Find all necessary DOM elements once and store them in a central object.
@@ -213,6 +214,9 @@ function init() {
         renderPalette(state.lastPaletteKmax?.slice(0, state.K) || []);
     },
   });
+
+  // Manual Picker wiring
+  initManualPicker(elements, state, offCtx); // <-- [ADD]
 
   // Set initial UI values
   elements.kVal.textContent = String(state.K);
