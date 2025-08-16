@@ -83,7 +83,7 @@ export function initControls(elements, state, callbacks) {
     let lastX = startX, lastY = startY;
     let kDrag = false, kAccum = 0;
     const stepPx = Math.max(30, Math.min(56, Math.round(paletteClickable.clientHeight / 6)));
-    let ax = 0, ay = -1, dirSign = 1;
+    let dirSign = -1;
 
     paletteClickable.setPointerCapture(e.pointerId);
     lockPressSelection();
@@ -102,7 +102,7 @@ export function initControls(elements, state, callbacks) {
         movedTooFar = true; clearTimeout(lpTimer);
         if (Math.abs(dy) > Math.abs(dx) * 0.7) {
           kDrag = true;
-          dirSign = (dy < 0) ? 1 : -1;
+          dirSign = (dy < 0) ? -1 : 1;
         }
       }
       if (kDrag) {
