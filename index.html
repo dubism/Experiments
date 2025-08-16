@@ -417,31 +417,24 @@ async function fetchDates(){
 
 function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
 
-// *** FIX 1: REVISED copyFile function to be more resilient ***
 async function copyFile(path, btn){
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = 'Copying…';
 
   try {
-    let content = '';
-    // First, try fetching directly from the public GitHub Pages URL.
-    // This is not rate-limited and is much more reliable.
     const pagesUrl = `${BASE}${path}`;
     const rPages = await fetch(pagesUrl);
+    if (!rPages.ok) throw new Error(`Fetch from GitHub Pages failed with status ${rPages.status}`);
+    
+    const content = await rPages.text();
+    const success = writeToClipboard(content);
 
-    if (rPages.ok) {
-      content = await rPages.text();
+    if (success) {
+      btn.innerHTML = 'Copied ✓';
     } else {
-      // As a fallback, try the GitHub API. This might fail due to rate limits.
-      const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
-      const rApi = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github.v3.raw' } });
-      if (!rApi.ok) throw new Error(`Both Pages and API fetch failed. API status: ${rApi.status}`);
-      content = await rApi.text();
+      throw new Error('Clipboard write command failed');
     }
-
-    await writeToClipboard(content);
-    btn.innerHTML = 'Copied ✓';
   } catch(err) {
     console.error('Copy failed:', err);
     btn.innerHTML = 'Failed ✕';
@@ -450,40 +443,51 @@ async function copyFile(path, btn){
   }
 }
 
-async function writeToClipboard(text){
-  // Modern async clipboard API is preferred
-  if(navigator.clipboard && window.isSecureContext){
-    return navigator.clipboard.writeText(text);
-  }
-  // Fallback for older browsers or insecure contexts
+// *** IOS FIX: A single, robust clipboard function using the document.execCommand fallback. ***
+function writeToClipboard(text) {
   const ta = document.createElement('textarea');
+  // Use `readonly` to prevent the keyboard from popping up on mobile devices
+  ta.setAttribute('readonly', '');
   ta.value = text;
-  ta.style.position='fixed'; ta.style.left='-9999px'; ta.style.opacity = '0';
+  // Position the textarea off-screen
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  ta.style.top = '0px';
   document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  try{
-    document.execCommand('copy');
-  } catch(err) {
-    console.error("Fallback copy failed", err);
+
+  let success = false;
+  try {
+    ta.select();
+    // A robust way to ensure the entire content is selected
+    ta.setSelectionRange(0, text.length);
+    success = document.execCommand('copy');
+  } catch (err) {
+    console.error('Copy to clipboard failed:', err);
+    success = false;
   } finally {
     document.body.removeChild(ta);
   }
+  return success;
 }
 
 async function copySelf(){
   const btn = copySelfBtn;
   const original = btn.innerHTML;
-  try{
-    btn.disabled = true;
-    btn.innerHTML = 'Copying…';
+  btn.disabled = true;
+  btn.innerHTML = 'Copying…';
+  
+  try {
     const text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-    await writeToClipboard(text);
-    btn.innerHTML = 'Copied ✓';
-  }catch(e){
+    const success = writeToClipboard(text); // Use the same robust function
+    if (success) {
+      btn.innerHTML = 'Copied ✓';
+    } else {
+      throw new Error('Clipboard write failed for self copy');
+    }
+  } catch(e) {
     console.error(e);
     btn.innerHTML = 'Failed ✕';
-  }finally{
+  } finally {
     setTimeout(()=>{ btn.disabled=false; btn.innerHTML=original; }, 1200);
   }
 }
@@ -560,10 +564,7 @@ const CLIENT_KEY = '23046386';               // <-- EDIT THIS: must match Worker
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.js-replace-btn');
     if(!btn) return;
-
-    // *** FIX 2: Prevent the parent link from navigating ***
     e.preventDefault();
-
     const path = (btn.dataset.path || btn.closest('[data-path]')?.dataset.path || '').trim();
     if(!path) return alert('No file path for this card.');
     openModal(path);
