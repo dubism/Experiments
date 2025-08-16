@@ -121,15 +121,17 @@ new ResizeObserver(() => {
 let frameCounter = 0, lastT = performance.now(), fps = 0, skipCounter = 0;
 const offCtx = elements.offCanvas.getContext('2d', { willReadFrequently: true });
 function samplePixels(imgData, stride) {
-    const d = imgData.data, n = d.length, out = [];
-    for (let i = 0; i < n; i += 4 * stride) {
-        if (d[i + 3] >= 250) out.push([d[i], d[i + 1], d[i + 2]]);
-    }
-    return out;
+  const d = imgData.data, n = d.length, out = [];
+  for (let i = 0; i < n; i += 4 * stride) {
+    if (d[i + 3] >= 250) out.push([d[i], d[i + 1], d[i + 2]]);
+  }
+  return out;
 }
 
 function tick(now) {
   requestAnimationFrame(tick);
+
+  // FPS
   if (now - lastT >= 500) {
     fps = Math.round((frameCounter * 1000) / (now - lastT));
     elements.fps.textContent = String(fps);
@@ -138,12 +140,10 @@ function tick(now) {
   }
   frameCounter++;
 
-  if (--skipCounter > 0) return;
-  skipCounter = state.throttleN;
-  
+  // Always prep the offscreen canvas and draw the current source
   elements.offCanvas.width = state.procWidth;
   elements.offCanvas.height = state.procWidth;
-  
+
   if (getSource() === 'camera' && getVideoElement()?.readyState >= 2) {
     const { sx, sy, sw, sh } = computeSquareCrop();
     if (sw > 0) {
@@ -158,11 +158,21 @@ function tick(now) {
     offCtx.clearRect(0, 0, state.procWidth, state.procWidth);
   }
 
-  const pixels = samplePixels(offCtx.getImageData(0, 0, state.procWidth, state.procWidth), 6);
-  if (state.algo === 'kmeans') state.lastPaletteKmax = kmeansKmax(pixels, state.KMAX);
-  else if (state.algo === 'hist') state.lastPaletteKmax = histogramKmax(pixels, state.KMAX);
-  else state.lastPaletteKmax = medianCutKmax(pixels, state.KMAX);
+  // Throttle ONLY the expensive recompute
+  if (--skipCounter <= 0) {
+    skipCounter = state.throttleN;
 
+    const pixels = samplePixels(offCtx.getImageData(0, 0, state.procWidth, state.procWidth), 6);
+    if (state.algo === 'kmeans') {
+      state.lastPaletteKmax = kmeansKmax(pixels, state.KMAX);
+    } else if (state.algo === 'hist') {
+      state.lastPaletteKmax = histogramKmax(pixels, state.KMAX);
+    } else {
+      state.lastPaletteKmax = medianCutKmax(pixels, state.KMAX);
+    }
+  }
+
+  // Always render with the latest available palette and the current K (instant UI)
   if (state.lastPaletteKmax?.length) {
     renderPalette(state.lastPaletteKmax.slice(0, Math.min(state.K, state.lastPaletteKmax.length)));
   }
@@ -184,34 +194,34 @@ function init() {
     highlightAlgoDesc();
     state.lastPaletteKmax = null;
   };
-  
+
   initCamera(elements, status, toast);
   initComposite(elements, state, status, toast);
   initControls(elements, state, {
     onKChange: (newK, instant) => {
-        play('tick');
-        elements.kRange.value = newK;
-        if (instant) applyKInstant(newK);
-        else state.K = newK;
+      play('tick');
+      elements.kRange.value = newK;
+      if (instant) applyKInstant(newK);
+      else state.K = newK;
     },
     onSizeChange: (newSize) => {
-        play('tick');
-        state.procWidth = newSize;
-        elements.sizeVal.textContent = `${newSize} px`;
+      play('tick');
+      state.procWidth = newSize;
+      elements.sizeVal.textContent = `${newSize} px`;
     },
     onThrottleChange: (newThrottle) => {
-        play('tick');
-        state.throttleN = sliderToN(newThrottle);
-        elements.throttleVal.textContent = String(state.throttleN);
+      play('tick');
+      state.throttleN = sliderToN(newThrottle);
+      elements.throttleVal.textContent = String(state.throttleN);
     },
     onAlgoChange: (dir) => {
-        play('click');
-        const i = ALGOS.indexOf(state.algo);
-        setAlgo(ALGOS[(i + dir + ALGOS.length) % ALGOS.length]);
+      play('click');
+      const i = ALGOS.indexOf(state.algo);
+      setAlgo(ALGOS[(i + dir + ALGOS.length) % ALGOS.length]);
     },
     onDisplayChange: () => {
-        play('click');
-        renderPalette(state.lastPaletteKmax?.slice(0, state.K) || []);
+      play('click');
+      renderPalette(state.lastPaletteKmax?.slice(0, state.K) || []);
     },
   });
 
