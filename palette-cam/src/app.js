@@ -31,7 +31,7 @@ const state = {
   algo: 'kmeans',
   K: +elements.kRange.value,
   procWidth: +elements.sizeRange.value,
-  throttleN: 20,
+  throttleN: 40,
   KMAX: +elements.kRange.max,
   lastPaletteKmax: null,
 };
