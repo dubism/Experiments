@@ -140,14 +140,14 @@ export function initManualPicker(elements, state, offCtx) {
   }
 
   function onPointerDown(e) {
-    e.preventDefault();
-    // Clear any existing text selection that might have been created
-    try { const sel = window.getSelection && window.getSelection(); if (sel && sel.removeAllRanges) sel.removeAllRanges(); } catch {}
-    if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
-    // Prevent Safari gesture events when starting inside #cc
-    document.addEventListener('gesturestart', (ge) => {
-      if (elements.cc.contains(ge.target)) ge.preventDefault();
-    }, { passive: false });
+    // Do NOT preventDefault here — allow long-press to be recognized
+    try {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && sel.removeAllRanges) sel.removeAllRanges();
+    } catch {}
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
 
     const touch = e.touches ? e.touches[0] : e;
     pressStartX = touch.clientX; pressStartY = touch.clientY;
@@ -177,7 +177,7 @@ export function initManualPicker(elements, state, offCtx) {
     }
 
     if (dragging) {
-      e.preventDefault();
+      e.preventDefault(); // only block native scroll/zoom while dragging
       movePicker(touch.clientX, touch.clientY);
       if (!rafId) {
         rafId = requestAnimationFrame(() => {
@@ -209,6 +209,11 @@ export function initManualPicker(elements, state, offCtx) {
   // Prevent native drag/select stealing interactions
   elements.cc.addEventListener('dragstart',   (e) => e.preventDefault());
   elements.cc.addEventListener('selectstart', (e) => e.preventDefault());
+
+  // Only block native pinch gestures while in MPM mode inside #cc
+  document.addEventListener('gesturestart', (ge) => {
+    if (state.mode === 'MPM' && elements.cc.contains(ge.target)) ge.preventDefault();
+  }, { passive: false });
 
   // Optional mouse support
   elements.cc.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') onPointerDown(e); }, { passive: false });
