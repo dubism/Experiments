@@ -82,7 +82,7 @@ export function initControls(elements, state, callbacks) {
     const startX = e.clientX, startY = e.clientY;
     let lastX = startX, lastY = startY;
     let kDrag = false, kAccum = 0;
-    const stepPx = Math.max(14, Math.min(56, Math.round(paletteClickable.clientHeight / 6)));
+    const stepPx = Math.max(30, Math.min(56, Math.round(paletteClickable.clientHeight / 6)));
     let ax = 0, ay = -1, dirSign = 1;
 
     paletteClickable.setPointerCapture(e.pointerId);
