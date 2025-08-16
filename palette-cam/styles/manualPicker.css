@@ -1,5 +1,13 @@
 /* Manual Picker Styles */
 
+/* Disable iOS text selection/callout in interactive area */
+.app, #videoPane, #cc, #cc *, #palettePane, #palettePane *,
+#compositeOverlay, #compositeOverlay * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 #pickerPuck {
   position: absolute;
   top: 0;
