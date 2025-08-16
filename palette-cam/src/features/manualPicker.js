@@ -194,6 +194,9 @@ export function initManualPicker(elements, state, offCtx) {
   elements.cc.addEventListener('touchmove',   onPointerMove, { passive: false });
   elements.cc.addEventListener('touchend',    onPointerUp,   { passive: false });
   elements.cc.addEventListener('touchcancel', onPointerUp,   { passive: false });
+  
+  // Block iOS context menu on long-press inside the square
+  elements.cc.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // Optional mouse support
   elements.cc.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') onPointerDown(e); }, { passive: false });
