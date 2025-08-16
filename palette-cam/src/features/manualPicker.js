@@ -141,6 +141,13 @@ export function initManualPicker(elements, state, offCtx) {
 
   function onPointerDown(e) {
     e.preventDefault();
+    // Clear any existing text selection that might have been created
+    try { const sel = window.getSelection && window.getSelection(); if (sel && sel.removeAllRanges) sel.removeAllRanges(); } catch {}
+    if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+    // Prevent Safari gesture events when starting inside #cc
+    document.addEventListener('gesturestart', (ge) => {
+    if (elements.cc.contains(ge.target)) ge.preventDefault();
+    }, { passive: false });
     const touch = e.touches ? e.touches[0] : e;
     pressStartX = touch.clientX; pressStartY = touch.clientY;
     pressing = true;
