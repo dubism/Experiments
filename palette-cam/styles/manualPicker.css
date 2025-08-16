@@ -1,6 +1,6 @@
-/* Manual Picker Styles */
+/* Manual Picker Styles + iOS hardening */
 
-/* Disable iOS text selection/callout in interactive area */
+/* Kill callout/selection globally where we interact */
 .app, #videoPane, #cc, #cc *, #palettePane, #palettePane *,
 #compositeOverlay, #compositeOverlay * {
   -webkit-user-select: none;
@@ -8,6 +8,14 @@
   -webkit-touch-callout: none;
 }
 
+/* Also ensure media can’t be selected/dragged */
+img, canvas, video {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Puck */
 #pickerPuck {
   position: absolute;
   top: 0;
@@ -27,11 +35,13 @@
   will-change: transform, background-color;
 }
 
+/* Square container must be positioned for absolute children */
 #cc {
   position: relative;
   touch-action: none; /* allow long press without scrolling */
 }
 
+/* Done chip */
 #mpmDone {
   position: absolute;
   right: 8px;
@@ -47,6 +57,7 @@
   display: none; /* hidden until MPM active */
 }
 
+/* Active swatch highlight */
 #swatches .swatch.active {
   outline: 2px solid #fff;
   outline-offset: 2px;
