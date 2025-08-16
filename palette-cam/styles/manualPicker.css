@@ -1,6 +1,6 @@
 /* Manual Picker Styles */
 
-#pick {
+#pickerPuck {
   position: absolute;
   top: 0;
   left: 0;
@@ -13,8 +13,8 @@
     0 0 0 1px rgba(0, 0, 0, 0.35) inset,
     0 2px 10px rgba(0, 0, 0, 0.35);
   pointer-events: none;
-  opacity: 1; /* always visible */
-  transform: scale(0); /* start hidden */
+  opacity: 1;                 /* 100% opacity */
+  transform: scale(0);        /* start hidden */
   transition: transform 0.5s ease;
   will-change: transform, background-color;
 }
