@@ -1,0 +1,45 @@
+/* Manual Picker Styles */
+
+#pick {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px; /* center on finger */
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    0 2px 10px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  opacity: 1; /* always visible */
+  transform: scale(0); /* start hidden */
+  transition: transform 0.5s ease;
+  will-change: transform, background-color;
+}
+
+#cc {
+  position: relative;
+  touch-action: none; /* allow long press without scrolling */
+}
+
+#mpmDone {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font: 12px/1.2 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: none; /* hidden until MPM active */
+}
+
+#swatches .swatch.active {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
