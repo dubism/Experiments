@@ -1,20 +1,30 @@
 // src/features/manualPicker.js
 
-// --- Exported Init ---
 export function initManualPicker(elements, state, offCtx) {
-  // Extend state
+  // Extend state (idempotent)
   Object.assign(state, {
-    mode: 'DEFAULT',
+    mode: state.mode || 'DEFAULT',
     mpmActiveIndex: 0,
-    mpm: { longPressMs: 500, moveTolPx: 12, sampleRadiusPx: 8, autoAdvance: false }
+    mpm: Object.assign({ longPressMs: 500, moveTolPx: 12, sampleRadiusPx: 8, autoAdvance: false }, state.mpm || {})
   });
 
-  // Add Done button
-  const doneBtn = document.createElement('button');
-  doneBtn.id = 'mpmDone';
-  doneBtn.textContent = 'Done';
-  elements.cc.appendChild(doneBtn);
-  elements.mpmDone = doneBtn;
+  // Create Done button (once)
+  if (!elements.mpmDone) {
+    const doneBtn = document.createElement('button');
+    doneBtn.id = 'mpmDone';
+    doneBtn.textContent = 'Done';
+    elements.cc.appendChild(doneBtn);
+    elements.mpmDone = doneBtn;
+  }
+
+  // Create picker puck (once)
+  let picker = elements.pickerPuck;
+  if (!picker) {
+    picker = document.createElement('div');
+    picker.id = 'pickerPuck';
+    elements.cc.appendChild(picker);
+    elements.pickerPuck = picker;
+  }
 
   // Palette helpers
   function setActiveSlot(idx) {
@@ -38,22 +48,16 @@ export function initManualPicker(elements, state, offCtx) {
   });
 
   // Color space utils
-  function srgbToLin(c) {
-    c /= 255;
-    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  }
-  function linToSrgb(c) {
-    c = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
-    return Math.max(0, Math.min(255, Math.round(c * 255)));
-  }
+  function srgbToLin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function linToSrgb(c) { c = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; return Math.max(0, Math.min(255, Math.round(c * 255))); }
 
   // Averaging
-  function sampleAverageAt(offCtx, ox, oy, radiusPx) {
+  function sampleAverageAt(ctx, ox, oy, radiusPx) {
     const r = Math.max(1, Math.round(radiusPx));
     const x0 = Math.max(0, ox - r), y0 = Math.max(0, oy - r);
     const x1 = Math.min(state.procWidth - 1, ox + r), y1 = Math.min(state.procWidth - 1, oy + r);
     const w = x1 - x0 + 1, h = y1 - y0 + 1;
-    const { data } = offCtx.getImageData(x0, y0, w, h);
+    const { data } = ctx.getImageData(x0, y0, w, h);
 
     const r2 = r * r;
     let sumR = 0, sumG = 0, sumB = 0, count = 0;
@@ -62,10 +66,11 @@ export function initManualPicker(elements, state, offCtx) {
         const dx = (x0 + xx) - ox, dy = (y0 + yy) - oy;
         if (dx * dx + dy * dy > r2) continue;
         const i = 4 * (yy * w + xx);
-        const a = data[i + 3];
-        if (a < 200) continue;
-        const R = srgbToLin(data[i]), G = srgbToLin(data[i + 1]), B = srgbToLin(data[i + 2]);
-        sumR += R; sumG += G; sumB += B; count++;
+        if (data[i + 3] < 200) continue;
+        sumR += srgbToLin(data[i]);
+        sumG += srgbToLin(data[i + 1]);
+        sumB += srgbToLin(data[i + 2]);
+        count++;
       }
     }
     if (!count) return [0, 0, 0];
@@ -87,19 +92,23 @@ export function initManualPicker(elements, state, offCtx) {
 
   // Picker visuals
   function movePicker(clientX, clientY) {
-    elements.pick.style.left = clientX + 'px';
-    elements.pick.style.top = clientY + 'px';
+    picker.style.left = clientX + 'px';
+    picker.style.top  = clientY + 'px';
   }
   function showPickerAt(clientX, clientY) {
     movePicker(clientX, clientY);
-    elements.pick.style.transition = 'transform .5s ease';
-    elements.pick.style.transform = 'scale(1)';
+    picker.style.transition = 'transform .5s ease';
+    picker.style.transform  = 'scale(1)';
+  }
+  function hidePicker() {
+    picker.style.transition = 'transform .18s ease';
+    picker.style.transform  = 'scale(0)';
   }
   function snapPicker() {
-    elements.pick.style.transition = 'transform .12s ease';
-    elements.pick.style.transform = 'scale(1.08)';
+    picker.style.transition = 'transform .12s ease';
+    picker.style.transform  = 'scale(1.08)';
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => { elements.pick.style.transform = 'scale(1)'; });
+      requestAnimationFrame(() => { picker.style.transform = 'scale(1)'; });
     });
   }
 
@@ -110,14 +119,13 @@ export function initManualPicker(elements, state, offCtx) {
     setActiveSlot(0);
     const { ox, oy } = clientToOff(x, y);
     const rgb = sampleAverageAt(offCtx, ox, oy, state.mpm.sampleRadiusPx);
-    elements.pick.style.background = `rgb(${rgb.join(',')})`;
+    picker.style.background = `rgb(${rgb.join(',')})`;
     writeSlot(0, rgb);
   }
   function exitMPM() {
     state.mode = 'DEFAULT';
     elements.mpmDone.style.display = 'none';
-    elements.pick.style.transition = 'transform .18s ease';
-    elements.pick.style.transform = 'scale(0)';
+    hidePicker();
     [...elements.swatches.children].forEach(el => el.classList.remove('active'));
   }
   elements.mpmDone.addEventListener('click', exitMPM);
@@ -138,7 +146,7 @@ export function initManualPicker(elements, state, offCtx) {
     pressing = true;
 
     movePicker(pressStartX, pressStartY);
-    elements.pick.style.transform = 'scale(0)';
+    picker.style.transform = 'scale(0)';
     showPickerAt(pressStartX, pressStartY);
 
     pressTimer = setTimeout(() => {
@@ -156,7 +164,7 @@ export function initManualPicker(elements, state, offCtx) {
 
     if (pressing && (dx * dx + dy * dy) > state.mpm.moveTolPx * state.mpm.moveTolPx) {
       clearPress();
-      elements.pick.style.transform = 'scale(0)';
+      hidePicker();
       return;
     }
 
@@ -168,7 +176,7 @@ export function initManualPicker(elements, state, offCtx) {
           rafId = 0;
           const { ox, oy } = clientToOff(touch.clientX, touch.clientY);
           const rgb = sampleAverageAt(offCtx, ox, oy, state.mpm.sampleRadiusPx);
-          elements.pick.style.background = `rgb(${rgb.join(',')})`;
+          picker.style.background = `rgb(${rgb.join(',')})`;
           writeSlot(state.mpmActiveIndex, rgb);
         });
       }
@@ -176,18 +184,19 @@ export function initManualPicker(elements, state, offCtx) {
   }
 
   function onPointerUp() {
-    if (pressing && !dragging) {
-      elements.pick.style.transform = 'scale(0)';
-    }
+    if (pressing && !dragging) hidePicker();
     clearPress();
   }
 
+  // Bind
   elements.cc.style.touchAction = 'none';
-  elements.cc.addEventListener('touchstart', onPointerDown, { passive: false });
-  elements.cc.addEventListener('touchmove', onPointerMove, { passive: false });
-  elements.cc.addEventListener('touchend', onPointerUp, { passive: false });
-  elements.cc.addEventListener('touchcancel', onPointerUp, { passive: false });
+  elements.cc.addEventListener('touchstart',  onPointerDown, { passive: false });
+  elements.cc.addEventListener('touchmove',   onPointerMove, { passive: false });
+  elements.cc.addEventListener('touchend',    onPointerUp,   { passive: false });
+  elements.cc.addEventListener('touchcancel', onPointerUp,   { passive: false });
+
+  // Optional mouse support
   elements.cc.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') onPointerDown(e); }, { passive: false });
   elements.cc.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') onPointerMove(e); }, { passive: false });
-  elements.cc.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse') onPointerUp(e); }, { passive: false });
+  elements.cc.addEventListener('pointerup',   (e) => { if (e.pointerType === 'mouse') onPointerUp(e);   }, { passive: false });
 }
