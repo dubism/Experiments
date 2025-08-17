@@ -7,14 +7,20 @@ import { getSource, setUiZoom, setPhotoZoom } from '../core/camera.js';
 // K CONTROL CONFIG (edit)
 // -----------------------
 const K_CFG = {
-  MIN: 1,
-  STEP: 1,                // discrete detents
-  DRAG_PX_PER_STEP: 40,   // pixels of vertical drag per detent
-  WHEEL_PX_PER_STEP: 100, // wheel delta per detent
-  INVERT: true,           // up/scroll-up increases K
+  MIN: 1,                  // slider minimum (also pushed to DOM)
+  STEP: 1,                 // K increments per detent
+  DRAG_PX_PER_STEP: 24,    // pixels of drag per 1 K step (↑ = slower) [snappier]
+  WHEEL_PX_PER_STEP: 80,   // wheel delta per 1 K step (↑ = slower)
+  INVERT: true,            // true: up/scroll-up increases K
   ENABLE_DRAG: true,
   ENABLE_WHEEL: true
 };
+
+// Long-press + gesture tolerances
+const LP_MS = 450;         // long-press hold time
+const LP_SLOP = 20;        // px allowed drift during long-press before cancel
+const MOVE_TOL = 4;        // px to decide "we're moving" for drag mode
+const VERTICAL_RATIO = 1;  // require |dy| > 1*|dx| to enter vertical drag
 
 let ccOpen = false;
 let pressLock = false;
@@ -68,6 +74,7 @@ export function initControls(elements, state, callbacks) {
     ccWrap.classList.remove('open');
     ccWrap.style.display = 'none';
   };
+
   on(cc, 'pointerdown', e => e.stopPropagation(), { capture: true });
   on(cc, 'click', e => e.stopPropagation(), { capture: true });
   on(document, 'pointerdown', (e) => {
@@ -76,6 +83,7 @@ export function initControls(elements, state, callbacks) {
   }, { capture: true });
   on(document, 'keydown', (e) => { if (e.key === 'Escape' && ccOpen) closeCC(); });
 
+  // Prevent selection/context menu while CC is open or during gestures
   on(document, 'selectstart', (e) => { if (pressLock) e.preventDefault(); }, { capture: true });
   on(document, 'selectionchange', () => { if (pressLock) try { window.getSelection()?.removeAllRanges(); } catch {} });
   on(document, 'contextmenu', (e) => { if (ccOpen || pressLock) e.preventDefault(); }, { capture: true });
@@ -95,7 +103,7 @@ export function initControls(elements, state, callbacks) {
       state.K = kk;
       kRange.value = String(kk);
       kVal.textContent = String(kk);
-      // Immediate signal; actual palette recompute is independently throttled elsewhere
+      // Immediate signal; palette recompute cadence is separately throttled in app.js
       onKChange(kk, true);
     }
   };
@@ -103,39 +111,58 @@ export function initControls(elements, state, callbacks) {
   // Slider thumb drag -> direct detent updates (no time element)
   on(kRange, 'input', () => commitK(+kRange.value));
 
-  // Palette vertical drag -> pixel-accumulated detents (pure movement)
-  let lpTimer = 0, movedTooFar = false, longPressed = false;
-  const LP_MS = 450, MOVE_TOL = 10;
+  // Palette vertical drag & long-press (decoupled from ENABLE_DRAG)
+  let lpTimer = 0, lpCanceled = false;
 
   on(paletteClickable, 'pointerdown', (e) => {
-    if (!K_CFG.ENABLE_DRAG) return;
     if (ccOpen || (e.pointerType === 'mouse' && e.button !== 0)) return;
 
-    movedTooFar = false; longPressed = false;
-    const startX = e.clientX, startY = e.clientY;
-    let lastY = startY;
-    let kDrag = false, kAccum = 0;
+    const dragEnabled = !!K_CFG.ENABLE_DRAG; // long-press ignores this; drag obeys it
+    let movedTooFarForLP = false;
+    let kDrag = false;
+    let kAccum = 0;
 
-    paletteClickable.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let lastY = startY;
+
+    try { paletteClickable.setPointerCapture(e.pointerId); } catch {}
     lockPressSelection();
     lockScroll();
 
+    // Start long-press ALWAYS; only canceled by true movement beyond LP_SLOP or entering drag
+    lpCanceled = false;
     lpTimer = setTimeout(() => {
-      if (movedTooFar || kDrag) return;
-      longPressed = true;
-      try { paletteClickable.releasePointerCapture(e.pointerId); } catch {}
-      openCC();
+      if (!lpCanceled && !kDrag) {
+        try { paletteClickable.releasePointerCapture(e.pointerId); } catch {}
+        openCC();
+      }
     }, LP_MS);
 
     const move = (ev) => {
-      const dx = ev.clientX - startX, dy = ev.clientY - startY;
-      if (!kDrag && (Math.abs(dx) > MOVE_TOL || Math.abs(dy) > MOVE_TOL)) {
-        movedTooFar = true; clearTimeout(lpTimer);
-        if (Math.abs(dy) > Math.abs(dx) * 0.7) kDrag = true;
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+
+      // Cancel long-press only after generous slop (robust to micro-jitter)
+      if (!movedTooFarForLP && (Math.abs(dx) > LP_SLOP || Math.abs(dy) > LP_SLOP)) {
+        movedTooFarForLP = true;
+        lpCanceled = true;
+        clearTimeout(lpTimer);
       }
+
+      // Enter vertical K-drag only if allowed, motion is vertical enough, and exceeds small tol
+      if (!kDrag && dragEnabled) {
+        if (Math.abs(dy) > Math.abs(dx) * VERTICAL_RATIO && Math.abs(dy) > MOVE_TOL) {
+          kDrag = true;
+          // If we just transitioned into drag, ensure LP is canceled
+          if (!lpCanceled) { lpCanceled = true; clearTimeout(lpTimer); }
+        }
+      }
+
+      // While in K-drag, step purely by movement detents (no timing)
       if (kDrag) {
         const deltaY = ev.clientY - lastY;                 // up = negative
-        const signed = K_CFG.INVERT ? (-deltaY) : deltaY;  // up increases if INVERT
+        const signed = K_CFG.INVERT ? (-deltaY) : deltaY;  // make up increase if INVERT=true
         kAccum += signed;
 
         const stepPx = K_CFG.DRAG_PX_PER_STEP;
@@ -146,6 +173,7 @@ export function initControls(elements, state, callbacks) {
 
         if (ev.cancelable) ev.preventDefault();
       }
+
       lastY = ev.clientY;
     };
 
@@ -153,9 +181,19 @@ export function initControls(elements, state, callbacks) {
       try { paletteClickable.releasePointerCapture(e.pointerId); } catch {}
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', finish);
-      clearTimeout(lpTimer); unlockScroll(); unlockPressSelection();
-      if (!longPressed && !kDrag && !movedTooFar) {
-        onAlgoChange((ev.clientX - paletteClickable.getBoundingClientRect().left) < (paletteClickable.clientWidth / 2) ? -1 : 1);
+      clearTimeout(lpTimer);
+      unlockScroll();
+      unlockPressSelection();
+
+      // Tap action (no LP, no drag, minimal movement) -> cycle algo by side
+      const endRect = paletteClickable.getBoundingClientRect();
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      const tinyMove = Math.abs(dx) <= MOVE_TOL && Math.abs(dy) <= MOVE_TOL;
+
+      if (!ccOpen && !kDrag && tinyMove) {
+        const leftHalf = (ev.clientX - endRect.left) < (paletteClickable.clientWidth / 2);
+        onAlgoChange(leftHalf ? -1 : 1);
       }
     };
 
@@ -187,7 +225,7 @@ export function initControls(elements, state, callbacks) {
   // Size & Throttle & UI
   // ======================
   on(sizeRange, 'input', () => onSizeChange(+sizeRange.value));
-  on(throttleLog, 'input', () => onThrottleChange(+throttleLog.value)); // palette refresh cadence is independent
+  on(throttleLog, 'input', () => onThrottleChange(+throttleLog.value)); // independent palette refresh cadence
   on(rectChk, 'change', onDisplayChange);
   on(gradChk, 'change', onDisplayChange);
 
