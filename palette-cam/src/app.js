@@ -7,10 +7,9 @@ import { medianCutKmax } from './algos/mediancut.js';
 import { initCamera, startCamera, getSource, getVideoElement, getPhotoBitmap, computeSquareCrop, currentPhotoSrcRect, drawPhotoPreview } from './core/camera.js';
 import { initControls } from './ui/controls.js';
 import { initComposite } from './features/composite.js';
-import { initManualPicker } from './features/manualPicker.js'; // <-- [ADD]
+import { initManualPicker } from './features/manualPicker.js';
 
 // --- Element Querying ---
-// Find all necessary DOM elements once and store them in a central object.
 const elements = {
   video: $('#video'), frozenCanvas: $('#frozenCanvas'), status: $('#status'),
   fps: $('#fps'), res: $('#res'), swatches: $('#swatches'), gradient: $('#gradient'),
@@ -131,7 +130,6 @@ function samplePixels(imgData, stride) {
 function tick(now) {
   requestAnimationFrame(tick);
 
-  // FPS
   if (now - lastT >= 500) {
     fps = Math.round((frameCounter * 1000) / (now - lastT));
     elements.fps.textContent = String(fps);
@@ -140,7 +138,6 @@ function tick(now) {
   }
   frameCounter++;
 
-  // Always prep the offscreen canvas and draw the current source
   elements.offCanvas.width = state.procWidth;
   elements.offCanvas.height = state.procWidth;
 
@@ -158,7 +155,6 @@ function tick(now) {
     offCtx.clearRect(0, 0, state.procWidth, state.procWidth);
   }
 
-  // Throttle ONLY the expensive recompute
   if (--skipCounter <= 0) {
     skipCounter = state.throttleN;
 
@@ -172,7 +168,6 @@ function tick(now) {
     }
   }
 
-  // Always render with the latest available palette and the current K (instant UI)
   if (state.lastPaletteKmax?.length) {
     renderPalette(state.lastPaletteKmax.slice(0, Math.min(state.K, state.lastPaletteKmax.length)));
   }
@@ -183,7 +178,6 @@ function init() {
   document.addEventListener('pointerdown', primeOnce, { once: true });
   window.addEventListener('error', e => toast(`Script error: ${e.message || 'unknown'}`), { once: true });
 
-  // Render algorithm descriptions
   const brief = $('#algoBrief');
   brief.innerHTML = ALGOS.map(a => `<div class="a" data-a="${a}">${ALGO_COPY[a]}</div>`).join('');
   const highlightAlgoDesc = () => $$('#algoBrief .a').forEach(n => n.classList.toggle('active', n.dataset.a === state.algo));
@@ -225,10 +219,8 @@ function init() {
     },
   });
 
-  // Manual Picker wiring
-  initManualPicker(elements, state, offCtx); // <-- [ADD]
+  initManualPicker(elements, state, offCtx);
 
-  // Set initial UI values
   elements.kVal.textContent = String(state.K);
   elements.sizeVal.textContent = `${state.procWidth} px`;
   state.throttleN = sliderToN(+elements.throttleLog.value);
@@ -241,5 +233,4 @@ function init() {
   requestAnimationFrame(tick);
 }
 
-// Start the application
 init();
