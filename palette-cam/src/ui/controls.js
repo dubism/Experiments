@@ -1,4 +1,3 @@
-// src/ui/controls.js
 import { on, clamp } from './dom.js';
 import { play } from '../sound/sfx.js';
 import { getSource, setUiZoom, setPhotoZoom } from '../core/camera.js';
@@ -18,35 +17,31 @@ const K_CFG = {
 
 // Long-press + gesture tolerances
 const LP_MS = 450;           // long-press hold time
-const LP_SLOP = 22;          // px allowed jitter during long-press before cancel
+the LP_SLOP = 22;            // px allowed jitter during long-press before cancel
 const MOVE_TOL = 4;          // px to consider "moving"
 const VERTICAL_RATIO = 0.75; // |dy| > 0.75|dx| to enter vertical drag
 
 let ccOpen = false;
 let pressLock = false;
 
-// Preserve/restore original inline styles while we suppress iOS selection/callout
+// Preserve/restore inline styles while suppressing iOS selection/callout
 let _prevBodyUserSelect = '';
 let _prevBodyCallout = '';
 let _prevBodyTouchAction = '';
 
-// --- Private Helpers ---
 function lockPressSelection() {
   if (pressLock) return;
   pressLock = true;
-  // Save
   const b = document.body;
   _prevBodyUserSelect = b.style.userSelect;
   _prevBodyCallout = b.style.webkitTouchCallout;
   _prevBodyTouchAction = b.style.touchAction;
-  // Suppress iOS text selector/callout + gestures during press
   b.style.userSelect = 'none';
   b.style.webkitUserSelect = 'none';
   b.style.webkitTouchCallout = 'none';
   b.style.touchAction = 'none';
   document.body.classList.add('pressLock');
 }
-
 function unlockPressSelection() {
   if (!pressLock) return;
   pressLock = false;
@@ -63,18 +58,15 @@ function noScroll(e) {
   if (ccOpen) return;            // allow scrolling inside CC
   if (e.cancelable) e.preventDefault();
 }
-
 function lockScroll() {
   document.addEventListener('touchmove', noScroll, { passive: false, capture: true });
   document.addEventListener('wheel', noScroll, { passive: false, capture: true });
 }
-
 function unlockScroll() {
   document.removeEventListener('touchmove', noScroll, { capture: true });
   document.removeEventListener('wheel', noScroll, { capture: true });
 }
 
-// --- Public (Exported) Functions ---
 export function initControls(elements, state, callbacks) {
   const {
     paletteClickable, kRange, kVal, sizeRange, throttleLog, rectChk, gradChk,
@@ -83,10 +75,9 @@ export function initControls(elements, state, callbacks) {
 
   const { onKChange, onSizeChange, onThrottleChange, onAlgoChange, onDisplayChange } = callbacks;
 
-  // Defensive: prevent browser gesture conflicts on iOS for the palette area
   try { paletteClickable.style.touchAction = 'none'; } catch {}
 
-  // ----- Controls Panel (CC) Logic -----
+  // ----- Controls Panel (CC) -----
   const openCC = () => {
     play('open');
     unlockScroll();
@@ -101,16 +92,13 @@ export function initControls(elements, state, callbacks) {
     ccWrap.classList.remove('open');
     ccWrap.style.display = 'none';
   };
-
   on(cc, 'pointerdown', e => e.stopPropagation(), { capture: true });
   on(cc, 'click', e => e.stopPropagation(), { capture: true });
   on(document, 'pointerdown', (e) => {
-    if (compositeOverlay.classList.contains('open')) return;
+    if (compositeOverlay?.classList.contains('open')) return;
     if (ccOpen && !cc.contains(e.target)) closeCC();
   }, { capture: true });
   on(document, 'keydown', (e) => { if (e.key === 'Escape' && ccOpen) closeCC(); });
-
-  // Prevent selection/context menu while CC is open or during gestures
   on(document, 'selectstart', (e) => { if (pressLock) e.preventDefault(); }, { capture: true });
   on(document, 'selectionchange', () => { if (pressLock) try { window.getSelection()?.removeAllRanges(); } catch {} });
   on(document, 'contextmenu', (e) => { if (ccOpen || pressLock) e.preventDefault(); }, { capture: true });
@@ -138,28 +126,20 @@ export function initControls(elements, state, callbacks) {
   on(paletteClickable, 'pointerdown', (e) => {
     if (ccOpen || (e.pointerType === 'mouse' && e.button !== 0)) return;
 
-    // Optional invisible shield to swallow native behaviors (if provided in DOM)
     if (pressShield) {
       pressShield.style.display = 'block';
       pressShield.style.position = 'fixed';
       pressShield.style.inset = '0';
-      pressShield.style.pointerEvents = 'none'; // visible only to Safari heuristics
+      pressShield.style.pointerEvents = 'none';
     }
 
-    const dragEnabled = !!K_CFG.ENABLE_DRAG; // LP ignores this; drag obeys it
-    let lpTimer = 0;
-    let lpCanceled = false;
-    let sessionEnded = false;
+    const dragEnabled = !!K_CFG.ENABLE_DRAG;
+    let lpTimer = 0, lpCanceled = false, sessionEnded = false;
+    let movedPastLpSlop = false, kDrag = false, kAccum = 0;
 
-    let movedPastLpSlop = false;
-    let kDrag = false;
-    let kAccum = 0;
-
-    const startX = e.clientX;
-    const startY = e.clientY;
+    const startX = e.clientX, startY = e.clientY;
     let lastY = startY;
 
-    // Common cleanup that always runs exactly once
     const cleanup = () => {
       if (sessionEnded) return;
       sessionEnded = true;
@@ -172,35 +152,26 @@ export function initControls(elements, state, callbacks) {
       unlockPressSelection();
       if (pressShield) pressShield.style.display = 'none';
     };
-
-    const endSessionAndOpenCC = () => {
-      cleanup();
-      openCC();
-    };
+    const endSessionAndOpenCC = () => { cleanup(); openCC(); };
 
     try { paletteClickable.setPointerCapture(e.pointerId); } catch {}
     lockPressSelection();
     lockScroll();
 
-    // Start long-press ALWAYS; cancel only on real drift or when drag begins
     lpTimer = setTimeout(() => {
-      if (!lpCanceled && !kDrag) {
-        endSessionAndOpenCC();
-      }
+      if (!lpCanceled && !kDrag) endSessionAndOpenCC();
     }, LP_MS);
 
     const onMove = (ev) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
 
-      // Cancel LP only after generous jitter slop (prevents iOS "selection" heuristics)
       if (!movedPastLpSlop && (Math.abs(dx) > LP_SLOP || Math.abs(dy) > LP_SLOP)) {
         movedPastLpSlop = true;
         lpCanceled = true;
         clearTimeout(lpTimer);
       }
 
-      // Enter vertical K-drag only if allowed and motion is clearly vertical
       if (!kDrag && dragEnabled) {
         if (Math.abs(dy) > Math.abs(dx) * VERTICAL_RATIO && Math.abs(dy) > MOVE_TOL) {
           kDrag = true;
@@ -208,7 +179,6 @@ export function initControls(elements, state, callbacks) {
         }
       }
 
-      // Movement-only detents while dragging
       if (kDrag) {
         const deltaY = ev.clientY - lastY;                 // up = negative
         const signed = K_CFG.INVERT ? (-deltaY) : deltaY;  // up increases if INVERT
@@ -231,7 +201,6 @@ export function initControls(elements, state, callbacks) {
       const dy = ev.clientY - startY;
       const tinyMove = Math.abs(dx) <= MOVE_TOL && Math.abs(dy) <= MOVE_TOL;
 
-      // Tap action (no LP, no drag): cycle algo by side
       if (!ccOpen && !kDrag && tinyMove) {
         const r = paletteClickable.getBoundingClientRect();
         const leftHalf = (ev.clientX - r.left) < (paletteClickable.clientWidth / 2);
@@ -240,10 +209,7 @@ export function initControls(elements, state, callbacks) {
       cleanup();
     };
 
-    const onCancel = () => {
-      // Critical: handle iOS pointercancel so state never gets stuck
-      cleanup();
-    };
+    const onCancel = () => { cleanup(); };
 
     document.addEventListener('pointermove', onMove, { passive: false });
     document.addEventListener('pointerup', onUp, { once: true });
@@ -253,7 +219,6 @@ export function initControls(elements, state, callbacks) {
   // Prevent native scroll on the palette area
   on(paletteClickable, 'wheel', e => e.preventDefault(), { passive: false });
 
-  // Wheel -> detents from accumulated wheel delta (movement proxy)
   if (K_CFG.ENABLE_WHEEL) {
     let wheelAccum = 0;
     const wheelTarget = paletteClickable;
@@ -274,7 +239,7 @@ export function initControls(elements, state, callbacks) {
   // Size & Throttle & UI
   // ======================
   on(sizeRange, 'input', () => onSizeChange(+sizeRange.value));
-  on(throttleLog, 'input', () => onThrottleChange(+throttleLog.value)); // independent cadence
+  on(throttleLog, 'input', () => onThrottleChange(+throttleLog.value));
   on(rectChk, 'change', onDisplayChange);
   on(gradChk, 'change', onDisplayChange);
 
