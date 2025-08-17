@@ -19,16 +19,16 @@
 
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif}
 
   header{position:sticky;top:0;z-index:10;background:linear-gradient(#10131a,#0c0f15);border-bottom:1px solid #1c2537}
-  .wrap{max-width:1100px;margin:0 auto;padding:12px 14px}
+  .wrap{max-width:1240px;margin:0 auto;padding:12px 14px}
   h1{margin:0;font-size:16px;letter-spacing:.3px}
-  main{max-width:1100px;margin:0 auto;padding:14px}
+  main{max-width:1240px;margin:0 auto;padding:14px}
 
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   input[type=search]{
-    flex:1;min-width:220px;background:#0b0f16;border:1px solid #1e293e;border-radius:10px;
+    flex:1;min-width:260px;background:#0b0f16;border:1px solid #1e293e;border-radius:10px;
     padding:.55rem .7rem;color:var(--ink);outline:none;
     transition:border-color .2s, background .2s, box-shadow .25s;
     box-shadow:0 0 0 0 rgba(74,163,255,.0);
@@ -38,7 +38,7 @@
 
   button{
     border:1px solid #25324a;background:#131a26;color:var(--ink);
-    padding:.5rem .7rem;border-radius:10px;cursor:pointer;font-weight:650;letter-spacing:.2px;
+    padding:.5rem .75rem;border-radius:10px;cursor:pointer;font-weight:650;letter-spacing:.2px;
     transition:transform .15s, box-shadow .2s, border-color .2s, background .2s;
     box-shadow:var(--shadow);
   }
@@ -46,82 +46,75 @@
   .status{font-size:12px;color:#9aa3b2}
 
   .seg{display:inline-flex;border:1px solid #27324a;border-radius:10px;overflow:hidden}
-  .seg button{border:0;border-right:1px solid #27324a;background:#101622;padding:.45rem .65rem}
+  .seg button{border:0;border-right:1px solid #27324a;background:#101622;padding:.45rem .7rem}
   .seg button:last-child{border-right:0}
   .seg button[aria-pressed="true"]{background:#162133}
   .seg button[aria-pressed="true"] span{opacity:1}
   .seg button span{opacity:.85}
 
-  .grp{margin-top:14px}
-  .grp h2{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa3b2;margin:6px 2px 8px;letter-spacing:.25px}
-  .grp h2 .folder-ic{opacity:.85}
+  .grp{margin-top:16px}
+  .grp h2{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa3b2;margin:6px 2px 10px;letter-spacing:.25px}
 
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+  /* Desktop-friendly grid */
+  .cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(360px,1fr));
+    gap:14px;
+  }
 
+  /* Card uses two-flex-rows to avoid any overlap */
   .card{
-    display:grid;text-decoration:none;color:inherit;
+    position:relative; overflow:hidden; text-decoration:none; color:inherit;
     background:linear-gradient(180deg,var(--card),var(--card2));
-    border:1px solid var(--line);border-radius:var(--radius);
-    padding:12px 14px;
-    box-shadow:var(--shadow);
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; box-shadow:var(--shadow);
     transition:transform .18s, box-shadow .22s, border-color .2s, background .25s;
-    position:relative;overflow:hidden;
-
-    grid-template-columns: 28px 1fr auto;
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "icon title open"
-      "meta meta actions";
-    column-gap:10px; row-gap:6px;
+    display:flex; flex-direction:column; gap:10px; min-width:0;
   }
   .card.sub{background:linear-gradient(180deg,var(--cardSub),var(--card2Sub));border-color:#22314a}
   .card:before{
-    content:"";position:absolute;inset:-1px;border-radius:var(--radius);
-    background:radial-gradient(90px 60px at 0% 0%, rgba(74,163,255,.08), transparent 60%),
-               radial-gradient(120px 80px at 100% 0%, rgba(39,255,136,.05), transparent 60%);
+    content:""; position:absolute; inset:-1px; border-radius:var(--radius);
+    background:radial-gradient(120px 80px at 0% 0%, rgba(74,163,255,.08), transparent 60%),
+               radial-gradient(160px 100px at 100% 0%, rgba(39,255,136,.05), transparent 60%);
     pointer-events:none;
   }
   .card:hover,.card:focus-visible{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#2a3755;outline:none}
 
-  .ic{grid-area:icon;width:28px;height:28px;display:grid;place-items:center;background:#0c1119;border:1px solid #1f2a42;border-radius:8px}
-  .titleWrap{grid-area:title;min-width:0;display:flex;flex-direction:column;gap:2px}
-  .name{font-weight:750;letter-spacing:.2px;line-height:1.2;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .path{font-size:11px;color:#97a1b1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top{display:flex;align-items:center;gap:12px;min-width:0}
+  .ic{flex:0 0 32px; width:32px; height:32px; display:grid; place-items:center; background:#0c1119; border:1px solid #1f2a42; border-radius:10px}
+  .titleWrap{min-width:0; display:flex; flex:1 1 auto; flex-direction:column; gap:2px}
+  .name{font-weight:750; letter-spacing:.2px; line-height:1.2; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .path{font-size:11px; color:#97a1b1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .openVis{flex:0 0 auto; font-size:12px; color:#cfd5df; opacity:.9; display:inline-flex; gap:6px; align-items:center; pointer-events:none}
 
-  .openVis{grid-area:open;align-self:start;justify-self:end;font-size:12px;color:#cfd5df;opacity:.9;display:inline-flex;gap:6px;align-items:center;pointer-events:none}
-  .openVis svg{opacity:.9}
-
-  .meta{grid-area:meta;display:flex;align-items:center;gap:10px;min-width:0}
-  .actions{grid-area:actions;display:flex;align-items:center;gap:8px;justify-self:end}
-
-  .ago{font-size:11px;font-weight:700;letter-spacing:.3px;display:inline-flex;align-items:center;gap:6px}
+  .bottom{display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0}
+  .meta{display:flex; align-items:center; gap:10px; min-width:0; overflow:hidden}
+  .ago{font-size:11px; font-weight:700; letter-spacing:.3px; display:inline-flex; align-items:center; gap:6px; flex:0 0 auto}
   .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.95}
   .ago.t0{color:var(--t0)} .ago.t1{color:var(--t1)} .ago.t2{color:var(--t2)}
   .ago.t3{color:var(--t3)} .ago.t4{color:var(--t4)} .ago.t5{color:var(--t5)}
   .ago.t6{color:var(--t6)} .ago.t7{color:var(--t7)} .ago.t8{color:var(--t8)} .ago.t9{color:var(--t9)}
+  .exact{font-size:11px;color:#cfd5df;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-  .exact{font-size:11px;color:#cfd5df;opacity:.85;white-space:nowrap}
-
+  .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
   .copyBtn{
     border:1px dashed #2a3755;background:#101622;color:#d9e1ee;
-    padding:.35rem .55rem;border-radius:9px;font-size:11px;letter-spacing:.2px;
-    display:inline-flex;align-items:center;gap:6px;box-shadow:none;
+    padding:.38rem .6rem;border-radius:9px;font-size:11px;letter-spacing:.2px;
+    display:inline-flex;align-items:center;gap:6px;box-shadow:none;flex:0 0 auto;
   }
   .copyBtn:hover{background:#12203a;border-color:#35507d}
   .copyBtn svg{opacity:.9}
 
-  footer{color:#9aa3b2;text-align:center;padding:16px;border-top:1px solid #161b25}
+  footer{color:#9aa3b2;text-align:center;padding:18px;border-top:1px solid #161b25}
 
+  /* Tablet & below: denser grid */
+  @media (max-width:900px){
+    .cards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  }
+  /* Phone */
   @media (max-width:480px){
-    .card{
-      grid-template-columns:28px 1fr auto;
-      grid-template-rows:auto auto auto;
-      grid-template-areas:
-        "icon title open"
-        "meta  meta  meta"
-        "actions actions actions";
-    }
-    .actions{justify-self:start}
+    .cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+    .openVis{display:none}
   }
   @media (prefers-reduced-motion: reduce){*{transition:none !important}}
 </style>
@@ -231,85 +224,7 @@ function timeAgoClassAndText(d){
   return {cls:'t9', text: days < 365 ? `${days}d ago` : `${Math.floor(days/365)}y ago`};
 }
 
-function createCard(it) {
-  const a = document.createElement('a');
-  a.className = 'card';
-  if (it.depth === 2) a.classList.add('sub');
-  a.href = it.href;
-  a.dataset.path = it.path;
-
-  const ic = document.createElement('div');
-  ic.className = 'ic';
-  ic.innerHTML = fileIcon();
-
-  const titleWrap = document.createElement('div');
-  titleWrap.className = 'titleWrap';
-  titleWrap.innerHTML = `
-    <div class="name">${prettyName(it.name)}</div>
-    <div class="path">${it.path}</div>
-  `;
-
-  const open = document.createElement('div');
-  open.className = 'openVis';
-  open.innerHTML = `Open ${arrowIcon()}`;
-
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-
-  const when = document.createElement('span');
-  when.className = 'ago';
-  when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
-
-  if (it.updatedAt) {
-    const d = new Date(it.updatedAt);
-    const ag = timeAgoClassAndText(d);
-    when.classList.add(ag.cls);
-    when.querySelector('.t').textContent = ag.text;
-    when.title = `Last updated: ${isoLocal(d)}`;
-  } else {
-    when.classList.add('t9');
-  }
-
-  const exact = document.createElement('span');
-  exact.className = 'exact';
-  if (it.updatedAt) {
-      exact.textContent = isoLocal(new Date(it.updatedAt));
-  }
-
-  meta.append(when);
-  if (sortMode === 'time') {
-      meta.append(exact);
-  }
-
-  const actions = document.createElement('div');
-  actions.className = 'actions';
-
-  const copyBtn = document.createElement('button');
-  copyBtn.className = 'copyBtn';
-  copyBtn.type = 'button';
-  copyBtn.innerHTML = `
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-      <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-    </svg>
-    Copy HTML`;
-  copyBtn.addEventListener('click', (ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    copyFile(it.path, copyBtn);
-  });
-
-  const replaceBtn = document.createElement('button');
-  replaceBtn.className = 'btn btn-replace js-replace-btn';
-  replaceBtn.type = 'button';
-  replaceBtn.textContent = 'Replace';
-  
-  actions.append(copyBtn, replaceBtn);
-
-  a.append(ic, titleWrap, open, meta, actions);
-  return a;
-}
-
+/* -------- Rendering (desktop-safe, no overlap) -------- */
 function render(items){
   const q = qEl.value.trim().toLowerCase();
   let list = !q ? items : items.filter(it =>
@@ -332,7 +247,10 @@ function render(items){
 
     const grid = document.createElement('div');
     grid.className = 'cards';
-    list.forEach(it => grid.appendChild(createCard(it)));
+
+    list.forEach(it=>{
+      grid.appendChild(buildCard(it));
+    });
 
     section.appendChild(grid);
     listEl.appendChild(section);
@@ -356,235 +274,4 @@ function render(items){
     section.appendChild(h2);
 
     const grid = document.createElement('div');
-    grid.className = 'cards';
-    arr.forEach(it => grid.appendChild(createCard(it)));
-
-    section.appendChild(grid);
-    listEl.appendChild(section);
-  });
-}
-
-function applyFilter(){ render(allItems); }
-
-async function fetchTree(){
-  statusEl.textContent = "Loading…";
-  try{
-    const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/HEAD?recursive=1`);
-    if(!r.ok) throw new Error(`GitHub tree API failed: ${r.status}`);
-    const data = await r.json();
-    allItems = data.tree
-      .filter(n => {
-        if(n.type !== "blob") return false;
-        if(!/\.html?$/i.test(n.path)) return false;
-        if(/(^|\/)index\.html?$/i.test(n.path)) return false;
-        const depth = n.path.split('/').length;
-        return depth <= 2;
-      })
-      .map(n => ({
-        path:n.path,
-        name:n.path.split('/').pop(),
-        href:BASE+n.path,
-        updatedAt:null,
-        depth:n.path.split('/').length
-      }));
-    render(allItems);
-    statusEl.textContent = `Found ${allItems.length} file(s), fetching dates…`;
-    await fetchDates();
-    render(allItems);
-    statusEl.textContent = `Found ${allItems.length} file(s)`;
-  }catch(e){
-    console.error(e);
-    statusEl.textContent = "Error fetching data";
-  }
-}
-
-async function fetchDates(){
-  let i = 0, max = 4;
-  async function worker(){
-    while(i < allItems.length){
-      const idx = i++;
-      try{
-        const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(allItems[idx].path)}&per_page=1`);
-        if(r.ok){
-          const c = await r.json();
-          allItems[idx].updatedAt = c[0]?.commit?.committer?.date || null;
-        }
-      }catch(_){}
-    }
-  }
-  await Promise.all(Array.from({length:max}, worker));
-}
-
-function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
-
-async function copyFile(path, btn){
-  const original = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = 'Copying…';
-
-  try {
-    const pagesUrl = `${BASE}${path}`;
-    const rPages = await fetch(pagesUrl);
-    if (!rPages.ok) throw new Error(`Fetch from GitHub Pages failed with status ${rPages.status}`);
-    
-    const content = await rPages.text();
-    const success = writeToClipboard(content);
-
-    if (success) {
-      btn.innerHTML = 'Copied ✓';
-    } else {
-      throw new Error('Clipboard write command failed');
-    }
-  } catch(err) {
-    console.error('Copy failed:', err);
-    btn.innerHTML = 'Failed ✕';
-  } finally {
-    setTimeout(()=>{ btn.disabled=false; btn.innerHTML = original; }, 1200);
-  }
-}
-
-// *** IOS FIX: A single, robust clipboard function using the document.execCommand fallback. ***
-function writeToClipboard(text) {
-  const ta = document.createElement('textarea');
-  // Use `readonly` to prevent the keyboard from popping up on mobile devices
-  ta.setAttribute('readonly', '');
-  ta.value = text;
-  // Position the textarea off-screen
-  ta.style.position = 'fixed';
-  ta.style.left = '-9999px';
-  ta.style.top = '0px';
-  document.body.appendChild(ta);
-
-  let success = false;
-  try {
-    ta.select();
-    // A robust way to ensure the entire content is selected
-    ta.setSelectionRange(0, text.length);
-    success = document.execCommand('copy');
-  } catch (err) {
-    console.error('Copy to clipboard failed:', err);
-    success = false;
-  } finally {
-    document.body.removeChild(ta);
-  }
-  return success;
-}
-
-async function copySelf(){
-  const btn = copySelfBtn;
-  const original = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = 'Copying…';
-  
-  try {
-    const text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-    const success = writeToClipboard(text); // Use the same robust function
-    if (success) {
-      btn.innerHTML = 'Copied ✓';
-    } else {
-      throw new Error('Clipboard write failed for self copy');
-    }
-  } catch(e) {
-    console.error(e);
-    btn.innerHTML = 'Failed ✕';
-  } finally {
-    setTimeout(()=>{ btn.disabled=false; btn.innerHTML=original; }, 1200);
-  }
-}
-
-fetchTree();
-</script>
-
-<!-- Replace modal and script -->
-<div id="replace-modal" hidden>
-  <div class="rm-backdrop"></div>
-  <div class="rm-dialog" role="dialog" aria-modal="true" aria-labelledby="rm-title">
-    <h3 id="rm-title">Replace file?</h3>
-    <p id="rm-path" class="rm-path"></p>
-    <p class="rm-note">Your clipboard text will overwrite this file in GitHub.</p>
-    <div class="rm-actions">
-      <button class="btn btn-neutral" data-rm="cancel" autofocus>Cancel</button>
-      <button class="btn btn-danger" data-rm="confirm">Replace</button>
-    </div>
-  </div>
-</div>
-
-<style>
-.btn{font:14px/1 system-ui;padding:.55rem .8rem;border:1px solid var(--line,#1a2130);
-  background:var(--card2,#10131a);color:var(--ink,#f5f6f8);border-radius:10px;cursor:pointer}
-.btn + .btn{margin-left:.5rem}
-.btn-danger{border-color:#4a1f22;background:#2a0f12}
-.btn-danger:hover{background:#3a1418}
-.btn-neutral{background:#0f1117}
-.btn[disabled]{opacity:.5;pointer-events:none}
-#replace-modal[hidden]{display:none}
-#replace-modal{position:fixed;inset:0;z-index:9999}
-.rm-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.6)}
-.rm-dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  width:min(92vw,520px);background:var(--card,#0f1117);color:var(--ink,#f5f6f8);
-  border:1px solid var(--line,#1a2130);border-radius:16px;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-.rm-path{font-family:ui-monospace,Menlo,monospace;opacity:.85;word-break:break-all}
-.rm-note{opacity:.75}
-.rm-actions{display:flex;justify-content:flex-end;gap:.5rem;margin-top:12px}
-</style>
-
-<script>
-/* ---- CONFIG: set these 5 values ---- */
-const PROXY_URL  = 'https://experiments-updater-dubism.jxpfrhry6m.workers.dev/'; // <-- EDIT THIS: paste your Worker URL
-const OWNER      = 'dubism';                          // This is correct for your repo
-const REPO       = 'Experiments';                     // This is correct for your repo
-const BRANCH     = 'main';                            // <-- EDIT THIS: if your branch is not 'main'
-const CLIENT_KEY = '23046386';               // <-- EDIT THIS: must match Worker SECRET_KEY
-/* ------------------------------------ */
-
-(function(){
-  const modal = document.getElementById('replace-modal');
-  const pathEl = document.getElementById('rm-path');
-  let pendingPath = null;
-
-  function openModal(path){ pendingPath = path; pathEl.textContent = path; modal.hidden = false;
-    modal.querySelector('[data-rm="cancel"]').focus(); }
-  function closeModal(){ modal.hidden = true; pendingPath = null; }
-
-  async function readClipboard(){
-    try { return await navigator.clipboard.readText(); }
-    catch { return prompt('Paste content here:') || ''; }
-  }
-  async function replaceFile(path, text){
-    const res = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(CLIENT_KEY?{'X-Client-Key':CLIENT_KEY}:{}) },
-      body: JSON.stringify({ owner: OWNER, repo: REPO, branch: BRANCH, path, text })
-    });
-    const t = await res.text();
-    alert((res.ok ? '✅ Replaced ' : '❌ Failed '+res.status+' — ') + path + '\n' + t);
-  }
-
-  // Click handler for per-card Replace buttons
-  document.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.js-replace-btn');
-    if(!btn) return;
-    e.preventDefault();
-    const path = (btn.dataset.path || btn.closest('[data-path]')?.dataset.path || '').trim();
-    if(!path) return alert('No file path for this card.');
-    openModal(path);
-  });
-
-  // Modal: cancel/confirm
-  modal.addEventListener('click', async (e)=>{
-    if (e.target.classList.contains('rm-backdrop') || e.target.dataset.rm === 'cancel') return closeModal();
-    if (e.target.dataset.rm === 'confirm') {
-      const path = pendingPath; closeModal();
-      const text = await readClipboard();
-      if(!text && text !== "") return alert('Clipboard empty or could not be read. Aborted.');
-      await replaceFile(path, text);
-    }
-  });
-
-  // Esc to cancel
-  document.addEventListener('keydown', (e)=>{ if(!modal.hidden && e.key==='Escape') closeModal(); });
-})();
-</script>
-
-</body>
-</html>
+    grid.classN
