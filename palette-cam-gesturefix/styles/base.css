@@ -1,0 +1,31 @@
+:root{
+  --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
+  --card:#0f1117; --card2:#10131a; --line:#1a2130;
+  --ok:#35d07f; --bad:#ff6b6b; --warn:#ffb020;
+}
+*{box-sizing:border-box}
+html,body{height:100%;}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+button,input,select{font:inherit}
+.hidden{display:none !important}
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:6px;margin:8px 0}
+.swatches .swatch{height:40px;border-radius:8px;border:1px solid var(--line)}
+.status{opacity:.8;margin-top:6px}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);padding:10px 12px;background:#222;border:1px solid var(--line);border-radius:10px;display:none;z-index:1000}
+#paletteClickable{position:absolute;inset:0;touch-action:none; /* block UA panning */}
+/* CC */
+.cc{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;align-items:flex-end;justify-content:center;z-index:999}
+.cc .cc-sheet{width:100%;max-width:600px;background:var(--card);border-top-left-radius:16px;border-top-right-radius:16px;border:1px solid var(--line)}
+.cc-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+.cc-body{padding:16px}
+/* Press lock */
+body.pressLock{
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+  touch-action:none;
+}
