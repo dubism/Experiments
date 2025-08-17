@@ -1,0 +1,15 @@
+:root{
+  --bg:#000; --ink:#fff; --muted:#bdbdbd; --line:#222; --zoom:1;
+  --sq:0px; --cbH:0px;
+  --ctaW:clamp(220px,60vw,340px); --ctaH:56px;
+  --ctaB:calc(16px + env(safe-area-inset-bottom));
+}
+*{box-sizing:border-box}
+html,body{height:100dvh}
+html,body{
+  margin:0;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  user-select:none; overflow:hidden; overscroll-behavior:none; touch-action:none;
+  -webkit-text-size-adjust:100%;
+}
+.small,.value{font-variant-numeric:tabular-nums}
+.label{font-weight:600}
