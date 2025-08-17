@@ -1,251 +1,590 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Real HUD: Horizon & Compass</title>
-    <style>
-        :root {
-            --hud-color: #00ffaa;
-            --hud-glow: 0 0 5px var(--hud-color), 0 0 10px var(--hud-color);
-            --background-color: #020408;
-        }
-
-        body, html {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: var(--background-color);
-            color: var(--hud-color);
-            font-family: 'Courier New', Courier, monospace;
-            width: 100%;
-            height: 100%;
-        }
-
-        #camera-view {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: translate(-50%, -50%) scaleX(-1);
-            opacity: 0.4;
-            z-index: 1;
-        }
-
-        #hud-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
-        }
-        
-        #permission-prompt {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            z-index: 10;
-            font-size: 1.5em;
-            cursor: pointer;
-            text-shadow: var(--hud-glow);
-        }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<title>Touch Lab — iOS Gesture Demonstrator</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<style>
+  :root{
+    --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
+    --card:#10141b; --card2:#0e1218; --line:#1b2330; --accent:#6ae3ff;
+    --ok:#7DFFA7; --warn:#FFD36E; --bad:#FF7D7D;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  html,body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;
+    -webkit-text-size-adjust:100%; overscroll-behavior:none;
+  }
+  .app{position:fixed; inset:0; display:grid; grid-template-rows:auto 1fr auto; gap:10px;
+       padding: clamp(10px,1.6vmin,20px); padding-bottom: calc( clamp(10px,1.6vmin,20px) + env(safe-area-inset-bottom) );
+       padding-top: calc( clamp(10px,1.6vmin,20px) + env(safe-area-inset-top) );}
+  header,footer{display:flex; align-items:center; gap:10px; background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.00));
+                border:1px solid var(--line); border-radius:14px; padding:10px 12px;}
+  header h1{margin:0;font-weight:650; letter-spacing:.2px; font-size:15px}
+  header .pill{margin-left:auto; display:flex; gap:6px; flex-wrap:wrap}
+  .pill button,.pill .chip{
+    border:1px solid var(--line); background:var(--card2); color:var(--ink);
+    padding:8px 10px; border-radius:12px; font:inherit; cursor:pointer;
+  }
+  .pill button:active{transform:translateY(1px)}
+  .grid{display:grid; gap:10px; grid-template-columns: 2.2fr 1fr}
+  @media (max-width: 1000px){ .grid{grid-template-columns: 1fr} }
+  .stage{
+    position:relative; min-height:58vh; background:
+      radial-gradient(80% 120% at 120% -10%, rgba(106,227,255,.10), transparent 60%),
+      radial-gradient(80% 120% at -20% 120%, rgba(110,170,255,.06), transparent 60%),
+      var(--card);
+    border:1px solid var(--line); border-radius:16px; overflow:hidden;
+    touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  }
+  .hud{
+    position:absolute; left:10px; top:10px; right:10px; display:flex; gap:8px; flex-wrap:wrap; pointer-events:none;
+  }
+  .hud .meter{
+    pointer-events:auto;
+    background:rgba(12,16,22,.7); backdrop-filter: blur(10px);
+    border:1px solid var(--line); border-radius:12px; padding:8px 10px; min-width:120px;
+  }
+  .meter b{display:block; font-size:11px; color:var(--muted); font-weight:600}
+  .meter .v{font-size:16px; letter-spacing:.2px}
+  .canvas{position:absolute; inset:0}
+  .focusRing{
+    position:absolute; width:120px; height:120px; left:50%; top:50%; transform:translate(-50%,-50%);
+    border-radius:50%; border:1px dashed #2c3b54; pointer-events:none; opacity:.5;
+  }
+  .panel{
+    display:grid; gap:10px;
+    grid-template-columns: repeat( auto-fill, minmax(220px, 1fr) );
+    align-content:start; padding:2px;
+  }
+  .card{
+    background:var(--card2); border:1px solid var(--line); border-radius:14px; padding:12px; min-height:76px;
+    display:grid; gap:6px; align-content:start;
+  }
+  .card h3{margin:0; font-size:13px; letter-spacing:.2px; font-weight:650}
+  .row{display:flex; gap:10px; align-items:center; justify-content:space-between}
+  .badge{
+    font-size:11px; color:var(--muted); background:#0b1016; border:1px solid var(--line); padding:2px 8px; border-radius:999px;
+  }
+  .pulse{animation:pulse .4s ease}
+  @keyframes pulse{0%{transform:scale(1)}35%{transform:scale(1.04)}100%{transform:scale(1)}}
+  .good{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  .log{
+    max-height:28vh; overflow:auto; scrollbar-width:thin;
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px 10px; font-family:ui-monospace,Menlo,monospace;
+  }
+  .log .item{opacity:.95; padding:6px 2px; border-bottom:1px dashed rgba(255,255,255,.06)}
+  .log .item:last-child{border-bottom:0}
+  .muted{color:var(--muted)}
+  footer{justify-content:space-between}
+  .legend{display:flex; gap:8px; flex-wrap:wrap}
+  .legend .chip{font-size:12px}
+  .accent{color:var(--accent)}
+</style>
 </head>
 <body>
+  <div class="app">
+    <header>
+      <h1>Touch Lab — iOS Gesture Demonstrator</h1>
+      <div class="pill">
+        <button id="clearBtn" title="Clear drawing & logs">Clear</button>
+        <button id="helpBtn" title="Show help">Help</button>
+        <span class="chip">Pointers: <b id="ptrCount">0</b></span>
+        <span class="chip">Hz: <b id="fps">–</b></span>
+      </div>
+    </header>
 
-    <video id="camera-view" autoplay playsinline></video>
-    <canvas id="hud-canvas"></canvas>
-    
-    <div id="permission-prompt">
-        TAP SCREEN TO<br>INITIALIZE SENSORS
+    <div class="grid">
+      <section class="stage" id="stage">
+        <canvas class="canvas" id="c"></canvas>
+        <div class="focusRing"></div>
+
+        <div class="hud">
+          <div class="meter"><b>Scale</b><div class="v" id="mScale">1.00×</div></div>
+          <div class="meter"><b>Rotate</b><div class="v" id="mRot">0°</div></div>
+          <div class="meter"><b>Translate</b><div class="v" id="mTrans">0, 0</div></div>
+          <div class="meter"><b>Swipe</b><div class="v" id="mSwipe">–</div></div>
+          <div class="meter"><b>Tap</b><div class="v" id="mTap">–</div></div>
+          <div class="meter"><b>Pressure</b><div class="v" id="mPressure">–</div></div>
+          <div class="meter"><b>Pencil</b><div class="v" id="mPencil">–</div></div>
+        </div>
+      </section>
+
+      <aside class="panel" id="cards">
+        <div class="card" data-key="tap">
+          <div class="row"><h3>Tap / Double / Triple</h3><span class="badge" id="bTap">0</span></div>
+          <div class="muted">Quick touch within 250ms &lt; 10px move. Double within 320ms. Triple within 480ms.</div>
+        </div>
+
+        <div class="card" data-key="long">
+          <div class="row"><h3>Long-Press</h3><span class="badge" id="bLong">0</span></div>
+          <div class="muted">Hold &gt; 500ms within 12px. Cancels on move.</div>
+        </div>
+
+        <div class="card" data-key="pan">
+          <div class="row"><h3>Pan / Drag</h3><span class="badge" id="bPan">0</span></div>
+          <div class="muted">Continuous move. Shows centroid translation for multi-touch.</div>
+        </div>
+
+        <div class="card" data-key="swipe">
+          <div class="row"><h3>Swipe / Flick</h3><span class="badge" id="bSwipe">0</span></div>
+          <div class="muted">Speed &gt; 0.7 px/ms + distance &gt; 60px → left/right/up/down.</div>
+        </div>
+
+        <div class="card" data-key="pinch">
+          <div class="row"><h3>Pinch (Scale)</h3><span class="badge" id="bPinch">0</span></div>
+          <div class="muted">Two-finger distance ratio from start (centroid anchored).</div>
+        </div>
+
+        <div class="card" data-key="rotate">
+          <div class="row"><h3>Rotate</h3><span class="badge" id="bRotate">0</span></div>
+          <div class="muted">Angle change between the first two active touches.</div>
+        </div>
+
+        <div class="card" data-key="twoTap">
+          <div class="row"><h3>Two-Finger Tap</h3><span class="badge" id="bTwoTap">0</span></div>
+          <div class="muted">Two simultaneous short taps (&lt; 250ms), minimal move.</div>
+        </div>
+
+        <div class="card" data-key="threeTap">
+          <div class="row"><h3>Three-Finger Tap</h3><span class="badge" id="bThreeTap">0</span></div>
+          <div class="muted">Three quick taps at once.</div>
+        </div>
+
+        <div class="card" data-key="pressure">
+          <div class="row"><h3>Pressure / Force</h3><span class="badge" id="bPressure">0</span></div>
+          <div class="muted">Uses <code>event.pressure</code> or <code>touch.force</code> if device supports it.</div>
+        </div>
+
+        <div class="card" data-key="pencil">
+          <div class="row"><h3>Apple Pencil</h3><span class="badge" id="bPencil">0</span></div>
+          <div class="muted">Pointer type <code>pen</code>. Shows tilt/azimuth if available.</div>
+        </div>
+
+        <div class="card">
+          <div class="row"><h3>Multi-touch Shape</h3><span class="badge" id="bShape">0</span></div>
+          <div class="muted">Averages radius/rotation of touches to visualize finger contact area.</div>
+        </div>
+      </aside>
     </div>
 
-    <script>
-        // --- DOM Elements ---
-        const video = document.getElementById('camera-view');
-        const canvas = document.getElementById('hud-canvas');
-        const ctx = canvas.getContext('2d');
-        const permissionPrompt = document.getElementById('permission-prompt');
+    <footer>
+      <div class="legend">
+        <span class="chip">Drawn trails = raw pointer paths</span>
+        <span class="chip">Dots = active touches</span>
+        <span class="chip">Centroid = ▲</span>
+        <span class="chip">Pinch vector = ⇔</span>
+        <span class="chip">Rotate = ⟳</span>
+      </div>
+      <div class="muted">Made for iOS Safari. Page zoom disabled to allow custom pinch/rotate.</div>
+    </footer>
 
-        // --- State Variables ---
-        let orientation = { alpha: 0, beta: 0, gamma: 0 }; // alpha: yaw, beta: pitch, gamma: roll
-        let sensorsActive = false;
-        
-        // --- Setup & Permissions ---
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+    <div class="log" id="log" aria-live="polite"></div>
+  </div>
+
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  let W=0,H=0; const resize=()=>{W=stage.clientWidth;H=stage.clientHeight; canvas.width=W*dpr; canvas.height=H*dpr; canvas.style.width=W+'px'; canvas.style.height=H+'px'; ctx.setTransform(dpr,0,0,dpr,0,0);}; resize(); addEventListener('resize',resize);
+
+  const ui = {
+    ptrCount: document.getElementById('ptrCount'),
+    fps: document.getElementById('fps'),
+    mScale: document.getElementById('mScale'),
+    mRot: document.getElementById('mRot'),
+    mTrans: document.getElementById('mTrans'),
+    mSwipe: document.getElementById('mSwipe'),
+    mTap: document.getElementById('mTap'),
+    mPressure: document.getElementById('mPressure'),
+    mPencil: document.getElementById('mPencil'),
+    log: document.getElementById('log'),
+    badges: {
+      tap: document.getElementById('bTap'),
+      long: document.getElementById('bLong'),
+      pan: document.getElementById('bPan'),
+      swipe: document.getElementById('bSwipe'),
+      pinch: document.getElementById('bPinch'),
+      rotate: document.getElementById('bRotate'),
+      twoTap: document.getElementById('bTwoTap'),
+      threeTap: document.getElementById('bThreeTap'),
+      pressure: document.getElementById('bPressure'),
+      pencil: document.getElementById('bPencil'),
+      shape: document.getElementById('bShape'),
+    },
+    clearBtn: document.getElementById('clearBtn'),
+    helpBtn: document.getElementById('helpBtn'),
+    cards: document.querySelectorAll('.card[data-key]')
+  };
+  const pulseCard = key=>{
+    const el = document.querySelector(`.card[data-key="${key}"]`);
+    if(!el) return; el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+  };
+  const bumpBadge = key=>{
+    if(!ui.badges[key]) return; const v= (+ui.badges[key].textContent||0)+1; ui.badges[key].textContent = v; pulseCard(key);
+  };
+  const log = (title, detail) => {
+    const row = document.createElement('div');
+    row.className='item';
+    row.innerHTML = `<span class="accent">${title}</span> <span class="muted">—</span> ${detail}`;
+    ui.log.prepend(row);
+    while (ui.log.childElementCount>80) ui.log.lastChild.remove();
+  };
+
+  const state = {
+    pointers:new Map(), // id -> data
+    // gesture base for first two touches:
+    base:null, // {ids:[a,b], dist, angle, centroid:{x,y}}
+    scale:1, rotation:0, translation:{x:0,y:0},
+    recentTaps:[], // {t,x,y,fingers}
+    lastSingleTap:null, // {t,x,y,count}
+    trails:[], // drawing
+    fps:{last:performance.now(), count:0}
+  };
+
+  const now = () => performance.now();
+
+  const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+  const angle = (a,b)=>Math.atan2(b.y-a.y, b.x-a.x);
+  const centroid = pts=>{
+    const n=pts.length; if(!n) return {x:0,y:0};
+    let x=0,y=0; for(const p of pts){x+=p.x;y+=p.y} return {x:x/n,y:y/n};
+  };
+  const deg = r=> (r*180/Math.PI);
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+
+  const metrics = {
+    TAP_MAX_TIME:250,
+    TAP_MAX_MOVE:10,
+    DOUBLE_MAX_GAP:320,
+    TRIPLE_MAX_GAP:480,
+    LONG_MS:500,
+    SWIPE_MIN_SPEED:0.7, // px/ms
+    SWIPE_MIN_DIST:60
+  };
+
+  function startBaseIfNeeded(){
+    if(state.pointers.size>=2 && !state.base){
+      const ids=[...state.pointers.keys()].slice(0,2);
+      const a=state.pointers.get(ids[0]), b=state.pointers.get(ids[1]);
+      state.base = {
+        ids, dist: Math.max(1, dist(a,b)),
+        angle: angle(a,b),
+        centroid: centroid([a,b]),
+      };
+      bumpBadge('pinch'); // count a pinch session start
+      bumpBadge('rotate');
+    }
+  }
+  function updateTransform(){
+    if(!state.base) { state.scale=1; state.rotation=0; state.translation={x:0,y:0}; return; }
+    const a=state.pointers.get(state.base.ids[0]);
+    const b=state.pointers.get(state.base.ids[1]);
+    if(!a || !b){ state.base=null; state.scale=1; state.rotation=0; state.translation={x:0,y:0}; return; }
+    const cd = centroid([a,b]);
+    const d = Math.max(1, dist(a,b));
+    const ang = angle(a,b);
+    state.scale = d/state.base.dist;
+    let dAng = deg(ang - state.base.angle);
+    // normalize to [-180,180]
+    dAng = ((dAng+540)%360)-180;
+    state.rotation = dAng;
+    state.translation = { x: cd.x - state.base.centroid.x, y: cd.y - state.base.centroid.y };
+  }
+
+  function addTrailPoint(p){
+    const last = state.trails[state.trails.length-1];
+    if(!last || last.id!==p.id) state.trails.push({id:p.id, pts:[{x:p.x,y:p.y}]});
+    else last.pts.push({x:p.x,y:p.y});
+    if(state.trails.length>32) state.trails.shift();
+  }
+
+  function pressureOf(evt, id){
+    if(evt.type.startsWith('pointer')){
+      return clamp(evt.pressure ?? 0, 0, 1);
+    }
+    const t = (evt.touches && id!=null)
+      ? [...evt.changedTouches, ...evt.touches].find(x=>x.identifier===id)
+      : (evt.changedTouches && evt.changedTouches[0]);
+    if(!t) return 0;
+    return clamp(t.force ?? 0, 0, 1);
+  }
+
+  function onDown(id, x, y, pointerType, extras){
+    const t = now();
+    const data = {
+      id, x, y, sx:x, sy:y, t0:t, tlast:t,
+      pointerType, pressure: extras.pressure || 0,
+      path:[{x,y,t}],
+      longTimer: null, longFired:false,
+      moved:false
+    };
+    // long press
+    data.longTimer = setTimeout(()=>{
+      if(!data.moved){ data.longFired=true; bumpBadge('long'); log('Long-press','500ms hold'); ui.mTap.textContent='Long-press'; pulseCard('long'); }
+    }, metrics.LONG_MS);
+
+    state.pointers.set(id, data);
+    ui.ptrCount.textContent = state.pointers.size;
+
+    startBaseIfNeeded();
+    addTrailPoint(data);
+
+    // two/three finger tap staging: record simultaneous down window
+    // handled on up by inspecting cohort sizes/times.
+
+    // Pencil detection
+    if(pointerType==='pen'){ bumpBadge('pencil'); ui.mPencil.textContent='Apple Pencil'; pulseCard('pencil'); }
+  }
+
+  function onMove(id, x, y, pressure){
+    const p = state.pointers.get(id); if(!p) return;
+    const t = now(); p.moved = p.moved || (Math.hypot(x-p.sx, y-p.sy) > metrics.TAP_MAX_MOVE);
+    p.x=x; p.y=y; p.tlast=t; p.pressure = pressure ?? p.pressure;
+    p.path.push({x,y,t}); if(p.path.length>20) p.path.shift();
+
+    // cancel long if moved too far
+    if(p.moved && p.longTimer){ clearTimeout(p.longTimer); p.longTimer=null; }
+
+    bumpBadge('pan');
+    ui.mTrans.textContent = `${state.translation.x|0}, ${state.translation.y|0}`;
+    addTrailPoint(p);
+  }
+
+  function classifySwipe(p){
+    // velocity over last ~100ms
+    const pts = p.path;
+    const t2 = pts[pts.length-1], t1 = [...pts].reverse().find(q=>t2.t - q.t >= 80) || pts[0];
+    const dt = Math.max(1, t2.t - t1.t);
+    const dx = t2.x - t1.x, dy = t2.y - t1.y;
+    const speed = Math.hypot(dx,dy)/dt; // px/ms
+    const total = Math.hypot(p.x - p.sx, p.y - p.sy);
+    if(speed >= metrics.SWIPE_MIN_SPEED && total >= metrics.SWIPE_MIN_DIST){
+      const dir = Math.abs(dx)>Math.abs(dy)
+        ? (dx>0?'right':'left')
+        : (dy>0?'down':'up');
+      bumpBadge('swipe'); ui.mSwipe.textContent = dir; log('Swipe', `${dir} — ${speed.toFixed(2)} px/ms`); pulseCard('swipe');
+      return true;
+    }
+    return false;
+  }
+
+  function onUp(id, x, y){
+    const p = state.pointers.get(id); if(!p) return;
+    const t = now();
+    if(p.longTimer){ clearTimeout(p.longTimer); p.longTimer=null; }
+    const dt = t - p.t0;
+    const moved = Math.hypot(x-p.sx, y-p.sy);
+    let tapped = false;
+    if(!p.longFired && dt <= metrics.TAP_MAX_TIME && moved <= metrics.TAP_MAX_MOVE){
+      tapped = true;
+      // track single/double/triple
+      let count = 1;
+      const last = state.lastSingleTap;
+      if(last && (t-last.t) <= metrics.DOUBLE_MAX_GAP && Math.hypot(x-last.x,y-last.y)<=30){
+        count = (last.count||1)+1;
+      }
+      state.lastSingleTap = {t, x, y, count};
+      const label = count===1?'Tap':count===2?'Double-tap':'Triple-tap';
+      bumpBadge('tap'); ui.mTap.textContent = label; log(label, `(${x|0},${y|0})`); pulseCard('tap');
+    } else {
+      // maybe a swipe
+      classifySwipe(p);
+    }
+
+    // multi-finger tap recognition cohort:
+    const cohort = [...state.pointers.values()].filter(q => q !== p && (Math.abs(q.t0 - p.t0) < 90));
+    const liftedCount = 1 + cohort.filter(q => !q.moved && (Math.abs((q.tlast||t)-t) < 120)).length;
+    if(tapped && liftedCount>=2){
+      if(liftedCount===2){ bumpBadge('twoTap'); log('Two-finger tap', ''); ui.mTap.textContent='Two-finger tap'; pulseCard('twoTap'); }
+      if(liftedCount>=3){ bumpBadge('threeTap'); log('Three-finger tap', ''); ui.mTap.textContent='Three-finger tap'; pulseCard('threeTap'); }
+    }
+
+    // pressure event seen?
+    if(p.pressure && p.pressure>0){
+      bumpBadge('pressure'); ui.mPressure.textContent = p.pressure.toFixed(2); pulseCard('pressure');
+    }
+
+    state.pointers.delete(id);
+    ui.ptrCount.textContent = state.pointers.size;
+    if(state.base && state.base.ids.includes(id)) state.base=null;
+  }
+
+  // Pointer Events (preferred)
+  const hasPointer = 'onpointerdown' in window;
+  if(hasPointer){
+    stage.addEventListener('pointerdown', e=>{
+      if(e.pointerType==='mouse') return;
+      stage.setPointerCapture?.(e.pointerId);
+      e.preventDefault();
+      const rect = stage.getBoundingClientRect();
+      onDown(e.pointerId, e.clientX-rect.left, e.clientY-rect.top, e.pointerType, {pressure:e.pressure});
+      startBaseIfNeeded();
+    }, {passive:false});
+    stage.addEventListener('pointermove', e=>{
+      if(e.pointerType==='mouse') return;
+      const rect = stage.getBoundingClientRect();
+      onMove(e.pointerId, e.clientX-rect.left, e.clientY-rect.top, e.pressure);
+      updateTransform();
+      e.preventDefault();
+    }, {passive:false});
+    ['pointerup','pointercancel','pointerleave'].forEach(type=>{
+      stage.addEventListener(type, e=>{
+        if(e.pointerType==='mouse') return;
+        const rect = stage.getBoundingClientRect();
+        onUp(e.pointerId, e.clientX-rect.left, e.clientY-rect.top);
+        updateTransform();
+        e.preventDefault();
+      }, {passive:false});
+    });
+  }
+  // Touch Events (fallback / older iOS)
+  else{
+    stage.addEventListener('touchstart', e=>{
+      const rect = stage.getBoundingClientRect();
+      for(const t of e.changedTouches){
+        onDown(t.identifier, t.clientX-rect.left, t.clientY-rect.top, 'touch', {pressure: t.force||0});
+      }
+      startBaseIfNeeded();
+      e.preventDefault();
+    }, {passive:false});
+    stage.addEventListener('touchmove', e=>{
+      const rect = stage.getBoundingClientRect();
+      for(const t of e.changedTouches){
+        onMove(t.identifier, t.clientX-rect.left, t.clientY-rect.top, t.force||0);
+      }
+      updateTransform();
+      e.preventDefault();
+    }, {passive:false});
+    stage.addEventListener('touchend', e=>{
+      const rect = stage.getBoundingClientRect();
+      for(const t of e.changedTouches){
+        onUp(t.identifier, t.clientX-rect.left, t.clientY-rect.top);
+      }
+      updateTransform();
+      e.preventDefault();
+    }, {passive:false});
+    stage.addEventListener('touchcancel', e=>{
+      const rect = stage.getBoundingClientRect();
+      for(const t of e.changedTouches){
+        onUp(t.identifier, t.clientX-rect.left, t.clientY-rect.top);
+      }
+      updateTransform();
+      e.preventDefault();
+    }, {passive:false});
+  }
+
+  // Drawing
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    // trails
+    ctx.globalAlpha = .9;
+    for(const t of state.trails){
+      const pts = t.pts; if(pts.length<2) continue;
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.18)';
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    }
+
+    const active = [...state.pointers.values()];
+    if(active.length){
+      // centroid
+      const c = centroid(active);
+      ctx.fillStyle = '#6ae3ff'; ctx.globalAlpha = .9;
+      ctx.beginPath(); ctx.moveTo(c.x, c.y-8); ctx.lineTo(c.x-6, c.y+5); ctx.lineTo(c.x+6, c.y+5); ctx.closePath(); ctx.fill();
+
+      // per touch dots & shape radii
+      let hadShape=false;
+      for(const p of active){
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'rgba(255,255,255,.9)';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI*2); ctx.fill();
+
+        if(p.pressure>0){
+          hadShape = true;
+          const r = 14 + p.pressure*22;
+          ctx.globalAlpha = .25; ctx.strokeStyle = '#7DFFA7'; ctx.lineWidth=2;
+          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.stroke();
         }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+      }
+      if(hadShape){ bumpBadge('shape'); }
 
-        async function init() {
-            // Request Camera
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                video.srcObject = stream;
-            } catch (err) {
-                console.error("Camera access denied:", err);
-                alert("Camera access is required for this experience.");
-            }
+      // pinch / rotate guides
+      if(active.length>=2){
+        const ids=[...state.pointers.keys()].slice(0,2);
+        const a=state.pointers.get(ids[0]), b=state.pointers.get(ids[1]);
+        if(a && b){
+          ctx.globalAlpha = .35; ctx.strokeStyle = '#6ae3ff'; ctx.lineWidth=3;
+          ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
 
-            // Request Motion Sensors
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                // This is the modern way for iOS 13+
-                const permission = await DeviceOrientationEvent.requestPermission();
-                if (permission === 'granted') {
-                    window.addEventListener('deviceorientation', handleOrientation);
-                    sensorsActive = true;
-                } else {
-                    alert("Sensor access is required for the HUD.");
-                    return;
-                }
-            } else {
-                // This is for other browsers and older iOS
-                window.addEventListener('deviceorientation', handleOrientation);
-                sensorsActive = true;
-            }
-            
-            permissionPrompt.style.display = 'none'; // Hide the prompt
-            requestAnimationFrame(drawHUD); // Start the drawing loop
+          // rotation arc
+          ctx.globalAlpha = .25; ctx.strokeStyle = '#FFD36E'; ctx.lineWidth=2;
+          const ang0 = state.base?state.base.angle:0, ang1 = Math.atan2(b.y-a.y, b.x-a.x);
+          const r = 26;
+          ctx.beginPath();
+          ctx.arc((a.x+b.x)/2, (a.y+b.y)/2, r, ang0, ang1, false);
+          ctx.stroke();
         }
+      }
+    }
 
-        permissionPrompt.addEventListener('click', init, { once: true });
-        
-        function handleOrientation(event) {
-            orientation.alpha = event.alpha || 0;
-            orientation.beta = event.beta || 0;
-            orientation.gamma = event.gamma || 0;
-        }
+    // HUD updates
+    ui.mScale.textContent = state.scale.toFixed(2)+'×';
+    ui.mRot.textContent = (state.rotation|0) + '°';
+    ui.mTrans.textContent = `${state.translation.x|0}, ${state.translation.y|0}`;
 
-        // --- HUD Drawing ---
-        function drawHUD() {
-            if (!sensorsActive) return;
+    requestAnimationFrame(draw);
+  }
+  draw();
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Shared styles
-            ctx.strokeStyle = 'var(--hud-color)';
-            ctx.fillStyle = 'var(--hud-color)';
-            ctx.shadowColor = 'var(--hud-color)';
-            ctx.shadowBlur = 10;
-            ctx.lineWidth = 2;
+  // FPS
+  (function tick(){
+    const t=performance.now();
+    state.fps.count++;
+    if(t-state.fps.last>500){
+      ui.fps.textContent = ((state.fps.count*1000)/(t-state.fps.last)).toFixed(0);
+      state.fps.last=t; state.fps.count=0;
+    }
+    requestAnimationFrame(tick);
+  })();
 
-            drawArtificialHorizon();
-            drawCompass();
-            drawDataReadout();
-            drawStaticElements();
-            
-            requestAnimationFrame(drawHUD);
-        }
+  // Buttons
+  ui.clearBtn.addEventListener('click', ()=>{
+    state.trails.length=0; ui.log.innerHTML=''; for(const k in ui.badges){ ui.badges[k].textContent='0'; }
+    log('Cleared','Trails and counters reset');
+  });
+  ui.helpBtn.addEventListener('click', ()=>{
+    const msg = [
+      'Try these on the big pad:',
+      '• Tap, double-tap, triple-tap',
+      '• Long-press (hold 0.5s)',
+      '• Drag / Pan (one finger or two)',
+      '• Swipe / Fling in any direction',
+      '• Pinch to zoom (two fingers)',
+      '• Rotate with two fingers',
+      '• Two-finger tap / Three-finger tap',
+      '• If available: press harder or use Apple Pencil to see pressure/tilt'
+    ].join('\n');
+    alert(msg);
+  });
 
-        function drawArtificialHorizon() {
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-            
-            // Convert degrees to radians for canvas functions
-            const roll = orientation.gamma * (Math.PI / 180);
-            const pitch = orientation.beta; // Pitch value directly affects vertical position
-            
-            // The pitch ladder moves up/down. Max movement capped at 90px.
-            const pitchOffset = Math.max(-90, Math.min(90, pitch)) * 2;
-            
-            ctx.save();
-            // Center the coordinate system and apply rotation and translation
-            ctx.translate(centerX, centerY);
-            ctx.rotate(roll);
-            ctx.translate(0, pitchOffset); // Apply pitch after roll
+  // Prevent page scroll/bounce inside stage
+  document.addEventListener('gesturestart', e=>e.preventDefault?.(), {passive:false});
+  document.addEventListener('gesturechange', e=>e.preventDefault?.(), {passive:false});
+  document.addEventListener('gestureend', e=>e.preventDefault?.(), {passive:false});
 
-            // Draw the horizon line
-            ctx.beginPath();
-            ctx.moveTo(-canvas.width, 0);
-            ctx.lineTo(canvas.width, 0);
-            ctx.stroke();
-            
-            // Draw pitch markers (simple lines for now)
-            ctx.lineWidth = 1;
-            for(let i = -4; i <= 4; i++) {
-                if (i === 0) continue;
-                const y = i * -40; // Pitch lines are 40px apart
-                ctx.beginPath();
-                ctx.moveTo(-40, y);
-                ctx.lineTo(40, y);
-                ctx.stroke();
-            }
-
-            ctx.restore(); // Reset transformations
-        }
-        
-        function drawCompass() {
-            const centerX = canvas.width / 2;
-            const heading = orientation.alpha; // 0-360 degrees
-
-            ctx.save();
-            ctx.font = '16px "Courier New"';
-            ctx.textAlign = 'center';
-            
-            // Draw heading markers
-            for (let i = -4; i <= 4; i++) {
-                const angle = Math.round(heading) + (i * 20);
-                const xPos = centerX + (i * 80);
-                
-                let label;
-                let normalizedAngle = (angle % 360 + 360) % 360;
-                if (Math.abs(normalizedAngle - 0) < 10 || Math.abs(normalizedAngle - 360) < 10) label = 'N';
-                else if (Math.abs(normalizedAngle - 90) < 10) label = 'E';
-                else if (Math.abs(normalizedAngle - 180) < 10) label = 'S';
-                else if (Math.abs(normalizedAngle - 270) < 10) label = 'W';
-                else label = normalizedAngle;
-
-                ctx.fillText(label, xPos, 50);
-            }
-            
-            // Main heading indicator
-            ctx.beginPath();
-            ctx.moveTo(centerX, 60);
-            ctx.lineTo(centerX - 10, 70);
-            ctx.lineTo(centerX + 10, 70);
-            ctx.closePath();
-            ctx.fill();
-            
-            ctx.restore();
-        }
-        
-        function drawDataReadout() {
-            ctx.font = '12px "Courier New"';
-            ctx.textAlign = 'left';
-            const x = 20;
-            const y = canvas.height - 50;
-            ctx.fillText(`HDG: ${orientation.alpha.toFixed(1)}°`, x, y);
-            ctx.fillText(`PCH: ${orientation.beta.toFixed(1)}°`, x, y + 15);
-            ctx.fillText(`RLL: ${orientation.gamma.toFixed(1)}°`, x, y + 30);
-        }
-
-        function drawStaticElements() {
-            // Static aircraft symbol / crosshair
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(centerX - 50, centerY);
-            ctx.lineTo(centerX - 15, centerY);
-            ctx.moveTo(centerX + 15, centerY);
-            ctx.lineTo(centerX + 50, centerY);
-            ctx.moveTo(centerX, centerY - 10);
-            ctx.lineTo(centerX, centerY - 25);
-            ctx.stroke();
-        }
-    </script>
-
+  // Initial log
+  log('Ready', 'Touch the stage and explore gestures');
+})();
+</script>
 </body>
 </html>
