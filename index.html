@@ -55,14 +55,12 @@
   .grp{margin-top:16px}
   .grp h2{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa3b2;margin:6px 2px 10px;letter-spacing:.25px}
 
-  /* Desktop-friendly grid */
   .cards{
     display:grid;
     grid-template-columns:repeat(auto-fill,minmax(360px,1fr));
     gap:14px;
   }
 
-  /* Card uses two-flex-rows to avoid any overlap */
   .card{
     position:relative; overflow:hidden; text-decoration:none; color:inherit;
     background:linear-gradient(180deg,var(--card),var(--card2));
@@ -107,11 +105,9 @@
 
   footer{color:#9aa3b2;text-align:center;padding:18px;border-top:1px solid #161b25}
 
-  /* Tablet & below: denser grid */
   @media (max-width:900px){
     .cards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
   }
-  /* Phone */
   @media (max-width:480px){
     .cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
     .openVis{display:none}
@@ -161,13 +157,8 @@
 <script>
 const USER = "dubism";
 const REPO = "Experiments";
+let   REF  = null; // default branch name once resolved
 const BASE = `https://${USER}.github.io/${REPO}/`;
-
-/* ——— Small runtime guard so failures don’t silently hang ——— */
-window.addEventListener('error', (e)=>{
-  const s = document.getElementById('status');
-  if(s) s.textContent = 'Script error: ' + (e.message || 'See console');
-});
 
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('list');
@@ -175,7 +166,7 @@ const qEl = document.getElementById('q');
 const sortTimeBtn = document.getElementById('sortTime');
 const sortNameBtn = document.getElementById('sortName');
 const copySelfBtn = document.getElementById('copySelf');
-document.getElementById('refresh').onclick = fetchTree;
+document.getElementById('refresh').onclick = fetchIndex;
 qEl.oninput = applyFilter;
 copySelfBtn.onclick = copySelf;
 
@@ -192,7 +183,6 @@ function setSort(mode){
   applyFilter();
 }
 
-function folderOf(path){const i=path.lastIndexOf('/');return i===-1?"":path.slice(0,i);}
 function fileIcon(){return `
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.3" />
@@ -212,7 +202,6 @@ function isoLocal(d){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ` +
          `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
-
 function timeAgoClassAndText(d){
   let secs = Math.max(0,(Date.now()-d.getTime())/1000);
   if(secs < 60)  return {cls:'t0', text:`${Math.floor(secs)}s ago`};
@@ -230,60 +219,21 @@ function timeAgoClassAndText(d){
   return {cls:'t9', text: days < 365 ? `${days}d ago` : `${Math.floor(days/365)}y ago`};
 }
 
-/* -------- Rendering -------- */
-function render(items){
-  const q = qEl.value.trim().toLowerCase();
-  let list = !q ? items : items.filter(it =>
-    it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
-  );
-  listEl.innerHTML = "";
-
-  if(sortMode === 'time'){
-    list.sort((a,b)=>{
-      const ad = a.updatedAt ? new Date(a.updatedAt).getTime() : -Infinity;
-      const bd = b.updatedAt ? new Date(b.updatedAt).getTime() : -Infinity;
-      return bd - ad;
-    });
-
-    const section = document.createElement('section');
-    section.className = 'grp';
-    const h2 = document.createElement('h2');
-    h2.textContent = "All files — Newest → Oldest";
-    section.appendChild(h2);
-
-    const grid = document.createElement('div');
-    grid.className = 'cards';
-    list.forEach(it=> grid.appendChild(buildCard(it)));
-    section.appendChild(grid);
-    listEl.appendChild(section);
-    return;
-  }
-
-  const groups = new Map();
-  list.forEach(it=>{
-    const key = folderOf(it.path);
-    if(!groups.has(key)) groups.set(key,[]);
-    groups.get(key).push(it);
-  });
-
-  [...groups.entries()].sort().forEach(([folder,arr])=>{
-    arr.sort((a,b)=>a.name.localeCompare(b.name));
-
-    const section = document.createElement('section');
-    section.className = 'grp';
-    const h2 = document.createElement('h2');
-    h2.innerHTML = `${folderIcon()} ${folder?`/${folder}`:"/"}`;
-    section.appendChild(h2);
-
-    const grid = document.createElement('div');
-    grid.className = 'cards';
-    arr.forEach(it=> grid.appendChild(buildCard(it)));
-
-    section.appendChild(grid);
-    listEl.appendChild(section);
-  });
+/* ---------- Helpers: timeout + fetch wrappers ---------- */
+function withTimeout(promise, ms, label){
+  return Promise.race([
+    promise,
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error(`${label} timeout after ${ms}ms`)), ms))
+  ]);
 }
+async function gh(url){
+  const r = await withTimeout(fetch(url, {headers:{'Accept':'application/vnd.github+json'}}), 12000, url);
+  if(!r.ok) throw new Error(`${url} HTTP ${r.status}`);
+  return r.json();
+}
+function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
 
+/* ---------- Rendering ---------- */
 function buildCard(it){
   const a = document.createElement('a');
   a.className = 'card';
@@ -361,65 +311,144 @@ function buildCard(it){
   return a;
 }
 
+function render(items){
+  const q = qEl.value.trim().toLowerCase();
+  let list = !q ? items : items.filter(it =>
+    it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
+  );
+  listEl.innerHTML = "";
+
+  if(sortMode === 'time'){
+    list.sort((a,b)=>{
+      const ad = a.updatedAt ? new Date(a.updatedAt).getTime() : -Infinity;
+      const bd = b.updatedAt ? new Date(b.updatedAt).getTime() : -Infinity;
+      return bd - ad;
+    });
+
+    const section = document.createElement('section');
+    section.className = 'grp';
+    const h2 = document.createElement('h2');
+    h2.textContent = "All files — Newest → Oldest";
+    section.appendChild(h2);
+
+    const grid = document.createElement('div');
+    grid.className = 'cards';
+    list.forEach(it=> grid.appendChild(buildCard(it)));
+    section.appendChild(grid);
+    listEl.appendChild(section);
+    return;
+  }
+
+  const groups = new Map();
+  list.forEach(it=>{
+    const key = it.depth === 1 ? "" : it.path.split('/')[0];
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(it);
+  });
+
+  [...groups.entries()].sort().forEach(([folder,arr])=>{
+    arr.sort((a,b)=>a.name.localeCompare(b.name));
+
+    const section = document.createElement('section');
+    section.className = 'grp';
+    const h2 = document.createElement('h2');
+    h2.innerHTML = `${folder ? folderIcon() + ' /' + folder : 'Root'}`;
+    section.appendChild(h2);
+
+    const grid = document.createElement('div');
+    grid.className = 'cards';
+    arr.forEach(it=> grid.appendChild(buildCard(it)));
+
+    section.appendChild(grid);
+    listEl.appendChild(section);
+  });
+}
+
 function applyFilter(){ render(allItems); }
 
-/* -------- Data (robust to default branch / HEAD issues) -------- */
-async function fetchTree(){
+/* ---------- Fetch index using Contents API (root + 1 level) ---------- */
+async function fetchIndex(){
   statusEl.textContent = "Loading…";
   try{
-    // 1) Get default branch
-    const repoResp = await fetch(`https://api.github.com/repos/${USER}/${REPO}`);
-    if(!repoResp.ok) throw new Error(`Repo HTTP ${repoResp.status}`);
-    const repoInfo = await repoResp.json();
-    const branch = repoInfo.default_branch || 'main';
+    // Resolve default branch once
+    if(!REF){
+      const repoInfo = await gh(`https://api.github.com/repos/${USER}/${REPO}`);
+      REF = repoInfo.default_branch || 'main';
+    }
 
-    // 2) Get branch head SHA
-    const brResp = await fetch(`https://api.github.com/repos/${USER}/${REPO}/branches/${encodeURIComponent(branch)}`);
-    if(!brResp.ok) throw new Error(`Branch HTTP ${brResp.status}`);
-    const brInfo = await brResp.json();
-    const sha = brInfo.commit?.sha;
-    if(!sha) throw new Error('No branch SHA');
+    // 1) Root listing
+    const root = await gh(`https://api.github.com/repos/${USER}/${REPO}/contents?ref=${encodeURIComponent(REF)}`);
 
-    // 3) Get tree for that SHA
-    const treeResp = await fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/${sha}?recursive=1`);
-    if(!treeResp.ok) throw new Error(`Tree HTTP ${treeResp.status}`);
-    const data = await treeResp.json();
-
-    allItems = data.tree
-      .filter(n => {
-        if(n.type !== "blob") return false;
-        if(!/\.html?$/i.test(n.path)) return false;
-        if(/(^|\/)index\.html?$/i.test(n.path)) return false;
-        const depth = n.path.split('/').length;
-        return depth <= 2; // root or exactly one folder deep
-      })
-      .map(n => ({
-        path:n.path,
-        name:n.path.split('/').pop(),
-        href:BASE+n.path,
-        updatedAt:null,
-        depth:n.path.split('/').length
+    // Files in root
+    const rootFiles = root
+      .filter(x => x.type === 'file' && /\.html?$/i.test(x.name) && !/^index\.html?$/i.test(x.name))
+      .map(x => ({
+        path: x.name,
+        name: x.name,
+        href: BASE + x.name,
+        updatedAt: null,
+        depth: 1
       }));
+
+    // Top-level folders (ignore dot folders)
+    const topDirs = root.filter(x => x.type === 'dir' && !x.name.startsWith('.'));
+
+    // 2) For each top folder, list its contents (no recursion)
+    const limiter = (arr, limit, fn) => {
+      let i = 0;
+      return Promise.all(Array.from({length:limit}, async ()=> {
+        while(i < arr.length){
+          const idx = i++;
+          await fn(arr[idx]);
+        }
+      }));
+    };
+
+    const subFiles = [];
+    await limiter(topDirs, 4, async dir => {
+      try{
+        const items = await gh(`https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(dir.name)}?ref=${encodeURIComponent(REF)}`);
+        items.forEach(it=>{
+          if(it.type === 'file' && /\.html?$/i.test(it.name) && !/^index\.html?$/i.test(it.name)){
+            const p = `${dir.name}/${it.name}`;
+            subFiles.push({
+              path: p,
+              name: it.name,
+              href: BASE + p,
+              updatedAt: null,
+              depth: 2
+            });
+          }
+        });
+      }catch(e){
+        console.warn('Dir list failed:', dir.name, e);
+      }
+    });
+
+    allItems = [...rootFiles, ...subFiles];
 
     render(allItems);
     statusEl.textContent = `Found ${allItems.length} file(s), fetching dates…`;
-    await fetchDates();
+
+    await fetchDates(); // commit dates via commits?path=
     render(allItems);
     statusEl.textContent = `Found ${allItems.length} file(s)`;
   }catch(e){
     console.error(e);
-    const hint = (e && e.message || '').includes('403') ? ' (rate limited?)' : '';
-    statusEl.textContent = "Error fetching data" + hint;
+    statusEl.textContent = `Error: ${e.message || e}`;
   }
 }
 
+/* ---------- Dates ---------- */
 async function fetchDates(){
   let i = 0, max = 4;
   async function worker(){
     while(i < allItems.length){
       const idx = i++;
       try{
-        const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(allItems[idx].path)}&per_page=1`);
+        const r = await withTimeout(fetch(
+          `https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(allItems[idx].path)}&per_page=1&sha=${encodeURIComponent(REF)}`
+        ), 12000, 'commits');
         if(r.ok){
           const c = await r.json();
           allItems[idx].updatedAt = c[0]?.commit?.committer?.date || null;
@@ -430,17 +459,15 @@ async function fetchDates(){
   await Promise.all(Array.from({length:max}, worker));
 }
 
-/* -------- Copy helpers -------- */
-function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
-
+/* ---------- Copy helpers ---------- */
 async function copyFile(path, btn){
   const original = btn.innerHTML;
   try{
     btn.disabled = true;
     btn.innerHTML = 'Copying…';
 
-    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
-    const resp = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' } });
+    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(REF || 'HEAD')}`;
+    const resp = await withTimeout(fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' } }), 12000, 'contents');
 
     let content = '';
 
@@ -451,13 +478,86 @@ async function copyFile(path, btn){
         const b64 = data.content.replace(/\n/g,'');
         content = atob(b64);
       }else if(data && data.download_url){
-        const r2 = await fetch(data.download_url);
+        const r2 = await withTimeout(fetch(data.download_url), 12000, 'download');
         if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
         content = await r2.text();
       }else{
-        const r3 = await fetch(`${BASE}${path}`);
+        const r3 = await withTimeout(fetch(`${BASE}${path}`), 12000, 'pages');
         if(!r3.ok) throw new Error(`Pages HTTP ${r3.status}`);
         content = await r3.text();
       }
     }else{
-      const r = await fetch(`${BASE}${path}`);
+      const r = await withTimeout(fetch(`${BASE}${path}`), 12000, 'pages');
+      if(!r.ok) throw new Error(`Pages HTTP ${r.status}`);
+      content = await r.text();
+    }
+
+    await writeToClipboard(content);
+    btn.innerHTML = 'Copied ✓';
+  }catch(err){
+    console.error('Copy failed:', err);
+    btn.innerHTML = 'Failed ✕';
+  }finally{
+    setTimeout(()=>{ btn.disabled=false; btn.innerHTML = original; }, 1200);
+  }
+}
+
+async function writeToClipboard(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text);
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position='fixed'; ta.style.left='-9999px';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try{ document.execCommand('copy'); }
+  finally{ document.body.removeChild(ta); }
+}
+
+/* Copy this page (repo source preferred, DOM fallback) */
+async function copySelf(){
+  const btn = copySelfBtn;
+  const original = btn.innerHTML;
+  try{
+    btn.disabled = true;
+    btn.innerHTML = 'Copying…';
+    const SELF_PATH = 'index.html';
+
+    // ensure REF
+    if(!REF){
+      const repoInfo = await gh(`https://api.github.com/repos/${USER}/${REPO}`);
+      REF = repoInfo.default_branch || 'main';
+    }
+
+    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(SELF_PATH)}?ref=${encodeURIComponent(REF)}`;
+    let text = '';
+
+    const r = await withTimeout(fetch(apiUrl, { headers: { 'Accept':'application/vnd.github+json' } }), 12000, 'self');
+    if(r.ok){
+      const data = await r.json();
+      if(data && data.content && data.encoding === 'base64'){
+        text = atob(data.content.replace(/\n/g,''));
+      }else if(data && data.download_url){
+        const r2 = await withTimeout(fetch(data.download_url), 12000, 'download');
+        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
+        text = await r2.text();
+      }
+    }
+    if(!text){ text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML; }
+
+    await writeToClipboard(text);
+    btn.innerHTML = 'Copied ✓';
+  }catch(e){
+    console.error(e);
+    btn.innerHTML = 'Failed ✕';
+  }finally{
+    setTimeout(()=>{ btn.disabled=false; btn.innerHTML=original; }, 1200);
+  }
+}
+
+/* init */
+fetchIndex();
+</script>
+</body>
+</html>
