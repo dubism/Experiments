@@ -17,34 +17,58 @@ const K_CFG = {
 };
 
 // Long-press + gesture tolerances
-const LP_MS = 450;         // long-press hold time
-const LP_SLOP = 22;        // px allowed jitter during long-press before cancel
-const MOVE_TOL = 4;        // px to consider "moving"
+const LP_MS = 450;           // long-press hold time
+const LP_SLOP = 22;          // px allowed jitter during long-press before cancel
+const MOVE_TOL = 4;          // px to consider "moving"
 const VERTICAL_RATIO = 0.75; // |dy| > 0.75|dx| to enter vertical drag
 
 let ccOpen = false;
 let pressLock = false;
 
+// Preserve/restore original inline styles while we suppress iOS selection/callout
+let _prevBodyUserSelect = '';
+let _prevBodyCallout = '';
+let _prevBodyTouchAction = '';
+
 // --- Private Helpers ---
 function lockPressSelection() {
   if (pressLock) return;
   pressLock = true;
+  // Save
+  const b = document.body;
+  _prevBodyUserSelect = b.style.userSelect;
+  _prevBodyCallout = b.style.webkitTouchCallout;
+  _prevBodyTouchAction = b.style.touchAction;
+  // Suppress iOS text selector/callout + gestures during press
+  b.style.userSelect = 'none';
+  b.style.webkitUserSelect = 'none';
+  b.style.webkitTouchCallout = 'none';
+  b.style.touchAction = 'none';
   document.body.classList.add('pressLock');
 }
+
 function unlockPressSelection() {
   if (!pressLock) return;
   pressLock = false;
+  const b = document.body;
+  b.style.userSelect = _prevBodyUserSelect;
+  b.style.webkitUserSelect = '';
+  b.style.webkitTouchCallout = _prevBodyCallout;
+  b.style.touchAction = _prevBodyTouchAction;
   document.body.classList.remove('pressLock');
   try { window.getSelection()?.removeAllRanges(); } catch {}
 }
+
 function noScroll(e) {
-  if (ccOpen) return;              // when CC open, allow native scroll inside it
+  if (ccOpen) return;            // allow scrolling inside CC
   if (e.cancelable) e.preventDefault();
 }
+
 function lockScroll() {
   document.addEventListener('touchmove', noScroll, { passive: false, capture: true });
   document.addEventListener('wheel', noScroll, { passive: false, capture: true });
 }
+
 function unlockScroll() {
   document.removeEventListener('touchmove', noScroll, { capture: true });
   document.removeEventListener('wheel', noScroll, { capture: true });
@@ -59,7 +83,7 @@ export function initControls(elements, state, callbacks) {
 
   const { onKChange, onSizeChange, onThrottleChange, onAlgoChange, onDisplayChange } = callbacks;
 
-  // Defensive: prevent browser gesture conflicts on iOS
+  // Defensive: prevent browser gesture conflicts on iOS for the palette area
   try { paletteClickable.style.touchAction = 'none'; } catch {}
 
   // ----- Controls Panel (CC) Logic -----
@@ -104,21 +128,30 @@ export function initControls(elements, state, callbacks) {
       state.K = kk;
       kRange.value = String(kk);
       kVal.textContent = String(kk);
-      onKChange(kk, true); // UI updates immediately; recompute cadence is throttled elsewhere
+      onKChange(kk, true); // recompute cadence is throttled elsewhere
     }
   };
 
   on(kRange, 'input', () => commitK(+kRange.value));
 
-  // ---- Palette long-press + drag (robust) ----
+  // ---- Palette long-press + drag (robust; no stuck states) ----
   on(paletteClickable, 'pointerdown', (e) => {
     if (ccOpen || (e.pointerType === 'mouse' && e.button !== 0)) return;
+
+    // Optional invisible shield to swallow native behaviors (if provided in DOM)
+    if (pressShield) {
+      pressShield.style.display = 'block';
+      pressShield.style.position = 'fixed';
+      pressShield.style.inset = '0';
+      pressShield.style.pointerEvents = 'none'; // visible only to Safari heuristics
+    }
 
     const dragEnabled = !!K_CFG.ENABLE_DRAG; // LP ignores this; drag obeys it
     let lpTimer = 0;
     let lpCanceled = false;
-    let movedPastLpSlop = false;
+    let sessionEnded = false;
 
+    let movedPastLpSlop = false;
     let kDrag = false;
     let kAccum = 0;
 
@@ -126,15 +159,33 @@ export function initControls(elements, state, callbacks) {
     const startY = e.clientY;
     let lastY = startY;
 
+    // Common cleanup that always runs exactly once
+    const cleanup = () => {
+      if (sessionEnded) return;
+      sessionEnded = true;
+      try { paletteClickable.releasePointerCapture(e.pointerId); } catch {}
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onCancel);
+      clearTimeout(lpTimer);
+      unlockScroll();
+      unlockPressSelection();
+      if (pressShield) pressShield.style.display = 'none';
+    };
+
+    const endSessionAndOpenCC = () => {
+      cleanup();
+      openCC();
+    };
+
     try { paletteClickable.setPointerCapture(e.pointerId); } catch {}
     lockPressSelection();
     lockScroll();
 
-    // Start long-press ALWAYS; cancel only on big enough drift or entering drag
+    // Start long-press ALWAYS; cancel only on real drift or when drag begins
     lpTimer = setTimeout(() => {
       if (!lpCanceled && !kDrag) {
-        try { paletteClickable.releasePointerCapture(e.pointerId); } catch {}
-        openCC();
+        endSessionAndOpenCC();
       }
     }, LP_MS);
 
@@ -142,7 +193,7 @@ export function initControls(elements, state, callbacks) {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
 
-      // Cancel LP only after generous jitter slop
+      // Cancel LP only after generous jitter slop (prevents iOS "selection" heuristics)
       if (!movedPastLpSlop && (Math.abs(dx) > LP_SLOP || Math.abs(dy) > LP_SLOP)) {
         movedPastLpSlop = true;
         lpCanceled = true;
@@ -175,16 +226,6 @@ export function initControls(elements, state, callbacks) {
       lastY = ev.clientY;
     };
 
-    const cleanup = () => {
-      try { paletteClickable.releasePointerCapture(e.pointerId); } catch {}
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onCancel);
-      clearTimeout(lpTimer);
-      unlockScroll();
-      unlockPressSelection();
-    };
-
     const onUp = (ev) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
@@ -196,7 +237,6 @@ export function initControls(elements, state, callbacks) {
         const leftHalf = (ev.clientX - r.left) < (paletteClickable.clientWidth / 2);
         onAlgoChange(leftHalf ? -1 : 1);
       }
-
       cleanup();
     };
 
