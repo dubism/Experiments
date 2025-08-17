@@ -163,6 +163,12 @@ const USER = "dubism";
 const REPO = "Experiments";
 const BASE = `https://${USER}.github.io/${REPO}/`;
 
+/* ——— Small runtime guard so failures don’t silently hang ——— */
+window.addEventListener('error', (e)=>{
+  const s = document.getElementById('status');
+  if(s) s.textContent = 'Script error: ' + (e.message || 'See console');
+});
+
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('list');
 const qEl = document.getElementById('q');
@@ -224,7 +230,7 @@ function timeAgoClassAndText(d){
   return {cls:'t9', text: days < 365 ? `${days}d ago` : `${Math.floor(days/365)}y ago`};
 }
 
-/* -------- Rendering (desktop-safe, no overlap) -------- */
+/* -------- Rendering -------- */
 function render(items){
   const q = qEl.value.trim().toLowerCase();
   let list = !q ? items : items.filter(it =>
@@ -247,11 +253,7 @@ function render(items){
 
     const grid = document.createElement('div');
     grid.className = 'cards';
-
-    list.forEach(it=>{
-      grid.appendChild(buildCard(it));
-    });
-
+    list.forEach(it=> grid.appendChild(buildCard(it)));
     section.appendChild(grid);
     listEl.appendChild(section);
     return;
@@ -274,4 +276,188 @@ function render(items){
     section.appendChild(h2);
 
     const grid = document.createElement('div');
-    grid.classN
+    grid.className = 'cards';
+    arr.forEach(it=> grid.appendChild(buildCard(it)));
+
+    section.appendChild(grid);
+    listEl.appendChild(section);
+  });
+}
+
+function buildCard(it){
+  const a = document.createElement('a');
+  a.className = 'card';
+  if(it.depth === 2) a.classList.add('sub');
+  a.href = it.href;
+
+  const top = document.createElement('div');
+  top.className = 'top';
+
+  const ic = document.createElement('div');
+  ic.className = 'ic';
+  ic.innerHTML = fileIcon();
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'titleWrap';
+  titleWrap.innerHTML = `
+    <div class="name">${prettyName(it.name)}</div>
+    <div class="path">${it.path}</div>
+  `;
+
+  const open = document.createElement('div');
+  open.className = 'openVis';
+  open.innerHTML = `Open ${arrowIcon()}`;
+
+  top.append(ic, titleWrap, open);
+
+  const bottom = document.createElement('div');
+  bottom.className = 'bottom';
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+
+  const when = document.createElement('span');
+  when.className = 'ago';
+  when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
+
+  const exact = document.createElement('span');
+  exact.className = 'exact';
+  exact.textContent = '—';
+
+  if(it.updatedAt){
+    const d = new Date(it.updatedAt);
+    const ag = timeAgoClassAndText(d);
+    when.classList.add(ag.cls);
+    when.querySelector('.t').textContent = ag.text;
+    when.title = `Last updated: ${isoLocal(d)}`;
+    exact.textContent = isoLocal(d);
+  } else {
+    when.classList.add('t9');
+  }
+
+  meta.append(when, exact);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'copyBtn';
+  copyBtn.type = 'button';
+  copyBtn.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
+      <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
+    </svg>
+    Copy HTML`;
+  copyBtn.addEventListener('click', (ev)=>{
+    ev.preventDefault(); ev.stopPropagation();
+    copyFile(it.path, copyBtn);
+  });
+
+  actions.append(copyBtn);
+  bottom.append(meta, actions);
+
+  a.append(top, bottom);
+  return a;
+}
+
+function applyFilter(){ render(allItems); }
+
+/* -------- Data (robust to default branch / HEAD issues) -------- */
+async function fetchTree(){
+  statusEl.textContent = "Loading…";
+  try{
+    // 1) Get default branch
+    const repoResp = await fetch(`https://api.github.com/repos/${USER}/${REPO}`);
+    if(!repoResp.ok) throw new Error(`Repo HTTP ${repoResp.status}`);
+    const repoInfo = await repoResp.json();
+    const branch = repoInfo.default_branch || 'main';
+
+    // 2) Get branch head SHA
+    const brResp = await fetch(`https://api.github.com/repos/${USER}/${REPO}/branches/${encodeURIComponent(branch)}`);
+    if(!brResp.ok) throw new Error(`Branch HTTP ${brResp.status}`);
+    const brInfo = await brResp.json();
+    const sha = brInfo.commit?.sha;
+    if(!sha) throw new Error('No branch SHA');
+
+    // 3) Get tree for that SHA
+    const treeResp = await fetch(`https://api.github.com/repos/${USER}/${REPO}/git/trees/${sha}?recursive=1`);
+    if(!treeResp.ok) throw new Error(`Tree HTTP ${treeResp.status}`);
+    const data = await treeResp.json();
+
+    allItems = data.tree
+      .filter(n => {
+        if(n.type !== "blob") return false;
+        if(!/\.html?$/i.test(n.path)) return false;
+        if(/(^|\/)index\.html?$/i.test(n.path)) return false;
+        const depth = n.path.split('/').length;
+        return depth <= 2; // root or exactly one folder deep
+      })
+      .map(n => ({
+        path:n.path,
+        name:n.path.split('/').pop(),
+        href:BASE+n.path,
+        updatedAt:null,
+        depth:n.path.split('/').length
+      }));
+
+    render(allItems);
+    statusEl.textContent = `Found ${allItems.length} file(s), fetching dates…`;
+    await fetchDates();
+    render(allItems);
+    statusEl.textContent = `Found ${allItems.length} file(s)`;
+  }catch(e){
+    console.error(e);
+    const hint = (e && e.message || '').includes('403') ? ' (rate limited?)' : '';
+    statusEl.textContent = "Error fetching data" + hint;
+  }
+}
+
+async function fetchDates(){
+  let i = 0, max = 4;
+  async function worker(){
+    while(i < allItems.length){
+      const idx = i++;
+      try{
+        const r = await fetch(`https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(allItems[idx].path)}&per_page=1`);
+        if(r.ok){
+          const c = await r.json();
+          allItems[idx].updatedAt = c[0]?.commit?.committer?.date || null;
+        }
+      }catch(_){}
+    }
+  }
+  await Promise.all(Array.from({length:max}, worker));
+}
+
+/* -------- Copy helpers -------- */
+function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
+
+async function copyFile(path, btn){
+  const original = btn.innerHTML;
+  try{
+    btn.disabled = true;
+    btn.innerHTML = 'Copying…';
+
+    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=HEAD`;
+    const resp = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' } });
+
+    let content = '';
+
+    if(resp.ok){
+      const data = await resp.json();
+
+      if(data && data.content && data.encoding === 'base64'){
+        const b64 = data.content.replace(/\n/g,'');
+        content = atob(b64);
+      }else if(data && data.download_url){
+        const r2 = await fetch(data.download_url);
+        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
+        content = await r2.text();
+      }else{
+        const r3 = await fetch(`${BASE}${path}`);
+        if(!r3.ok) throw new Error(`Pages HTTP ${r3.status}`);
+        content = await r3.text();
+      }
+    }else{
+      const r = await fetch(`${BASE}${path}`);
