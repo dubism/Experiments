@@ -7,11 +7,11 @@ import { getSource, setUiZoom, setPhotoZoom } from '../core/camera.js';
 // K CONTROL CONFIG (edit)
 // -----------------------
 const K_CFG = {
-  MIN: 1,                 // slider minimum (also pushed to DOM)
-  STEP: 1,                // K increments per detent
-  DRAG_PX_PER_STEP: 40,   // pixels of drag per 1 K step (↑ = slower)
-  WHEEL_PX_PER_STEP: 100, // wheel delta per 1 K step (↑ = slower)
-  INVERT: true,           // true: up/scroll-up increases K
+  MIN: 1,
+  STEP: 1,                // discrete detents
+  DRAG_PX_PER_STEP: 40,   // pixels of vertical drag per detent
+  WHEEL_PX_PER_STEP: 100, // wheel delta per detent
+  INVERT: true,           // up/scroll-up increases K
   ENABLE_DRAG: true,
   ENABLE_WHEEL: true
 };
@@ -25,24 +25,20 @@ function lockPressSelection() {
   pressLock = true;
   document.body.classList.add('pressLock');
 }
-
 function unlockPressSelection() {
   if (!pressLock) return;
   pressLock = false;
   document.body.classList.remove('pressLock');
   try { window.getSelection()?.removeAllRanges(); } catch {}
 }
-
 function noScroll(e) {
   if (ccOpen) return;
   if (e.cancelable) e.preventDefault();
 }
-
 function lockScroll() {
   document.addEventListener('touchmove', noScroll, { passive: false, capture: true });
   document.addEventListener('wheel', noScroll, { passive: false, capture: true });
 }
-
 function unlockScroll() {
   document.removeEventListener('touchmove', noScroll, { capture: true });
   document.removeEventListener('wheel', noScroll, { capture: true });
@@ -80,17 +76,17 @@ export function initControls(elements, state, callbacks) {
   }, { capture: true });
   on(document, 'keydown', (e) => { if (e.key === 'Escape' && ccOpen) closeCC(); });
 
-  // Prevent selection/context menu while CC is open or during gestures
   on(document, 'selectstart', (e) => { if (pressLock) e.preventDefault(); }, { capture: true });
   on(document, 'selectionchange', () => { if (pressLock) try { window.getSelection()?.removeAllRanges(); } catch {} });
   on(document, 'contextmenu', (e) => { if (ccOpen || pressLock) e.preventDefault(); }, { capture: true });
 
   // ============================
-  // K (palette size) — FULL CTRL
+  // K (palette size) — MOVEMENT-ONLY
   // ============================
 
-  // Push min to DOM to keep native slider bounds aligned
+  // Keep native slider bounds/steps aligned with our detents
   kRange.min = String(K_CFG.MIN);
+  kRange.step = String(K_CFG.STEP);
 
   const clampK = (v) => Math.max(K_CFG.MIN, Math.min(+kRange.max, Math.round(v)));
   const commitK = (k) => {
@@ -99,14 +95,15 @@ export function initControls(elements, state, callbacks) {
       state.K = kk;
       kRange.value = String(kk);
       kVal.textContent = String(kk);
-      onKChange(kk, /*instant*/ true); // instant UI response; recompute is throttled in app.js
+      // Immediate signal; actual palette recompute is independently throttled elsewhere
+      onKChange(kk, true);
     }
   };
 
-  // --- Slider input (dragging the range thumb) ---
+  // Slider thumb drag -> direct detent updates (no time element)
   on(kRange, 'input', () => commitK(+kRange.value));
 
-  // --- Palette Gestures (drag up/down over the preview to change K) ---
+  // Palette vertical drag -> pixel-accumulated detents (pure movement)
   let lpTimer = 0, movedTooFar = false, longPressed = false;
   const LP_MS = 450, MOVE_TOL = 10;
 
@@ -134,13 +131,11 @@ export function initControls(elements, state, callbacks) {
       const dx = ev.clientX - startX, dy = ev.clientY - startY;
       if (!kDrag && (Math.abs(dx) > MOVE_TOL || Math.abs(dy) > MOVE_TOL)) {
         movedTooFar = true; clearTimeout(lpTimer);
-        if (Math.abs(dy) > Math.abs(dx) * 0.7) {
-          kDrag = true;
-        }
+        if (Math.abs(dy) > Math.abs(dx) * 0.7) kDrag = true;
       }
       if (kDrag) {
         const deltaY = ev.clientY - lastY;                 // up = negative
-        const signed = K_CFG.INVERT ? (-deltaY) : deltaY;  // make up increase if INVERT=true
+        const signed = K_CFG.INVERT ? (-deltaY) : deltaY;  // up increases if INVERT
         kAccum += signed;
 
         const stepPx = K_CFG.DRAG_PX_PER_STEP;
@@ -164,17 +159,17 @@ export function initControls(elements, state, callbacks) {
       }
     };
 
-    document.addEventListener('pointermove', move);
+    document.addEventListener('pointermove', move, { passive: false });
     document.addEventListener('pointerup', finish, { once: true });
   });
 
   // Prevent native scroll on the palette area
   on(paletteClickable, 'wheel', e => e.preventDefault(), { passive: false });
 
-  // --- Wheel over the slider (optional) ---
+  // Wheel -> detents from accumulated wheel delta (movement proxy), independent of time
   if (K_CFG.ENABLE_WHEEL) {
     let wheelAccum = 0;
-    const wheelTarget = kRange; // change to paletteClickable if you prefer
+    const wheelTarget = paletteClickable; // wheel over the interactive area
     on(wheelTarget, 'wheel', (e) => {
       e.preventDefault();
       const signed = K_CFG.INVERT ? (-e.deltaY) : e.deltaY;
@@ -192,7 +187,7 @@ export function initControls(elements, state, callbacks) {
   // Size & Throttle & UI
   // ======================
   on(sizeRange, 'input', () => onSizeChange(+sizeRange.value));
-  on(throttleLog, 'input', () => onThrottleChange(+throttleLog.value));
+  on(throttleLog, 'input', () => onThrottleChange(+throttleLog.value)); // palette refresh cadence is independent
   on(rectChk, 'change', onDisplayChange);
   on(gradChk, 'change', onDisplayChange);
 
