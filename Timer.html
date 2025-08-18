@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Simple Minute Timer</title>
+<style>
+  :root{
+    --bg:#000;
+    --ink:#fff;
+  }
+  html,body{
+    height:100%;
+  }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    -webkit-font-smoothing: antialiased;
+    display:flex; align-items:center; justify-content:center;
+    touch-action: manipulation;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .wrap{
+    width:min(680px, 92vw);
+    display:grid;
+    grid-template-rows:auto auto auto;
+    gap:20px;
+    text-align:center;
+  }
+
+  .screen{
+    font-size: clamp(56px, 14vw, 140px);
+    line-height:1;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sub{
+    font-size: clamp(14px, 3.5vw, 18px);
+    opacity:.7;
+  }
+
+  .row{
+    display:flex; gap:12px; justify-content:center; flex-wrap:wrap;
+  }
+
+  button{
+    cursor:pointer;
+    font: inherit;
+    color: currentColor;
+    background: transparent;
+    border:2px solid currentColor;
+    padding:12px 18px;
+    border-radius:14px;
+    min-width: 84px;
+  }
+  button:disabled{
+    opacity:.45; cursor: not-allowed;
+  }
+  button:active{ transform: translateY(1px); }
+
+  /* Flashing when time is up */
+  .alarm{
+    animation: flash 0.8s steps(2, start) infinite;
+  }
+  @keyframes flash{
+    0%   { background:#000; color:#fff; }
+    50%  { background:#fff; color:#000; }
+    100% { background:#000; color:#fff; }
+  }
+
+  /* Respect users who prefer reduced motion */
+  @media (prefers-reduced-motion: reduce){
+    .alarm{ animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap" role="application" aria-label="Countdown timer">
+    <div class="screen" id="screen" aria-live="polite">00:00</div>
+    <div class="sub" id="status">Set minutes with − / +, then Start.</div>
+
+    <div class="row">
+      <button id="minus">−1 min</button>
+      <button id="plus">+1 min</button>
+      <button id="start">Start</button>
+      <button id="reset">Reset</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const screen = document.getElementById('screen');
+  const status = document.getElementById('status');
+  const btnMinus = document.getElementById('minus');
+  const btnPlus  = document.getElementById('plus');
+  const btnStart = document.getElementById('start');
+  const btnReset = document.getElementById('reset');
+
+  let totalSeconds = 0;       // configured time
+  let remaining = 0;          // current countdown
+  let ticker = null;          // interval handle
+  let running = false;
+
+  function fmt(sec){
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  function updateUI(){
+    screen.textContent = fmt(remaining);
+    btnStart.disabled = running || remaining === 0;
+    btnMinus.disabled = running || totalSeconds === 0;
+    btnPlus.disabled  = running || totalSeconds >= 60*600; // cap at 10h to avoid overflow
+  }
+
+  function setMinutes(delta){
+    if(running) return;
+    document.body.classList.remove('alarm');
+    totalSeconds = Math.max(0, Math.min(60*600, totalSeconds + delta*60));
+    remaining = totalSeconds;
+    status.textContent = totalSeconds ? "Ready." : "Set minutes with − / +, then Start.";
+    updateUI();
+  }
+
+  function start(){
+    if(running || remaining <= 0) return;
+    running = true;
+    status.textContent = "Counting…";
+    updateUI();
+
+    // Align ticks to the second to minimize drift
+    let next = Date.now() + 1000;
+    ticker = setTimeout(tick, Math.max(0, next - Date.now()));
+
+    function tick(){
+      if(!running) return;
+      remaining = Math.max(0, remaining - 1);
+      screen.textContent = fmt(remaining);
+
+      if(remaining <= 0){
+        stopInternal(false);
+        fireAlarm();
+        return;
+      }
+      next += 1000;
+      ticker = setTimeout(tick, Math.max(0, next - Date.now()));
+    }
+  }
+
+  function stopInternal(fromReset){
+    running = false;
+    clearTimeout(ticker);
+    ticker = null;
+    if(fromReset){
+      status.textContent = "Reset.";
+    }else{
+      status.textContent = "Time’s up.";
+    }
+    updateUI();
+  }
+
+  function fireAlarm(){
+    document.body.classList.add('alarm');
+    // Light haptic/vibration if available (ignored on unsupported devices)
+    if(navigator.vibrate){ try{ navigator.vibrate([200,100,200,100,200]); }catch(e){} }
+  }
+
+  function reset(){
+    document.body.classList.remove('alarm');
+    clearTimeout(ticker);
+    ticker = null;
+    running = false;
+    totalSeconds = 0;
+    remaining = 0;
+    updateUI();
+    status.textContent = "Set minutes with − / +, then Start.";
+  }
+
+  // Events
+  btnMinus.addEventListener('click', () => setMinutes(-1));
+  btnPlus .addEventListener('click', () => setMinutes(+1));
+  btnStart.addEventListener('click', start);
+  btnReset.addEventListener('click', reset);
+
+  // Keyboard shortcuts (optional, non-intrusive)
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 'ArrowUp') { setMinutes(+1); }
+    if(e.key === 'ArrowDown') { setMinutes(-1); }
+    if(e.key === 'Enter' || e.key === ' ') { if(!running) start(); }
+    if(e.key.toLowerCase() === 'r') { reset(); }
+  });
+
+  // Initial paint
+  remaining = totalSeconds;
+  updateUI();
+})();
+</script>
+</body>
+</html>
