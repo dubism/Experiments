@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Long-Scroll — Stripe Curtain with Bounce & Snap Controls</title>
+<style>
+  :root{
+    --sceneHeight: 2000vh;     /* overall scroll length */
+    --period: 4000vh;          /* one rainbow cycle length (very long) */
+    --stripes: 18;
+    --gridCols: 10;
+    --gridRows: 7;
+    --openNear: 0.12;          /* start opening when within this distance of integer q */
+    --openFull: 0.28;          /* fully open when closer than this */
+  }
+
+  html,body{height:auto; background:#000; color:#fff; margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+
+  /* Rainbow background: repeating, very long, over black via alpha stops. */
+  body{
+    background-image:
+      repeating-linear-gradient(180deg,
+        #9000FF00 0px,
+        #3C00FF07 calc(var(--period)*0.10),
+        #0011FF1C calc(var(--period)*0.20),
+        #0099FF44 calc(var(--period)*0.30),
+        #00FFEFA4 calc(var(--period)*0.40),
+        #00FF55FF calc(var(--period)*0.50),
+        #66FF00D5 calc(var(--period)*0.60),
+        #FFA60074 calc(var(--period)*0.70),
+        #FF370025 calc(var(--period)*0.80),
+        #FF130009 calc(var(--period)*0.90),
+        #FF000000 calc(var(--period)*1.00)
+      );
+    background-repeat: repeat;
+    background-attachment: scroll;
+  }
+
+  .scene{ height: var(--sceneHeight); position: relative; }
+  .pin{ position: sticky; top:0; height:100svh; height:100vh; overflow:hidden; display:grid; place-items:center; }
+
+  .layer{ position:absolute; inset:0; pointer-events:none; will-change:opacity,transform; }
+  .vstripes{ display:flex; }
+  .vstripes .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
+
+  .hstripes{ display:flex; flex-direction:column; }
+  .hstripes .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
+
+  .grid{ display:grid; grid-template-columns: repeat(var(--gridCols), 1fr); grid-template-rows: repeat(var(--gridRows), 1fr); }
+  .grid .cell{ background:#fff; will-change:transform,opacity; }
+
+  .ui{
+    position:absolute; inset:auto 0 4rem 0; display:flex; justify-content:center; pointer-events:none;
+    text-shadow:0 2px 12px rgba(0,0,0,.6);
+  }
+  .pill{
+    background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.12); padding:.6rem .9rem; border-radius:999px;
+    font-size:14px; letter-spacing:.3px; pointer-events:auto;
+  }
+
+  /* Controls */
+  .ctrl{
+    position:fixed; left:.75rem; bottom:.75rem; width:min(92vw,520px);
+    background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:.75rem .9rem; backdrop-filter: blur(6px);
+    display:grid; grid-template-columns: 120px 1fr 52px; grid-row-gap:.45rem; grid-column-gap:.6rem; align-items:center;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  .ctrl label{ font:12px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; opacity:.85; }
+  .ctrl input[type="range"]{ width:100%; accent-color:#fff; }
+  .ctrl .val{ text-align:right; font:12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; opacity:.85; }
+  .ctrl .rowTitle{ grid-column:1 / -1; font-size:12px; opacity:.65; margin-bottom:.2rem; }
+  .ctrl .hint{ grid-column:1 / -1; font-size:11px; opacity:.55; }
+
+  /* Debug HUD (toggle with D) */
+  .hud{
+    position:fixed; right:.75rem; top:.75rem; width:260px; font:12px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.6rem .7rem; display:none;
+  }
+  .hud.on{display:block;}
+  .bar{height:6px; background:rgba(255,255,255,.12); border-radius:4px; overflow:hidden; margin:.35rem 0 .2rem;}
+  .bar > i{display:block; height:100%; width:0%; background:#fff; opacity:.8; border-radius:4px;}
+  .row{display:flex; justify-content:space-between; opacity:.9;}
+  .row b{font-weight:600;}
+
+  @media (max-width:540px){
+    .ctrl{ grid-template-columns: 1fr 52px; }
+    .ctrl label{ grid-column:1 / -1; }
+  }
+</style>
+</head>
+<body>
+
+  <section class="scene" id="scene">
+    <div class="pin">
+      <div class="layer vstripes" id="vLayer" aria-hidden="true"></div>
+      <div class="layer hstripes" id="hLayer" aria-hidden="true"></div>
+      <div class="layer grid" id="gLayer" aria-hidden="true"></div>
+      <div class="ui"><div class="pill">Scroll. Adjust Bounce & Snap below. Press “D” for HUD.</div></div>
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <form class="ctrl" id="controls" onsubmit="return false;">
+    <div class="rowTitle">Controls</div>
+
+    <label for="bounce">Bounce</label>
+    <input id="bounce" type="range" min="0" max="100" value="25" />
+    <div class="val" id="bounceVal">25</div>
+
+    <label for="snap">Snap</label>
+    <input id="snap" type="range" min="0" max="100" value="35" />
+    <div class="val" id="snapVal">35</div>
+
+    <div class="hint">0 = smooth / no snap. 100 = max bounce / total snap.</div>
+  </form>
+
+  <!-- Debug HUD -->
+  <div class="hud" id="hud" role="status" aria-live="polite" aria-atomic="true">
+    <div class="row"><span>p (0–1)</span><b id="pVal">0.00</b></div>
+    <div class="bar"><i id="pBar"></i></div>
+    <div class="row"><span>q (p*N)</span><b id="qVal">0.00</b></div>
+    <div class="row"><span>k (stage)</span><b id="kVal">0</b></div>
+    <div class="row"><span>t (fract)</span><b id="tVal">0.00</b></div>
+    <div class="row"><span>open (spring)</span><b id="oVal">0.00</b></div>
+    <div class="row"><span>pattern</span><b id="patVal">v / h / grid</b></div>
+  </div>
+
+<script>
+(() => {
+  /* ------- helpers ------- */
+  const clamp = (x, a=0, b=1) => Math.max(a, Math.min(b, x));
+  const lerp  = (a, b, t)  => a + (b - a) * t;
+  const fract = x => x - Math.floor(x);
+  const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+
+  /* ------- DOM ------- */
+  const scene = document.getElementById('scene');
+  const vLayer = document.getElementById('vLayer');
+  const hLayer = document.getElementById('hLayer');
+  const gLayer = document.getElementById('gLayer');
+
+  const hud = document.getElementById('hud');
+  const pBar = document.getElementById('pBar');
+  const pVal = document.getElementById('pVal');
+  const qVal = document.getElementById('qVal');
+  const kVal = document.getElementById('kVal');
+  const tVal = document.getElementById('tVal');
+  const oVal = document.getElementById('oVal');
+  const patVal = document.getElementById('patVal');
+
+  const ctrl = {
+    bounce: document.getElementById('bounce'),
+    snap:   document.getElementById('snap'),
+    bounceVal: document.getElementById('bounceVal'),
+    snapVal:   document.getElementById('snapVal'),
+  };
+
+  /* ------- build stripes/grid ------- */
+  const getVar = name => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
+  const STRIPES = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--stripes')) || 18;
+  const GRID_COLS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gridCols')) || 10;
+  const GRID_ROWS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gridRows')) || 7;
+
+  for(let i=0;i<STRIPES;i++){
+    const d = document.createElement('div');
+    d.className = 'stripe';
+    d.style.transformOrigin = (i%2 ? 'left center' : 'right center');
+    vLayer.appendChild(d);
+  }
+  for(let i=0;i<STRIPES;i++){
+    const d = document.createElement('div');
+    d.className = 'stripe';
+    d.style.transformOrigin = (i%2 ? 'center top' : 'center bottom');
+    hLayer.appendChild(d);
+  }
+  for(let r=0;r<GRID_ROWS;r++){
+    for(let c=0;c<GRID_COLS;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const nx = (c/(GRID_COLS-1))*2-1;
+      const ny = (r/(GRID_ROWS-1))*2-1;
+      cell.dataset.nx = nx.toFixed(3);
+      cell.dataset.ny = ny.toFixed(3);
+      cell.style.transformOrigin = (nx>0? 'right':'left') + ' ' + (ny>0? 'bottom':'top');
+      gLayer.appendChild(cell);
+    }
+  }
+
+  /* ------- params controlled by sliders ------- */
+  let bounceStrength = (parseInt(ctrl.bounce.value)||0)/100; // 0..1
+  let snapStrength   = (parseInt(ctrl.snap.value)||0)/100;   // 0..1
+
+  // spring params derived from bounceStrength:
+  //  - More bounce → lower damping, higher stiffness.
+  function springParams(b){
+    const damping   = lerp(0.96, 0.78, b); // 0=smooth, 1=bouncy
+    const stiffness = lerp(0.08, 0.28, b);
+    return { damping, stiffness };
+  }
+
+  // magnetize strength derived from snapStrength:
+  //  - 0 → qMag=q (no snap); 1 → hard snap (qMag=round(q))
+  function magnetize(q){
+    if(snapStrength >= 0.999) return Math.round(q);
+    if(snapStrength <= 0.001) return q;
+
+    const r = Math.round(q);
+    const dist = Math.abs(q - r);
+
+    // Field width narrows with strength; base intensity rises with strength.
+    const sigmaBase = 0.06, sigmaTight = 0.012;
+    const baseSoft  = 0.00, maxSoft = 0.40; // upper bound of interpolation factor
+    const sigma = lerp(sigmaBase, sigmaTight, snapStrength);
+    const base  = lerp(baseSoft, maxSoft,   snapStrength);
+
+    const softness = base * Math.exp(-(dist*dist)/Math.max(1e-5,sigma));
+    return lerp(q, r, clamp(softness, 0, 0.999));
+  }
+
+  /* ------- state ------- */
+  const openNear = getVar('--openNear') || 0.12;
+  const openFull = getVar('--openFull') || 0.28;
+  const N = 10;
+
+  const state = {
+    p:0, q:0, qMag:0, k:0, t:0,
+    open:0, v:0,
+    lastT: performance.now()
+  };
+
+  /* ------- progress mapping ------- */
+  function computeProgress(){
+    const start = scene.offsetTop;
+    const height = scene.offsetHeight;
+    const vp = window.innerHeight || document.documentElement.clientHeight || 1;
+    return clamp((window.scrollY - start) / (height - vp), 0, 1);
+  }
+
+  function openTarget(qMag){
+    const dist = Math.abs(qMag - Math.round(qMag));
+    return 1 - smoothstep(openNear, openFull, dist); // 1 near integers, 0 far
+  }
+
+  /* ------- pattern application ------- */
+  function applyPattern(k, open){
+    const pattern = k % 3;
+    vLayer.style.opacity = (pattern===0)?1:0;
+    hLayer.style.opacity = (pattern===1)?1:0;
+    gLayer.style.opacity = (pattern===2)?1:0;
+
+    // keep >0 size to avoid shimmer
+    const closed = 1;
+    const openScale = 0.02;
+    const kidsV = vLayer.children, kidsH = hLayer.children, kidsG = gLayer.children;
+
+    if(pattern===0){
+      for(let i=0;i<kidsV.length;i++){
+        const a = i/(kidsV.length-1);
+        const wobble = 0.03 * Math.sin((a*8 + state.qMag*6.283));
+        const s = clamp(lerp(closed, openScale, open) + wobble * open, 0, 1);
+        kidsV[i].style.transform = `scaleX(${s})`;
+      }
+    } else if(pattern===1){
+      for(let i=0;i<kidsH.length;i++){
+        const a = i/(kidsH.length-1);
+        const wobble = 0.03 * Math.cos((a*9 + state.qMag*6.283));
+        const s = clamp(lerp(closed, openScale, open) + wobble * open, 0, 1);
+        kidsH[i].style.transform = `scaleY(${s})`;
+      }
+    } else {
+      const maxShift = Math.min(window.innerWidth, window.innerHeight) * 0.7;
+      const e = open*open;
+      for(let i=0;i<kidsG.length;i++){
+        const nx = parseFloat(kidsG[i].dataset.nx);
+        const ny = parseFloat(kidsG[i].dataset.ny);
+        const dx = nx * maxShift * e;
+        const dy = ny * maxShift * e;
+        const rot = (nx*ny) * 6 * open;
+        kidsG[i].style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+      }
+    }
+
+    if(hud.classList.contains('on')){
+      patVal.textContent = (pattern===0?'vertical':(pattern===1?'horizontal':'grid'));
+    }
+  }
+
+  /* ------- RAF loop ------- */
+  function tick(now){
+    const { damping, stiffness } = springParams(bounceStrength);
+
+    state.p = computeProgress();
+    state.q = state.p * N;
+    state.qMag = magnetize(state.q);
+    state.k = Math.floor(state.qMag);
+    state.t = fract(state.qMag);
+
+    const target = openTarget(state.qMag);
+
+    // normalized dt for stability
+    const dt = Math.max(0.0005, (now - state.lastT) / 16.666);
+    state.v = state.v * Math.pow(damping, dt) + (target - state.open) * (stiffness * dt);
+    state.open = state.open + state.v;
+
+    applyPattern(state.k, clamp(state.open,0,1));
+
+    // Parallax-like background drift
+    document.body.style.backgroundPosition = `center ${(-window.scrollY * 0.35).toFixed(1)}px`;
+
+    if(hud.classList.contains('on')){
+      pBar.style.width = (state.p*100).toFixed(1)+'%';
+      pVal.textContent = state.p.toFixed(3);
+      qVal.textContent = state.q.toFixed(3);
+      kVal.textContent = state.k.toString();
+      tVal.textContent = state.t.toFixed(3);
+      oVal.textContent = state.open.toFixed(3);
+    }
+
+    state.lastT = now;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  /* ------- Controls wiring ------- */
+  const updateBounce = () => {
+    bounceStrength = (parseInt(ctrl.bounce.value)||0)/100;
+    ctrl.bounceVal.textContent = Math.round(bounceStrength*100);
+  };
+  const updateSnap = () => {
+    snapStrength = (parseInt(ctrl.snap.value)||0)/100;
+    ctrl.snapVal.textContent = Math.round(snapStrength*100);
+  };
+  ctrl.bounce.addEventListener('input', updateBounce, {passive:true});
+  ctrl.snap.addEventListener('input', updateSnap, {passive:true});
+  updateBounce(); updateSnap();
+
+  /* ------- HUD toggle ------- */
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='d' || e.key==='D'){ hud.classList.toggle('on'); }
+  }, {passive:true});
+})();
+</script>
+</body>
+</html>
