@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Manual Picker — Hard-Gated Snap → MPM</title>
+<style>
+  :root { --puck: 100px; --offsetY: 50px; }
+
+  html,body{
+    margin:0;height:100%;
+    background:#111;color:#eaeaea;
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  }
+  .wrap{height:100%;display:grid;place-items:center;gap:12px}
+
+  #square{
+    width:min(84vw,420px);height:min(84vw,420px);
+    background:#222;border-radius:12px;position:relative;overflow:hidden;
+    touch-action:manipulation;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+    box-shadow:0 8px 30px rgba(0,0,0,.35);
+  }
+  #square.mpm{ touch-action:none; }
+  #imgCanvas{width:100%;height:100%;display:block}
+
+  #exitBtn{
+    position:absolute;right:10px;top:10px;z-index:3;
+    padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;
+    border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(6px);
+    font-size:12px;letter-spacing:.2px;display:none;
+    touch-action:manipulation;
+  }
+
+  #puck{
+    position:absolute;z-index:2;width:var(--puck);height:var(--puck);
+    margin-left:calc(var(--puck)/-2);
+    margin-top:calc(var(--puck)/-2 - var(--offsetY));
+    border-radius:50%;
+    background:#f2f2f2;border:1px solid #000;
+    box-shadow:0 2px 10px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,255,255,.08);
+    pointer-events:none;opacity:0;
+    will-change:transform,opacity;
+    backface-visibility:hidden;
+    contain: layout paint;
+    transform:scale(0) translateZ(0);
+    transition:transform .42s cubic-bezier(.75,0,.9,.5),opacity .12s ease-out;
+  }
+
+  /* Long-press grow timing — updated easing (slow → rocket finish) */
+  #puck.seed{
+    border-color:rgba(0,0,0,.6);
+    box-shadow:0 1px 6px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,255,255,.06);
+    transition:transform .52s cubic-bezier(0.95,0,1,1), opacity .12s ease-out;
+  }
+
+  #puck.instant{ transition:none !important; }
+
+  @keyframes bounce{
+    0%  {transform:scale(1) translateZ(0)}
+    35% {transform:scale(1.16) translateZ(0)}
+    70% {transform:scale(.94) translateZ(0)}
+    100%{transform:scale(1) translateZ(0)}
+  }
+  #puck.bounce{animation:bounce .22s ease-out both}
+
+  #palette{display:flex;gap:8px;justify-content:center}
+  .slot{
+    width:54px;height:54px;border-radius:8px;background:#555;
+    border:2px solid transparent;box-shadow:0 6px 16px rgba(0,0,0,.25);
+  }
+  .mpm-ui .slot.active{border-color:#fff}
+  #palette{pointer-events:none;opacity:.85}
+  .mpm-ui #palette{pointer-events:auto;opacity:1}
+
+  #badge{opacity:.75;font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="square" aria-label="interactive image area">
+    <canvas id="imgCanvas" width="600" height="600"></canvas>
+    <button id="exitBtn" type="button">Exit</button>
+    <div id="puck"></div>
+  </div>
+
+  <div id="palette" aria-label="palette slots">
+    <div class="slot active" data-idx="0" title="Slot 1"></div>
+    <div class="slot" data-idx="1" title="Slot 2"></div>
+    <div class="slot" data-idx="2" title="Slot 3"></div>
+    <div class="slot" data-idx="3" title="Slot 4"></div>
+  </div>
+
+  <div id="badge">mode: <b id="modeTxt">AUTO</b> · long-press 200 ms</div>
+</div>
+
+<script>
+(() => {
+  const square=document.getElementById('square');
+  const canvas=document.getElementById('imgCanvas');
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  const puck=document.getElementById('puck');
+  const exitBtn=document.getElementById('exitBtn');
+  const slots=[...document.querySelectorAll('.slot')];
+  const modeTxt=document.getElementById('modeTxt');
+
+  let mode='AUTO',activeSlot=0,pressing=false,movedTooFar=false;
+  let seedTimer=0,longTimer=0;
+  const LONG=200,MOVE2=12*12,SEED_DELAY=40;
+  let animState='idle',pendingMPM=null;
+
+  function localXY(x,y){const r=square.getBoundingClientRect();return {x:x-r.left,y:y-r.top}}
+  function setMode(n){mode=n;modeTxt.textContent=mode;exitBtn.style.display=(mode==='MPM')?'inline-block':'none';square.classList.toggle('mpm',mode==='MPM');document.body.classList.toggle('mpm-ui',mode==='MPM')}
+  function setActiveSlot(i){activeSlot=i;slots.forEach((el,idx)=>el.classList.toggle('active',idx===i))}
+  slots.forEach(s=>s.addEventListener('click',()=>{if(mode!=='MPM')return;setActiveSlot(+s.dataset.idx)}));
+
+  function clientToCanvas(x,y){const r=canvas.getBoundingClientRect();const u=(x-r.left)/r.width,v=(y-r.top)/r.height;const cx=Math.max(0,Math.min(canvas.width-1,Math.round(u*(canvas.width-1)))),cy=Math.max(0,Math.min(canvas.height-1,Math.round(v*(canvas.height-1))));return {cx,cy}}
+  function sampleRGBAtClient(x,y){const {cx,cy}=clientToCanvas(x,y);const d=ctx.getImageData(cx,cy,1,1).data;return `rgb(${d[0]},${d[1]},${d[2]})`}
+
+  function placePuckAtClient(x,y){const {x:lx,y:ly}=localXY(x,y);puck.style.left=lx+'px';puck.style.top=ly+'px'}
+  function hidePuck(){puck.style.opacity=0;puck.classList.remove('seed','bounce','instant');animState='idle'}
+  function resetBounce(){puck.classList.remove('bounce');puck.offsetWidth}
+
+  function showSeedAt(x,y){if(animState!=='idle')return;const c=sampleRGBAtClient(x,y);placePuckAtClient(x,y);resetBounce();puck.classList.add('seed','instant');puck.style.background=c;puck.style.opacity=1;puck.style.transform='scale(0.05) translateZ(0)';requestAnimationFrame(()=>puck.classList.remove('instant'));animState='seeding'}
+  function startGrow(){if(animState!=='seeding')return;animState='growing';const onEnd=(ev)=>{if(ev.propertyName!=='transform')return;puck.removeEventListener('transitionend',onEnd);if(!pressing){pendingMPM=null;animState='idle';return}puck.classList.remove('seed');puck.style.transform='scale(1) translateZ(0)';if(pendingMPM&&pressing){setMode('MPM');setActiveSlot(0);const c=sampleRGBAtClient(pendingMPM.x,pendingMPM.y);slots[0].style.background=c;puck.style.background=c;pendingMPM=null;requestAnimationFrame(()=>{resetBounce();puck.classList.add('bounce');animState='puck'})}else{pendingMPM=null}};puck.addEventListener('transitionend',onEnd);puck.style.transform='scale(1) translateZ(0)'}
+  function showPuckImmediateAt(x,y){const c=sampleRGBAtClient(x,y);placePuckAtClient(x,y);resetBounce();puck.classList.add('instant');puck.classList.remove('seed');puck.style.opacity=1;puck.style.transform='scale(1) translateZ(0)';puck.style.background=c;requestAnimationFrame(()=>puck.classList.remove('instant'));animState='puck';return c}
+  function enterMPMFromLongPress(x,y){const c=sampleRGBAtClient(x,y);placePuckAtClient(x,y);puck.style.background=c;if(animState==='seeding'){startGrow()}else if(animState==='idle'){puck.classList.add('seed','instant');puck.style.opacity=1;puck.style.transform='scale(0.05) translateZ(0)';requestAnimationFrame(()=>{puck.classList.remove('instant');animState='seeding';startGrow()})}pendingMPM={x,y}}
+  function dragSampleAt(x,y){const c=sampleRGBAtClient(x,y);placePuckAtClient(x,y);puck.style.opacity=1;puck.style.transform='scale(1) translateZ(0)';puck.style.background=c;slots[activeSlot].style.background=c;animState='puck'}
+
+  let sx=0,sy=0;
+  function clearTimers(){clearTimeout(seedTimer);clearTimeout(longTimer)}
+
+  ['touchstart','touchend','click'].forEach(t=>exitBtn.addEventListener(t,ev=>ev.stopPropagation(),{passive:true}));
+  square.addEventListener('touchstart',(e)=>{if(e.target===exitBtn||exitBtn.contains(e.target))return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;pressing=true;movedTooFar=false;resetBounce();clearTimers();animState='idle';pendingMPM=null;if(mode==='MPM'){if(e.target===canvas){const c=showPuckImmediateAt(sx,sy);slots[activeSlot].style.background=c}return}seedTimer=setTimeout(()=>{if(pressing&&!movedTooFar&&animState==='idle')showSeedAt(sx,sy)},SEED_DELAY);longTimer=setTimeout(()=>{if(pressing&&!movedTooFar)enterMPMFromLongPress(sx,sy)},LONG)},{passive:true});
+  square.addEventListener('touchmove',(e)=>{if(!pressing)return;if(e.target===exitBtn||exitBtn.contains(e.target))return;const t=e.touches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(mode!=='MPM'){if(!movedTooFar&&(dx*dx+dy*dy)>MOVE2){movedTooFar=true;hidePuck();clearTimers();pendingMPM=null}return}e.preventDefault();dragSampleAt(t.clientX,t.clientY)},{passive:false});
+  square.addEventListener('touchend',(e)=>{if(e.target===exitBtn||exitBtn.contains(e.target))return;pressing=false;clearTimers();if(mode!=='MPM'){pendingMPM=null;hidePuck();return}hidePuck()},{passive:true});
+  exitBtn.addEventListener('click',()=>{pressing=false;clearTimers();animState='idle';setMode('AUTO');hidePuck()});
+  ['contextmenu','selectstart','dragstart'].forEach(ev=>square.addEventListener(ev,e=>e.preventDefault()));
+
+  function drawGradient(){const w=canvas.width,h=canvas.height;const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0.00,'#ff3b3b');g.addColorStop(0.25,'#ffea00');g.addColorStop(0.50,'#00d86f');g.addColorStop(0.75,'#00a7ff');g.addColorStop(1.00,'#8b46ff');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}
+  function fit(){const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));const r=square.getBoundingClientRect();canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);drawGradient()}
+  fit();addEventListener('resize',fit,{passive:true});
+})();
+</script>
+</body>
+</html>
