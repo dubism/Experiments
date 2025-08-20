@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Experiments — Auto Index</title>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Experiments — Auto Index (No-403)</title>
 <style>
   :root{
     --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
@@ -120,7 +119,7 @@
   <div class="wrap">
     <h1>🧪 Experiments — Auto Index</h1>
     <div class="row" style="margin-top:8px">
-      <input id="q" type="search" placeholder="Filter by name or path…" />
+      <input id="q" type="search" placeholder="Filter by name or path…">
       <div class="seg" role="group" aria-label="Sort">
         <button id="sortTime" aria-pressed="true" title="Newest → Oldest"><span>Time</span></button>
         <button id="sortName" aria-pressed="false" title="A → Z by name"><span>Name</span></button>
@@ -128,22 +127,14 @@
       <button id="refresh" aria-label="Refresh list">
         <span style="display:inline-flex;gap:8px;align-items:center">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M20 12a 8 8 0 1 1-2.34-5.66" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round"/>
-            <path d="M20 4v6h-6" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M20 12a 8 8 0 1 1-2.34-5.66" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round"></path>
+            <path d="M20 4v6h-6" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
           Refresh
         </span>
       </button>
-      <button id="copySelf" aria-label="Copy this page’s HTML">
-        <span style="display:inline-flex;gap:8px;align-items:center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-            <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-          </svg>
-          Copy This Page
-        </span>
-      </button>
-      <span id="status" class="status">Loading…</span>
+      <button id="copySelf" aria-label="Copy this page’s HTML">Copy this page</button>
+      <span id="status" class="status">—</span>
     </div>
   </div>
 </header>
@@ -152,13 +143,13 @@
   <div id="list"></div>
 </main>
 
-<footer>Generated from <code>dubism/Experiments</code> via GitHub API</footer>
+<footer>Generated from <code>dubism/Experiments</code> via Git Trees API</footer>
 
 <script>
 /* ===== Config ===== */
 const USER = "dubism";
 const REPO = "Experiments";
-const REF  = "main"; // hard-coded default branch to avoid 403 on /repos endpoint
+const REF  = "main";  // fixed to avoid hitting /repos default-branch endpoints
 const BASE = `https://${USER}.github.io/${REPO}/`;
 
 /* ===== DOM ===== */
@@ -192,11 +183,26 @@ function withTimeout(promise, ms, label){
   ]);
 }
 async function gh(url){
-  const r = await withTimeout(fetch(url, {headers:{'Accept':'application/vnd.github+json'}}), 12000, url);
-  if(!r.ok) throw new Error(`${url} HTTP ${r.status}`);
+  const r = await withTimeout(fetch(url, {
+    headers:{
+      'Accept':'application/vnd.github+json',
+      'X-GitHub-Api-Version':'2022-11-28'
+    }
+  }), 15000, url);
+
+  // Explicit, readable rate-limit handling
+  if (r.status === 403) {
+    const reset = r.headers.get('x-ratelimit-reset');
+    const retry = r.headers.get('retry-after');
+    const etaMs = retry ? (+retry*1000)
+      : reset ? Math.max(0, (+reset*1000 - Date.now()))
+      : 0;
+    const eta = etaMs ? `${Math.ceil(etaMs/1000)}s` : 'soon';
+    throw new Error(`${url} HTTP 403 (rate limited, try again in ~${eta})`);
+  }
+  if (!r.ok) throw new Error(`${url} HTTP ${r.status}`);
   return r.json();
 }
-function encodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
 function fileIcon(){return `
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.3" />
@@ -236,73 +242,43 @@ function timeAgoClassAndText(d){
 function buildCard(it){
   const a = document.createElement('a');
   a.className = 'card';
-  if(it.depth === 2) a.classList.add('sub');
+  if(it.depth >= 2) a.classList.add('sub');
   a.href = it.href;
+  a.dataset.path = it.path;
 
-  const top = document.createElement('div');
-  top.className = 'top';
-
-  const ic = document.createElement('div');
-  ic.className = 'ic';
-  ic.innerHTML = fileIcon();
-
-  const titleWrap = document.createElement('div');
-  titleWrap.className = 'titleWrap';
+  const top = document.createElement('div'); top.className = 'top';
+  const ic = document.createElement('div'); ic.className = 'ic'; ic.innerHTML = fileIcon();
+  const titleWrap = document.createElement('div'); titleWrap.className = 'titleWrap';
   titleWrap.innerHTML = `
     <div class="name">${prettyName(it.name)}</div>
     <div class="path">${it.path}</div>
   `;
-
-  const open = document.createElement('div');
-  open.className = 'openVis';
-  open.innerHTML = `Open ${arrowIcon()}`;
-
+  const open = document.createElement('div'); open.className = 'openVis'; open.innerHTML = `Open ${arrowIcon()}`;
   top.append(ic, titleWrap, open);
 
-  const bottom = document.createElement('div');
-  bottom.className = 'bottom';
-
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-
-  const when = document.createElement('span');
-  when.className = 'ago';
+  const bottom = document.createElement('div'); bottom.className = 'bottom';
+  const meta = document.createElement('div'); meta.className = 'meta';
+  const when = document.createElement('span'); when.className = 'ago t9';
   when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
-
-  const exact = document.createElement('span');
-  exact.className = 'exact';
-  exact.textContent = '—';
-
+  const exact = document.createElement('span'); exact.className = 'exact'; exact.textContent = '—';
   if(it.updatedAt){
     const d = new Date(it.updatedAt);
     const ag = timeAgoClassAndText(d);
-    when.classList.add(ag.cls);
-    when.querySelector('.t').textContent = ag.text;
-    when.title = `Last updated: ${isoLocal(d)}`;
+    when.classList.add(ag.cls); when.querySelector('.t').textContent = ag.text; when.title = `Last updated: ${isoLocal(d)}`;
     exact.textContent = isoLocal(d);
-  } else {
-    when.classList.add('t9');
   }
-
   meta.append(when, exact);
 
-  const actions = document.createElement('div');
-  actions.className = 'actions';
-
+  const actions = document.createElement('div'); actions.className = 'actions';
   const copyBtn = document.createElement('button');
-  copyBtn.className = 'copyBtn';
-  copyBtn.type = 'button';
+  copyBtn.className = 'copyBtn'; copyBtn.type = 'button';
   copyBtn.innerHTML = `
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
       <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
     </svg>
     Copy HTML`;
-  copyBtn.addEventListener('click', (ev)=>{
-    ev.preventDefault(); ev.stopPropagation();
-    copyFile(it.path, copyBtn);
-  });
-
+  copyBtn.addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); copyFile(it.path, copyBtn); });
   actions.append(copyBtn);
   bottom.append(meta, actions);
 
@@ -326,165 +302,177 @@ function render(items){
 
     const section = document.createElement('section');
     section.className = 'grp';
-    const h2 = document.createElement('h2');
-    h2.textContent = "All files — Newest → Oldest";
+    const h2 = document.createElement('h2'); h2.textContent = "All files — Newest → Oldest (dates load on demand)";
     section.appendChild(h2);
 
-    const grid = document.createElement('div');
-    grid.className = 'cards';
+    const grid = document.createElement('div'); grid.className = 'cards';
     list.forEach(it=> grid.appendChild(buildCard(it)));
     section.appendChild(grid);
     listEl.appendChild(section);
-    return;
+  } else {
+    const groups = new Map();
+    list.forEach(it=>{
+      const key = it.path.includes('/') ? it.path.split('/')[0] : '';
+      if(!groups.has(key)) groups.set(key,[]);
+      groups.get(key).push(it);
+    });
+    [...groups.entries()].sort().forEach(([folder,arr])=>{
+      arr.sort((a,b)=>a.name.localeCompare(b.name));
+      const section = document.createElement('section'); section.className = 'grp';
+      const h2 = document.createElement('h2'); h2.innerHTML = `${folder ? folderIcon() + ' /' + folder : 'Root'}`;
+      section.appendChild(h2);
+      const grid = document.createElement('div'); grid.className = 'cards';
+      arr.forEach(it=> grid.appendChild(buildCard(it)));
+      section.appendChild(grid); listEl.appendChild(section);
+    });
   }
 
-  const groups = new Map();
-  list.forEach(it=>{
-    const key = it.depth === 1 ? "" : it.path.split('/')[0];
-    if(!groups.has(key)) groups.set(key,[]);
-    groups.get(key).push(it);
-  });
-
-  [...groups.entries()].sort().forEach(([folder,arr])=>{
-    arr.sort((a,b)=>a.name.localeCompare(b.name));
-
-    const section = document.createElement('section');
-    section.className = 'grp';
-    const h2 = document.createElement('h2');
-    h2.innerHTML = `${folder ? folderIcon() + ' /' + folder : 'Root'}`;
-    section.appendChild(h2);
-
-    const grid = document.createElement('div');
-    grid.className = 'cards';
-    arr.forEach(it=> grid.appendChild(buildCard(it)));
-
-    section.appendChild(grid);
-    listEl.appendChild(section);
-  });
+  initDateObserver(); // attach lazy date loader to current cards
 }
 
 function applyFilter(){ render(allItems); }
 
-/* ===== Data: Contents API (root + one level), no /repos metadata ===== */
+/* ===== Data via Git Trees (two calls, no folder fan-out) ===== */
 async function fetchIndex(){
   statusEl.textContent = "Loading…";
   try{
-    // 1) Root listing (files + top-level folders)
-    const root = await gh(`https://api.github.com/repos/${USER}/${REPO}/contents?ref=${encodeURIComponent(REF)}`);
+    // 1) Resolve branch SHA
+    const branch = await gh(`https://api.github.com/repos/${USER}/${REPO}/branches/${encodeURIComponent(REF)}`);
+    const sha = branch.commit.sha;
 
-    // Files in root
-    const rootFiles = root
-      .filter(x => x.type === 'file' && /\.html?$/i.test(x.name) && !/^index\.html?$/i.test(x.name))
-      .map(x => ({
-        path: x.name,
-        name: x.name,
-        href: BASE + x.name,
+    // 2) Get recursive tree
+    const tree = await gh(`https://api.github.com/repos/${USER}/${REPO}/git/trees/${sha}?recursive=1`);
+
+    const files = tree.tree.filter(n =>
+      n.type === 'blob' && /\.html?$/i.test(n.path) && !/^index\.html?$/i.test(n.path)
+    );
+
+    allItems = files.map(n => {
+      const name = n.path.split('/').pop();
+      return {
+        path: n.path,
+        name,
+        href: BASE + n.path,
         updatedAt: null,
-        depth: 1
-      }));
-
-    // Top-level folders (ignore dot folders)
-    const topDirs = root.filter(x => x.type === 'dir' && !x.name.startsWith('.'));
-
-    // 2) For each top folder, list its contents (no recursion)
-    const limiter = (arr, limit, fn) => {
-      let i = 0;
-      return Promise.all(Array.from({length:limit}, async ()=> {
-        while(i < arr.length){
-          const idx = i++;
-          await fn(arr[idx]);
-        }
-      }));
-    };
-
-    const subFiles = [];
-    await limiter(topDirs, 4, async dir => {
-      try{
-        const items = await gh(`https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(dir.name)}?ref=${encodeURIComponent(REF)}`);
-        items.forEach(it=>{
-          if(it.type === 'file' && /\.html?$/i.test(it.name) && !/^index\.html?$/i.test(it.name)){
-            const p = `${dir.name}/${it.name}`;
-            subFiles.push({
-              path: p,
-              name: it.name,
-              href: BASE + p,
-              updatedAt: null,
-              depth: 2
-            });
-          }
-        });
-      }catch(e){
-        console.warn('Dir list failed:', dir.name, e);
-      }
+        depth: n.path.includes('/') ? n.path.split('/').length : 1
+      };
     });
 
-    allItems = [...rootFiles, ...subFiles];
     render(allItems);
-    statusEl.textContent = `Found ${allItems.length} file(s), fetching dates…`;
-
-    await fetchDates(); // commit dates via commits?path=
-    render(allItems);
-    statusEl.textContent = `Found ${allItems.length} file(s)`;
+    statusEl.textContent = `Found ${allItems.length} file(s). Dates load on demand.`;
   }catch(e){
     console.error(e);
     statusEl.textContent = `Error: ${e.message || e}`;
   }
 }
 
-/* ===== Dates ===== */
-async function fetchDates(){
-  let i = 0, max = 4;
-  async function worker(){
-    while(i < allItems.length){
-      const idx = i++;
-      try{
-        const r = await withTimeout(fetch(
-          `https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(allItems[idx].path)}&per_page=1&sha=${encodeURIComponent(REF)}`
-        ), 12000, 'commits');
-        if(r.ok){
-          const c = await r.json();
-          allItems[idx].updatedAt = c[0]?.commit?.committer?.date || null;
-        }
-      }catch(_){}
+/* ===== Lazy commit dates (viewport-triggered, concurrency=1) ===== */
+const DATE_LIMIT_TOTAL = 40;    // safety: at most N dates per page view
+let dateRequested = new Set();
+let dateFetched = 0;
+let queue = [];
+let processing = false;
+let cooldownUntil = 0;
+
+function initDateObserver(){
+  const cards = document.querySelectorAll('.card');
+  const io = new IntersectionObserver((entries)=>{
+    for(const entry of entries){
+      if(!entry.isIntersecting) continue;
+      const path = entry.target.dataset.path;
+      if(!path || dateRequested.has(path)) continue;
+      if(dateFetched + queue.length >= DATE_LIMIT_TOTAL) continue; // cap
+      dateRequested.add(path);
+      queue.push(path);
+      processQueue();
     }
-  }
-  await Promise.all(Array.from({length:max}, worker));
+  }, {rootMargin:'200px 0px 200px 0px'});
+
+  cards.forEach(c=> io.observe(c));
 }
 
-/* ===== Copy helpers ===== */
+async function processQueue(){
+  if(processing) return;
+  processing = true;
+  try{
+    while(queue.length){
+      const now = Date.now();
+      if(now < cooldownUntil){
+        const waitMs = cooldownUntil - now;
+        statusEl.textContent = `Cooling down for rate limit… resuming in ~${Math.ceil(waitMs/1000)}s`;
+        await new Promise(r=>setTimeout(r, Math.min(waitMs, 5000)));
+        continue;
+      }
+
+      const path = queue.shift();
+      try{
+        const d = await fetchCommitDate(path);
+        const it = allItems.find(x=>x.path===path);
+        if(it && d){ it.updatedAt = d.toISOString(); updateCardDates(path, d); dateFetched++; }
+        if(sortMode==='time'){ applyFilter(); } // keep order fresh
+      }catch(err){
+        // 403 handling sets cooldown; others we ignore
+        console.warn('Date fetch failed for', path, err);
+      }
+    }
+  } finally {
+    processing = false;
+  }
+}
+
+async function fetchCommitDate(path){
+  const url = `https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(path)}&per_page=1&sha=${encodeURIComponent(REF)}`;
+  const r = await withTimeout(fetch(url, {
+    headers:{
+      'Accept':'application/vnd.github+json',
+      'X-GitHub-Api-Version':'2022-11-28'
+    }
+  }), 15000, 'commits');
+
+  if (r.status === 403){
+    const reset = r.headers.get('x-ratelimit-reset');
+    const retry = r.headers.get('retry-after');
+    const etaMs = retry ? (+retry*1000)
+      : reset ? Math.max(0, (+reset*1000 - Date.now()))
+      : 30*1000;
+    cooldownUntil = Date.now() + Math.max(etaMs, 10*1000);
+    throw new Error(`Rate limited, cooling ~${Math.ceil(etaMs/1000)}s`);
+  }
+  if(!r.ok) throw new Error(`Commits HTTP ${r.status}`);
+
+  const c = await r.json();
+  const iso = c?.[0]?.commit?.committer?.date;
+  return iso ? new Date(iso) : null;
+}
+
+function updateCardDates(path, d){
+  const card = document.querySelector(`.card[data-path="${cssEscape(path)}"]`);
+  if(!card) return;
+  const when = card.querySelector('.ago');
+  const exact = card.querySelector('.exact');
+  if(!when || !exact) return;
+  when.className = 'ago'; // reset classes
+  const ag = timeAgoClassAndText(d);
+  when.classList.add(ag.cls);
+  when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">${ag.text}</span>`;
+  when.title = `Last updated: ${isoLocal(d)}`;
+  exact.textContent = isoLocal(d);
+}
+
+// Minimal CSS.escape fallback
+function cssEscape(sel){
+  return sel.replace(/["\\#.;,!?+*~^$[\] ()=>|]/g, '\\$&');
+}
+
+/* ===== Copy helpers (no API: fetch from Pages) ===== */
 async function copyFile(path, btn){
   const original = btn.innerHTML;
   try{
-    btn.disabled = true;
-    btn.innerHTML = 'Copying…';
-
-    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(REF)}`;
-    const resp = await withTimeout(fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' } }), 12000, 'contents');
-
-    let content = '';
-
-    if(resp.ok){
-      const data = await resp.json();
-
-      if(data && data.content && data.encoding === 'base64'){
-        const b64 = data.content.replace(/\n/g,'');
-        content = atob(b64);
-      }else if(data && data.download_url){
-        const r2 = await withTimeout(fetch(data.download_url), 12000, 'download');
-        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
-        content = await r2.text();
-      }else{
-        const r3 = await withTimeout(fetch(`${BASE}${path}`), 12000, 'pages');
-        if(!r3.ok) throw new Error(`Pages HTTP ${r3.status}`);
-        content = await r3.text();
-      }
-    }else{
-      const r = await withTimeout(fetch(`${BASE}${path}`), 12000, 'pages');
-      if(!r.ok) throw new Error(`Pages HTTP ${r.status}`);
-      content = await r.text();
-    }
-
-    await writeToClipboard(content);
+    btn.disabled = true; btn.innerHTML = 'Copying…';
+    const r = await withTimeout(fetch(`${BASE}${path}`, {cache:'no-store'}), 15000, 'pages');
+    if(!r.ok) throw new Error(`Pages HTTP ${r.status}`);
+    const text = await r.text();
+    await writeToClipboard(text);
     btn.innerHTML = 'Copied ✓';
   }catch(err){
     console.error('Copy failed:', err);
@@ -495,48 +483,29 @@ async function copyFile(path, btn){
 }
 
 async function writeToClipboard(text){
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    return navigator.clipboard.writeText(text);
-  }
+  if(navigator.clipboard?.writeText){ return navigator.clipboard.writeText(text); }
   const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position='fixed'; ta.style.left='-9999px';
-  document.body.appendChild(ta);
-  ta.focus(); ta.select();
-  try{ document.execCommand('copy'); }
-  finally{ document.body.removeChild(ta); }
+  ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try{ document.execCommand('copy'); } finally{ document.body.removeChild(ta); }
 }
 
-/* Copy this page (repo source preferred, DOM fallback) */
+/* Copy this page (DOM fallback) */
 async function copySelf(){
-  const btn = copySelfBtn;
-  const original = btn.innerHTML;
+  const btn = copySelfBtn; const original = btn.innerHTML;
   try{
-    btn.disabled = true;
-    btn.innerHTML = 'Copying…';
-    const SELF_PATH = 'index.html';
-
-    const apiUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodePath(SELF_PATH)}?ref=${encodeURIComponent(REF)}`;
+    btn.disabled = true; btn.innerHTML = 'Copying…';
+    // Try to fetch raw from Pages; fallback to DOM
     let text = '';
-
-    const r = await withTimeout(fetch(apiUrl, { headers: { 'Accept':'application/vnd.github+json' } }), 12000, 'self');
-    if(r.ok){
-      const data = await r.json();
-      if(data && data.content && data.encoding === 'base64'){
-        text = atob(data.content.replace(/\n/g,''));
-      }else if(data && data.download_url){
-        const r2 = await withTimeout(fetch(data.download_url), 12000, 'download');
-        if(!r2.ok) throw new Error(`Download HTTP ${r2.status}`);
-        text = await r2.text();
-      }
-    }
+    try{
+      const r = await withTimeout(fetch(`${BASE}index.html`, {cache:'no-store'}), 12000, 'self');
+      if(r.ok) text = await r.text();
+    }catch(_){}
     if(!text){ text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML; }
-
     await writeToClipboard(text);
     btn.innerHTML = 'Copied ✓';
   }catch(e){
-    console.error(e);
-    btn.innerHTML = 'Failed ✕';
+    console.error(e); btn.innerHTML = 'Failed ✕';
   }finally{
     setTimeout(()=>{ btn.disabled=false; btn.innerHTML=original; }, 1200);
   }
@@ -545,5 +514,4 @@ async function copySelf(){
 /* init */
 fetchIndex();
 </script>
-</body>
-</html>
+</body></html>
