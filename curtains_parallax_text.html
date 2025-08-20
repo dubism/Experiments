@@ -6,7 +6,7 @@
 <title>_Curtains · Parallax C, Real Snap, Calm Patterns</title>
 <style>
   :root{
-    --period: 4000vh;     /* gradient cycle height */
+    --period: 4000vh;     /* gradient cycle height (background only) */
     --stripes: 18;
     --gridCols: 10;
     --gridRows: 7;
@@ -35,7 +35,7 @@
 
   /* Image stack (does NOT push layout at top; appears below first viewport) */
   .imagesWrap{
-    position:absolute; left:0; right:0; top:100vh; z-index:2;    /* start below initial view */
+    position:absolute; left:0; right:0; top:100vh; z-index:2;
     display:grid; place-items:center; will-change:transform;
   }
   .bgStack{ display:flex; flex-direction:column; gap:16px; }
@@ -58,7 +58,7 @@
   .diag.diag135{ transform: rotate(-45deg); }
   .diag .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
 
-  /* Foreground text (no backplate), sits in normal flow and is visible at start */
+  /* Foreground text */
   .content{ position: relative; z-index:7; padding:12vh 20px 0; display:grid; place-items:center; }
   .content-inner{ width:min(860px, 92vw); display:grid; gap:22px; }
   .copy h1, .copy h2, .copy h3{ color:#000; margin:.1rem 0 .4rem; text-wrap:balance; }
@@ -74,8 +74,6 @@
   .cols{ columns: 2 280px; column-gap: 26px; }
   .caption{ font:12px/1.5 ui-sans-serif,system-ui; letter-spacing:.2px; opacity:.95; color:#000; }
   .spacer{ height:12vh; }
-
-  /* Spacer to account for absolutely positioned images (keeps page long enough) */
   .imgSpacer{ height:0; }
 
   /* Controls */
@@ -90,8 +88,7 @@
   }
   .ctrlWrap{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; z-index:29; pointer-events:none; }
   .ctrl{
-    /* widened */
-    width:min(96vw, 900px);
+    width:min(94vw, 820px);
     background:rgba(0,0,0,.72); border:1px solid rgba(255,255,255,.18);
     border-radius:14px; padding:.7rem .8rem .8rem;
     backdrop-filter: blur(6px);
@@ -103,12 +100,9 @@
   .ctrl.open{ transform: translateY(0%); }
   .ctrl h3{ margin:.2rem 0 .35rem; font:600 12px/1.1 ui-monospace; opacity:.9; letter-spacing:.2px; color:#fff; }
   .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:.5rem .65rem; }
-  /* make the first column (Timing) span full width for long sliders */
-  .ctrl .grid3 > div:first-child{ grid-column: 1 / -1; }
-
-  .row{ display:grid; grid-template-columns: 120px 1fr 60px; align-items:center; gap:.45rem; }
+  .row{ display:grid; grid-template-columns: 150px 1fr 72px; align-items:center; gap:.45rem; }
   .row label{ font:12px/1 ui-monospace; opacity:.95; color:#fff; }
-  .row input[type="range"]{ width:100%; accent-color:#fff; }
+  .row input[type="range"], .row input[type="number"]{ width:100%; accent-color:#fff; }
   .row .val{ text-align:right; font:12px/1 ui-monospace; opacity:.95; color:#fff; }
   .row .chk{ display:flex; align-items:center; gap:.45rem; color:#fff; }
   .row .btns{ display:flex; gap:.5rem; }
@@ -117,7 +111,7 @@
 
   /* HUD */
   .hud{
-    position:fixed; left:.75rem; top:.75rem; width:280px; font:12px/1.25 ui-monospace;
+    position:fixed; left:.75rem; top:.75rem; width:300px; font:12px/1.25 ui-monospace;
     background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.6rem .7rem; display:none; z-index:28; color:#fff;
   }
   .hud.on{display:block;}
@@ -148,7 +142,7 @@
       <div class="layer diag diag135" id="d2Layer" aria-hidden="true"></div>
     </div>
 
-    <!-- TEXT (no backplate) -->
+    <!-- TEXT -->
     <div class="content" id="content">
       <div class="content-inner copy" id="copy">
         <div class="caption">Notes from the atelier — Field series</div>
@@ -223,7 +217,6 @@
         <div class="spacer"></div>
       </div>
 
-      <!-- Spacer to accommodate absolute images height so page is long enough -->
       <div class="imgSpacer" id="imgSpacer"></div>
     </div>
 
@@ -236,6 +229,9 @@
     <div>q (p*N): <b id="qVal">0.00</b></div>
     <div>open: <b id="oVal">0.00</b></div>
     <div>pattern: <b id="patVal">v / h / grid / d45 / d135</b></div>
+    <div class="hr"></div>
+    <div>period px: <b id="hudPeriod">–</b></div>
+    <div>none/overlap/closed: <b id="hudSegs">–</b></div>
   </div>
 
   <button class="fab" id="fab" aria-label="Show controls">⚙</button>
@@ -270,18 +266,6 @@
             <input id="hold" type="range" min="0" max="600" value="120" />
             <div class="val" id="holdVal">120</div>
           </div>
-
-          <!-- Timed drive -->
-          <div class="row chk">
-            <input id="driveTime" type="checkbox" />
-            <label for="driveTime">Timed drive</label>
-          </div>
-          <div class="row">
-            <label for="periodMs">Period / stage (ms)</label>
-            <input id="periodMs" type="range" min="200" max="8000" step="10" value="1200" />
-            <div class="val" id="periodMsVal">1200</div>
-          </div>
-
           <div class="row chk">
             <input id="cleanSwitch" type="checkbox" />
             <label for="cleanSwitch">Clean switch at full-open</label>
@@ -313,6 +297,62 @@
         </div>
 
         <div class="sep"></div>
+
+        <!-- NEW: Pixel-based period + segments -->
+        <div>
+          <h3>Curtain Period (px)</h3>
+          <div class="row">
+            <label for="periodPx">Period px</label>
+            <input id="periodPx" type="range" min="400" max="8000" value="1600" />
+            <div class="val" id="periodPxVal">1600</div>
+          </div>
+          <div class="row">
+            <label for="nonePx">No curtains px</label>
+            <input id="nonePx" type="range" min="0" max="4000" value="400" />
+            <div class="val" id="nonePxVal">400</div>
+          </div>
+          <div class="row">
+            <label for="closedPx">Closed px</label>
+            <input id="closedPx" type="range" min="0" max="4000" value="400" />
+            <div class="val" id="closedPxVal">400</div>
+          </div>
+          <div class="row">
+            <label for="overlapPx">Overlap px</label>
+            <input id="overlapPx" type="range" min="0" max="2000" value="300" />
+            <div class="val" id="overlapPxVal">300</div>
+          </div>
+        </div>
+
+        <div>
+          <h3>Numbers</h3>
+          <div class="row">
+            <label>Period px</label>
+            <input id="periodPxNum" type="number" min="200" max="12000" step="10" value="1600" />
+            <div class="val">px</div>
+          </div>
+          <div class="row">
+            <label>None px</label>
+            <input id="nonePxNum" type="number" min="0" max="8000" step="10" value="400" />
+            <div class="val">px</div>
+          </div>
+          <div class="row">
+            <label>Closed px</label>
+            <input id="closedPxNum" type="number" min="0" max="8000" step="10" value="400" />
+            <div class="val">px</div>
+          </div>
+          <div class="row">
+            <label>Overlap px</label>
+            <input id="overlapPxNum" type="number" min="0" max="4000" step="10" value="300" />
+            <div class="val">px</div>
+          </div>
+        </div>
+
+        <div>
+          <h3>Extremes</h3>
+          <div class="row chk"><input id="enforceExtremes" type="checkbox" checked /><label for="enforceExtremes">Force 0% / 100% in holds</label></div>
+          <div class="row chk"><input id="linkRampToPlateau" type="checkbox" /><label for="linkRampToPlateau">Shape ramps by Plateau</label></div>
+        </div>
+
       </div>
     </form>
   </div>
@@ -321,6 +361,7 @@
 (() => {
   const clamp = (x, a=0, b=1) => Math.max(a, Math.min(b, x));
   const lerp  = (a, b, t)  => a + (b - a) * t;
+  const smooth = t => (t<0?0:(t>1?1:(t*t*(3-2*t)))); // C2 smoothstep
 
   const scene   = document.getElementById('scene');
   const content = document.getElementById('content');
@@ -340,6 +381,8 @@
   const qVal = document.getElementById('qVal');
   const oVal = document.getElementById('oVal');
   const patVal = document.getElementById('patVal');
+  const hudPeriod = document.getElementById('hudPeriod');
+  const hudSegs = document.getElementById('hudSegs');
 
   const fab = document.getElementById('fab');
   const panel = document.getElementById('controls');
@@ -352,15 +395,23 @@
     hold: document.getElementById('hold'),
     cleanSwitch: document.getElementById('cleanSwitch'),
     parallax: document.getElementById('parallax'),
-    // Timed controls
-    driveTime: document.getElementById('driveTime'),
-    periodMs: document.getElementById('periodMs'),
     // effects
     effV: document.getElementById('effV'),
     effH: document.getElementById('effH'),
     effG: document.getElementById('effG'),
     effD45: document.getElementById('effD45'),
     effD135: document.getElementById('effD135'),
+    // pixel period controls
+    periodPx: document.getElementById('periodPx'),
+    nonePx: document.getElementById('nonePx'),
+    closedPx: document.getElementById('closedPx'),
+    overlapPx: document.getElementById('overlapPx'),
+    periodPxNum: document.getElementById('periodPxNum'),
+    nonePxNum: document.getElementById('nonePxNum'),
+    closedPxNum: document.getElementById('closedPxNum'),
+    overlapPxNum: document.getElementById('overlapPxNum'),
+    enforceExtremes: document.getElementById('enforceExtremes'),
+    linkRampToPlateau: document.getElementById('linkRampToPlateau'),
     // values
     vals: {
       inertia: document.getElementById('inertiaVal'),
@@ -369,7 +420,10 @@
       plateau: document.getElementById('plateauVal'),
       hold: document.getElementById('holdVal'),
       parallax: document.getElementById('parallaxVal'),
-      periodMs: document.getElementById('periodMsVal'),
+      periodPx: document.getElementById('periodPxVal'),
+      nonePx: document.getElementById('nonePxVal'),
+      closedPx: document.getElementById('closedPxVal'),
+      overlapPx: document.getElementById('overlapPxVal'),
     },
     // image controls
     imgInput: document.getElementById('imgInput'),
@@ -377,6 +431,16 @@
     btnClear: document.getElementById('btnClear'),
     bgShow: document.getElementById('bgShow')
   };
+
+  // sync helpers (slider <-> number)
+  function linkRangeAndNumber(rangeEl, numEl, valEl){
+    const sync = v=>{
+      rangeEl.value = v; numEl.value = v; if(valEl) valEl.textContent = v;
+      P = getParams(); reflectUI(P);
+    };
+    rangeEl.addEventListener('input', ()=> sync(rangeEl.value), {passive:true});
+    numEl.addEventListener('input', ()=> sync(numEl.value), {passive:true});
+  }
 
   /* ------- Build geometry ------- */
   const STRIPES = 18, GRID_COLS=10, GRID_ROWS=7;
@@ -442,24 +506,46 @@
   function getParams(){
     const inertia = (parseInt(ctrl.inertia.value)||0)/100;
     const SCROLL_TAU = 0.04 + 1.16 * inertia;    // 0.04..1.20 s
-    const OPEN_TAU   = 0.24 + 0.66 * inertia;    // slower openness → calmer
+    const OPEN_TAU   = 0.24 + 0.66 * inertia;
 
     const snapUi = (parseInt(ctrl.snap.value)||0)/100;  // 0..1
-    const snapWindow = 0.02 + 0.25 * Math.pow(snapUi, 1.4); // 0.02..~0.27
-    const snapSharp  = 1 + 28 * Math.pow(snapUi, 2.0);      // strictness to 0/1
+    const snapWindow = 0.02 + 0.25 * Math.pow(snapUi, 1.4);
+    const snapSharp  = 1 + 28 * Math.pow(snapUi, 2.0);
 
     const stages = Math.max(1, parseInt(ctrl.stages.value)||4);
     const plateau = (parseInt(ctrl.plateau.value)||0)/100;
     const holdMs = parseInt(ctrl.hold.value)||0;
     const cleanSwitch = ctrl.cleanSwitch.checked;
 
-    const C = Math.max(0.2, Math.min(2.0, (parseInt(ctrl.parallax.value)||100)/100)); // 0.2..2.0
-
-    const driveTimed = ctrl.driveTime.checked;
-    const stageMs = Math.max(50, parseInt(ctrl.periodMs.value)||1200);
-
+    const C = Math.max(0.2, Math.min(2.0, (parseInt(ctrl.parallax.value)||100)/100));
     const enabled = getEnabledPatterns();
-    return {SCROLL_TAU, OPEN_TAU, snapWindow, snapSharp, stages, plateau, holdMs, cleanSwitch, C, enabled, driveTimed, stageMs};
+
+    // Pixel period
+    let periodPx = Math.max(200, parseInt(ctrl.periodPx.value||ctrl.periodPxNum.value)||1600);
+    let nonePx   = Math.max(0,   parseInt(ctrl.nonePx.value||ctrl.nonePxNum.value)||400);
+    let closedPx = Math.max(0,   parseInt(ctrl.closedPx.value||ctrl.closedPxNum.value)||400);
+    let overlapPx= Math.max(0,   parseInt(ctrl.overlapPx.value||ctrl.overlapPxNum.value)||300);
+
+    // Fit segments to the period:  none + closed + 2*overlap <= period
+    const maxOverlapTotal = Math.max(0, periodPx - (nonePx + closedPx));
+    const overlapEff = Math.min(overlapPx, maxOverlapTotal/2);
+    // If even none+closed exceeds period, scale them proportionally
+    if (maxOverlapTotal < 0){
+      const sum = nonePx + closedPx;
+      const k = (periodPx) / Math.max(1, sum);
+      nonePx = Math.floor(nonePx * k);
+      closedPx = Math.floor(closedPx * k);
+    }
+
+    const enforceExtremes = ctrl.enforceExtremes.checked;
+    const linkRampToPlateau = ctrl.linkRampToPlateau.checked;
+
+    return {
+      SCROLL_TAU, OPEN_TAU, snapWindow, snapSharp, stages, plateau, holdMs, cleanSwitch,
+      C, enabled,
+      periodPx, nonePx, closedPx, overlapPx, overlapEff,
+      enforceExtremes, linkRampToPlateau
+    };
   }
 
   function reflectUI(P){
@@ -469,41 +555,85 @@
     ctrl.vals.plateau.textContent = Math.round(P.plateau*100);
     ctrl.vals.hold.textContent = P.holdMs;
     ctrl.vals.parallax.textContent = '×'+P.C.toFixed(2);
-    ctrl.vals.periodMs.textContent = P.stageMs;
+    ctrl.vals.periodPx.textContent = P.periodPx;
+    ctrl.vals.nonePx.textContent   = P.nonePx;
+    ctrl.vals.closedPx.textContent = P.closedPx;
+    ctrl.vals.overlapPx.textContent= P.overlapPx;
+    hudPeriod.textContent = P.periodPx;
+    hudSegs.textContent = `${P.nonePx}/${Math.round(P.overlapEff)}/${P.closedPx}`;
   }
 
   let P = getParams(); reflectUI(P);
 
-  // State (incl. timed phase)
+  // bind classic controls
+  ['inertia','snap','stages','plateau','hold','cleanSwitch','parallax',
+   'effV','effH','effG','effD45','effD135',
+   'enforceExtremes','linkRampToPlateau']
+    .forEach(id=>{
+      const el = document.getElementById(id);
+      el.addEventListener((el.type==='checkbox'?'change':'input'), ()=>{ P=getParams(); reflectUI(P); }, {passive:true});
+    });
+
+  // bind new range <-> number pairs
+  linkRangeAndNumber(ctrl.periodPx, ctrl.periodPxNum, ctrl.vals.periodPx);
+  linkRangeAndNumber(ctrl.nonePx,   ctrl.nonePxNum,   ctrl.vals.nonePx);
+  linkRangeAndNumber(ctrl.closedPx, ctrl.closedPxNum, ctrl.vals.closedPx);
+  linkRangeAndNumber(ctrl.overlapPx,ctrl.overlapPxNum,ctrl.vals.overlapPx);
+
+  /* ------- Layout sizing for absolute images ------- */
+  function updateLayout(){
+    const h = bgStack.scrollHeight;
+    imgSpacer.style.height = (h + window.innerHeight*0.1) + 'px';
+  }
+  window.addEventListener('resize', updateLayout, {passive:true});
+
+  /* ------- State ------- */
   const state = {
     p:0, q:0, qSnap:0, step:0, open:1,
     fullOpenSince: 0,
     lastT: performance.now(),
-    t0: performance.now(),   // timed reference
-    p0: 0                    // timed phase at t0
+    prevStep: 0
   };
 
-  function resyncTimedPhase(){
-    state.t0 = performance.now();
-    state.p0 = ((state.p % 1) + 1) % 1; // keep visual phase
-  }
+  /* ------- Open mapping: pixel-based periodic piecewise ------- */
+  function openFromPixels(localScroll, P){
+    const period = Math.max(1, P.periodPx);
+    let m = localScroll % period; if(m<0) m += period;
 
-  function onParamChange(){
-    const prev = P;
-    P = getParams(); reflectUI(P);
-    if (P.driveTimed && (!prev.driveTimed || prev.stageMs !== P.stageMs || prev.stages !== P.stages)){
-      resyncTimedPhase();
+    const a1 = P.nonePx;                        // end of fully-open hold
+    const a2 = a1 + P.overlapEff;               // end of close ramp
+    const a3 = a2 + P.closedPx;                 // end of fully-closed hold
+    const a4 = a3 + P.overlapEff;               // end of open ramp
+    // remainder (period - a4) is additional open hold
+
+    let o;
+    if (m < a1) { o = 1; }
+    else if (m < a2) {
+      const t = (m - a1) / Math.max(1, P.overlapEff);
+      const shaped = P.linkRampToPlateau ? Math.pow(smooth(t), 1 + 2*P.plateau) : smooth(t);
+      o = 1 - shaped;                           // ramp down to 0
     }
+    else if (m < a3) { o = 0; }
+    else if (m < a4) {
+      const t = (m - a3) / Math.max(1, P.overlapEff);
+      const shaped = P.linkRampToPlateau ? Math.pow(smooth(t), 1 + 2*P.plateau) : smooth(t);
+      o = shaped;                               // ramp up to 1
+    }
+    else { o = 1; }
+
+    // Enforce extremes exactly in holds
+    if (P.enforceExtremes){
+      if (m < a1 || m >= a4) o = 1;
+      if (m >= a2 && m < a3) o = 0;
+    }
+
+    // Push remaining near-edges firmly to {0,1}
+    o = clamp(o, 0, 1);
+    o = strictSnap01(o, Math.max(1, P.snapSharp));
+    return o;
   }
 
-  ['inertia','snap','stages','plateau','hold','cleanSwitch','parallax',
-   'effV','effH','effG','effD45','effD135','driveTime','periodMs'
-  ].forEach(id=>{
-      const el = document.getElementById(id);
-      el.addEventListener((el.type==='checkbox'?'change':'input'), onParamChange, {passive:true});
-  });
-
-  /* ------- Snap helpers ------- */
+  /* ------- Snap helpers (for step quantization / pattern cycling) ------- */
   function softQuantize(q, w){
     const r = Math.round(q);
     const d = Math.abs(q - r);
@@ -516,21 +646,6 @@
     const a = Math.max(1.0, sharp);
     const y = Math.pow(x, a) / (Math.pow(x, a) + Math.pow(1 - x, a));
     return y;
-  }
-
-  /* ------- Layout sizing for absolute images ------- */
-  function updateLayout(){
-    const h = bgStack.scrollHeight;
-    imgSpacer.style.height = (h + window.innerHeight*0.1) + 'px';
-  }
-  window.addEventListener('resize', updateLayout, {passive:true});
-
-  /* ------- Stage/open mapping ------- */
-  function openBands(plateau){
-    const openNear = 0.02 + 0.15 * plateau;     // 0.02..0.17
-    const width = 0.08 + 0.12 * plateau;        // 0.08..0.20
-    const openFull = Math.min(0.49, openNear + width);
-    return {openNear, openFull};
   }
 
   /* ------- Pattern transforms ------- */
@@ -604,31 +719,21 @@
   /* ------- RAF loop ------- */
   function tick(now){
     const dt = Math.max(0.0005, (now - state.lastT) / 1000);
-    const Pnow = P;
+    const Pnow = P; // capture
 
-    // Local scroll within scene
+    // Compute local scroll within scene
     const sceneTop = scene.getBoundingClientRect().top + window.scrollY;
     const vpH = window.innerHeight || document.documentElement.clientHeight || 1;
     const sceneHeight = Math.max(content.scrollHeight, bgStack.scrollHeight + vpH);
     const maxScroll = Math.max(1, sceneHeight - vpH);
     const localScroll = Math.max(0, Math.min(maxScroll, window.scrollY - sceneTop));
 
-    // Target progress: time-driven OR scroll-driven
-    let pTarget;
-    if (Pnow.driveTimed){
-      const perStageSec = Pnow.stageMs / 1000;
-      const rate = 1 / (perStageSec * Pnow.stages);
-      const elapsed = (now - state.t0) / 1000;
-      pTarget = (state.p0 + elapsed * rate) % 1;
-    } else {
-      pTarget = localScroll / maxScroll;
-    }
-
-    // Inertia smoothing
-    const alpha = Pnow.driveTimed ? 1 : (1 - Math.exp(-dt / Pnow.SCROLL_TAU));
+    // Inertia smoothing for curtains drive
+    const alpha = 1 - Math.exp(-dt / Pnow.SCROLL_TAU);
+    const pTarget = localScroll / maxScroll;
     state.p = state.p + (pTarget - state.p) * alpha;
 
-    // Quantized staging with snap
+    // Pattern stepping (decoupled from open/close)
     const qRaw = state.p * Pnow.stages;
     const qSnap = softQuantize(qRaw, Math.min(0.49, Pnow.snapWindow));
     state.q = qRaw;
@@ -636,29 +741,21 @@
     const stepIdx = Math.floor(qSnap);
     state.step = stepIdx;
 
-    // Openness mapping
-    const dist = Math.abs(qSnap - Math.round(qSnap));
-    const {openNear, openFull} = openBands(Pnow.plateau);
-    let o = 1;
-    if (dist >= openFull) o = 0;
-    else if (dist > openNear) {
-      const t = (dist - openNear) / (openFull - openNear);
-      o = 1 - t;
-    }
-    o = strictSnap01(Math.max(0, Math.min(1, o)), Pnow.snapSharp);
+    // NEW: openness from pixel-period mapping
+    let o = openFromPixels(localScroll, Pnow);
 
-    // Smooth openness
+    // Smooth open state by OPEN_TAU
     const beta = 1 - Math.exp(-dt / Pnow.OPEN_TAU);
     state.open = state.open + (o - state.open) * beta;
 
-    // Clean commit gate
+    // Commit rule: if cleanSwitch is ON, only change effect while fully open & held
     let committedStep = state.step;
     if (Pnow.cleanSwitch){
       const FULL_EPS = 0.998;
       if (state.open >= FULL_EPS){
         if (state.fullOpenSince === 0) state.fullOpenSince = now;
         if ((now - state.fullOpenSince) >= Pnow.holdMs){
-          // allow change
+          // allow commit
         } else {
           committedStep = (state.prevStep ?? state.step);
         }
@@ -669,12 +766,13 @@
     }
     state.prevStep = committedStep;
 
-    // Parallax
-    const y = (Pnow.C - 1) * localScroll;
+    // Parallax: C = images speed / text speed (continuous offset)
+    const C = Pnow.C;
+    const y = (C - 1) * localScroll;
     imagesWrap.style.transform = `translateY(${y.toFixed(2)}px)`;
 
     // Apply pattern
-    applyPattern(committedStep, Math.max(0, Math.min(1, state.open)), qSnap);
+    applyPattern(committedStep, clamp(state.open,0,1), qSnap);
 
     // HUD
     if(hud.classList.contains('on')){
@@ -689,6 +787,7 @@
   }
   requestAnimationFrame(tick);
 
+  /* ------- Background drift (unchanged) ------- */
   function updateBgDrift(){
     const periodVH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--period'))||4000;
     const periodPx = (periodVH/100) * (window.innerHeight || document.documentElement.clientHeight || 1);
@@ -715,7 +814,9 @@
   }, {passive:true});
 
   // Initial layout sizing
-  updateLayout();
+  function afterDOMReady(){ updateLayout(); P=getParams(); reflectUI(P); }
+  if(document.readyState === 'complete' || document.readyState === 'interactive') afterDOMReady();
+  else window.addEventListener('DOMContentLoaded', afterDOMReady, {once:true});
 })();
 </script>
 </body>
