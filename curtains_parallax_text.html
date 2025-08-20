@@ -1,605 +1,724 @@
 <!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Experiments — Auto Index (No-403)</title>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>_Curtains · Parallax C, Real Snap, Calm Patterns</title>
 <style>
   :root{
-    --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
-    --card:#0f1117; --card2:#10131a; --line:#1a2130;
-    --cardSub:#121823; --card2Sub:#141d2a;
-    --shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 0 0 1px #1a2130, 0 8px 18px rgba(0,0,0,.45);
-    --shadow-hover:0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 14px 28px rgba(0,0,0,.6);
-    --radius:14px;
-
-    --t0:#82FFB5; --t1:#66F5C8; --t2:#4FDEDE; --t3:#4BC5F2; --t4:#5AAAF5;
-    --t5:#7D96F0; --t6:#9CA6CC; --t7:#A9B6E0; --t8:#B9C2E0; --t9:#B8B8B8;
+    --period: 4000vh;     /* gradient cycle height */
+    --stripes: 18;
+    --gridCols: 10;
+    --gridRows: 7;
   }
 
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif}
+  html,body{min-height:100%; background:#000; color:#000; margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
 
-  header{position:sticky;top:0;z-index:10;background:linear-gradient(#10131a,#0c0f15);border-bottom:1px solid #1c2537}
-  .wrap{max-width:1240px;margin:0 auto;padding:12px 14px}
-  h1{margin:0;font-size:16px;letter-spacing:.3px}
-  main{max-width:1240px;margin:0 auto;padding:14px}
-
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  input[type=search]{
-    flex:1;min-width:260px;background:#0b0f16;border:1px solid #1e293e;border-radius:10px;
-    padding:.55rem .7rem;color:var(--ink);outline:none;
-    transition:border-color .2s, background .2s, box-shadow .25s;
-    box-shadow:0 0 0 0 rgba(74,163,255,.0);
-  }
-  input[type=search]::placeholder{color:#8e97a6}
-  input[type=search]:focus{border-color:#2b3f65;background:#0d1220;box-shadow:0 0 0 5px rgba(74,163,255,.06)}
-
-  /* Small numeric control */
-  .control{display:flex;align-items:center;gap:8px;background:#0b0f16;border:1px solid #1e293e;border-radius:10px;padding:.35rem .5rem}
-  .control label{font-size:12px;color:#c8d2e4;opacity:.9}
-  .control input[type=number]{width:84px;background:transparent;border:0;color:var(--ink);padding:.25rem .3rem;outline:none}
-  .control .suf{font-size:12px;color:#9aa3b2}
-  .tapBtn{
-    border:1px dashed #2a3755;background:#101622;color:#d9e1ee;
-    padding:.38rem .6rem;border-radius:9px;font-size:11px;letter-spacing:.2px;
-    display:inline-flex;align-items:center;gap:6px;box-shadow:none;flex:0 0 auto;
-  }
-  .tapBtn:hover{background:#12203a;border-color:#35507d}
-
-  button{
-    border:1px solid #25324a;background:#131a26;color:var(--ink);
-    padding:.5rem .75rem;border-radius:10px;cursor:pointer;font-weight:650;letter-spacing:.2px;
-    transition:transform .15s, box-shadow .2s, border-color .2s, background .2s;
-    box-shadow:var(--shadow);
-  }
-  button:hover{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#31456b;background:#141e2c}
-  .status{font-size:12px;color:#9aa3b2}
-
-  .seg{display:inline-flex;border:1px solid #27324a;border-radius:10px;overflow:hidden}
-  .seg button{border:0;border-right:1px solid #27324a;background:#101622;padding:.45rem .7rem}
-  .seg button:last-child{border-right:0}
-  .seg button[aria-pressed="true"]{background:#162133}
-  .seg button[aria-pressed="true"] span{opacity:1}
-  .seg button span{opacity:.85}
-
-  .grp{margin-top:16px}
-  .grp h2{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa3b2;margin:6px 2px 10px;letter-spacing:.25px}
-
-  .cards{
-    display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(360px,1fr));
-    gap:14px;
+  /* Background gradient (base layer) */
+  body{
+    background-image:
+      linear-gradient(180deg,
+        #9000FF00 0%, #3C00FF26 10%, #0011FF59 20%, #0099FF99 30%, #00FFEFD6 40%,
+        #00FF55FF 50%, #66FF00F0 60%, #FFA6009C 70%, #FF37003F 80%, #FF130018 90%, #FF000000 100%
+      ),
+      linear-gradient(180deg,
+        #9000FF00 0%, #3C00FF26 10%, #0011FF59 20%, #0099FF99 30%, #00FFEFD6 40%,
+        #00FF55FF 50%, #66FF00F0 60%, #FFA6009C 70%, #FF37003F 80%, #FF130018 90%, #FF000000 100%
+      );
+    background-repeat: repeat-y, repeat-y;
+    background-size: 100% var(--period), 100% var(--period);
+    background-color:#050505;
   }
 
-  .card{
-    position:relative; overflow:hidden; text-decoration:none; color:inherit;
-    background:linear-gradient(180deg,var(--card),var(--card2));
-    border:1px solid var(--line); border-radius:var(--radius);
-    padding:14px 16px; box-shadow:var(--shadow);
-    transition:transform .18s, box-shadow .22s, border-color .2s, background .25s;
-    display:flex; flex-direction:column; gap:10px; min-width:0;
-  }
-  .card.sub{background:linear-gradient(180deg,var(--cardSub),var(--card2Sub));border-color:#22314a}
-  .card:before{
-    content:""; position:absolute; inset:-1px; border-radius:var(--radius);
-    background:radial-gradient(120px 80px at 0% 0%, rgba(74,163,255,.08), transparent 60%),
-               radial-gradient(160px 100px at 100% 0%, rgba(39,255,136,.05), transparent 60%);
-    pointer-events:none;
-  }
-  .card:hover,.card:focus-visible{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#2a3755;outline:none}
+  /* ===== Layering: gradient -> images -> curtains -> text -> controls */
+  .scene{ position: relative; z-index:0; }
 
-  .top{display:flex;align-items:center;gap:12px;min-width:0}
-  .ic{flex:0 0 32px; width:32px; height:32px; display:grid; place-items:center; background:#0c1119; border:1px solid #1f2a42; border-radius:10px}
-  .titleWrap{min-width:0; display:flex; flex:1 1 auto; flex-direction:column; gap:2px}
-  .name{font-weight:750; letter-spacing:.2px; line-height:1.2; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  .path{font-size:11px; color:#97a1b1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  .openVis{flex:0 0 auto; font-size:12px; color:#cfd5df; opacity:.9; display:inline-flex; gap:6px; align-items:center; pointer-events:none}
-
-  .bottom{display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0}
-  .meta{display:flex; align-items:center; gap:10px; min-width:0; overflow:hidden}
-  .ago{font-size:11px; font-weight:700; letter-spacing:.3px; display:inline-flex; align-items:center; gap:6px; flex:0 0 auto}
-  .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.95}
-  .ago.t0{color:var(--t0)} .ago.t1{color:var(--t1)} .ago.t2{color:var(--t2)}
-  .ago.t3{color:var(--t3)} .ago.t4{color:var(--t4)} .ago.t5{color:var(--t5)}
-  .ago.t6{color:var(--t6)} .ago.t7{color:var(--t7)} .ago.t8{color:var(--t8)} .ago.t9{color:var(--t9)}
-  .exact{font-size:11px;color:#cfd5df;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-  .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-  .copyBtn{
-    border:1px dashed #2a3755;background:#101622;color:#d9e1ee;
-    padding:.38rem .6rem;border-radius:9px;font-size:11px;letter-spacing:.2px;
-    display:inline-flex;align-items:center;gap:6px;box-shadow:none;flex:0 0 auto;
+  /* Image stack (does NOT push layout at top; appears below first viewport) */
+  .imagesWrap{
+    position:absolute; left:0; right:0; top:100vh; z-index:2;    /* start below initial view */
+    display:grid; place-items:center; will-change:transform;
   }
-  .copyBtn:hover{background:#12203a;border-color:#35507d}
-  .copyBtn svg{opacity:.9}
-
-  footer{color:#9aa3b2;text-align:center;padding:18px;border-top:1px solid #161b25}
-
-  @media (max-width:900px){
-    .cards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .bgStack{ display:flex; flex-direction:column; gap:16px; }
+  .bgStack img{
+    width:100vw; max-width:100vw; height:auto; object-fit:cover; display:block;
+    box-shadow:0 8px 26px rgba(0,0,0,.45);
   }
-  @media (max-width:480px){
-    .cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-    .openVis{display:none}
+
+  /* Curtains overlay (sticky) */
+  .pin{ position: sticky; top:0; height:100svh; height:100vh; overflow:hidden; z-index:5; pointer-events:none; }
+  .layer{ position:absolute; inset:0; will-change:opacity,transform; }
+  .vstripes{ display:flex; }
+  .vstripes .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
+  .hstripes{ display:flex; flex-direction:column; }
+  .hstripes .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
+  .grid{ display:grid; grid-template-columns: repeat(var(--gridCols), 1fr); grid-template-rows: repeat(var(--gridRows), 1fr); }
+  .grid .cell{ background:#fff; will-change:transform,opacity; }
+  .diag{ position:absolute; inset:-40% -40%; display:flex; }
+  .diag.diag45{ transform: rotate(45deg); }
+  .diag.diag135{ transform: rotate(-45deg); }
+  .diag .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
+
+  /* Foreground text (no backplate), sits in normal flow and is visible at start */
+  .content{ position: relative; z-index:7; padding:12vh 20px 0; display:grid; place-items:center; }
+  .content-inner{ width:min(860px, 92vw); display:grid; gap:22px; }
+  .copy h1, .copy h2, .copy h3{ color:#000; margin:.1rem 0 .4rem; text-wrap:balance; }
+  .copy h1{ font:800 clamp(22px,4.6vw,40px)/1.14 ui-sans-serif,system-ui; letter-spacing:.2px; }
+  .copy h2{ font:700 clamp(16px,2.6vw,24px)/1.2 ui-sans-serif,system-ui; letter-spacing:.3px; text-transform:uppercase; }
+  .copy h3{ font:700 14px/1.2 ui-sans-serif,system-ui; letter-spacing:.6px; text-transform:uppercase; opacity:.9; }
+  .copy p{ margin:.45rem 0; font:14px/1.68 ui-sans-serif,system-ui; letter-spacing:.2px; hyphens:auto; color:#000; }
+  .copy .lede{ font:15px/1.7 ui-sans-serif,system-ui; letter-spacing:.25px; }
+  .copy .rule{ height:1px; background:linear-gradient(90deg,transparent,#000 45%,#000 55%,transparent); opacity:.25; margin:.8rem 0; }
+  .copy blockquote{ margin:.8rem 0; padding:.4rem 0 .4rem 1rem; border-left:3px solid #000; font:italic 14px/1.6 ui-sans-serif,system-ui; color:#000; }
+  .copy ul, .copy ol{ margin:.3rem 0 .2rem 1.2rem; padding:0; }
+  .copy li{ font:14px/1.6 ui-sans-serif,system-ui; margin:.25rem 0; letter-spacing:.2px; color:#000; }
+  .cols{ columns: 2 280px; column-gap: 26px; }
+  .caption{ font:12px/1.5 ui-sans-serif,system-ui; letter-spacing:.2px; opacity:.95; color:#000; }
+  .spacer{ height:12vh; }
+
+  /* Spacer to account for absolutely positioned images (keeps page long enough) */
+  .imgSpacer{ height:0; }
+
+  /* Controls */
+  .fab{
+    position:fixed; right:.75rem; bottom:.75rem;
+    width:44px; height:44px; border-radius:50%;
+    display:grid; place-items:center;
+    background:#0f1117; border:1px solid rgba(255,255,255,.18);
+    color:#fff; font-size:18px; line-height:1; cursor:pointer;
+    box-shadow:0 8px 20px rgba(0,0,0,.35);
+    z-index:30;
   }
-  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
+  .ctrlWrap{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; z-index:29; pointer-events:none; }
+  .ctrl{
+    width:min(94vw, 680px);
+    background:rgba(0,0,0,.72); border:1px solid rgba(255,255,255,.18);
+    border-radius:14px; padding:.7rem .8rem .8rem;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 10px 28px rgba(0,0,0,.45);
+    pointer-events:auto;
+    transform: translateY(110%); transition: transform .28s ease;
+    color:#fff;
+  }
+  .ctrl.open{ transform: translateY(0%); }
+  .ctrl h3{ margin:.2rem 0 .35rem; font:600 12px/1.1 ui-monospace; opacity:.9; letter-spacing:.2px; color:#fff; }
+  .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:.5rem .65rem; }
+  .row{ display:grid; grid-template-columns: 120px 1fr 60px; align-items:center; gap:.45rem; }
+  .row label{ font:12px/1 ui-monospace; opacity:.95; color:#fff; }
+  .row input[type="range"]{ width:100%; accent-color:#fff; }
+  .row .val{ text-align:right; font:12px/1 ui-monospace; opacity:.95; color:#fff; }
+  .row .chk{ display:flex; align-items:center; gap:.45rem; color:#fff; }
+  .row .btns{ display:flex; gap:.5rem; }
+  .btn{ appearance:none; border:1px solid rgba(255,255,255,.2); background:#10141d; color:#fff; border-radius:10px; padding:.5rem .7rem; font:12px ui-monospace; cursor:pointer; }
+  .sep{ height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent); margin:.1rem 0; grid-column:1 / -1; }
+
+  /* HUD */
+  .hud{
+    position:fixed; left:.75rem; top:.75rem; width:280px; font:12px/1.25 ui-monospace;
+    background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.6rem .7rem; display:none; z-index:28; color:#fff;
+  }
+  .hud.on{display:block;}
+  .bar{height:6px; background:rgba(255,255,255,.12); border-radius:4px; overflow:hidden; margin:.35rem 0 .2rem;}
+  .bar > i{display:block; height:100%; width:0%; background:#fff; opacity:.85; border-radius:4px;}
+  .hr{height:1px; background:rgba(255,255,255,.14); margin:.35rem 0;}
+
+  @media (max-width:640px){
+    .grid3{ grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="wrap">
-    <h1>🧪 Experiments — Auto Index</h1>
-    <div class="row" style="margin-top:8px">
-      <input id="q" type="search" placeholder="Filter by name or path…">
-      <div class="seg" role="group" aria-label="Sort">
-        <button id="sortTime" aria-pressed="true" title="Newest → Oldest"><span>Time</span></button>
-        <button id="sortName" aria-pressed="false" title="A → Z by name"><span>Name</span></button>
-      </div>
 
-      <!-- ✨ Surgical addition: curtain period control + tap tempo -->
-      <div class="control" title="Curtain period passed to pages as ?cp=milliseconds">
-        <label for="cpSec">Period</label>
-        <input id="cpSec" type="number" min="0.1" step="0.1" inputmode="decimal" aria-label="Curtain period in seconds">
-        <span class="suf">s</span>
-      </div>
-      <button id="tap" class="tapBtn" aria-label="Tap tempo">Tap</button>
-      <!-- ✨ End addition -->
+  <section class="scene" id="scene">
 
-      <button id="refresh" aria-label="Refresh list">
-        <span style="display:inline-flex;gap:8px;align-items:center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M20 12a 8 8 0 1 1-2.34-5.66" stroke="#9fb3d6" stroke-width="1.5" stroke-linecap="round"></path>
-            <path d="M20 4v6h-6" stroke="#9fb3d6" stroke-width="1.5" stroke-linejoin="round"></path>
-          </svg>
-          Refresh
-        </span>
-      </button>
-      <button id="copySelf" aria-label="Copy this page’s HTML">Copy this page</button>
-      <span id="status" class="status">—</span>
+    <!-- IMAGES (full-width, parallax, don't push initial view) -->
+    <div class="imagesWrap" id="imagesWrap">
+      <div class="bgStack" id="bgStack" aria-hidden="true"></div>
     </div>
+
+    <!-- STICKY CURTAINS OVERLAY -->
+    <div class="pin">
+      <div class="layer vstripes" id="vLayer" aria-hidden="true"></div>
+      <div class="layer hstripes" id="hLayer" aria-hidden="true"></div>
+      <div class="layer grid" id="gLayer" aria-hidden="true"></div>
+      <div class="layer diag diag45" id="d1Layer" aria-hidden="true"></div>
+      <div class="layer diag diag135" id="d2Layer" aria-hidden="true"></div>
+    </div>
+
+    <!-- TEXT (no backplate) -->
+    <div class="content" id="content">
+      <div class="content-inner copy" id="copy">
+        <div class="caption">Notes from the atelier — Field series</div>
+        <h1>Quiet Headline for a Loud World</h1>
+        <p class="lede">
+          A paragraph to set cadence. Keep the voice calm. Use space as punctuation.
+          Let motion be an accent, not the message.
+        </p>
+        <blockquote>“Design tells you what to pay attention to. The rest is noise.”</blockquote>
+
+        <div class="rule"></div>
+
+        <h2>Rhythm over spectacle</h2>
+        <p>
+          We aim for a tempo you can breathe with. Scroll is not a trigger—it’s a negotiation.
+          The curtains modulate exposure; the images cooperate rather than perform.
+        </p>
+        <ul>
+          <li>Hierarchy grows from contrast, not volume.</li>
+          <li>Transitions should read as intent, not inertia.</li>
+          <li>Use fewer elements; orchestrate more carefully.</li>
+        </ul>
+
+        <div class="rule"></div>
+
+        <h2>Edges, weight, and silence</h2>
+        <p>
+          Thin edges feel faster; heavy blocks slow the scene. Silence is a weight class of its own.
+          We calibrate all three as if they were type sizes.
+        </p>
+        <p>
+          Pixels don’t know restraint. Designers do. This is where the controls speak the same
+          language as composition: fewer knobs, broader ranges, predictable curves.
+        </p>
+
+        <div class="rule"></div>
+
+        <h2>Interlude—field notes</h2>
+        <div class="cols">
+          <p>
+            Typography: keep it black. No backplates. Let the contrast fight and win or lose;
+            that friction is part of the piece.
+          </p>
+          <p>
+            Motion: anchor it to meaning. Parallax isn’t spectacle, it’s grammar—
+            it clarifies which layer is speaking.
+          </p>
+          <p>
+            Sequencing: give users agency without confusion. The same gesture should spell
+            the same sentence—up or down.
+          </p>
+        </div>
+
+        <div class="rule"></div>
+
+        <h2>Checklist for humane motion</h2>
+        <ol>
+          <li>Set a baseline pace, then make deviations rare and legible.</li>
+          <li>Keep reveals reversible; no traps, no one-way tours.</li>
+          <li>Prefer position-based logic to time-based suspense.</li>
+        </ol>
+
+        <div class="rule"></div>
+
+        <h2>Close with intent</h2>
+        <p>
+          The project is a lens, not a mirror. If the lens is clean, we see the work.
+          If the lens shouts, we see the lens. Keep it quiet.
+        </p>
+        <p class="caption">— Draft, living document. Adjust in daylight.</p>
+
+        <div class="spacer"></div>
+      </div>
+
+      <!-- Spacer to accommodate absolute images height so page is long enough -->
+      <div class="imgSpacer" id="imgSpacer"></div>
+    </div>
+
+  </section>
+
+  <!-- HUD + Controls -->
+  <div class="hud" id="hud" role="status" aria-live="polite" aria-atomic="true">
+    <div>p (0–1): <b id="pVal">0.00</b></div>
+    <div class="bar"><i id="pBar"></i></div>
+    <div>q (p*N): <b id="qVal">0.00</b></div>
+    <div>open: <b id="oVal">0.00</b></div>
+    <div>pattern: <b id="patVal">v / h / grid / d45 / d135</b></div>
   </div>
-</header>
 
-<main>
-  <div id="list"></div>
-</main>
+  <button class="fab" id="fab" aria-label="Show controls">⚙</button>
+  <div class="ctrlWrap">
+    <form class="ctrl" id="controls" onsubmit="return false;">
+      <div class="grid3">
 
-<footer>Generated from <code>dubism/Experiments</code> via Git Trees API</footer>
+        <div>
+          <h3>Timing</h3>
+          <div class="row">
+            <label for="inertia">Inertia</label>
+            <input id="inertia" type="range" min="0" max="100" value="10" />
+            <div class="val" id="inertiaVal">10</div>
+          </div>
+          <div class="row">
+            <label for="snap">Snap</label>
+            <input id="snap" type="range" min="0" max="100" value="85" />
+            <div class="val" id="snapVal">85</div>
+          </div>
+          <div class="row">
+            <label for="stages">Stages</label>
+            <input id="stages" type="range" min="1" max="12" value="4" />
+            <div class="val" id="stagesVal">4</div>
+          </div>
+          <div class="row">
+            <label for="plateau">Plateau</label>
+            <input id="plateau" type="range" min="0" max="100" value="10" />
+            <div class="val" id="plateauVal">10</div>
+          </div>
+          <div class="row">
+            <label for="hold">Hold (ms)</label>
+            <input id="hold" type="range" min="0" max="600" value="120" />
+            <div class="val" id="holdVal">120</div>
+          </div>
+
+          <!-- [Timed] New: timed drive + period per stage -->
+          <div class="row chk">
+            <input id="driveTime" type="checkbox" />
+            <label for="driveTime">Timed drive</label>
+          </div>
+          <div class="row">
+            <label for="periodMs">Period / stage (ms)</label>
+            <input id="periodMs" type="range" min="200" max="8000" step="10" value="1200" />
+            <div class="val" id="periodMsVal">1200</div>
+          </div>
+          <!-- [/Timed] -->
+
+          <div class="row chk">
+            <input id="cleanSwitch" type="checkbox" />
+            <label for="cleanSwitch">Clean switch at full-open</label>
+          </div>
+        </div>
+
+        <div>
+          <h3>Parallax & Media</h3>
+          <div class="row">
+            <label for="parallax">Parallax C</label>
+            <input id="parallax" type="range" min="20" max="200" value="100" />
+            <div class="val" id="parallaxVal">×1.00</div>
+          </div>
+          <div class="row btns">
+            <button id="btnUpload" class="btn" type="button">Upload images…</button>
+            <button id="btnClear" class="btn" type="button">Clear</button>
+            <label class="chk"><input id="bgShow" type="checkbox" checked /> Show stack</label>
+            <input id="imgInput" type="file" accept="image/*" multiple style="display:none" />
+          </div>
+        </div>
+
+        <div>
+          <h3>Effects (cycle order)</h3>
+          <div class="row chk"><input id="effV" type="checkbox" checked /><label for="effV">Vertical stripes</label></div>
+          <div class="row chk"><input id="effH" type="checkbox" checked /><label for="effH">Horizontal stripes</label></div>
+          <div class="row chk"><input id="effG" type="checkbox" checked /><label for="effG">Grid push</label></div>
+          <div class="row chk"><input id="effD45" type="checkbox" checked /><label for="effD45">Diagonal 45°</label></div>
+          <div class="row chk"><input id="effD135" type="checkbox" /><label for="effD135">Diagonal 135°</label></div>
+        </div>
+
+        <div class="sep"></div>
+      </div>
+    </form>
+  </div>
 
 <script>
-/* ===== Config ===== */
-const USER = "dubism";
-const REPO = "Experiments";
-const REF  = "main";  // fixed to avoid hitting /repos default-branch endpoints
-const BASE = `https://${USER}.github.io/${REPO}/`;
+(() => {
+  const clamp = (x, a=0, b=1) => Math.max(a, Math.min(b, x));
+  const lerp  = (a, b, t)  => a + (b - a) * t;
 
-/* ===== DOM ===== */
-const statusEl = document.getElementById('status');
-const listEl = document.getElementById('list');
-const qEl = document.getElementById('q');
-const sortTimeBtn = document.getElementById('sortTime');
-const sortNameBtn = document.getElementById('sortName');
-const copySelfBtn = document.getElementById('copySelf');
-document.getElementById('refresh').onclick = fetchIndex;
-qEl.oninput = applyFilter;
-copySelfBtn.onclick = copySelf;
+  const scene   = document.getElementById('scene');
+  const content = document.getElementById('content');
+  const imgSpacer = document.getElementById('imgSpacer');
+  const imagesWrap = document.getElementById('imagesWrap');
+  const bgStack = document.getElementById('bgStack');
 
-// ✨ new controls
-const cpSecEl = document.getElementById('cpSec');
-const tapBtn  = document.getElementById('tap');
+  const vLayer = document.getElementById('vLayer');
+  const hLayer = document.getElementById('hLayer');
+  const gLayer = document.getElementById('gLayer');
+  const d1Layer = document.getElementById('d1Layer');
+  const d2Layer = document.getElementById('d2Layer');
 
-/* ===== State ===== */
-let allItems = [];
-let sortMode = 'time';
-sortTimeBtn.onclick = () => setSort('time');
-sortNameBtn.onclick = () => setSort('name');
+  const hud = document.getElementById('hud');
+  const pBar = document.getElementById('pBar');
+  const pVal = document.getElementById('pVal');
+  const qVal = document.getElementById('qVal');
+  const oVal = document.getElementById('oVal');
+  const patVal = document.getElementById('patVal');
 
-/* ===== Curtain period (s → ms) ===== */
-const LS_KEY = 'curtainPeriodSec';
-function getCurtainSec(){
-  const v = parseFloat(localStorage.getItem(LS_KEY));
-  return Number.isFinite(v) && v > 0 ? v : 3.0; // default 3s
-}
-function setCurtainSec(sec){
-  if(!Number.isFinite(sec) || sec <= 0) return;
-  localStorage.setItem(LS_KEY, String(sec));
-  cpSecEl.value = String(sec);
-  updateAllCardLinks(); // re-apply ?cp=
-  statusNote();
-}
-function getCurtainMs(){ return Math.round(getCurtainSec()*1000); }
+  const fab = document.getElementById('fab');
+  const panel = document.getElementById('controls');
 
-function statusNote(){
-  statusEl.textContent = statusEl.textContent.replace(/ \| Period: .*$/,'') + ` | Period: ${getCurtainSec().toFixed(2)}s`;
-}
+  const ctrl = {
+    inertia: document.getElementById('inertia'),
+    snap: document.getElementById('snap'),
+    stages: document.getElementById('stages'),
+    plateau: document.getElementById('plateau'),
+    hold: document.getElementById('hold'),
+    cleanSwitch: document.getElementById('cleanSwitch'),
+    parallax: document.getElementById('parallax'),
+    // [Timed] controls
+    driveTime: document.getElementById('driveTime'),
+    periodMs: document.getElementById('periodMs'),
+    // effects
+    effV: document.getElementById('effV'),
+    effH: document.getElementById('effH'),
+    effG: document.getElementById('effG'),
+    effD45: document.getElementById('effD45'),
+    effD135: document.getElementById('effD135'),
+    // values
+    vals: {
+      inertia: document.getElementById('inertiaVal'),
+      snap: document.getElementById('snapVal'),
+      stages: document.getElementById('stagesVal'),
+      plateau: document.getElementById('plateauVal'),
+      hold: document.getElementById('holdVal'),
+      parallax: document.getElementById('parallaxVal'),
+      periodMs: document.getElementById('periodMsVal'), // [Timed]
+    },
+    // image controls
+    imgInput: document.getElementById('imgInput'),
+    btnUpload: document.getElementById('btnUpload'),
+    btnClear: document.getElementById('btnClear'),
+    bgShow: document.getElementById('bgShow')
+  };
 
-/* Tap tempo (average last 3–6 intervals) */
-let tapTimes = [];
-function handleTap(){
-  const now = performance.now();
-  if (tapTimes.length && (now - tapTimes[tapTimes.length-1]) > 2500) tapTimes = [];
-  tapTimes.push(now);
-  if (tapTimes.length >= 2){
-    const intervals = [];
-    for(let i=1;i<tapTimes.length;i++) intervals.push(tapTimes[i]-tapTimes[i-1]);
-    const use = intervals.slice(-6); // last up to 6
-    const avgMs = use.reduce((a,b)=>a+b,0)/use.length;
-    setCurtainSec(Math.max(0.1, avgMs/1000));
+  /* ------- Build geometry ------- */
+  const STRIPES = 18, GRID_COLS=10, GRID_ROWS=7;
+  for(let i=0;i<STRIPES;i++){
+    const d = document.createElement('div');
+    d.className = 'stripe';
+    d.style.transformOrigin = (i%2 ? 'left center' : 'right center');
+    vLayer.appendChild(d);
   }
-}
-tapBtn.addEventListener('click', handleTap);
-cpSecEl.addEventListener('input', ()=>{
-  const sec = parseFloat(cpSecEl.value);
-  if(Number.isFinite(sec) && sec > 0){ setCurtainSec(sec); }
-});
-
-/* ===== Utils ===== */
-function setSort(mode){
-  sortMode = mode;
-  sortTimeBtn.setAttribute('aria-pressed', mode==='time' ? 'true' : 'false');
-  sortNameBtn.setAttribute('aria-pressed', mode==='name' ? 'true' : 'false');
-  applyFilter();
-}
-function withTimeout(promise, ms, label){
-  return Promise.race([
-    promise,
-    new Promise((_,rej)=>setTimeout(()=>rej(new Error(`${label} timeout after ${ms}ms`)), ms))
-  ]);
-}
-async function gh(url){
-  const r = await withTimeout(fetch(url, {
-    headers:{
-      'Accept':'application/vnd.github+json',
-      'X-GitHub-Api-Version':'2022-11-28'
+  for(let i=0;i<STRIPES;i++){
+    const d = document.createElement('div');
+    d.className = 'stripe';
+    d.style.transformOrigin = (i%2 ? 'center top' : 'center bottom');
+    hLayer.appendChild(d);
+  }
+  for(let r=0;r<GRID_ROWS;r++){
+    for(let c=0;c<GRID_COLS;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const nx = (c/(GRID_COLS-1))*2-1;
+      const ny = (r/(GRID_ROWS-1))*2-1;
+      cell.dataset.nx = nx.toFixed(3);
+      cell.dataset.ny = ny.toFixed(3);
+      cell.style.transformOrigin = (nx>0? 'right':'left') + ' ' + (ny>0? 'bottom':'top');
+      gLayer.appendChild(cell);
     }
-  }), 15000, url);
-
-  // Explicit, readable rate-limit handling
-  if (r.status === 403) {
-    const reset = r.headers.get('x-ratelimit-reset');
-    const retry = r.headers.get('retry-after');
-    const etaMs = retry ? (+retry*1000)
-      : reset ? Math.max(0, (+reset*1000 - Date.now()))
-      : 0;
-    const eta = etaMs ? `${Math.ceil(etaMs/1000)}s` : 'soon';
-    throw new Error(`${url} HTTP 403 (rate limited, try again in ~${eta})`);
   }
-  if (!r.ok) throw new Error(`${url} HTTP ${r.status}`);
-  return r.json();
-}
-function fileIcon(){return `
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.3" />
-    <path d="M13 3v5h5" stroke="#9fb3d6" stroke-width="1.3"/>
-  </svg>`;}
-function folderIcon(){return `
-  <svg class="folder-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M3 8h7l2 2h9v9H3z" stroke="#8ea2c6" stroke-width="1.3"/>
-  </svg>`;}
-function arrowIcon(){return `
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M7 17l7-7M10 7h7v7" stroke="#cdd7e6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;}
-function prettyName(name){return name.replace(/\.html?$/i,'').replace(/[-_]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase());}
-function isoLocal(d){
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ` +
-         `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-}
-function timeAgoClassAndText(d){
-  let secs = Math.max(0,(Date.now()-d.getTime())/1000);
-  if(secs < 60)  return {cls:'t0', text:`${Math.floor(secs)}s ago`};
-  let mins = secs/60;
-  if(mins < 5)   return {cls:'t1', text:`${Math.floor(mins)}m ago`};
-  if(mins < 15)  return {cls:'t2', text:`${Math.floor(mins)}m ago`};
-  if(mins < 30)  return {cls:'t3', text:`${Math.floor(mins)}m ago`};
-  if(mins < 60)  return {cls:'t4', text:`${Math.floor(mins)}m ago`};
-  let hours = mins/60;
-  if(hours < 4)   return {cls:'t5', text:`${Math.floor(hours)}h ago`};
-  if(hours < 12)  return {cls:'t6', text:`${Math.floor(hours)}h ago`};
-  if(hours < 24)  return {cls:'t7', text:`${Math.floor(hours)}h ago`};
-  if(hours < 72)  return {cls:'t8', text:`${Math.floor(hours)}h ago`};
-  let days = Math.floor(hours/24);
-  return {cls:'t9', text: days < 365 ? `${days}d ago` : `${Math.floor(days/365)}y ago`};
-}
+  for(let i=0;i<STRIPES;i++){ d1Layer.appendChild(Object.assign(document.createElement('div'),{className:'stripe'})); }
+  for(let i=0;i<STRIPES;i++){ d2Layer.appendChild(Object.assign(document.createElement('div'),{className:'stripe'})); }
 
-/* ===== Rendering ===== */
-function buildCard(it){
-  const a = document.createElement('a');
-  a.className = 'card';
-  if(it.depth >= 2) a.classList.add('sub');
-
-  // ✨ apply curtain period param to href
-  a.href = hrefWithCurtainParam(it.href);
-  a.dataset.path = it.path;
-
-  const top = document.createElement('div'); top.className = 'top';
-  const ic = document.createElement('div'); ic.className = 'ic'; ic.innerHTML = fileIcon();
-  const titleWrap = document.createElement('div'); titleWrap.className = 'titleWrap';
-  titleWrap.innerHTML = `
-    <div class="name">${prettyName(it.name)}</div>
-    <div class="path">${it.path}</div>
-  `;
-  const open = document.createElement('div'); open.className = 'openVis'; open.innerHTML = `Open ${arrowIcon()}`;
-  top.append(ic, titleWrap, open);
-
-  const bottom = document.createElement('div'); bottom.className = 'bottom';
-  const meta = document.createElement('div'); meta.className = 'meta';
-  const when = document.createElement('span'); when.className = 'ago t9';
-  when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">—</span>`;
-  const exact = document.createElement('span'); exact.className = 'exact'; exact.textContent = '—';
-  if(it.updatedAt){
-    const d = new Date(it.updatedAt);
-    const ag = timeAgoClassAndText(d);
-    when.classList.add(ag.cls); when.querySelector('.t').textContent = ag.text; when.title = `Last updated: ${isoLocal(d)}`;
-    exact.textContent = isoLocal(d);
-  }
-  meta.append(when, exact);
-
-  const actions = document.createElement('div'); actions.className = 'actions';
-  const copyBtn = document.createElement('button');
-  copyBtn.className = 'copyBtn'; copyBtn.type = 'button';
-  copyBtn.innerHTML = `
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="9" y="9" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5"/>
-      <rect x="3" y="3" width="12" height="12" rx="2" stroke="#cdd7e6" stroke-width="1.5" opacity=".85"/>
-    </svg>
-    Copy HTML`;
-  copyBtn.addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); copyFile(it.path, copyBtn); });
-  actions.append(copyBtn);
-  bottom.append(meta, actions);
-
-  a.append(top, bottom);
-  return a;
-}
-
-function render(items){
-  const q = qEl.value.trim().toLowerCase();
-  let list = !q ? items : items.filter(it =>
-    it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
-  );
-  listEl.innerHTML = "";
-
-  if(sortMode === 'time'){
-    list.sort((a,b)=>{
-      const ad = a.updatedAt ? new Date(a.updatedAt).getTime() : -Infinity;
-      const bd = b.updatedAt ? new Date(b.updatedAt).getTime() : -Infinity;
-      return bd - ad;
+  /* ------- Image upload (stack) ------- */
+  let imgURLs = [];
+  function clearImages(){ imgURLs.forEach(u=>URL.revokeObjectURL(u)); imgURLs=[]; bgStack.innerHTML=''; updateLayout(); }
+  ctrl.btnUpload.addEventListener('click', ()=> ctrl.imgInput.click());
+  ctrl.btnClear.addEventListener('click', ()=> clearImages());
+  ctrl.bgShow.addEventListener('change', ()=> { imagesWrap.style.display = ctrl.bgShow.checked ? '' : 'none'; });
+  ctrl.imgInput.addEventListener('change', (e)=>{
+    const files = Array.from(e.target.files||[]);
+    if(!files.length) return;
+    clearImages();
+    let loaded = 0;
+    files.forEach(f => {
+      const url = URL.createObjectURL(f);
+      imgURLs.push(url);
+      const im = document.createElement('img');
+      im.loading='eager'; im.decoding='async'; im.src=url;
+      im.onload = ()=>{ loaded++; if(loaded===files.length) updateLayout(); };
+      bgStack.appendChild(im);
     });
-
-    const section = document.createElement('section');
-    section.className = 'grp';
-    const h2 = document.createElement('h2'); h2.textContent = "All files — Newest → Oldest (dates load on demand)";
-    section.appendChild(h2);
-
-    const grid = document.createElement('div'); grid.className = 'cards';
-    list.forEach(it=> grid.appendChild(buildCard(it)));
-    section.appendChild(grid);
-    listEl.appendChild(section);
-  } else {
-    const groups = new Map();
-    list.forEach(it=>{
-      const key = it.path.includes('/') ? it.path.split('/')[0] : '';
-      if(!groups.has(key)) groups.set(key,[]);
-      groups.get(key).push(it);
-    });
-    [...groups.entries()].sort().forEach(([folder,arr])=>{
-      arr.sort((a,b)=>a.name.localeCompare(b.name));
-      const section = document.createElement('section'); section.className = 'grp';
-      const h2 = document.createElement('h2'); h2.innerHTML = `${folder ? folderIcon() + ' /' + folder : 'Root'}`;
-      section.appendChild(h2);
-      const grid = document.createElement('div'); grid.className = 'cards';
-      arr.forEach(it=> grid.appendChild(buildCard(it)));
-      section.appendChild(grid); listEl.appendChild(section);
-    });
-  }
-
-  initDateObserver(); // attach lazy date loader to current cards
-  updateAllCardLinks(); // ensure ?cp is applied to all visible cards
-}
-
-function applyFilter(){ render(allItems); }
-
-/* ===== Data via Git Trees (two calls, no folder fan-out) ===== */
-async function fetchIndex(){
-  statusEl.textContent = "Loading…";
-  try{
-    // 1) Resolve branch SHA
-    const branch = await gh(`https://api.github.com/repos/${USER}/${REPO}/branches/${encodeURIComponent(REF)}`);
-    const sha = branch.commit.sha;
-
-    // 2) Get recursive tree
-    const tree = await gh(`https://api.github.com/repos/${USER}/${REPO}/git/trees/${sha}?recursive=1`);
-
-    const files = tree.tree.filter(n =>
-      n.type === 'blob' && /\.html?$/i.test(n.path) && !/^index\.html?$/i.test(n.path)
-    );
-
-    allItems = files.map(n => {
-      const name = n.path.split('/').pop();
-      return {
-        path: n.path,
-        name,
-        href: BASE + n.path,
-        updatedAt: null,
-        depth: n.path.includes('/') ? n.path.split('/').length : 1
-      };
-    });
-
-    render(allItems);
-    statusEl.textContent = `Found ${allItems.length} file(s). Dates load on demand.`;
-    statusNote();
-  }catch(e){
-    console.error(e);
-    statusEl.textContent = `Error: ${e.message || e}`;
-  }
-}
-
-/* ===== Lazy commit dates (viewport-triggered, concurrency=1) ===== */
-const DATE_LIMIT_TOTAL = 40;    // safety: at most N dates per page view
-let dateRequested = new Set();
-let dateFetched = 0;
-let queue = [];
-let processing = false;
-let cooldownUntil = 0;
-
-function initDateObserver(){
-  const cards = document.querySelectorAll('.card');
-  const io = new IntersectionObserver((entries)=>{
-    for(const entry of entries){
-      if(!entry.isIntersecting) continue;
-      const path = entry.target.dataset.path;
-      if(!path || dateRequested.has(path)) continue;
-      if(dateFetched + queue.length >= DATE_LIMIT_TOTAL) continue; // cap
-      dateRequested.add(path);
-      queue.push(path);
-      processQueue();
-    }
-  }, {rootMargin:'200px 0px 200px 0px'});
-
-  cards.forEach(c=> io.observe(c));
-}
-
-async function processQueue(){
-  if(processing) return;
-  processing = true;
-  try{
-    while(queue.length){
-      const now = Date.now();
-      if(now < cooldownUntil){
-        const waitMs = cooldownUntil - now;
-        statusEl.textContent = `Cooling down for rate limit… resuming in ~${Math.ceil(waitMs/1000)}s`;
-        await new Promise(r=>setTimeout(r, Math.min(waitMs, 5000)));
-        continue;
-      }
-
-      const path = queue.shift();
-      try{
-        const d = await fetchCommitDate(path);
-        const it = allItems.find(x=>x.path===path);
-        if(it && d){ it.updatedAt = d.toISOString(); updateCardDates(path, d); dateFetched++; }
-        if(sortMode==='time'){ applyFilter(); } // keep order fresh
-      }catch(err){
-        // 403 handling sets cooldown; others we ignore
-        console.warn('Date fetch failed for', path, err);
-      }
-    }
-  } finally {
-    processing = false;
-  }
-}
-
-async function fetchCommitDate(path){
-  const url = `https://api.github.com/repos/${USER}/${REPO}/commits?path=${encodeURIComponent(path)}&per_page=1&sha=${encodeURIComponent(REF)}`;
-  const r = await withTimeout(fetch(url, {
-    headers:{
-      'Accept':'application/vnd.github+json',
-      'X-GitHub-Api-Version':'2022-11-28'
-    }
-  }), 15000, 'commits');
-
-  if (r.status === 403){
-    const reset = r.headers.get('x-ratelimit-reset');
-    const retry = r.headers.get('retry-after');
-    const etaMs = retry ? (+retry*1000)
-      : reset ? Math.max(0, (+reset*1000 - Date.now()))
-      : 30*1000;
-    cooldownUntil = Date.now() + Math.max(etaMs, 10*1000);
-    throw new Error(`Rate limited, cooling ~${Math.ceil(etaMs/1000)}s`);
-  }
-  if(!r.ok) throw new Error(`Commits HTTP ${r.status}`);
-
-  const c = await r.json();
-  const iso = c?.[0]?.commit?.committer?.date;
-  return iso ? new Date(iso) : null;
-}
-
-function updateCardDates(path, d){
-  const card = document.querySelector(`.card[data-path="${cssEscape(path)}"]`);
-  if(!card) return;
-  const when = card.querySelector('.ago');
-  const exact = card.querySelector('.exact');
-  if(!when || !exact) return;
-  when.className = 'ago'; // reset classes
-  const ag = timeAgoClassAndText(d);
-  when.classList.add(ag.cls);
-  when.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="t">${ag.text}</span>`;
-  when.title = `Last updated: ${isoLocal(d)}`;
-  exact.textContent = isoLocal(d);
-}
-
-// Minimal CSS.escape fallback
-function cssEscape(sel){
-  return sel.replace(/["\\#.;,!?+*~^$[\] ()=>|]/g, '\\$&');
-}
-
-/* ===== Copy helpers (no API: fetch from Pages) ===== */
-async function copyFile(path, btn){
-  const original = btn.innerHTML;
-  try{
-    btn.disabled = true; btn.innerHTML = 'Copying…';
-    const r = await withTimeout(fetch(`${BASE}${path}`, {cache:'no-store'}), 15000, 'pages');
-    if(!r.ok) throw new Error(`Pages HTTP ${r.status}`);
-    const text = await r.text();
-    await writeToClipboard(text);
-    btn.innerHTML = 'Copied ✓';
-  }catch(err){
-    console.error('Copy failed:', err);
-    btn.innerHTML = 'Failed ✕';
-  }finally{
-    setTimeout(()=>{ btn.disabled=false; btn.innerHTML = original; }, 1200);
-  }
-}
-
-async function writeToClipboard(text){
-  if(navigator.clipboard?.writeText){ return navigator.clipboard.writeText(text); }
-  const ta = document.createElement('textarea');
-  ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px';
-  document.body.appendChild(ta); ta.focus(); ta.select();
-  try{ document.execCommand('copy'); } finally{ document.body.removeChild(ta); }
-}
-
-/* Copy this page (DOM fallback) */
-async function copySelf(){
-  const btn = copySelfBtn; const original = btn.innerHTML;
-  try{
-    btn.disabled = true; btn.innerHTML = 'Copying…';
-    // Try to fetch raw from Pages; fallback to DOM
-    let text = '';
-    try{
-      const r = await withTimeout(fetch(`${BASE}index.html`, {cache:'no-store'}), 12000, 'self');
-      if(r.ok) text = await r.text();
-    }catch(_){}
-    if(!text){ text = '<!DOCTYPE html>\n' + document.documentElement.outerHTML; }
-    await writeToClipboard(text);
-    btn.innerHTML = 'Copied ✓';
-  }catch(e){
-    console.error(e); btn.innerHTML = 'Failed ✕';
-  }finally{
-    setTimeout(()=>{ btn.disabled=false; btn.innerHTML=original; }, 1200);
-  }
-}
-
-/* ===== Curtain param plumbing for links ===== */
-function hrefWithCurtainParam(absUrl){
-  try{
-    const u = new URL(absUrl, location.href);
-    u.searchParams.set('cp', String(getCurtainMs())); // cp = curtain period (ms)
-    return u.toString();
-  }catch{ return absUrl; }
-}
-function updateAllCardLinks(){
-  document.querySelectorAll('a.card').forEach(a=>{
-    a.href = hrefWithCurtainParam(a.href);
   });
-}
 
-/* init */
-(function initCurtainControl(){
-  // seed UI from LS, then hook up
-  cpSecEl.value = String(getCurtainSec());
-  statusNote();
+  /* ------- Parameters & Mappings ------- */
+  function getEnabledPatterns(){
+    const arr = [];
+    if(ctrl.effV.checked) arr.push(0);
+    if(ctrl.effH.checked) arr.push(1);
+    if(ctrl.effG.checked) arr.push(2);
+    if(ctrl.effD45.checked) arr.push(3);
+    if(ctrl.effD135.checked) arr.push(4);
+    return arr.length ? arr : [0]; // always at least one
+  }
+
+  function getParams(){
+    const inertia = (parseInt(ctrl.inertia.value)||0)/100;
+    const SCROLL_TAU = 0.04 + 1.16 * inertia;    // 0.04..1.20 s
+    const OPEN_TAU   = 0.24 + 0.66 * inertia;    // slower openness → calmer
+
+    const snapUi = (parseInt(ctrl.snap.value)||0)/100;  // 0..1
+    const snapWindow = 0.02 + 0.25 * Math.pow(snapUi, 1.4); // 0.02..~0.27 (magnetic zone width)
+    const snapSharp  = 1 + 28 * Math.pow(snapUi, 2.0);      // strictness to 0/1
+
+    const stages = Math.max(1, parseInt(ctrl.stages.value)||4);
+    const plateau = (parseInt(ctrl.plateau.value)||0)/100;
+    const holdMs = parseInt(ctrl.hold.value)||0;
+    const cleanSwitch = ctrl.cleanSwitch.checked;
+
+    const C = Math.max(0.2, Math.min(2.0, (parseInt(ctrl.parallax.value)||100)/100)); // 0.2..2.0
+
+    const driveTimed = ctrl.driveTime.checked;                               // [Timed]
+    const stageMs = Math.max(50, parseInt(ctrl.periodMs.value)||1200);      // [Timed] per stage
+
+    const enabled = getEnabledPatterns();
+    return {SCROLL_TAU, OPEN_TAU, snapWindow, snapSharp, stages, plateau, holdMs, cleanSwitch, C, enabled, driveTimed, stageMs};
+  }
+
+  function reflectUI(P){
+    ctrl.vals.inertia.textContent = Math.round(((P.SCROLL_TAU-0.04)/1.16)*100);
+    ctrl.vals.snap.textContent = Math.round((Math.pow((P.snapWindow-0.02)/0.25, 1/1.4))*100);
+    ctrl.vals.stages.textContent = P.stages;
+    ctrl.vals.plateau.textContent = Math.round(P.plateau*100);
+    ctrl.vals.hold.textContent = P.holdMs;
+    ctrl.vals.parallax.textContent = '×'+P.C.toFixed(2);
+    ctrl.vals.periodMs.textContent = P.stageMs; // [Timed]
+  }
+
+  let P = getParams(); reflectUI(P);
+
+  // [Timed] Keep phase continuous when toggling/changing timing
+  const state = {
+    p:0, q:0, qSnap:0, step:0, open:1,
+    fullOpenSince: 0,
+    lastT: performance.now(),
+    // timed drive
+    t0: performance.now(),   // reference start
+    p0: 0                    // phase at t0
+  };
+
+  function resyncTimedPhase(){
+    state.t0 = performance.now();
+    state.p0 = ((state.p % 1) + 1) % 1; // preserve current visual phase, avoid jump
+  }
+
+  function onParamChange(){
+    const prev = P;
+    P = getParams(); reflectUI(P);
+    // Resync when enabling timed or changing the temporal step geometry
+    if (P.driveTimed && (!prev.driveTimed || prev.stageMs !== P.stageMs || prev.stages !== P.stages)){
+      resyncTimedPhase();
+    }
+  }
+
+  ['inertia','snap','stages','plateau','hold','cleanSwitch','parallax',
+   'effV','effH','effG','effD45','effD135',
+   'driveTime','periodMs' // [Timed]
+  ].forEach(id=>{
+      const el = document.getElementById(id);
+      el.addEventListener((el.type==='checkbox'?'change':'input'), onParamChange, {passive:true});
+  });
+
+  /* ------- Snap helpers ------- */
+  function softQuantize(q, w){
+    const r = Math.round(q);
+    const d = Math.abs(q - r);
+    if (d <= w) return r;  // hard snap inside window
+    const t = (d - w) / Math.max(1e-6, 0.5 - w); // 0..1
+    const keep = Math.min(1, Math.max(0, t));
+    return r + Math.sign(q - r) * keep * (d);
+  }
+  function strictSnap01(x, sharp){
+    const a = Math.max(1.0, sharp);  // >=1
+    const y = Math.pow(x, a) / (Math.pow(x, a) + Math.pow(1 - x, a));
+    return y;
+  }
+
+  /* ------- Layout sizing for absolute images ------- */
+  function updateLayout(){
+    const h = bgStack.scrollHeight;
+    imgSpacer.style.height = (h + window.innerHeight*0.1) + 'px';
+  }
+  window.addEventListener('resize', updateLayout, {passive:true});
+
+  /* ------- Stage/open mapping ------- */
+  function openBands(plateau){
+    const openNear = 0.02 + 0.15 * plateau;     // 0.02..0.17
+    const width = 0.08 + 0.12 * plateau;        // 0.08..0.20
+    const openFull = Math.min(0.49, openNear + width);
+    return {openNear, openFull};
+  }
+
+  /* ------- Pattern transforms ------- */
+  function applyPattern(stepIdx, open, qNorm){
+    const enabled = P.enabled;
+    const pattern = enabled[stepIdx % enabled.length];
+
+    vLayer.style.opacity  = (pattern===0)?1:0;
+    hLayer.style.opacity  = (pattern===1)?1:0;
+    gLayer.style.opacity  = (pattern===2)?1:0;
+    d1Layer.style.opacity = (pattern===3)?1:0;
+    d2Layer.style.opacity = (pattern===4)?1:0;
+
+    const vpMin = Math.min(window.innerWidth, window.innerHeight);
+    const longAmpBase = vpMin * 0.22;       // calmer amplitude
+    const longE = open*open;
+    const phase = qNorm * 6.283;
+    const openScale = 0.035;                // thin sliver at open
+
+    if(pattern===0){
+      const kids = vLayer.children;
+      for(let i=0;i<kids.length;i++){
+        const a = i/(kids.length-1);
+        const wobble = 0.015 * Math.sin((a*7.2 + phase));
+        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
+        const offset = Math.sin(phase + a*3.2) * longAmpBase * longE;
+        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
+      }
+    } else if(pattern===1){
+      const kids = hLayer.children;
+      for(let i=0;i<kids.length;i++){
+        const a = i/(kids.length-1);
+        const wobble = 0.015 * Math.cos((a*8.2 + phase));
+        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
+        const offset = Math.sin(phase*0.9 + a*3.6) * longAmpBase * longE;
+        kids[i].style.transform = `translateX(${offset.toFixed(2)}px) scaleY(${s})`;
+      }
+    } else if(pattern===2){
+      const kids = gLayer.children;
+      const maxShift = vpMin * 0.55;
+      const e = open*open;
+      for(let i=0;i<kids.length;i++){
+        const nx = parseFloat(kids[i].dataset.nx);
+        const ny = parseFloat(kids[i].dataset.ny);
+        const dx = nx * maxShift * e;
+        const dy = ny * maxShift * e;
+        const rot = (nx*ny) * 4.5 * open;
+        kids[i].style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+      }
+    } else if(pattern===3){
+      const kids = d1Layer.children;
+      for(let i=0;i<kids.length;i++){
+        const a = i/(kids.length-1);
+        const wobble = 0.015 * Math.sin((a*6.4 + phase));
+        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
+        const offset = Math.sin(phase*0.8 + a*2.8) * longAmpBase * longE;
+        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
+      }
+    } else {
+      const kids = d2Layer.children;
+      for(let i=0;i<kids.length;i++){
+        const a = i/(kids.length-1);
+        const wobble = 0.015 * Math.cos((a*6.8 + phase));
+        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
+        const offset = Math.sin(phase*1.1 + a*3.1) * longAmpBase * longE;
+        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
+      }
+    }
+  }
+
+  /* ------- RAF loop ------- */
+  function tick(now){
+    const dt = Math.max(0.0005, (now - state.lastT) / 1000);
+    const Pnow = P; // capture
+
+    // Compute local scroll within scene (always needed for parallax & scroll drive)
+    const sceneTop = scene.getBoundingClientRect().top + window.scrollY;
+    const vpH = window.innerHeight || document.documentElement.clientHeight || 1;
+    const sceneHeight = Math.max(content.scrollHeight, bgStack.scrollHeight + vpH); // text + images
+    const maxScroll = Math.max(1, sceneHeight - vpH);
+    const localScroll = Math.max(0, Math.min(maxScroll, window.scrollY - sceneTop));
+
+    // Target progress pTarget: time-driven OR scroll-driven
+    let pTarget;
+    if (Pnow.driveTimed){ // [Timed]
+      const perStageSec = Pnow.stageMs / 1000;
+      const rate = 1 / (perStageSec * Pnow.stages); // p units per second
+      const elapsed = (now - state.t0) / 1000;
+      pTarget = (state.p0 + elapsed * rate) % 1;
+    } else {
+      pTarget = localScroll / maxScroll;
+    }
+
+    // Inertia smoothing for curtains drive
+    const alpha = Pnow.driveTimed ? 1 : (1 - Math.exp(-dt / Pnow.SCROLL_TAU)); // [Timed] exact timing
+    state.p = state.p + (pTarget - state.p) * alpha;
+
+    // Quantized staging with real snap
+    const qRaw = state.p * Pnow.stages;
+    const qSnap = softQuantize(qRaw, Math.min(0.49, Pnow.snapWindow));
+    state.q = qRaw;
+    state.qSnap = qSnap;
+    const stepIdx = Math.floor(qSnap);
+    state.step = stepIdx;
+
+    // Map to openness target based on distance to nearest integer in snapped space
+    const dist = Math.abs(qSnap - Math.round(qSnap));
+    const {openNear, openFull} = openBands(Pnow.plateau);
+    let o = 1;
+    if (dist >= openFull) o = 0;
+    else if (dist > openNear) {
+      const t = (dist - openNear) / (openFull - openNear); // 0..1
+      o = 1 - t;
+    }
+    // Snap openness to edges smoothly/strictly
+    o = strictSnap01(Math.max(0, Math.min(1, o)), Pnow.snapSharp);
+
+    // Smooth open state by OPEN_TAU
+    const beta = 1 - Math.exp(-dt / Pnow.OPEN_TAU);
+    state.open = state.open + (o - state.open) * beta;
+
+    // Commit rule: if cleanSwitch is ON, only change effect while fully open & held
+    let committedStep = state.step;
+    if (Pnow.cleanSwitch){
+      const FULL_EPS = 0.998;
+      if (state.open >= FULL_EPS){
+        if (state.fullOpenSince === 0) state.fullOpenSince = now;
+        if ((now - state.fullOpenSince) >= Pnow.holdMs){
+          // allow commit
+        } else {
+          committedStep = (state.prevStep ?? state.step);
+        }
+      } else {
+        state.fullOpenSince = 0;
+        committedStep = (state.prevStep ?? state.step);
+      }
+    }
+    state.prevStep = committedStep;
+
+    // Parallax: C = images speed / text speed (continuous offset)
+    const C = Pnow.C;     // 0.2..2.0
+    const y = (C - 1) * localScroll;
+    imagesWrap.style.transform = `translateY(${y.toFixed(2)}px)`;
+
+    // Apply pattern
+    applyPattern(committedStep, Math.max(0, Math.min(1, state.open)), qSnap);
+
+    // HUD
+    if(hud.classList.contains('on')){
+      pBar.style.width = (state.p*100).toFixed(1)+'%';
+      pVal.textContent = state.p.toFixed(3);
+      qVal.textContent = qSnap.toFixed(3);
+      oVal.textContent = state.open.toFixed(3);
+    }
+
+    state.lastT = now;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  function updateBgDrift(){
+    const periodVH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--period'))||4000;
+    const periodPx = (periodVH/100) * (window.innerHeight || document.documentElement.clientHeight || 1);
+    const drift = (window.scrollY * 0.35) % periodPx;
+    const half = periodPx * 0.5;
+    document.body.style.backgroundPosition =
+      `center ${(-drift).toFixed(1)}px, center ${(-(drift+half)%periodPx).toFixed(1)}px`;
+  }
+  window.addEventListener('scroll', updateBgDrift, {passive:true});
+  window.addEventListener('resize', updateBgDrift, {passive:true});
+  updateBgDrift();
+
+  // Panel toggle
+  let panelOpen = false;
+  fab.addEventListener('click', ()=>{
+    panelOpen = !panelOpen;
+    panel.classList.toggle('open', panelOpen);
+    fab.setAttribute('aria-label', panelOpen?'Hide controls':'Show controls');
+  });
+
+  // HUD toggle
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='d' || e.key==='D'){ hud.classList.toggle('on'); }
+  }, {passive:true});
+
+  // Initial layout sizing
+  updateLayout();
 })();
-fetchIndex();
 </script>
-</body></html>
+</body>
+</html>
