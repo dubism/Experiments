@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>_Curtains · Parallax C, Real Snap, Calm Patterns</title>
+<style>
+  :root{
+    --period: 4000vh;     /* gradient cycle height */
+    --stripes: 18;
+    --gridCols: 10;
+    --gridRows: 7;
+  }
+
+  html,body{min-height:100%; background:#000; color:#000; margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+
+  /* Background gradient (base layer) */
+  body{
+    background-image:
+      linear-gradient(180deg,
+        #9000FF00 0%, #3C00FF26 10%, #0011FF59 20%, #0099FF99 30%, #00FFEFD6 40%,
+        #00FF55FF 50%, #66FF00F0 60%, #FFA6009C 70%, #FF37003F 80%, #FF130018 90%, #FF000000 100%
+      ),
+      linear-gradient(180deg,
+        #9000FF00 0%, #3C00FF26 10%, #0011FF59 20%, #0099FF99 30%, #00FFEFD6 40%,
+        #00FF55FF 50%, #66FF00F0 60%, #FFA6009C 70%, #FF37003F 80%, #FF130018 90%, #FF000000 100%
+      );
+    background-repeat: repeat-y, repeat-y;
+    background-size: 100% var(--period), 100% var(--period);
+    background-color:#050505;
+  }
+
+  /* ===== Layering: gradient -> images -> curtains -> text -> controls */
+  .scene{ position: relative; z-index:0; }
+
+  /* Image stack (does NOT push layout at top; appears below first viewport) */
+  .imagesWrap{
+    position:absolute; left:0; right:0; top:100vh; z-index:2;    /* start below initial view */
+    display:grid; place-items:center; will-change:transform;
+  }
+  .bgStack{ display:flex; flex-direction:column; gap:16px; }
+  .bgStack img{
+    width:100vw; max-width:100vw; height:auto; object-fit:cover; display:block;
+    box-shadow:0 8px 26px rgba(0,0,0,.45);
+  }
+
+  /* Curtains overlay (sticky) */
+  .pin{ position: sticky; top:0; height:100svh; height:100vh; overflow:hidden; z-index:5; pointer-events:none; }
+  .layer{ position:absolute; inset:0; will-change:opacity,transform; }
+  .vstripes{ display:flex; }
+  .vstripes .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
+  .hstripes{ display:flex; flex-direction:column; }
+  .hstripes .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
+  .grid{ display:grid; grid-template-columns: repeat(var(--gridCols), 1fr); grid-template-rows: repeat(var(--gridRows), 1fr); }
+  .grid .cell{ background:#fff; will-change:transform,opacity; }
+  .diag{ position:absolute; inset:-40% -40%; display:flex; }
+  .diag.diag45{ transform: rotate(45deg); }
+  .diag.diag135{ transform: rotate(-45deg); }
+  .diag .stripe{ flex:1 0 auto; background:#fff; transform-origin:center center; will-change:transform,opacity; }
+
+  /* Foreground text (no backplate), sits in normal flow and is visible at start */
+  .content{ position: relative; z-index:7; padding:12vh 20px 0; display:grid; place-items:center; }
+  .content-inner{ width:min(860px, 92vw); display:grid; gap:22px; }
+  .copy h1, .copy h2, .copy h3{ color:#000; margin:.1rem 0 .4rem; text-wrap:balance; }
+  .copy h1{ font:800 clamp(22px,4.6vw,40px)/1.14 ui-sans-serif,system-ui; letter-spacing:.2px; }
+  .copy h2{ font:700 clamp(16px,2.6vw,24px)/1.2 ui-sans-serif,system-ui; letter-spacing:.3px; text-transform:uppercase; }
+  .copy h3{ font:700 14px/1.2 ui-sans-serif,system-ui; letter-spacing:.6px; text-transform:uppercase; opacity:.9; }
+  .copy p{ margin:.45rem 0; font:14px/1.68 ui-sans-serif,system-ui; letter-spacing:.2px; hyphens:auto; color:#000; }
+  .copy .lede{ font:15px/1.7 ui-sans-serif,system-ui; letter-spacing:.25px; }
+  .copy .rule{ height:1px; background:linear-gradient(90deg,transparent,#000 45%,#000 55%,transparent); opacity:.25; margin:.8rem 0; }
+  .copy blockquote{ margin:.8rem 0; padding:.4rem 0 .4rem 1rem; border-left:3px solid #000; font:italic 14px/1.6 ui-sans-serif,system-ui; color:#000; }
+  .copy ul, .copy ol{ margin:.3rem 0 .2rem 1.2rem; padding:0; }
+  .copy li{ font:14px/1.6 ui-sans-serif,system-ui; margin:.25rem 0; letter-spacing:.2px; color:#000; }
+  .cols{ columns: 2 280px; column-gap: 26px; }
+  .caption{ font:12px/1.5 ui-sans-serif,system-ui; letter-spacing:.2px; opacity:.95; color:#000; }
+  .spacer{ height:12vh; }
+
+  /* Spacer to account for absolutely positioned images (keeps page long enough) */
+  .imgSpacer{ height:0; }
+
+  /* Controls */
+  .fab{
+    position:fixed; right:.75rem; bottom:.75rem;
+    width:44px; height:44px; border-radius:50%;
+    display:grid; place-items:center;
+    background:#0f1117; border:1px solid rgba(255,255,255,.18);
+    color:#fff; font-size:18px; line-height:1; cursor:pointer;
+    box-shadow:0 8px 20px rgba(0,0,0,.35);
+    z-index:30;
+  }
+  .ctrlWrap{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; z-index:29; pointer-events:none; }
+  .ctrl{
+    width:min(94vw, 680px);
+    background:rgba(0,0,0,.72); border:1px solid rgba(255,255,255,.18);
+    border-radius:14px; padding:.7rem .8rem .8rem;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 10px 28px rgba(0,0,0,.45);
+    pointer-events:auto;
+    transform: translateY(110%); transition: transform .28s ease;
+    color:#fff;
+  }
+  .ctrl.open{ transform: translateY(0%); }
+  .ctrl h3{ margin:.2rem 0 .35rem; font:600 12px/1.1 ui-monospace; opacity:.9; letter-spacing:.2px; color:#fff; }
+  .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:.5rem .65rem; }
+  .row{ display:grid; grid-template-columns: 120px 1fr 60px; align-items:center; gap:.45rem; }
+  .row label{ font:12px/1 ui-monospace; opacity:.95; color:#fff; }
+  .row input[type="range"]{ width:100%; accent-color:#fff; }
+  .row .val{ text-align:right; font:12px/1 ui-monospace; opacity:.95; color:#fff; }
+  .row .chk{ display:flex; align-items:center; gap:.45rem; color:#fff; }
+  .row .btns{ display:flex; gap:.5rem; }
+  .btn{ appearance:none; border:1px solid rgba(255,255,255,.2); background:#10141d; color:#fff; border-radius:10px; padding:.5rem .7rem; font:12px ui-monospace; cursor:pointer; }
+  .sep{ height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent); margin:.1rem 0; grid-column:1 / -1; }
+
+  /* HUD */
+  .hud{
+    position:fixed; left:.75rem; top:.75rem; width:280px; font:12px/1.25 ui-monospace;
+    background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.6rem .7rem; display:none; z-index:28; color:#fff;
+  }
+  .hud.on{display:block;}
+  .bar{height:6px; background:rgba(255,255,255,.12); border-radius:4px; overflow:hidden; margin:.35rem 0 .2rem;}
+  .bar > i{display:block; height:100%; width:0%; background:#fff; opacity:.85; border-radius:4px;}
+  .hr{height:1px; background:rgba(255,255,255,.14); margin:.35rem 0;}
+
+  @media (max-width:640px){
+    .grid3{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+  <section class="scene" id="scene">
+
+    <!-- IMAGES (full-width, parallax, don't push initial view) -->
+    <div class="imagesWrap" id="imagesWrap">
+      <div class="bgStack" id="bgStack" aria-hidden="true"></div>
+    </div>
+
+    <!-- STICKY CURTAINS OVERLAY -->
+    <div class="pin">
+      <div class="layer vstripes" id="vLayer" aria-hidden="true"></div>
+      <div class="layer hstripes" id="hLayer" aria-hidden="true"></div>
+      <div class="layer grid" id="gLayer" aria-hidden="true"></div>
+      <div class="layer diag diag45" id="d1Layer" aria-hidden="true"></div>
+      <div class="layer diag diag135" id="d2Layer" aria-hidden="true"></div>
+    </div>
+
+    <!-- TEXT (no backplate) -->
+    <div class="content" id="content">
+      <div class="content-inner copy" id="copy">
+        <div class="caption">Notes from the atelier — Field series</div>
+        <h1>Quiet Headline for a Loud World</h1>
+        <p class="lede">
+          A paragraph to set cadence. Keep the voice calm. Use space as punctuation.
+          Let motion be an accent, not the message.
+        </p>
+        <blockquote>“Design tells you what to pay attention to. The rest is noise.”</blockquote>
+
+        <div class="rule"></div>
+
+        <h2>Rhythm over spectacle</h2>
+        <p>
+          We aim for a tempo you can breathe with. Scroll is not a trigger—it’s a negotiation.
+          The curtains modulate exposure; the images cooperate rather than perform.
+        </p>
+        <ul>
+          <li>Hierarchy grows from contrast, not volume.</li>
+          <li>Transitions should read as intent, not inertia.</li>
+          <li>Use fewer elements; orchestrate more carefully.</li>
+        </ul>
+
+        <div class="rule"></div>
+
+        <h2>Edges, weight, and silence</h2>
+        <p>
+          Thin edges feel faster; heavy blocks slow the scene. Silence is a weight class of its own.
+          We calibrate all three as if they were type sizes.
+        </p>
+        <p>
+          Pixels don’t know restraint. Designers do. This is where the controls speak the same
+          language as composition: fewer knobs, broader ranges, predictable curves.
+        </p>
+
+        <div class="rule"></div>
+
+        <h2>Interlude—field notes</h2>
+        <div class="cols">
+          <p>
+            Typography: keep it black. No backplates. Let the contrast fight and win or lose;
+            that friction is part of the piece.
+          </p>
+          <p>
+            Motion: anchor it to meaning. Parallax isn’t spectacle, it’s grammar—
+            it clarifies which layer is speaking.
+          </p>
+          <p>
+            Sequencing: give users agency without confusion. The same gesture should spell
+            the same sentence—up or down.
+          </p>
+        </div>
+
+        <div class="rule"></div>
+
+        <h2>Checklist for humane motion</h2>
+        <ol>
+          <li>Set a baseline pace, then make deviations rare and legible.</li>
+          <li>Keep reveals reversible; no traps, no one-way tours.</li>
+          <li>Prefer position-based logic to time-based suspense.</li>
+        </ol>
+
+        <div class="rule"></div>
+
+        <h2>Close with intent</h2>
+        <p>
+          The project is a lens, not a mirror. If the lens is clean, we see the work.
+          If the lens shouts, we see the lens. Keep it quiet.
+        </p>
+        <p class="caption">— Draft, living document. Adjust in daylight.</p>
+
+        <div class="spacer"></div>
+      </div>
+
+      <!-- Spacer to accommodate absolute images height so page is long enough -->
+      <div class="imgSpacer" id="imgSpacer"></div>
+    </div>
+
+  </section>
+
+  <!-- HUD + Controls -->
+  <div class="hud" id="hud" role="status" aria-live="polite" aria-atomic="true">
+    <div>p (0–1): <b id="pVal">0.00</b></div>
+    <div class="bar"><i id="pBar"></i></div>
+    <div>q (p*N): <b id="qVal">0.00</b></div>
+    <div>open: <b id="oVal">0.00</b></div>
+    <div>pattern: <b id="patVal">v / h / grid / d45 / d135</b></div>
+  </div>
+
+  <button class="fab" id="fab" aria-label="Show controls">⚙</button>
+  <div class="ctrlWrap">
+    <form class="ctrl" id="controls" onsubmit="return false;">
+      <div class="grid3">
+
+        <div>
+          <h3>Timing</h3>
+          <div class="row">
+            <label for="inertia">Inertia</label>
+            <input id="inertia" type="range" min="0" max="100" value="10" />
+            <div class="val" id="inertiaVal">10</div>
+          </div>
+          <div class="row">
+            <label for="snap">Snap</label>
+            <input id="snap" type="range" min="0" max="100" value="85" />
+            <div class="val" id="snapVal">85</div>
+          </div>
+          <div class="row">
+            <label for="stages">Stages</label>
+            <input id="stages" type="range" min="1" max="12" value="4" />
+            <div class="val" id="stagesVal">4</div>
+          </div>
+          <div class="row">
+            <label for="plateau">Plateau</label>
+            <input id="plateau" type="range" min="0" max="100" value="10" />
+            <div class="val" id="plateauVal">10</div>
+          </div>
+          <div class="row">
+            <label for="hold">Hold (ms)</label>
+            <input id="hold" type="range" min="0" max="600" value="120" />
+            <div class="val" id="holdVal">120</div>
+          </div>
+          <div class="row chk">
+            <input id="cleanSwitch" type="checkbox" />
+            <label for="cleanSwitch">Clean switch at full-open</label>
+          </div>
+        </div>
+
+        <div>
+          <h3>Parallax & Media</h3>
+          <div class="row">
+            <label for="parallax">Parallax C</label>
+            <input id="parallax" type="range" min="20" max="200" value="100" />
+            <div class="val" id="parallaxVal">×1.00</div>
+          </div>
+          <div class="row btns">
+            <button id="btnUpload" class="btn" type="button">Upload images…</button>
+            <button id="btnClear" class="btn" type="button">Clear</button>
+            <label class="chk"><input id="bgShow" type="checkbox" checked /> Show stack</label>
+            <input id="imgInput" type="file" accept="image/*" multiple style="display:none" />
+          </div>
+        </div>
+
+        <div>
+          <h3>Effects (cycle order)</h3>
+          <div class="row chk"><input id="effV" type="checkbox" checked /><label for="effV">Vertical stripes</label></div>
+          <div class="row chk"><input id="effH" type="checkbox" checked /><label for="effH">Horizontal stripes</label></div>
+          <div class="row chk"><input id="effG" type="checkbox" checked /><label for="effG">Grid push</label></div>
+          <div class="row chk"><input id="effD45" type="checkbox" checked /><label for="effD45">Diagonal 45°</label></div>
+          <div class="row chk"><input id="effD135" type="checkbox" /><label for="effD135">Diagonal 135°</label></div>
+        </div>
+
+        <div class="sep"></div>
+      </div>
+    </form>
+  </div>
+
+<script>
+(() => {
+  const clamp = (x, a=0, b=1) => Math.max(a, Math.min(b, x));
+  const lerp  = (a, b, t)  => a + (b - a) * t;
+
+  const scene   = document.getElementById('scene');
+  const content = document.getElementById('content');
+  const imgSpacer = document.getElementById('imgSpacer');
+  const imagesWrap = document.getElementById('imagesWrap');
+  const bgStack = document.getElementById('bgStack');
+
+  const vLayer = document.getElementById('vLayer');
+  const hLayer = document.getElementById('hLayer');
+  const gLayer = document.getElementById('gLayer');
+  const d1Layer = document.getElementById('d1Layer');
+  const d2Layer = document.getElementById('d2Layer');
+
+  const hud = document.getElementById('hud');
+  const pBar = document.getElementById('pBar');
+  const pVal = document.getElementById('pVal');
+  const qVal = document.getElementById('qVal');
+  const oVal = document.getElementById('oVal');
+  const patVal = document.getElementById('patVal');
+
+  const fab = document.getElementById('fab');
+  const panel = document.getElementById('controls');
+
+  const ctrl = {
+    inertia: document.getElementById('inertia'),
+    snap: document.getElementById('snap'),
+    stages: document.getElementById('stages'),
+    plateau: document.getElementById('plateau'),
+    hold: document.getElementById('hold'),
+    cleanSwitch: document.getElementById('cleanSwitch'),
+    parallax: document.getElementById('parallax'),
+    // effects
+    effV: document.getElementById('effV'),
+    effH: document.getElementById('effH'),
+    effG: document.getElementById('effG'),
+    effD45: document.getElementById('effD45'),
+    effD135: document.getElementById('effD135'),
+    // values
+    vals: {
+      inertia: document.getElementById('inertiaVal'),
+      snap: document.getElementById('snapVal'),
+      stages: document.getElementById('stagesVal'),
+      plateau: document.getElementById('plateauVal'),
+      hold: document.getElementById('holdVal'),
+      parallax: document.getElementById('parallaxVal'),
+    },
+    // image controls
+    imgInput: document.getElementById('imgInput'),
+    btnUpload: document.getElementById('btnUpload'),
+    btnClear: document.getElementById('btnClear'),
+    bgShow: document.getElementById('bgShow')
+  };
+
+  /* ------- Build geometry ------- */
+  const STRIPES = 18, GRID_COLS=10, GRID_ROWS=7;
+  for(let i=0;i<STRIPES;i++){
+    const d = document.createElement('div');
+    d.className = 'stripe';
+    d.style.transformOrigin = (i%2 ? 'left center' : 'right center');
+    vLayer.appendChild(d);
+  }
+  for(let i=0;i<STRIPES;i++){
+    const d = document.createElement('div');
+    d.className = 'stripe';
+    d.style.transformOrigin = (i%2 ? 'center top' : 'center bottom');
+    hLayer.appendChild(d);
+  }
+  for(let r=0;r<GRID_ROWS;r++){
+    for(let c=0;c<GRID_COLS;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const nx = (c/(GRID_COLS-1))*2-1;
+      const ny = (r/(GRID_ROWS-1))*2-1;
+      cell.dataset.nx = nx.toFixed(3);
+      cell.dataset.ny = ny.toFixed(3);
+      cell.style.transformOrigin = (nx>0? 'right':'left') + ' ' + (ny>0? 'bottom':'top');
+      gLayer.appendChild(cell);
+    }
+  }
+  for(let i=0;i<STRIPES;i++){ d1Layer.appendChild(Object.assign(document.createElement('div'),{className:'stripe'})); }
+  for(let i=0;i<STRIPES;i++){ d2Layer.appendChild(Object.assign(document.createElement('div'),{className:'stripe'})); }
+
+  /* ------- Image upload (stack) ------- */
+  let imgURLs = [];
+  function clearImages(){ imgURLs.forEach(u=>URL.revokeObjectURL(u)); imgURLs=[]; bgStack.innerHTML=''; updateLayout(); }
+  ctrl.btnUpload.addEventListener('click', ()=> ctrl.imgInput.click());
+  ctrl.btnClear.addEventListener('click', ()=> clearImages());
+  ctrl.bgShow.addEventListener('change', ()=> { imagesWrap.style.display = ctrl.bgShow.checked ? '' : 'none'; });
+  ctrl.imgInput.addEventListener('change', (e)=>{
+    const files = Array.from(e.target.files||[]);
+    if(!files.length) return;
+    clearImages();
+    let loaded = 0;
+    files.forEach(f => {
+      const url = URL.createObjectURL(f);
+      imgURLs.push(url);
+      const im = document.createElement('img');
+      im.loading='eager'; im.decoding='async'; im.src=url;
+      im.onload = ()=>{ loaded++; if(loaded===files.length) updateLayout(); };
+      bgStack.appendChild(im);
+    });
+  });
+
+  /* ------- Parameters & Mappings ------- */
+  function getEnabledPatterns(){
+    const arr = [];
+    if(ctrl.effV.checked) arr.push(0);
+    if(ctrl.effH.checked) arr.push(1);
+    if(ctrl.effG.checked) arr.push(2);
+    if(ctrl.effD45.checked) arr.push(3);
+    if(ctrl.effD135.checked) arr.push(4);
+    return arr.length ? arr : [0]; // always at least one
+  }
+
+  function getParams(){
+    const inertia = (parseInt(ctrl.inertia.value)||0)/100;
+    const SCROLL_TAU = 0.04 + 1.16 * inertia;    // 0.04..1.20 s
+    const OPEN_TAU   = 0.24 + 0.66 * inertia;    // slower openness → calmer
+
+    const snapUi = (parseInt(ctrl.snap.value)||0)/100;  // 0..1
+    const snapWindow = 0.02 + 0.25 * Math.pow(snapUi, 1.4); // 0.02..~0.27 (magnetic zone width)
+    const snapSharp  = 1 + 28 * Math.pow(snapUi, 2.0);      // strictness to 0/1
+
+    const stages = Math.max(1, parseInt(ctrl.stages.value)||4);
+    const plateau = (parseInt(ctrl.plateau.value)||0)/100;
+    const holdMs = parseInt(ctrl.hold.value)||0;
+    const cleanSwitch = ctrl.cleanSwitch.checked;
+
+    const C = Math.max(0.2, Math.min(2.0, (parseInt(ctrl.parallax.value)||100)/100)); // 0.2..2.0
+
+    const enabled = getEnabledPatterns();
+    return {SCROLL_TAU, OPEN_TAU, snapWindow, snapSharp, stages, plateau, holdMs, cleanSwitch, C, enabled};
+  }
+
+  function reflectUI(P){
+    ctrl.vals.inertia.textContent = Math.round(((P.SCROLL_TAU-0.04)/1.16)*100);
+    ctrl.vals.snap.textContent = Math.round((Math.pow((P.snapWindow-0.02)/0.25, 1/1.4))*100);
+    ctrl.vals.stages.textContent = P.stages;
+    ctrl.vals.plateau.textContent = Math.round(P.plateau*100);
+    ctrl.vals.hold.textContent = P.holdMs;
+    ctrl.vals.parallax.textContent = '×'+P.C.toFixed(2);
+  }
+
+  let P = getParams(); reflectUI(P);
+  ['inertia','snap','stages','plateau','hold','cleanSwitch','parallax',
+   'effV','effH','effG','effD45','effD135']
+    .forEach(id=>{
+      const el = document.getElementById(id);
+      el.addEventListener((el.type==='checkbox'?'change':'input'), ()=>{ P=getParams(); reflectUI(P); }, {passive:true});
+    });
+
+  /* ------- Snap helpers ------- */
+  // Soft-quantize to nearest integer with a magnetic window of width w (0..0.49)
+  function softQuantize(q, w){
+    const r = Math.round(q);
+    const d = Math.abs(q - r);
+    if (d <= w) return r;  // hard snap inside window
+    // outside window: ease back toward q with smooth transition
+    const t = (d - w) / Math.max(1e-6, 0.5 - w); // 0..1 to mid-point
+    const keep = Math.min(1, Math.max(0, t));    // portion of delta we keep
+    return r + Math.sign(q - r) * keep * (d);
+  }
+  // Push any 0..1 openness toward edges with adjustable "strictness"
+  function strictSnap01(x, sharp){
+    const a = Math.max(1.0, sharp);  // >=1
+    const y = Math.pow(x, a) / (Math.pow(x, a) + Math.pow(1 - x, a));
+    return y;
+  }
+
+  /* ------- Layout sizing for absolute images ------- */
+  function updateLayout(){
+    // Set spacer to images height so the page is long enough to scroll through them
+    const h = bgStack.scrollHeight;
+    imgSpacer.style.height = (h + window.innerHeight*0.1) + 'px';
+  }
+  window.addEventListener('resize', updateLayout, {passive:true});
+
+  /* ------- Stage/open mapping ------- */
+  function openBands(plateau){
+    const openNear = 0.02 + 0.15 * plateau;     // 0.02..0.17
+    const width = 0.08 + 0.12 * plateau;        // 0.08..0.20
+    const openFull = Math.min(0.49, openNear + width);
+    return {openNear, openFull};
+  }
+
+  /* ------- State ------- */
+  const state = {
+    p:0, q:0, qSnap:0, step:0, open:1,
+    fullOpenSince: 0,
+    lastT: performance.now()
+  };
+
+  /* ------- Pattern transforms ------- */
+  function applyPattern(stepIdx, open, qNorm){
+    const enabled = P.enabled;
+    const pattern = enabled[stepIdx % enabled.length];
+
+    vLayer.style.opacity  = (pattern===0)?1:0;
+    hLayer.style.opacity  = (pattern===1)?1:0;
+    gLayer.style.opacity  = (pattern===2)?1:0;
+    d1Layer.style.opacity = (pattern===3)?1:0;
+    d2Layer.style.opacity = (pattern===4)?1:0;
+
+    const vpMin = Math.min(window.innerWidth, window.innerHeight);
+    const longAmpBase = vpMin * 0.22;       // calmer amplitude
+    const longE = open*open;
+    const phase = qNorm * 6.283;
+    const openScale = 0.035;                // thin sliver at open
+
+    if(pattern===0){
+      const kids = vLayer.children;
+      for(let i=0;i<kids.length;i++){
+        const a = i/(kids.length-1);
+        const wobble = 0.015 * Math.sin((a*7.2 + phase));
+        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
+        const offset = Math.sin(phase + a*3.2) * longAmpBase * longE;
+        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
+      }
+    } else if(pattern===1){
+      const kids = hLayer.children;
+      for(let i=0;i<kids.length;i++){
+        const a = i/(kids.length-1);
+        const wobble = 0.015 * Math.cos((a*8.2 + phase));
+        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
+        const offset = Math.sin(phase*0.9 + a*3.6) * longAmpBase * longE;
+        kids[i].style.transform = `translateX(${offset.toFixed(2)}px) scaleY(${s})`;
+      }
+    } else if(pattern===2){
+      const kids = gLayer.children;
+      const maxShift = vpMin * 0.55;
+      const e = open*open;
+      for(let i=0;i<kids.length;i++){
+        const nx = parseFloat(kids[i].dataset.nx);
+        const ny = parseFloat(kids[i].dataset.ny);
+        const dx = nx * maxShift * e;
+        const dy = ny * maxShift * e;
+        const rot = (nx*ny) * 4.5 * open;
+        kids[i].style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+      }
+    } else if(pattern===3){
+      const kids = d1Layer.children;
+      for(let i=0;i<kids.length;i++){
+        const a = i/(kids.length-1);
+        const wobble = 0.015 * Math.sin((a*6.4 + phase));
+        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
+        const offset = Math.sin(phase*0.8 + a*2.8) * longAmpBase * longE;
+        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
+      }
+    } else {
+      const kids = d2Layer.children;
+      for(let i=0;i<kids.length;i++){
+        const a = i/(kids.length-1);
+        const wobble = 0.015 * Math.cos((a*6.8 + phase));
+        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
+        const offset = Math.sin(phase*1.1 + a*3.1) * longAmpBase * longE;
+        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
+      }
+    }
+  }
+
+  /* ------- RAF loop ------- */
+  function tick(now){
+    const dt = Math.max(0.0005, (now - state.lastT) / 1000);
+    const Pnow = P; // capture
+
+    // Compute local scroll within scene
+    const sceneTop = scene.getBoundingClientRect().top + window.scrollY;
+    const vpH = window.innerHeight || document.documentElement.clientHeight || 1;
+    const sceneHeight = Math.max(content.scrollHeight, bgStack.scrollHeight + vpH); // text + images
+    const maxScroll = Math.max(1, sceneHeight - vpH);
+    const localScroll = Math.max(0, Math.min(maxScroll, window.scrollY - sceneTop));
+    const pTarget = localScroll / maxScroll;
+
+    // Inertia smoothing for curtains drive
+    const alpha = 1 - Math.exp(-dt / Pnow.SCROLL_TAU);
+    state.p = state.p + (pTarget - state.p) * alpha;
+
+    // Quantized staging with real snap
+    const qRaw = state.p * Pnow.stages;
+    const qSnap = softQuantize(qRaw, Math.min(0.49, Pnow.snapWindow));
+    state.q = qRaw;
+    state.qSnap = qSnap;
+    const stepIdx = Math.floor(qSnap);
+    state.step = stepIdx;
+
+    // Map to openness target based on distance to nearest integer in snapped space
+    const dist = Math.abs(qSnap - Math.round(qSnap));
+    const {openNear, openFull} = openBands(Pnow.plateau);
+    let o = 1;
+    if (dist >= openFull) o = 0;
+    else if (dist > openNear) {
+      const t = (dist - openNear) / (openFull - openNear); // 0..1
+      o = 1 - t;
+    }
+    // Snap openness to edges smoothly/strictly
+    o = strictSnap01(Math.max(0, Math.min(1, o)), Pnow.snapSharp);
+
+    // Smooth open state by OPEN_TAU
+    const beta = 1 - Math.exp(-dt / Pnow.OPEN_TAU);
+    state.open = state.open + (o - state.open) * beta;
+
+    // Commit rule: if cleanSwitch is ON, only change effect while fully open & held
+    let committedStep = state.step;
+    if (Pnow.cleanSwitch){
+      const FULL_EPS = 0.998;
+      if (state.open >= FULL_EPS){
+        if (state.fullOpenSince === 0) state.fullOpenSince = now;
+        if ((now - state.fullOpenSince) >= Pnow.holdMs){
+          // allow commit
+        } else {
+          // freeze to previous step until hold satisfied
+          committedStep = (state.prevStep ?? state.step);
+        }
+      } else {
+        state.fullOpenSince = 0;
+        committedStep = (state.prevStep ?? state.step);
+      }
+    }
+    state.prevStep = committedStep;
+
+    // Parallax: C = images speed / text speed (continuous offset)
+    const C = Pnow.C;     // 0.2..2.0
+    const y = (C - 1) * localScroll;
+    imagesWrap.style.transform = `translateY(${y.toFixed(2)}px)`;
+
+    // Apply pattern
+    applyPattern(committedStep, Math.max(0, Math.min(1, state.open)), qSnap);
+
+    // HUD
+    if(hud.classList.contains('on')){
+      pBar.style.width = (state.p*100).toFixed(1)+'%';
+      pVal.textContent = state.p.toFixed(3);
+      qVal.textContent = qSnap.toFixed(3);
+      oVal.textContent = state.open.toFixed(3);
+    }
+
+    state.lastT = now;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  function updateBgDrift(){
+    const periodVH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--period'))||4000;
+    const periodPx = (periodVH/100) * (window.innerHeight || document.documentElement.clientHeight || 1);
+    const drift = (window.scrollY * 0.35) % periodPx;
+    const half = periodPx * 0.5;
+    document.body.style.backgroundPosition =
+      `center ${(-drift).toFixed(1)}px, center ${(-(drift+half)%periodPx).toFixed(1)}px`;
+  }
+  window.addEventListener('scroll', updateBgDrift, {passive:true});
+  window.addEventListener('resize', updateBgDrift, {passive:true});
+  updateBgDrift();
+
+  // Panel toggle
+  let panelOpen = false;
+  fab.addEventListener('click', ()=>{
+    panelOpen = !panelOpen;
+    panel.classList.toggle('open', panelOpen);
+    fab.setAttribute('aria-label', panelOpen?'Hide controls':'Show controls');
+  });
+
+  // HUD toggle
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='d' || e.key==='D'){ hud.classList.toggle('on'); }
+  }, {passive:true});
+
+  // Initial layout sizing
+  updateLayout();
+})();
+</script>
+</body>
+</html>
