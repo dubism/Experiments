@@ -15,19 +15,23 @@
   body{
     margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
     color:var(--ink); background: radial-gradient(1200px 800px at 10% 0%, #10202b 0%, #0b0d10 40%, #0b0d10 100%);
+    -webkit-tap-highlight-color: transparent;
   }
   header{position:sticky;top:0;background:rgba(15,19,24,.85);backdrop-filter: blur(6px);border-bottom:1px solid var(--line);padding:14px 12px;z-index:10}
   h1{margin:0 0 4px;font-size:18px;letter-spacing:.2px}
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .card{border:1px solid var(--line);background:rgba(15,19,24,.8);border-radius:16px;padding:14px;margin:14px;box-shadow:var(--glow)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
   button.sound{
-    padding:16px 0;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,#14202b,#0f1318);
+    padding:14px 10px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,#14202b,#0f1318);
     color:var(--ink);cursor:pointer;box-shadow:var(--glow); position:relative; overflow:hidden;
-    transition:transform .08s ease-out, filter .08s ease-out;
+    transition:transform .06s ease-out, filter .08s ease-out, box-shadow .2s ease;
+    display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px;
+    touch-action: manipulation; user-select:none; -webkit-user-select:none;
   }
   button.sound::after{content:"";position:absolute;inset:0;background:radial-gradient(120px 40px at 50% 0%, rgba(255,255,255,.08), transparent 55%);pointer-events:none}
   button.sound:active{transform:scale(.97)}
+  button.sound.pressed{transform:scale(.97); box-shadow:0 0 0 1px #2ad0ff inset, 0 0 30px rgba(58, 208, 255, .35)}
   .ok{color:var(--accent)}
   .overlay{position:fixed;inset:0;background:rgba(7,9,12,.9);display:flex;align-items:center;justify-content:center;z-index:1000}
   .panel{background:#0f1318;border:1px solid var(--line);border-radius:16px;padding:22px;max-width:460px;text-align:center;box-shadow:var(--glow)}
@@ -51,7 +55,7 @@
   <div id="unlock" class="overlay">
     <div class="panel bubbly">
       <h2 style="margin:0 0 6px">Tap to enable sound</h2>
-      <div class="hint">iOS requires a user gesture. We’ll also play a tiny silent click to unlock audio.</div>
+      <div class="hint">No permission prompt will appear. This just unlocks audio playback on iOS.</div>
       <div style="margin-top:14px">
         <button id="unlockBtn" class="sound" style="padding:12px 18px">Enable</button>
       </div>
@@ -66,6 +70,7 @@
       <label class="pill"><input id="cut" type="checkbox" checked> Cut previous</label>
       <span id="status" class="small">Scanning…</span>
       <span class="pill"><span>Found</span> <strong id="found">0</strong></span>
+      <span class="pill"><span>Audio</span> <strong id="audioState">Locked</strong></span>
       <div class="meter"><div class="fill" id="meterFill"></div></div>
     </div>
   </header>
@@ -74,11 +79,11 @@
     <div id="chips" class="scroller"></div>
     <div class="grid" id="grid" style="margin-top:10px"></div>
     <div class="row" style="margin-top:16px">
-      <button id="seq" class="sound">Play quick sequence</button>
-      <button id="stopAll" class="sound">Stop All</button>
+      <button id="seq" class="sound">▶️ Quick playthrough</button>
+      <button id="stopAll" class="sound">⏹️ Stop All</button>
     </div>
     <p class="small" style="margin-top:10px">
-      Files are expected in <code>./sounds/</code>. We first fetch <code>manifest.json</code>, then fall back to probing <code>clip_001.wav…</code>.
+      Files are in <code>./sounds/</code>. We load <code>manifest.json</code> or probe <code>clip_001.wav…</code> if missing.
     </p>
   </main>
 
@@ -94,8 +99,13 @@ const gridEl = $("#grid");
 const meterFill = $("#meterFill");
 const unlockOverlay = $("#unlock");
 const unlockState = $("#unlockState");
+const audioStateEl = $("#audioState");
 
 function setStatus(msg, ok=false){ statusEl.textContent = msg; statusEl.classList.toggle("ok", ok); }
+function setAudioState(){ audioStateEl.textContent = unlocked ? "Unlocked" : "Locked"; }
+
+// Enable :active on iOS
+document.body.addEventListener("touchstart", ()=>{}, {passive:true});
 
 // ===== Discover files =====
 async function fetchJSON(url){
@@ -131,7 +141,7 @@ async function discover(){
     setStatus("Manifest loaded", true);
     return files;
   }
-  // Fallback probe: clip_001..clip_200
+  // Fallback probe
   let misses = 0;
   for(let i=1;i<=200;i++){
     const name = `clip_${String(i).padStart(3,"0")}.wav`;
@@ -161,6 +171,7 @@ function createCtx(){
     masterGain.gain.value = parseFloat(volEl.value);
     masterGain.connect(ctx.destination);
   }
+  setAudioState();
 }
 
 function setVolume(){
@@ -168,44 +179,54 @@ function setVolume(){
 }
 volEl.addEventListener("input", setVolume);
 
-async function unlockAudio(){
-  if(unlocked) return;
-  createCtx();
-  try{
-    // Play 1-frame silent buffer to satisfy iOS gesture requirement
-    const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
-    const src = ctx.createBufferSource();
-    src.buffer = silent;
-    src.connect(masterGain);
-    src.start(0);
-    src.stop(0);
-    await ctx.resume();
-    unlocked = true;
-    unlockState.textContent = "Audio unlocked ✅";
-  }catch(e){
-    unlockState.textContent = "Unlock failed: " + (e.message||e);
+// Promise-based unlock to allow chaining from first button tap
+let unlockPromise = null;
+function ensureUnlocked(){
+  if(unlocked){
+    if(ctx && ctx.state!=="running") return ctx.resume().then(()=>true);
+    return Promise.resolve(true);
   }
-  unlockOverlay.classList.add("hide");
-  // Start loading after unlock
-  loadAll().catch(e => setStatus("Load error"));
+  if(unlockPromise) return unlockPromise;
+  unlockPromise = (async ()=>{
+    createCtx();
+    try{
+      // 1-frame silent buffer
+      const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = silent; src.connect(masterGain);
+      src.start(0); src.stop(0);
+      await ctx.resume();
+      unlocked = true;
+      unlockState.textContent = "Audio unlocked ✅";
+    }catch(e){
+      unlockState.textContent = "Unlock failed: " + (e.message||e);
+    }
+    setAudioState();
+    unlockOverlay.classList.add("hide");
+    return true;
+  })();
+  return unlockPromise;
 }
 
+async function unlockAudio(){ await ensureUnlocked(); if(!ready) loadAll().catch(()=>{}); }
+
+// Multiple gesture hooks to satisfy iOS
+["click","pointerdown","pointerup","touchstart","touchend"].forEach(ev=>{
+  window.addEventListener(ev, unlockAudio, { once:true });
+});
 $("#unlockBtn").addEventListener("click", unlockAudio);
-window.addEventListener("touchend", unlockAudio, { once:true });
-window.addEventListener("pointerup", unlockAudio, { once:true });
-window.addEventListener("click", unlockAudio, { once:true });
 
 // ===== Loading & UI =====
 let FILES = [];
 async function loadAll(){
   if(!FILES.length){ setStatus("No files to load"); return; }
   setStatus("Loading 0/"+FILES.length+"…");
-  const start = performance.now();
   for(let i=0;i<FILES.length;i++){
     const url = "sounds/" + FILES[i];
     try{
       const res = await fetch(url, {cache:"no-store"});
       const arr = await res.arrayBuffer();
+      if(ctx.state==="suspended") await ctx.resume();
       const buf = await ctx.decodeAudioData(arr);
       buffers.set(FILES[i], buf);
       meterFill.style.width = Math.round(((i+1)/FILES.length)*100) + "%";
@@ -218,19 +239,41 @@ async function loadAll(){
   renderGrid();
 }
 
+function addPressFeedback(el){
+  const add = ()=>{ el.classList.add("pressed"); try{ navigator.vibrate && navigator.vibrate(8); }catch(_){ } };
+  const remove = ()=> el.classList.remove("pressed");
+  ["pointerdown","touchstart","mousedown"].forEach(ev=> el.addEventListener(ev, add));
+  ["pointerup","pointercancel","touchend","touchcancel","mouseleave","mouseup","blur"].forEach(ev=> el.addEventListener(ev, remove));
+}
+
 function makeButton(file, idx){
   const b = document.createElement("button");
   b.className = "sound";
-  b.textContent = (idx+1).toString().padStart(2,"0");
+  b.innerHTML = `▶️ <span>${String(idx+1).padStart(2,"0")}</span>`;
   b.title = file;
-  b.addEventListener("pointerdown", ()=> play(file));
-  b.addEventListener("keydown", (e)=>{ if(e.key==="Enter"||e.key===" "){ play(file); e.preventDefault(); }});
+  addPressFeedback(b);
+  b.addEventListener("pointerdown", async ()=>{ await ensureUnlocked(); if(!buffers.has(file)) await loadOne(file); play(file, b); });
+  b.addEventListener("keydown", async (e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); await ensureUnlocked(); if(!buffers.has(file)) await loadOne(file); play(file, b); }});
   return b;
 }
 
 function renderGrid(){
   gridEl.innerHTML = "";
   FILES.forEach((f,i)=> gridEl.appendChild(makeButton(f,i)));
+}
+
+async function loadOne(file){
+  setStatus("Decoding "+file);
+  try{
+    const res = await fetch("sounds/"+file, {cache:"no-store"});
+    const arr = await res.arrayBuffer();
+    if(ctx.state==="suspended") await ctx.resume();
+    const buf = await ctx.decodeAudioData(arr);
+    buffers.set(file, buf);
+    setStatus("Ready", true);
+  }catch(e){
+    setStatus("Decode error "+file);
+  }
 }
 
 function now(){ return ctx.currentTime; }
@@ -252,8 +295,8 @@ function stopAll(){
 }
 document.getElementById("stopAll").addEventListener("click", stopAll);
 
-function play(file){
-  if(!ready) return;
+function play(file, btn){
+  if(!buffers.has(file)) return;
   if(voices.size >= MAX_POLYPHONY){
     const oldest = voices.values().next().value;
     try{ oldest.src.stop(); }catch(_){}
@@ -275,26 +318,36 @@ function play(file){
   const t = now();
   fadeInOut(g, t, buf.duration*1000);
   src.start(t);
-  const voice = {file, src, g};
+  const voice = {file, src, g, btn};
   voices.add(voice);
-  src.onended = () => { try{ src.disconnect(); g.disconnect(); }catch(_){ } voices.delete(voice); };
+  btn && btn.classList.add("pressed");
+  src.onended = () => { try{ src.disconnect(); g.disconnect(); }catch(_){ } voices.delete(voice); btn && btn.classList.remove("pressed"); };
 }
 
-document.getElementById("seq").addEventListener("click", async ()=>{
-  if(!ready) return;
+document.getElementById("seq").addEventListener("pointerdown", async (e)=>{
+  const button = e.currentTarget;
+  button.classList.add("pressed");
+  await ensureUnlocked();
+  if(!ready){
+    FILES.length && await loadAll();
+  }
   let t = 0;
-  for(const f of FILES){
-    setTimeout(()=>play(f), t);
+  const buttons = Array.from(document.querySelectorAll("button.sound")).filter(b=>b!==button);
+  for(let i=0;i<FILES.length;i++){
+    const f = FILES[i];
+    if(!buffers.has(f)) await loadOne(f);
+    const btn = buttons[i];
+    setTimeout(()=>play(f, btn), t);
     t += 120;
   }
+  setTimeout(()=>button.classList.remove("pressed"), 200);
 });
 
-// Boot: discover immediately
+// Boot
 (async ()=>{
   FILES = await discover();
 })();
 
-// Power save
 document.addEventListener("visibilitychange", ()=>{
   if(!ctx) return;
   if(document.hidden) ctx.suspend().catch(()=>{}); else ctx.resume().catch(()=>{});
