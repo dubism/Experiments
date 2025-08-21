@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ultra Minimal To-do — FINAL · Dark · List · Kanban · Bento</title>
+<style>
+  :root{
+    --bg:#0b0d10; --ink:#e7eef6; --muted:#8fa2b8; --card:#0f1318; --line:#1b2330;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:ui-sans-serif,system-ui,Inter,Roboto,Segoe UI,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  button{font:inherit}
+
+  /* Top bar */
+  header{padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  header input{flex:1;min-width:220px;padding:12px 14px;font-size:18px;border:1px solid var(--line);border-radius:10px;background:#0c1015;color:var(--ink)}
+  header button{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#0c1015;color:var(--ink);cursor:pointer}
+  header button:hover{background:#0e141b}
+  #clearBtn{background:rgba(255,255,255,.06);color:var(--muted)}
+
+  main{display:grid;grid-template-rows:1fr auto;min-height:calc(100svh - 58px)}
+
+  /* Common card */
+  .item{position:relative;display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:16px;border:1px solid var(--line);border-radius:14px;background:#171c23;cursor:grab}
+  .item.done{opacity:.55;text-decoration:line-through}
+  .check{width:26px;height:26px;border-radius:999px;border:1.5px solid var(--muted);display:grid;place-items:center;background:transparent;cursor:pointer;color:#fff}
+  .check[data-on="true"]{background:#78faae;border-color:#78faae;color:#061014}
+  .txt{outline:none;font-size:18px;line-height:1.25}
+
+  /* 40% black backplate + white icons, NO stroke */
+  .del, .palette-btn{border:none;background:rgba(0,0,0,.40);color:#fff;border-radius:12px;padding:6px 10px;cursor:pointer}
+
+  /* Color palette popover */
+  .palette{position:absolute;display:none;gap:8px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#0c1015;z-index:50;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  .palette.show{display:flex;flex-wrap:wrap}
+  .sw{width:20px;height:20px;border-radius:999px;border:1px solid #0006;cursor:pointer}
+
+  /* Views */
+  #listView{display:block}
+  #list{list-style:none;margin:0;padding:18px;display:flex;flex-direction:column;gap:12px}
+
+  #kanbanView{display:none;padding:16px}
+  .board{display:grid;grid-template-columns:repeat(3, minmax(260px, 1fr));gap:16px}
+  .col{display:flex;flex-direction:column;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px}
+  .col h3{margin:0 0 8px;font-size:13px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .lane{min-height:140px}
+  .col[data-col="todo"]{background:#2a2116}
+  .col[data-col="doing"]{background:#132528}
+  .col[data-col="done"]{background:#12241b}
+
+  /* Bento grid (absolute, snapping) */
+  #bentoView{display:none}
+  .bentoWrap{position:relative;padding:16px}
+  .bentoGrid{--cell:140; position:relative; min-height:60vh; border:1px solid var(--line); border-radius:12px; overflow:visible;
+    background:
+      repeating-linear-gradient(0deg, #0e141b 0, #0e141b 1px, transparent 1px, transparent calc(var(--cell)*1px)),
+      repeating-linear-gradient(90deg, #0e141b 0, #0e141b 1px, transparent 1px, transparent calc(var(--cell)*1px));
+    background-color:#0c1015;
+  }
+  .bentoItem{position:absolute; width:calc(var(--w)*1px); height:calc(var(--h)*1px); display:flex; align-items:center; justify-content:center; padding:0; cursor:grab; border-radius:14px; border:1px solid var(--line); background:#171c23; -webkit-user-drag:none; user-drag:none;}
+  .bentoInner{display:grid; grid-template-columns:auto 1fr; align-items:center; gap:12px; width:88%;}
+  .noselect{ user-select:none; }
+
+  /* Right-edge UI in Bento */
+  .uiBtn{position:absolute; right:8px; width:32px; height:32px; display:grid; place-items:center; background:rgba(0,0,0,.40); color:#fff; border:none; border-radius:10px; cursor:pointer; z-index:4}
+  .btn-top-right{top:8px}
+  .btn-mid-right{top:50%; transform:translateY(-50%)}
+  .size{position:absolute; right:8px; bottom:8px; width:32px; height:32px; border:none; border-radius:10px; display:grid; place-items:center; font-size:12px; cursor:nwse-resize; background:rgba(0,0,0,.40); color:#fff; touch-action:none; user-select:none; z-index:3}
+
+  /* Scale helpers (JS refines further) */
+  .bentoItem{--scale:1}
+  .bentoItem .txt{font-size:calc(16px * var(--scale))}
+  .bentoItem .check{width:calc(22px * var(--scale)); height:calc(22px * var(--scale));}
+
+  /* Bento DONE strip */
+  .bentoDoneWrap{padding:8px 16px 18px}
+  .bentoDoneWrap h4{margin:8px 0 0;font-size:13px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .bentoDone{list-style:none;margin:8px 0 0;padding:0 18px 18px;display:flex;flex-direction:column;gap:12px}
+
+  footer{padding:10px 14px;border-top:1px solid var(--line);color:#8fa2b8;font-size:12px;background:var(--card)}
+  @media (max-width:900px){ .board{grid-template-columns:1fr} .bentoGrid{--cell:120} }
+</style>
+</head>
+<body>
+  <header>
+    <input id="newInput" placeholder="Add a task…" />
+    <button id="addBtn">Add</button>
+    <button id="viewBtn">Kanban ▸</button>
+    <button id="hideBtn">Hide ✓</button>
+    <button id="clearBtn">Clear</button>
+    <button id="saveBtn">Save ⬇</button>
+    <button id="loadBtn">Load ⬆</button>
+    <input id="fileInput" type="file" accept="application/json" style="display:none" />
+    <button id="fsBtn">⤢</button>
+  </header>
+
+  <main>
+    <!-- List -->
+    <section id="listView"><ul id="list"></ul></section>
+
+    <!-- Kanban -->
+    <section id="kanbanView">
+      <div class="board">
+        <div class="col" data-col="todo"><h3>Next</h3><div id="col-todo" class="lane"></div></div>
+        <div class="col" data-col="doing"><h3>Doing</h3><div id="col-doing" class="lane"></div></div>
+        <div class="col" data-col="done"><h3>Done</h3><div id="col-done" class="lane"></div></div>
+      </div>
+    </section>
+
+    <!-- Bento -->
+    <section id="bentoView">
+      <div class="bentoWrap">
+        <div class="bentoGrid" id="bento"></div>
+      </div>
+      <div class="bentoDoneWrap" id="bentoDoneWrap" style="display:none">
+        <h4>Done</h4>
+        <ul class="bentoDone" id="bentoDone"></ul>
+      </div>
+    </section>
+
+    <footer>
+      Enter = add • Click circle = done • 🎨 recolor • Drag to reorder/move • Bento: drag; ◿ resize • Double-click text to edit • H hide done • V cycle views • F fullscreen • Save/Load = portable JSON
+    </footer>
+  </main>
+
+<script>
+(function(){
+  'use strict';
+  const $=s=>document.querySelector(s);
+  const list=$('#list'), todo=$('#col-todo'), doing=$('#col-doing'), done=$('#col-done'), bento=$('#bento');
+  const bentoDoneWrap=$('#bentoDoneWrap'), bentoDone=$('#bentoDone');
+  const input=$('#newInput');
+  const addBtn=$('#addBtn'), viewBtn=$('#viewBtn'), hideBtn=$('#hideBtn'), clearBtn=$('#clearBtn'), fsBtn=$('#fsBtn');
+  const saveBtn=$('#saveBtn'), loadBtn=$('#loadBtn'), fileInput=$('#fileInput');
+
+  const COLORS=["#0e3a2f","#78faae","#394748","#6f797a","#f15252","#0961a1","#1ed4df","#faeb67","#f7b046"];
+
+  /* ===== State + persistence ===== */
+  let state;
+  function normalizeState(s){
+    const base = {items:[],view:'list',hideDone:false,bentoSeed:0};
+    s = (s && typeof s==='object') ? {...base, ...s} : {...base};
+    if(!Array.isArray(s.items)) s.items=[];
+    for(const it of s.items){
+      if(typeof it.id!=='string') it.id=uid();
+      if(typeof it.text!=='string') it.text='';
+      if(!('col' in it)) it.col='todo';
+      if(!('w' in it)) it.w=1;
+      if(!('h' in it)) it.h=1;
+      if(!('gx' in it)) it.gx=0;
+      if(!('gy' in it)) it.gy=0;
+      if(typeof it.done!=='boolean') it.done=(it.col==='done');
+      if(it.color && typeof it.color!=='string') delete it.color;
+    }
+    if(!['list','kanban','bento'].includes(s.view)) s.view='list';
+    if(typeof s.hideDone!=='boolean') s.hideDone=false;
+    if(typeof s.bentoSeed!=='number') s.bentoSeed=0;
+    return s;
+  }
+  try{ state=normalizeState(JSON.parse(localStorage.getItem('todoDarkBento')));}catch(e){ state=normalizeState(); }
+  const saveLocal=()=>{ try{ localStorage.setItem('todoDarkBento', JSON.stringify(state)); }catch(e){} };
+  const uid=()=>Math.random().toString(36).slice(2,9);
+
+  /* ===== Color & contrast helpers ===== */
+  function hexToRgb(hex){ const v=(hex||'').replace('#',''); return { r:parseInt(v.slice(0,2),16)||0, g:parseInt(v.slice(2,4),16)||0, b:parseInt(v.slice(4,6),16)||0 }; }
+  function prefersBlackText(hex){
+    const forceBlack = new Set(["#78faae","#1ed4df","#faeb67","#f7b046","#f15252"]);
+    if(forceBlack.has((hex||'').toLowerCase())) return true;
+    const {r,g,b} = hexToRgb(hex); const yiq=(r*299+g*587+b*114)/1000; return yiq>150;
+  }
+  function getInkForBg(hex){ if(hex && hex.toLowerCase()==='#0e3a2f') return '#78faae'; return prefersBlackText(hex)?'#000000':getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()||'#e7eef6'; }
+  function applyColor(it,hex,host){ it.color=hex; const ink=getInkForBg(hex); if(host){ host.style.background=hex; host.style.color=ink; } }
+
+  /* ===== Text scaling ===== */
+  const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
+  function scaleListItem(li){ const txt=li.querySelector('.txt'); if(!txt) return; const w=li.clientWidth; const fs=Math.round(clamp(w/18,16,36)); txt.style.fontSize=fs+'px'; const chk=li.querySelector('.check'); if(chk){ const s=Math.round(clamp(fs*1.05,18,44)); chk.style.width=s+'px'; chk.style.height=s+'px'; } }
+  function scaleBentoCard(card){ const txt=card.querySelector('.txt'); if(!txt) return; const w=card.clientWidth,h=card.clientHeight; const fs=Math.round(clamp(Math.min(w/12,h/4),16,48)); txt.style.fontSize=fs+'px'; const chk=card.querySelector('.check'); if(chk){ const s=Math.round(clamp(fs*1.0,18,48)); chk.style.width=s+'px'; chk.style.height=s+'px'; } }
+  function scaleAllText(){ document.querySelectorAll('#list .item, #kanbanView .item').forEach(scaleListItem); document.querySelectorAll('#bento .bentoItem').forEach(scaleBentoCard); }
+  const debounce=(fn,wait)=>{ let t; return ()=>{ clearTimeout(t); t=setTimeout(fn,wait); } };
+
+  function render(){
+    $('#listView').style.display=state.view==='list'?'block':'none';
+    $('#kanbanView').style.display=state.view==='kanban'?'block':'none';
+    $('#bentoView').style.display=state.view==='bento'?'block':'none';
+    viewBtn.textContent=state.view==='list'?'Kanban ▸':state.view==='kanban'?'Bento ▸':'List ▸';
+
+    // List
+    list.innerHTML='';
+    if(state.view==='list'){
+      const arr=state.items.filter(i=>!state.hideDone || !(i.done || i.col==='done'));
+      for(const it of arr) list.appendChild(listRow(it));
+    }
+
+    // Kanban (whole column droppable)
+    if(state.view==='kanban'){
+      todo.innerHTML=''; doing.innerHTML=''; done.innerHTML='';
+      const karr=state.items.filter(i=>!state.hideDone || !(i.done || i.col==='done'));
+      for(const it of karr){ const el=listRow(it); (it.col==='todo'?todo:(it.col==='doing'?doing:done)).appendChild(el); }
+      enableColumnDnD(todo.parentElement,todo,'todo');
+      enableColumnDnD(doing.parentElement,doing,'doing');
+      enableColumnDnD(done.parentElement,done,'done');
+    }
+
+    // Bento
+    if(state.view==='bento'){
+      bento.innerHTML=''; bentoDone.innerHTML='';
+      const cell=parseInt(getComputedStyle(bento).getPropertyValue('--cell'))||140; const pad=8;
+      const live=state.items.filter(i=>i.col!=='done' && !i.done);
+      if(live.length && live.every(i=>i.gx===0&&i.gy===0)){ autoPlace(cell); saveLocal(); }
+      for(const it of live) bento.appendChild(bentoCard(it,cell,pad));
+      const dones=state.items.filter(i=>i.col==='done'||i.done);
+      bentoDoneWrap.style.display=(state.hideDone || !dones.length)?'none':'block';
+      if(!state.hideDone){
+        for(const it of dones) bentoDone.appendChild(listRow(it));
+      }
+    }
+
+    scaleAllText();
+    hideBtn.textContent=state.hideDone?'Show ✓':'Hide ✓';
+    saveLocal();
+  }
+
+  /* ===== List/Kanban rows ===== */
+  function listRow(it){
+    const li=document.createElement('div'); li.className='item'+((it.col==='done'||it.done)?' done':''); li.dataset.id=it.id; li.draggable=true;
+    if(it.color){ const ink=getInkForBg(it.color); li.style.background=it.color; li.style.color=ink; }
+
+    const chk=document.createElement('button'); chk.className='check'; chk.dataset.on=(it.col==='done'||it.done); chk.textContent=(it.col==='done'||it.done)?'✓':'';
+    chk.addEventListener('pointerdown', e=>e.stopPropagation());
+    chk.addEventListener('click', e=>{ e.stopPropagation(); const now=!(it.col==='done'||it.done); it.done=now; it.col=now?'done':'todo'; render(); });
+
+    const txt=document.createElement('div'); txt.className='txt'; txt.textContent=it.text; txt.title='Double-click to edit';
+    txt.ondblclick=e=>{ e.stopPropagation(); inlineEdit(it,txt); };
+
+    const palBtn=document.createElement('button'); palBtn.className='palette-btn'; palBtn.textContent='🎨'; palBtn.addEventListener('pointerdown', e=>e.stopPropagation()); palBtn.onclick=e=>{ e.stopPropagation(); togglePalette(li,it,palBtn); };
+
+    const del=document.createElement('button'); del.className='del'; del.textContent='×'; del.onclick=e=>{ e.stopPropagation(); state.items=state.items.filter(x=>x.id!==it.id); render(); };
+
+    li.append(chk,txt,palBtn,del);
+
+    li.addEventListener('dragstart', e=>{ li.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', it.id); });
+    li.addEventListener('dragend', ()=>{ li.classList.remove('dragging'); commitFromDOM(); });
+
+    // Scale after insert
+    setTimeout(()=>scaleListItem(li),0);
+    return li;
+  }
+
+  function enableColumnDnD(colEl,listEl,col){
+    colEl.addEventListener('dragenter', e=>{ e.preventDefault(); colEl.style.outline='1px dashed var(--muted)'; colEl.style.outlineOffset='-6px'; });
+    colEl.addEventListener('dragleave', e=>{ if(!colEl.contains(e.relatedTarget)) { colEl.style.outline=''; colEl.style.outlineOffset=''; } });
+    colEl.addEventListener('dragover', e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; const dragging=document.querySelector('.item.dragging'); if(!dragging) return; const after=getAfter(listEl,e.clientY); if(after==null) listEl.appendChild(dragging); else listEl.insertBefore(dragging,after); });
+    colEl.addEventListener('drop', e=>{ e.preventDefault(); colEl.style.outline=''; colEl.style.outlineOffset=''; const els=listEl.querySelectorAll('.item'); for(const el of els){ const id=el.dataset.id; const o=state.items.find(x=>x.id===id); if(o){ o.col=col; if(col==='done') o.done=true; } } commitFromDOM(); });
+  }
+  function getAfter(container,y){ const els=[...container.querySelectorAll('.item:not(.dragging)')]; return els.reduce((c,ch)=>{const b=ch.getBoundingClientRect(); const o=y-b.top-b.height/2; return (o<0&&o>c.o)?{o,el:ch}:c; },{o:-Infinity,el:null}).el; }
+  function commitFromDOM(){ const map=new Map(state.items.map(x=>[x.id,x])); const seq=[]; const cols=['#col-todo','#col-doing','#col-done']; const names=['todo','doing','done']; for(let ci=0;ci<cols.length;ci++){ const nodes=document.querySelectorAll(cols[ci]+' .item'); for(const n of nodes){ const o=map.get(n.dataset.id); if(o){ o.col=names[ci]; if(o.col!=='done') o.done=false; seq.push(o); } } } state.items=seq.concat(state.items.filter(o=>!seq.includes(o))); saveLocal(); render(); }
+
+  function togglePalette(host,it,anchor){ const existing=host.querySelector('.palette'); if(existing){ existing.remove(); return; } const box=document.createElement('div'); box.className='palette show'; if(host.classList.contains('bentoItem')){ box.style.top='50%'; box.style.transform='translateY(-50%)'; box.style.right='36px'; } else { box.style.top='calc(100% + 8px)'; box.style.right='12px'; } box.addEventListener('pointerdown', e=>e.stopPropagation()); for(const hex of COLORS){ const sw=document.createElement('button'); sw.className='sw'; sw.style.background=hex; sw.title=hex; sw.onclick=e=>{ e.stopPropagation(); applyColor(it,hex,host); render(); }; box.appendChild(sw); } host.appendChild(box); }
+
+  function inlineEdit(it,node){ const inp=document.createElement('input'); inp.value=it.text; inp.onkeydown=e=>{ if(e.key==='Enter'){ it.text=inp.value.trim()||it.text; render(); } if(e.key==='Escape'){ render(); } }; node.replaceWith(inp); inp.focus(); }
+
+  /* ===== Bento ===== */
+  function bentoCard(it,cell,pad){
+    const card=document.createElement('div'); card.className='bentoItem'; card.dataset.id=it.id;
+    card.style.setProperty('--w', it.w*cell - pad*2); card.style.setProperty('--h', it.h*cell - pad*2);
+    card.style.left=(it.gx*cell+pad)+'px'; card.style.top=(it.gy*cell+pad)+'px';
+    if(it.color){ const ink=getInkForBg(it.color); card.style.background=it.color; card.style.color=ink; }
+
+    const inner=document.createElement('div'); inner.className='bentoInner';
+
+    const chk=document.createElement('button'); chk.className='check'; chk.dataset.on=(it.col==='done'||it.done); chk.textContent=(it.col==='done'||it.done)?'✓':'';
+    chk.addEventListener('pointerdown', e=>e.stopPropagation());
+    chk.addEventListener('click', e=>{ e.stopPropagation(); const now=!(it.col==='done'||it.done); it.done=now; it.col=now?'done':'todo'; render(); });
+
+    const txt=document.createElement('div'); txt.className='txt'; txt.textContent=it.text; txt.title='Double-click to edit'; txt.ondblclick=e=>{ e.stopPropagation(); inlineEdit(it,txt); };
+
+    const del=document.createElement('button'); del.className='uiBtn btn-top-right'; del.textContent='×'; del.title='Delete'; del.addEventListener('pointerdown', e=>e.stopPropagation()); del.onclick=e=>{ e.stopPropagation(); state.items=state.items.filter(x=>x.id!==it.id); render(); };
+
+    const colorBtn=document.createElement('button'); colorBtn.className='uiBtn btn-mid-right'; colorBtn.textContent='🎨'; colorBtn.title='Color'; colorBtn.addEventListener('pointerdown', e=>e.stopPropagation()); colorBtn.onclick=e=>{ e.stopPropagation(); togglePalette(card,it,colorBtn); };
+
+    const grip=document.createElement('div'); grip.className='size'; grip.textContent='◿';
+
+    inner.append(chk,txt); card.append(inner,del,colorBtn,grip);
+
+    // movement
+    let startX=0,startY=0,startGX=0,startGY=0,moving=false;
+    card.addEventListener('pointerdown', e=>{ if(e.target===grip||e.target.closest('.palette')||e.target.classList.contains('uiBtn')||e.target.closest('input')) return; moving=true; document.body.classList.add('noselect'); card.setPointerCapture(e.pointerId); startX=e.clientX; startY=e.clientY; startGX=it.gx; startGY=it.gy; card.style.cursor='grabbing'; });
+    card.addEventListener('pointermove', e=>{ if(!moving) return; const cell=parseInt(getComputedStyle(document.querySelector('.bentoGrid')).getPropertyValue('--cell'))||140; const dx=e.clientX-startX, dy=e.clientY-startY; const gx=Math.max(0,Math.round(startGX+dx/cell)); const gy=Math.max(0,Math.round(startGY+dy/cell)); if(gx!==it.gx||gy!==it.gy){ it.gx=gx; it.gy=gy; card.style.left=(gx*cell+pad)+'px'; card.style.top=(gy*cell+pad)+'px'; } });
+    card.addEventListener('pointerup', e=>{ if(!moving) return; moving=false; document.body.classList.remove('noselect'); card.releasePointerCapture(e.pointerId); card.style.cursor='grab'; saveLocal(); });
+
+    // resize
+    let rs=false,sx=0,sy=0,sw=it.w,sh=it.h;
+    grip.addEventListener('pointerdown', e=>{ e.stopPropagation(); rs=true; document.body.classList.add('noselect'); grip.setPointerCapture(e.pointerId); sx=e.clientX; sy=e.clientY; sw=it.w; sh=it.h; });
+    grip.addEventListener('pointermove', e=>{ if(!rs) return; const cell=parseInt(getComputedStyle(document.querySelector('.bentoGrid')).getPropertyValue('--cell'))||140; const dx=e.clientX-sx, dy=e.clientY-sy; let w=Math.max(1,Math.round(sw+dx/cell)); let h=Math.max(1,Math.round(sh+dy/cell)); it.w=w; it.h=h; card.style.setProperty('--w', w*cell - pad*2); card.style.setProperty('--h', h*cell - pad*2); scaleBentoCard(card); });
+    grip.addEventListener('pointerup', e=>{ if(!rs) return; rs=false; document.body.classList.remove('noselect'); grip.releasePointerCapture(e.pointerId); saveLocal(); });
+
+    // scale initially
+    setTimeout(()=>scaleBentoCard(card),0);
+    return card;
+  }
+
+  function autoPlace(cell){ const cols=Math.max(1,Math.floor(bento.clientWidth/cell)); let x=0,y=0,rowH=1; const items=state.items.filter(i=>i.col!=='done'&&!i.done); for(const it of items){ const w=Math.max(1,Math.min(4,it.w||1)); const h=Math.max(1,Math.min(4,it.h||1)); if(x+w>cols){ x=0; y+=rowH; rowH=1; } it.gx=x; it.gy=y; x+=w; rowH=Math.max(rowH,h); } }
+
+  /* New-item seeding for Bento */
+  function nextSeedPos(){ const cell= parseInt(getComputedStyle(bento).getPropertyValue('--cell'))||140; const cols=Math.max(1,Math.floor((bento.clientWidth||window.innerWidth-64)/cell)); const idx=state.bentoSeed||0; const gx=idx%cols; const gy=Math.floor(idx/cols); state.bentoSeed=idx+1; return {gx,gy}; }
+
+  /* ===== Save/Load portable JSON ===== */
+  function exportJSON(){
+    const data=JSON.stringify(state, null, 2);
+    const blob=new Blob([data], {type:'application/json'});
+    const a=document.createElement('a');
+    const ts=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    a.href=URL.createObjectURL(blob);
+    a.download=`todo-bento-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 250);
+  }
+  function importJSONText(text){
+    try{
+      const incoming=normalizeState(JSON.parse(text));
+      state=incoming;
+      saveLocal();
+      render();
+      flash('Loaded ✓');
+    }catch(e){
+      alert('Invalid file. Could not import.');
+    }
+  }
+  function flash(msg){
+    const n=document.createElement('div');
+    n.textContent=msg;
+    Object.assign(n.style,{position:'fixed',left:'50%',top:'16px',transform:'translateX(-50%)',background:'#0c1015',color:'var(--ink)',padding:'8px 12px',border:'1px solid var(--line)',borderRadius:'10px',zIndex:9999,boxShadow:'0 6px 18px rgba(0,0,0,.35)'});
+    document.body.appendChild(n);
+    setTimeout(()=>n.remove(),1200);
+  }
+
+  /* ===== Controls ===== */
+  addBtn.onclick=function(){ const t=input.value.trim(); if(!t) return; const pos=nextSeedPos(); state.items.unshift({id:uid(), text:t, col:'todo', done:false, w:1, h:1, gx:pos.gx, gy:pos.gy}); input.value=''; saveLocal(); render(); };
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ addBtn.click(); } });
+  viewBtn.onclick=function(){ state.view = state.view==='list'?'kanban': state.view==='kanban'?'bento':'list'; saveLocal(); render(); };
+  hideBtn.onclick=function(){ state.hideDone=!state.hideDone; render(); };
+  clearBtn.onclick=function(){ if(confirm('Clear all tasks?')){ state.items=[]; state.bentoSeed=0; saveLocal(); render(); } };
+  fsBtn.onclick=function(){ const d=document; if(!d.fullscreenElement){ d.documentElement.requestFullscreen?.(); } else { d.exitFullscreen?.(); } };
+  document.addEventListener('keydown', e=>{ if(e.target===input) return; const k=e.key.toLowerCase(); if(k==='v') viewBtn.click(); if(k==='h') hideBtn.click(); if(k==='f') fsBtn.click(); });
+
+  // Save/Load buttons
+  saveBtn.onclick=exportJSON;
+  loadBtn.onclick=()=>fileInput.click();
+  fileInput.onchange=e=>{
+    const f=e.target.files && e.target.files[0];
+    if(!f) return;
+    const reader=new FileReader();
+    reader.onload=()=>importJSONText(String(reader.result||''));
+    reader.readAsText(f);
+    fileInput.value='';
+  };
+
+  // Drag & drop import anywhere
+  window.addEventListener('dragover', e=>{ e.preventDefault(); });
+  window.addEventListener('drop', e=>{
+    e.preventDefault();
+    const f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(!f) return;
+    if(!/\.json$/i.test(f.name)) { alert('Drop a .json export file.'); return; }
+    const reader=new FileReader();
+    reader.onload=()=>importJSONText(String(reader.result||'')); reader.readAsText(f);
+  });
+
+  window.addEventListener('resize', debounce(scaleAllText,120));
+
+  render();
+})();
+</script>
+</body>
+</html>
