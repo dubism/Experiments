@@ -23,7 +23,6 @@
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .card{border:1px solid var(--line);background:rgba(15,19,24,.9);border-radius:16px;padding:14px;margin:14px;box-shadow:var(--glow)}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-
   button.sound{
     padding:14px 10px;border-radius:18px;border:1px solid var(--line);
     background:linear-gradient(180deg,#14202b,#0f1318);
@@ -35,13 +34,6 @@
   button.sound::after{content:"";position:absolute;inset:0;background:radial-gradient(120px 40px at 50% 0%, rgba(255,255,255,.08), transparent 55%);pointer-events:none}
   button.sound:active, button.sound.pressed{transform:scale(.97); box-shadow:0 0 0 1px #2ad0ff inset, 0 0 30px rgba(58,208,255,.35)}
   .ok{color:var(--accent)}
-
-  /* Overlay */
-  .overlay{position:fixed;inset:0;background:rgba(7,9,12,.92);display:flex;align-items:center;justify-content:center;z-index:1000;transition:opacity .18s ease}
-  .overlay.hide{opacity:0; pointer-events:none}
-  .panel{background:#0f1318;border:1px solid var(--line);border-radius:16px;padding:22px;max-width:460px;text-align:center;box-shadow:var(--glow)}
-  .hint{color:var(--muted);font-size:14px;margin-top:6px}
-
   input[type="range"]{width:220px}
   .small{font-size:12px;color:var(--muted)}
   .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:#111823}
@@ -54,17 +46,6 @@
 </style>
 </head>
 <body>
-  <div id="unlock" class="overlay" role="dialog" aria-modal="true">
-    <div class="panel">
-      <h2 style="margin:0 0 6px">Tap to enable sound</h2>
-      <div class="hint">No permission prompt will appear. This only unlocks audio on iOS.</div>
-      <div style="margin-top:14px">
-        <button id="unlockBtn" class="sound" style="padding:12px 18px">Enable</button>
-      </div>
-      <div class="hint" id="unlockState"></div>
-    </div>
-  </div>
-
   <header>
     <h1>UI Sounds — iPhone</h1>
     <div class="row">
@@ -85,81 +66,81 @@
       <button id="stopAll" class="sound">⏹️ Stop All</button>
     </div>
     <p class="small" style="margin-top:10px">
-      Files are in <code>./sounds/</code>. We load <code>manifest.json</code> or probe <code>clip_001.wav…</code>.
+      We first try <code>sounds/manifest.json</code> (list of filenames). If missing, we probe <code>clip_001.wav…clip_300.wav</code>.
     </p>
   </main>
 
 <script>
 const $ = s => document.querySelector(s);
-const statusEl = $("#status"), volEl = $("#vol"), cutEl = $("#cut"),
-      foundEl = $("#found"), chipsEl = $("#chips"), gridEl = $("#grid"),
-      meterFill = $("#meterFill"), unlockOverlay = $("#unlock"),
-      unlockState = $("#unlockState"), audioStateEl = $("#audioState");
-
-function setStatus(msg, ok=false){ statusEl.textContent = msg; statusEl.classList.toggle("ok", ok); }
-function setAudioState(){ audioStateEl.textContent = unlocked ? "Unlocked" : "Locked"; }
+const statusEl=$("#status"), volEl=$("#vol"), cutEl=$("#cut"), foundEl=$("#found"),
+      chipsEl=$("#chips"), gridEl=$("#grid"), meterFill=$("#meterFill"),
+      audioStateEl=$("#audioState");
 document.body.addEventListener("touchstart", ()=>{}, {passive:true}); // enable :active on iOS
 
-// --- Discover files ---
-async function fetchJSON(url){ try{ const r=await fetch(url,{cache:"no-store"}); if(!r.ok) throw 0; return r.json(); }catch{return null} }
-async function head(url){ try{ const r=await fetch(url,{method:"HEAD",cache:"no-store"}); return r.ok }catch{return false} }
-function chip(name, ok){ const el=document.createElement("span"); el.className="chip";
-  el.innerHTML=`<span class="dot ${ok?"ok":"err"}"></span><span>${name}</span>`; chipsEl.appendChild(el); }
-async function discover(){
-  setStatus("Scanning…"); let files=[];
-  const m=await fetchJSON("sounds/manifest.json");
-  if(m?.files?.length){ files=m.files.filter(f=>f.endsWith(".wav")); files.forEach(f=>chip(f,true)); foundEl.textContent=files.length; setStatus("Manifest loaded",true); return files; }
-  let miss=0; for(let i=1;i<=200;i++){ const name=`clip_${String(i).padStart(3,"0")}.wav`;
-    const ok=await head("sounds/"+name); chip(name,ok);
-    if(ok){ files.push(name); miss=0; } else { if(++miss>=25 && files.length) break; }
-    foundEl.textContent=files.length;
-  }
-  setStatus(files.length?"Probed files":"No files found", !!files.length); return files;
-}
-
-// --- Audio engine ---
+function setStatus(m,ok=false){ statusEl.textContent=m; statusEl.classList.toggle("ok", ok); }
 let ctx, masterGain, buffers=new Map(), voices=new Set(), unlocked=false, ready=false;
-const FADE_MS=8, MAX_POLYPHONY=16;
-function createCtx(){ if(!ctx||ctx.state==="closed"){ ctx=new (window.AudioContext||window.webkitAudioContext)();
-  masterGain=ctx.createGain(); masterGain.gain.value=parseFloat(volEl.value); masterGain.connect(ctx.destination); } setAudioState(); }
+function setAudioState(){ audioStateEl.textContent = unlocked ? "Unlocked" : "Locked"; }
+
+function createCtx(){
+  if(!ctx||ctx.state==="closed"){
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    masterGain=ctx.createGain(); masterGain.gain.value=parseFloat(volEl.value); masterGain.connect(ctx.destination);
+  }
+  setAudioState();
+}
 function setVolume(){ if(masterGain) masterGain.gain.setTargetAtTime(parseFloat(volEl.value), ctx.currentTime, .01); }
 volEl.addEventListener("input", setVolume);
 
+// Silent, invisible unlock on first tap
 let unlockPromise=null;
-function closeOverlay(){ unlockOverlay.classList.add("hide"); setTimeout(()=>unlockOverlay.remove(), 250); } // ensure removal
-function ensureUnlocked(){
-  if(unlocked){ if(ctx?.state!=="running") return ctx.resume().then(()=>true); return Promise.resolve(true); }
+async function ensureUnlocked(){
+  if(unlocked){ if(ctx?.state!=="running") await ctx.resume(); return true; }
   if(unlockPromise) return unlockPromise;
   unlockPromise=(async ()=>{
     createCtx();
     try{
       const silent=ctx.createBuffer(1,1,ctx.sampleRate);
       const src=ctx.createBufferSource(); src.buffer=silent; src.connect(masterGain); src.start(0); src.stop(0);
-      await ctx.resume(); unlocked=true; unlockState.textContent="Audio unlocked ✅";
-    }catch(e){ unlockState.textContent="Unlock failed: "+(e.message||e); }
-    setAudioState(); closeOverlay(); return true;
+      await ctx.resume(); unlocked=true;
+    }catch(_){}
+    setAudioState();
+    return true;
   })();
   return unlockPromise;
 }
-async function unlockAudio(e){ e?.preventDefault?.(); await ensureUnlocked(); if(!ready) loadAll().catch(()=>{}); }
 
-// Button handler (no global gesture traps)
-$("#unlockBtn").addEventListener("touchend", unlockAudio, {passive:false});
-$("#unlockBtn").addEventListener("click", unlockAudio);
+// --- Discovery ---
+async function fetchJSON(url){ try{ const r=await fetch(url,{cache:"no-store"}); if(!r.ok) throw 0; return r.json(); }catch{return null} }
+async function head(url){ try{ const r=await fetch(url,{method:"HEAD",cache:"no-store"}); return r.ok }catch{return false} }
+function chip(name, ok){ const el=document.createElement("span"); el.className="chip"; el.innerHTML=`<span class="dot ${ok?"ok":"err"}"></span><span>${name}</span>`; chipsEl.appendChild(el); }
 
-// Safety: force-close overlay even if something goes wrong after 800ms
-$("#unlockBtn").addEventListener("click", ()=> setTimeout(closeOverlay, 800), {once:true});
+let FILES=[];
+(async function discover(){
+  setStatus("Scanning…");
+  const m=await fetchJSON("sounds/manifest.json");
+  if(m?.files?.length){
+    FILES=m.files.filter(f=>/\.wav$/i.test(f));
+    FILES.forEach(f=>chip(f,true)); foundEl.textContent=FILES.length; setStatus("Manifest loaded", true);
+  }else{
+    let miss=0; for(let i=1;i<=300;i++){
+      const name=`clip_${String(i).padStart(3,"0")}.wav`;
+      const ok=await head("sounds/"+name); chip(name, ok);
+      if(ok){ FILES.push(name); miss=0; } else { if(++miss>=25 && FILES.length) break; }
+      foundEl.textContent=FILES.length;
+    }
+    setStatus(FILES.length?"Probed files":"No files found", !!FILES.length);
+  }
+  if(FILES.length) loadAll();
+})();
 
 // --- Loading & UI ---
-let FILES=[];
 async function loadAll(){
-  if(!FILES.length){ setStatus("No files to load"); return; }
   setStatus(`Loading 0/${FILES.length}…`);
   for(let i=0;i<FILES.length;i++){
     const url="sounds/"+FILES[i];
     try{
       const res=await fetch(url,{cache:"no-store"}); const arr=await res.arrayBuffer();
-      if(ctx.state==="suspended") await ctx.resume();
+      if(!ctx) createCtx(); if(ctx.state==="suspended") await ctx.resume();
       const buf=await ctx.decodeAudioData(arr); buffers.set(FILES[i], buf);
       meterFill.style.width=Math.round(((i+1)/FILES.length)*100)+"%";
       setStatus(`Loaded ${i+1}/${FILES.length}`, i+1===FILES.length);
@@ -167,14 +148,12 @@ async function loadAll(){
   }
   ready=true; renderGrid();
 }
-
 function addPressFeedback(el){
   const add = ()=>{ el.classList.add("pressed"); try{ navigator.vibrate&&navigator.vibrate(8); }catch{} };
   const remove = ()=> el.classList.remove("pressed");
   ["pointerdown","touchstart","mousedown"].forEach(ev=> el.addEventListener(ev, add,{passive:true}));
   ["pointerup","pointercancel","touchend","touchcancel","mouseleave","mouseup","blur"].forEach(ev=> el.addEventListener(ev, remove));
 }
-
 function makeButton(file, idx){
   const b=document.createElement("button");
   b.className="sound"; b.innerHTML=`▶️ <span>${String(idx+1).padStart(2,"0")}</span>`; b.title=file; addPressFeedback(b);
@@ -183,7 +162,6 @@ function makeButton(file, idx){
   return b;
 }
 function renderGrid(){ gridEl.innerHTML=""; FILES.forEach((f,i)=> gridEl.appendChild(makeButton(f,i))); }
-
 async function loadOne(file){
   setStatus("Decoding "+file);
   try{
@@ -192,17 +170,16 @@ async function loadOne(file){
     const buf=await ctx.decodeAudioData(arr); buffers.set(file,buf); setStatus("Ready",true);
   }catch{ setStatus("Decode error "+file); }
 }
+const FADE_MS=8, MAX_POLYPHONY=16;
 function now(){ return ctx.currentTime; }
 function fadeInOut(g,start,durMs){ const t=start, d=durMs/1000, A=Math.max(FADE_MS,1)/1000;
   g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0.0,t); g.gain.linearRampToValueAtTime(parseFloat(volEl.value),t+A);
   g.gain.setValueAtTime(parseFloat(volEl.value),t+d-A); g.gain.linearRampToValueAtTime(0.0,t+d); }
 function stopAll(){ voices.forEach(v=>{ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); }); voices.clear(); }
 document.getElementById("stopAll").addEventListener("click", stopAll);
-
 function play(file, btn){
   if(!buffers.has(file)) return;
-  if(voices.size>=MAX_POLYPHONY){ const oldest=voices.values().next().value;
-    try{oldest.src.stop()}catch{} oldest.src.disconnect(); oldest.g.disconnect(); voices.delete(oldest); }
+  if(voices.size>=MAX_POLYPHONY){ const oldest=voices.values().next().value; try{oldest.src.stop()}catch{} oldest.src.disconnect(); oldest.g.disconnect(); voices.delete(oldest); }
   const buf=buffers.get(file); if(!buf) return;
   if(cutEl.checked){ for(const v of Array.from(voices)){ if(v.file===file){ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); voices.delete(v); } } }
   const src=ctx.createBufferSource(), g=ctx.createGain(); src.buffer=buf; src.connect(g).connect(masterGain);
@@ -210,17 +187,14 @@ function play(file, btn){
   const voice={file,src,g,btn}; voices.add(voice); btn&&btn.classList.add("pressed");
   src.onended=()=>{ try{src.disconnect(); g.disconnect();}catch{} voices.delete(voice); btn&&btn.classList.remove("pressed"); };
 }
-
 document.getElementById("seq").addEventListener("pointerdown", async e=>{
   const button=e.currentTarget; button.classList.add("pressed");
-  await ensureUnlocked(); if(!ready && FILES.length) await loadAll();
+  await ensureUnlocked();
+  if(!ready && FILES.length) await loadAll();
   let t=0, btns=Array.from(document.querySelectorAll("button.sound")).filter(b=>b!==button);
   for(let i=0;i<FILES.length;i++){ const f=FILES[i]; if(!buffers.has(f)) await loadOne(f); const b=btns[i]; setTimeout(()=>play(f,b), t); t+=120; }
   setTimeout(()=>button.classList.remove("pressed"), 220);
 });
-
-// Boot
-(async()=>{ FILES = await discover(); })();
 document.addEventListener("visibilitychange", ()=>{ if(!ctx) return; if(document.hidden) ctx.suspend().catch(()=>{}); else ctx.resume().catch(()=>{}); });
 </script>
 </body>
