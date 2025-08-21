@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>_Curtains · Parallax C, Real Snap, Calm Patterns</title>
+<title>_Curtains · Guard-railed Controls</title>
 <style>
   :root{
     --period: 4000vh;     /* gradient cycle height (background only) */
@@ -76,55 +76,84 @@
   .spacer{ height:12vh; }
   .imgSpacer{ height:0; }
 
-  /* Controls */
+  /* FAB */
   .fab{
     position:fixed; right:.75rem; bottom:.75rem;
-    width:44px; height:44px; border-radius:50%;
+    width:48px; height:48px; border-radius:50%;
     display:grid; place-items:center;
     background:#0f1117; border:1px solid rgba(255,255,255,.18);
     color:#fff; font-size:18px; line-height:1; cursor:pointer;
     box-shadow:0 8px 20px rgba(0,0,0,.35);
     z-index:30;
+    touch-action:manipulation;
   }
-  .ctrlWrap{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; z-index:29; pointer-events:none; }
+
+  /* Control Center (CC) */
+  .ctrlWrap{ position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; z-index:29; pointer-events:none; padding:.5rem; }
   .ctrl{
-    width:min(96vw, 940px);
-    background:rgba(0,0,0,.72); border:1px solid rgba(255,255,255,.18);
-    border-radius:14px; padding:.8rem .9rem .9rem;
-    backdrop-filter: blur(6px);
-    box-shadow: 0 10px 28px rgba(0,0,0,.45);
+    width:min(98vw, 1120px);
+    background:rgba(0,0,0,.75); border:1px solid rgba(255,255,255,.18);
+    border-radius:16px; padding:1rem 1rem 1.1rem;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 12px 30px rgba(0,0,0,.55);
     pointer-events:auto;
     transform: translateY(110%); transition: transform .28s ease;
     color:#fff;
+    max-height: min(78vh, 900px);
+    overflow:auto;
   }
   .ctrl.open{ transform: translateY(0%); }
-  .ctrl h3{ margin:.2rem 0 .35rem; font:600 12px/1.1 ui-monospace; opacity:.9; letter-spacing:.2px; color:#fff; }
-  .grid3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:.6rem .8rem; }
-  .row{ display:grid; grid-template-columns: 180px 1fr 84px; align-items:center; gap:.5rem; }
-  .row label{ font:12px/1 ui-monospace; opacity:.95; color:#fff; }
-  .row input[type="range"], .row input[type="number"]{ width:100%; accent-color:#fff; }
-  .row input[type="range"]{ min-width: 260px; }
-  .row .val{ text-align:right; font:12px/1 ui-monospace; opacity:.95; color:#fff; }
-  .row .chk{ display:flex; align-items:center; gap:.45rem; color:#fff; }
-  .row .btns{ display:flex; gap:.5rem; }
-  .btn{ appearance:none; border:1px solid rgba(255,255,255,.2); background:#10141d; color:#fff; border-radius:10px; padding:.5rem .7rem; font:12px ui-monospace; cursor:pointer; }
-  .sep{ height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent); margin:.1rem 0; grid-column:1 / -1; }
+  .ctrl h3{ margin:.25rem 0 .5rem; font:700 12px/1.1 ui-monospace; letter-spacing:.25px; color:#fff; text-transform:uppercase; opacity:.95; }
+  .grid3{ display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:.7rem .9rem; }
+  .row{ display:grid; grid-template-columns: 220px 1fr 110px; align-items:center; gap:.55rem; }
+  .row label{ font:12px/1 ui-monospace; opacity:.95; color:#fff; user-select:none; }
+  .row input[type="range"], .row input[type="number"]{ width:100%; }
+  .row input[type="number"]{ padding:.35rem .45rem; border-radius:10px; border:1px solid rgba(255,255,255,.18); background:#0f141d; color:#fff; font:12px ui-monospace; }
+  .val{ text-align:right; font:12px/1 ui-monospace; opacity:.95; color:#fff; white-space:nowrap; }
+  .row .chk{ display:flex; align-items:center; gap:.55rem; color:#fff; }
+  .row .btns{ display:flex; gap:.5rem; flex-wrap:wrap; }
+  .btn{ appearance:none; border:1px solid rgba(255,255,255,.25); background:#10141d; color:#fff; border-radius:12px; padding:.55rem .75rem; font:12px ui-monospace; cursor:pointer; touch-action:manipulation; }
+  .sep{ height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent); margin:.2rem 0; grid-column:1 / -1; }
+
+  /* Big, friendly sliders */
+  input[type="range"]{
+    -webkit-appearance:none; appearance:none; height:38px; background:transparent;
+    touch-action:manipulation;
+  }
+  input[type="range"]::-webkit-slider-runnable-track{
+    height:10px; border-radius:999px; background:linear-gradient(180deg,rgba(255,255,255,.25),rgba(255,255,255,.18));
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:22px; height:22px; border-radius:50%;
+    background:#fff; border:0; margin-top:-6px; box-shadow:0 2px 6px rgba(0,0,0,.4);
+  }
+  input[type="range"]::-moz-range-track{
+    height:10px; border-radius:999px; background:rgba(255,255,255,.2);
+  }
+  input[type="range"]::-moz-range-thumb{
+    width:22px; height:22px; border-radius:50%; background:#fff; border:none; box-shadow:0 2px 6px rgba(0,0,0,.4);
+  }
+  .row input[type="range"]{ min-width: 380px; }
+  @media (max-width:1100px){ .row{ grid-template-columns: 180px 1fr 90px; } .row input[type="range"]{ min-width: 300px; } }
+  @media (max-width:860px){
+    .grid3{ grid-template-columns: 1fr; }
+    .row{ grid-template-columns: 150px 1fr 70px; }
+    .row input[type="range"]{ min-width: 220px; }
+  }
 
   /* HUD */
   .hud{
-    position:fixed; left:.75rem; top:.75rem; width:320px; font:12px/1.25 ui-monospace;
+    position:fixed; left:.75rem; top:.75rem; width:340px; font:12px/1.25 ui-monospace;
     background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:.6rem .7rem; display:none; z-index:28; color:#fff;
   }
   .hud.on{display:block;}
   .bar{height:6px; background:rgba(255,255,255,.12); border-radius:4px; overflow:hidden; margin:.35rem 0 .2rem;}
   .bar > i{display:block; height:100%; width:0%; background:#fff; opacity:.85; border-radius:4px;}
   .hr{height:1px; background:rgba(255,255,255,.14); margin:.35rem 0;}
-
-  @media (max-width:860px){
-    .grid3{ grid-template-columns: 1fr; }
-    .row{ grid-template-columns: 150px 1fr 70px; }
-    .row input[type="range"]{ min-width: 200px; }
-  }
+  .badge{ display:inline-block; padding:.08rem .35rem; border-radius:6px; font-weight:700; font-size:11px; vertical-align:baseline;}
+  .ok{ background:#0b5135; color:#b6ffe0; }
+  .warn{ background:#5c4b12; color:#ffe9a8; }
+  .clamped{ background:#5b1c1c; color:#ffd0d0; }
 </style>
 </head>
 <body>
@@ -185,36 +214,24 @@
 
         <h2>Interlude—field notes</h2>
         <div class="cols">
-          <p>
-            Typography: keep it black. No backplates. Let the contrast fight and win or lose;
-            that friction is part of the piece.
-          </p>
-          <p>
-            Motion: anchor it to meaning. Parallax isn’t spectacle, it’s grammar—
-            it clarifies which layer is speaking.
-          </p>
-          <p>
-            Sequencing: give users agency without confusion. The same gesture should spell
-            the same sentence—up or down.
-          </p>
+          <p>Typography: keep it black. No backplates. Let the contrast fight and win or lose.</p>
+          <p>Motion: anchor it to meaning. Parallax is grammar—it clarifies which layer speaks.</p>
+          <p>Sequencing: give users agency without confusion. The same gesture should say the same thing.</p>
         </div>
 
         <div class="rule"></div>
 
         <h2>Checklist for humane motion</h2>
         <ol>
-          <li>Set a baseline pace, then make deviations rare and legible.</li>
-          <li>Keep reveals reversible; no traps, no one-way tours.</li>
+          <li>Set a baseline pace; make deviations rare and legible.</li>
+          <li>Keep reveals reversible; no traps.</li>
           <li>Prefer position-based logic to time-based suspense.</li>
         </ol>
 
         <div class="rule"></div>
 
         <h2>Close with intent</h2>
-        <p>
-          The project is a lens, not a mirror. If the lens is clean, we see the work.
-          If the lens shouts, we see the lens. Keep it quiet.
-        </p>
+        <p>The project is a lens, not a mirror. If the lens shouts, we see the lens. Keep it quiet.</p>
         <p class="caption">— Draft, living document. Adjust in daylight.</p>
 
         <div class="spacer"></div>
@@ -231,11 +248,11 @@
     <div class="bar"><i id="pBar"></i></div>
     <div>q (p*N): <b id="qVal">0.00</b></div>
     <div>open: <b id="oVal">0.00</b></div>
-    <div>pattern: <b id="patVal">v / h / grid / d45 / d135</b></div>
     <div class="hr"></div>
     <div>period px: <b id="hudPeriod">–</b></div>
     <div>eff none / overlap / eff closed: <b id="hudSegs">–</b></div>
     <div>stop-frames px: <b id="hudStop">–</b></div>
+    <div>budget: <span id="budgetBadge" class="badge ok">ok</span></div>
   </div>
 
   <button class="fab" id="fab" aria-label="Show controls">⚙</button>
@@ -252,12 +269,12 @@
           </div>
           <div class="row">
             <label for="snap">Snap</label>
-            <input id="snap" type="range" min="0" max="100" value="85" />
+            <input id="snap" type="range" min="40" max="95" value="85" />
             <div class="val" id="snapVal">85</div>
           </div>
           <div class="row">
             <label for="stages">Stages</label>
-            <input id="stages" type="range" min="1" max="12" value="4" />
+            <input id="stages" type="range" min="1" max="6" value="4" />
             <div class="val" id="stagesVal">4</div>
           </div>
           <div class="row">
@@ -271,7 +288,7 @@
             <div class="val" id="holdVal">120</div>
           </div>
           <div class="row chk">
-            <input id="cleanSwitch" type="checkbox" />
+            <input id="cleanSwitch" type="checkbox" checked />
             <label for="cleanSwitch">Clean switch at full-open/closed</label>
           </div>
         </div>
@@ -279,8 +296,8 @@
         <div>
           <h3>Parallax & Media</h3>
           <div class="row">
-            <label for="parallax">Parallax C</label>
-            <input id="parallax" type="range" min="20" max="200" value="100" />
+            <label for="parallax">Parallax ×</label>
+            <input id="parallax" type="range" min="85" max="135" value="100" />
             <div class="val" id="parallaxVal">×1.00</div>
           </div>
           <div class="row btns">
@@ -307,22 +324,22 @@
           <h3>Curtain Period (px)</h3>
           <div class="row">
             <label for="periodPx">Period px</label>
-            <input id="periodPx" type="range" min="400" max="12000" value="1600" />
+            <input id="periodPx" type="range" min="600" max="12000" value="1600" />
             <div class="val" id="periodPxVal">1600</div>
           </div>
           <div class="row">
-            <label for="nonePx">No curtains px</label>
-            <input id="nonePx" type="range" min="0" max="8000" value="400" />
+            <label for="nonePx">Open hold px</label>
+            <input id="nonePx" type="range" min="0" max="480" value="400" />
             <div class="val" id="nonePxVal">400</div>
           </div>
           <div class="row">
-            <label for="closedPx">Closed px</label>
-            <input id="closedPx" type="range" min="0" max="8000" value="400" />
+            <label for="closedPx">Closed hold px</label>
+            <input id="closedPx" type="range" min="0" max="480" value="400" />
             <div class="val" id="closedPxVal">400</div>
           </div>
           <div class="row">
-            <label for="overlapPx">Overlap px</label>
-            <input id="overlapPx" type="range" min="0" max="4000" value="300" />
+            <label for="overlapPx">Ramp px (per side)</label>
+            <input id="overlapPx" type="range" min="48" max="400" value="300" />
             <div class="val" id="overlapPxVal">300</div>
           </div>
         </div>
@@ -331,31 +348,31 @@
           <h3>Numbers</h3>
           <div class="row">
             <label>Period px</label>
-            <input id="periodPxNum" type="number" min="200" max="20000" step="10" value="1600" />
+            <input id="periodPxNum" type="number" min="600" max="20000" step="10" value="1600" />
             <div class="val">px</div>
           </div>
           <div class="row">
-            <label>None px</label>
+            <label>Open hold px</label>
             <input id="nonePxNum" type="number" min="0" max="12000" step="10" value="400" />
             <div class="val">px</div>
           </div>
           <div class="row">
-            <label>Closed px</label>
+            <label>Closed hold px</label>
             <input id="closedPxNum" type="number" min="0" max="12000" step="10" value="400" />
             <div class="val">px</div>
           </div>
           <div class="row">
-            <label>Overlap px</label>
+            <label>Ramp px</label>
             <input id="overlapPxNum" type="number" min="0" max="8000" step="10" value="300" />
             <div class="val">px</div>
           </div>
         </div>
 
         <div>
-          <h3>Stop-frames (px)</h3>
+          <h3>Stop-frames & Cycles</h3>
           <div class="row">
             <label for="stopPx">Stop-frames px</label>
-            <input id="stopPx" type="range" min="0" max="1000" value="0" />
+            <input id="stopPx" type="range" min="0" max="300" value="0" />
             <div class="val" id="stopPxVal">0</div>
           </div>
           <div class="row">
@@ -365,6 +382,11 @@
           </div>
           <div class="row chk"><input id="enforceExtremes" type="checkbox" checked /><label for="enforceExtremes">Force exact 0% / 100% in holds</label></div>
           <div class="row chk"><input id="linkRampToPlateau" type="checkbox" /><label for="linkRampToPlateau">Shape ramps by Plateau</label></div>
+          <div class="row">
+            <label>Cycles (periods)</label>
+            <input id="cyclesNum" type="number" min="1" max="12" step="1" value="6" />
+            <div class="val">×</div>
+          </div>
         </div>
 
       </div>
@@ -375,6 +397,9 @@
 (() => {
   const clamp = (x, a=0, b=1) => Math.max(a, Math.min(b, x));
   const smooth = t => (t<0?0:(t>1?1:(t*t*(3-2*t)))); // C2 smoothstep
+  const clampNum = (x,a,b)=> Math.max(a, Math.min(b, x));
+  const vw = ()=> Math.max(document.documentElement.clientWidth,  window.innerWidth  || 0);
+  const vh = ()=> Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
 
   const scene   = document.getElementById('scene');
   const content = document.getElementById('content');
@@ -393,10 +418,10 @@
   const pVal = document.getElementById('pVal');
   const qVal = document.getElementById('qVal');
   const oVal = document.getElementById('oVal');
-  const patVal = document.getElementById('patVal');
   const hudPeriod = document.getElementById('hudPeriod');
   const hudSegs = document.getElementById('hudSegs');
   const hudStop = document.getElementById('hudStop');
+  const budgetBadge = document.getElementById('budgetBadge');
 
   const fab = document.getElementById('fab');
   const panel = document.getElementById('controls');
@@ -409,13 +434,13 @@
     hold: document.getElementById('hold'),
     cleanSwitch: document.getElementById('cleanSwitch'),
     parallax: document.getElementById('parallax'),
-    // effects
+
     effV: document.getElementById('effV'),
     effH: document.getElementById('effH'),
     effG: document.getElementById('effG'),
     effD45: document.getElementById('effD45'),
     effD135: document.getElementById('effD135'),
-    // pixel period controls
+
     periodPx: document.getElementById('periodPx'),
     nonePx: document.getElementById('nonePx'),
     closedPx: document.getElementById('closedPx'),
@@ -428,7 +453,8 @@
     stopPxNum: document.getElementById('stopPxNum'),
     enforceExtremes: document.getElementById('enforceExtremes'),
     linkRampToPlateau: document.getElementById('linkRampToPlateau'),
-    // values
+    cyclesNum: document.getElementById('cyclesNum'),
+
     vals: {
       inertia: document.getElementById('inertiaVal'),
       snap: document.getElementById('snapVal'),
@@ -442,7 +468,6 @@
       overlapPx: document.getElementById('overlapPxVal'),
       stopPx: document.getElementById('stopPxVal'),
     },
-    // image controls
     imgInput: document.getElementById('imgInput'),
     btnUpload: document.getElementById('btnUpload'),
     btnClear: document.getElementById('btnClear'),
@@ -452,9 +477,10 @@
   // sync helpers (slider <-> number)
   function linkRangeAndNumber(rangeEl, numEl, valEl){
     const sync = v=>{
-      const n = Math.max(parseInt(rangeEl.min||0), Math.min(parseInt(rangeEl.max||100000), parseInt(v||0)));
+      const min = parseInt(rangeEl.min||0), max = parseInt(rangeEl.max||100000);
+      const n = Math.max(min, Math.min(max, parseInt(v||0)));
       rangeEl.value = n; numEl.value = n; if(valEl) valEl.textContent = n;
-      P = getParams(); reflectUI(P);
+      enforceBudgetAndReflect();
     };
     rangeEl.addEventListener('input', ()=> sync(rangeEl.value), {passive:true});
     numEl.addEventListener('input', ()=> sync(numEl.value), {passive:true});
@@ -510,7 +536,7 @@
     });
   });
 
-  /* ------- Parameters & Mappings ------- */
+  /* ------- Effects guard (always at least one) ------- */
   function getEnabledPatterns(){
     const arr = [];
     if(ctrl.effV.checked) arr.push(0);
@@ -518,9 +544,58 @@
     if(ctrl.effG.checked) arr.push(2);
     if(ctrl.effD45.checked) arr.push(3);
     if(ctrl.effD135.checked) arr.push(4);
-    return arr.length ? arr : [0];
+    if(!arr.length){ ctrl.effV.checked = true; arr.push(0); }
+    return arr;
   }
 
+  /* ------- Perceptual mins / domains ------- */
+  function perceptualMins(){
+    const Vh = vh();
+    const minHoldPx  = clampNum(Math.round(0.12*Vh), 120, 360);
+    const minRampPx  = clampNum(Math.round(0.06*Vh),  48, 240);
+    const maxStopPx  = clampNum(Math.round(0.15*minHoldPx), 0, 300);
+    return {minHoldPx, minRampPx, maxStopPx};
+  }
+
+  let lastClamped = false;
+
+  function setDependentDomains(){
+    const period = Math.max(600, parseInt(ctrl.periodPx.value||ctrl.periodPxNum.value)||1600);
+    const {minHoldPx, minRampPx, maxStopPx} = perceptualMins();
+
+    const maxHold   = Math.floor(0.40 * period);
+    const maxRamp   = Math.floor(0.25 * period);
+    const stopMax   = Math.min(maxStopPx, Math.floor(0.15 * period));
+
+    // Update input attributes
+    [
+      [ctrl.nonePx,   ctrl.nonePxNum,   0, maxHold],
+      [ctrl.closedPx, ctrl.closedPxNum, 0, maxHold],
+      [ctrl.overlapPx,ctrl.overlapPxNum,minRampPx, maxRamp],
+      [ctrl.stopPx,   ctrl.stopPxNum,   0, stopMax],
+    ].forEach(([range,num,min,max])=>{
+      range.min=min; range.max=max; num.min=min; num.max=max;
+    });
+
+    // Clamp current values into new domains
+    lastClamped = false;
+    function clampPair(range,num,min,max){
+      const before = parseInt(range.value);
+      const v = clampNum(before, min, max);
+      if (v !== before) lastClamped = true;
+      range.value = v; num.value = v;
+    }
+    clampPair(ctrl.nonePx,   ctrl.nonePxNum,   0, maxHold);
+    clampPair(ctrl.closedPx, ctrl.closedPxNum, 0, maxHold);
+    clampPair(ctrl.overlapPx,ctrl.overlapPxNum,minRampPx, maxRamp);
+    clampPair(ctrl.stopPx,   ctrl.stopPxNum,   0, stopMax);
+
+    // Snap range guard (couple lightly to inertia)
+    const inertiaUi = (parseInt(ctrl.inertia.value)||0)/100; // 0..1
+    ctrl.snap.value = String(clampNum(parseInt(ctrl.snap.value), 40, 95));
+  }
+
+  /* ------- Parameters ------- */
   function getParams(){
     const inertia = (parseInt(ctrl.inertia.value)||0)/100;
     const SCROLL_TAU = 0.04 + 1.16 * inertia;    // 0.04..1.20 s
@@ -530,44 +605,53 @@
     const snapWindow = 0.02 + 0.25 * Math.pow(snapUi, 1.4);
     const snapSharp  = 1 + 28 * Math.pow(snapUi, 2.0);
 
-    const stages = Math.max(1, parseInt(ctrl.stages.value)||4);
+    const stages = Math.max(1, Math.min(6, parseInt(ctrl.stages.value)||4));
     const plateau = (parseInt(ctrl.plateau.value)||0)/100;
     const holdMs = parseInt(ctrl.hold.value)||0;
     const cleanSwitch = ctrl.cleanSwitch.checked;
 
-    const C = Math.max(0.2, Math.min(2.0, (parseInt(ctrl.parallax.value)||100)/100));
+    const C = clampNum((parseInt(ctrl.parallax.value)||100)/100, 0.85, 1.35);
     const enabled = getEnabledPatterns();
 
-    // Pixel period
-    let periodPx = Math.max(200, parseInt(ctrl.periodPx.value||ctrl.periodPxNum.value)||1600);
-    let nonePx   = Math.max(0,   parseInt(ctrl.nonePx.value||ctrl.nonePxNum.value)||400);
-    let closedPx = Math.max(0,   parseInt(ctrl.closedPx.value||ctrl.closedPxNum.value)||400);
-    let overlapPx= Math.max(0,   parseInt(ctrl.overlapPx.value||ctrl.overlapPxNum.value)||300);
-    const stopPx = Math.max(0,   parseInt(ctrl.stopPx.value||ctrl.stopPxNum.value)||0);
+    // Pixel period (values already domain-clamped by setDependentDomains)
+    let periodPx = Math.max(600, parseInt(ctrl.periodPx.value||ctrl.periodPxNum.value)||1600);
+    let nonePx   = parseInt(ctrl.nonePx.value||ctrl.nonePxNum.value)||0;
+    let closedPx = parseInt(ctrl.closedPx.value||ctrl.closedPxNum.value)||0;
+    let overlapPx= parseInt(ctrl.overlapPx.value||ctrl.overlapPxNum.value)||0;
+    const stopPx = parseInt(ctrl.stopPx.value||ctrl.stopPxNum.value)||0;
+
+    // Perceptual minima
+    const {minHoldPx, minRampPx} = perceptualMins();
+
+    // Hard feasibility lift for tiny period
+    const minFeasible = 2*minRampPx + 2*stopPx + 2*minHoldPx;
+    if (periodPx < minFeasible){
+      periodPx = minFeasible;
+      ctrl.periodPx.value = ctrl.periodPxNum.value = periodPx;
+      lastClamped = true;
+    }
 
     // Effective holds with non-negotiable stop-frames
-    let effNoneBase = nonePx;
-    let effClosedBase = closedPx;
+    let effNoneBase = Math.max(nonePx,   minHoldPx);
+    let effClosedBase = Math.max(closedPx, minHoldPx);
+    let overlapEff = Math.max(overlapPx, minRampPx);
     const mandatory = stopPx;
 
-    // First, allocate overlap given current holds
-    let overlapEff = overlapPx;
-
-    // Budget check: period >= effNoneBase+mandatory + effClosedBase+mandatory + 2*overlapEff
     const needTotal = effNoneBase + effClosedBase + 2*overlapEff + 2*mandatory;
 
     if (needTotal > periodPx){
+      lastClamped = true;
       // 1) Trim overlap first
       const maxForOverlap = Math.max(0, periodPx - (effNoneBase + effClosedBase + 2*mandatory));
-      overlapEff = Math.max(0, Math.min(overlapPx, maxForOverlap/2));
+      overlapEff = Math.max(minRampPx, Math.min(overlapEff, Math.floor(maxForOverlap/2)));
 
-      // 2) If still over, proportionally trim base holds (keep mandatory)
-      const stillNeed = effNoneBase + effClosedBase + 2*overlapEff + 2*mandatory - periodPx;
+      // 2) If still over, proportionally trim base holds (keep mandatory & minHold)
+      let stillNeed = effNoneBase + effClosedBase + 2*overlapEff + 2*mandatory - periodPx;
       if (stillNeed > 0){
         const baseSum = Math.max(1, effNoneBase + effClosedBase);
         const k = Math.max(0, (periodPx - (2*mandatory) - 2*overlapEff) / baseSum);
-        effNoneBase   = Math.floor(effNoneBase * k);
-        effClosedBase = Math.floor(effClosedBase * k);
+        effNoneBase   = Math.max(minHoldPx, Math.floor(effNoneBase * k));
+        effClosedBase = Math.max(minHoldPx, Math.floor(effClosedBase * k));
       }
     }
 
@@ -581,7 +665,7 @@
       SCROLL_TAU, OPEN_TAU, snapWindow, snapSharp, stages, plateau, holdMs, cleanSwitch,
       C, enabled,
       periodPx,
-      nonePx, closedPx, overlapPx,
+      nonePx: effNoneBase, closedPx: effClosedBase, overlapPx: overlapEff, // show bases in UI
       stopPx,
       effNone, effClosed, overlapEff,
       enforceExtremes, linkRampToPlateau
@@ -595,292 +679,18 @@
     ctrl.vals.plateau.textContent = Math.round(P.plateau*100);
     ctrl.vals.hold.textContent = P.holdMs;
     ctrl.vals.parallax.textContent = '×'+P.C.toFixed(2);
+
+    // Reflect (possibly clamped) base inputs back to fields
+    ctrl.periodPx.value = ctrl.periodPxNum.value = P.periodPx;
+    ctrl.nonePx.value   = ctrl.nonePxNum.value   = P.nonePx;
+    ctrl.closedPx.value = ctrl.closedPxNum.value = P.closedPx;
+    ctrl.overlapPx.value= ctrl.overlapPxNum.value= P.overlapPx;
+    ctrl.stopPx.value   = ctrl.stopPxNum.value   = P.stopPx;
+
     ctrl.vals.periodPx.textContent = P.periodPx;
     ctrl.vals.nonePx.textContent   = P.nonePx;
     ctrl.vals.closedPx.textContent = P.closedPx;
     ctrl.vals.overlapPx.textContent= P.overlapPx;
     ctrl.vals.stopPx.textContent   = P.stopPx;
 
-    hudPeriod.textContent = P.periodPx;
-    hudSegs.textContent = `${P.effNone} / ${Math.round(P.overlapEff)} / ${P.effClosed}`;
-    hudStop.textContent = P.stopPx;
-  }
-
-  let P = getParams(); reflectUI(P);
-
-  // bind classic controls
-  ['inertia','snap','stages','plateau','hold','cleanSwitch','parallax',
-   'effV','effH','effG','effD45','effD135',
-   'enforceExtremes','linkRampToPlateau']
-    .forEach(id=>{
-      const el = document.getElementById(id);
-      el.addEventListener((el.type==='checkbox'?'change':'input'), ()=>{ P=getParams(); reflectUI(P); }, {passive:true});
-    });
-
-  // bind range <-> number pairs
-  function bindPairs(){
-    linkRangeAndNumber(ctrl.periodPx, ctrl.periodPxNum, ctrl.vals.periodPx);
-    linkRangeAndNumber(ctrl.nonePx,   ctrl.nonePxNum,   ctrl.vals.nonePx);
-    linkRangeAndNumber(ctrl.closedPx, ctrl.closedPxNum, ctrl.vals.closedPx);
-    linkRangeAndNumber(ctrl.overlapPx,ctrl.overlapPxNum,ctrl.vals.overlapPx);
-    linkRangeAndNumber(ctrl.stopPx,   ctrl.stopPxNum,   ctrl.vals.stopPx);
-  }
-  bindPairs();
-
-  /* ------- Layout sizing for absolute images ------- */
-  function updateLayout(){
-    const h = bgStack.scrollHeight;
-    imgSpacer.style.height = (h + window.innerHeight*0.1) + 'px';
-  }
-  window.addEventListener('resize', updateLayout, {passive:true});
-
-  /* ------- Open mapping: pixel-period piecewise with stop-frames ------- */
-  function thresholds(P){
-    const a1 = P.effNone;                 // end of fully-open hold
-    const a2 = a1 + P.overlapEff;         // end of close ramp
-    const a3 = a2 + P.effClosed;          // end of fully-closed hold
-    const a4 = a3 + P.overlapEff;         // end of open ramp
-    return {a1,a2,a3,a4};
-  }
-
-  function openFromPixels(localScroll, P){
-    const period = Math.max(1, P.periodPx);
-    let m = localScroll % period; if(m<0) m += period;
-
-    const {a1,a2,a3,a4} = thresholds(P);
-    let o;
-    if (m < a1) { o = 1; }                     // open hold
-    else if (m < a2) {
-      const t = (m - a1) / Math.max(1, P.overlapEff);
-      const shaped = P.linkRampToPlateau ? Math.pow(smooth(t), 1 + 2*P.plateau) : smooth(t);
-      o = 1 - shaped;                           // ramp down to 0
-    }
-    else if (m < a3) { o = 0; }                // closed hold
-    else if (m < a4) {
-      const t = (m - a3) / Math.max(1, P.overlapEff);
-      const shaped = P.linkRampToPlateau ? Math.pow(smooth(t), 1 + 2*P.plateau) : smooth(t);
-      o = shaped;                               // ramp up to 1
-    }
-    else { o = 1; }                             // trailing open hold
-
-    if (P.enforceExtremes){
-      if (m < a1 || m >= a4) o = 1;
-      if (m >= a2 && m < a3) o = 0;
-    }
-
-    o = clamp(o, 0, 1);
-    o = strictSnap01(o, Math.max(1, P.snapSharp));
-    return o;
-  }
-
-  function openPhase(localScroll, P){
-    const period = Math.max(1, P.periodPx);
-    let m = localScroll % period; if (m < 0) m += period;
-    const {a1,a2,a3,a4} = thresholds(P);
-
-    if (m < a1) return {phase:'openHoldA', idx:0};
-    if (m < a2) return {phase:'rampDown', idx:1};
-    if (m < a3) return {phase:'closedHold', idx:2};
-    if (m < a4) return {phase:'rampUp', idx:3};
-    return {phase:'openHoldB', idx:4};
-  }
-
-  /* ------- Snap helpers ------- */
-  function softQuantize(q, w){
-    const r = Math.round(q);
-    const d = Math.abs(q - r);
-    if (d <= w) return r;
-    const t = (d - w) / Math.max(1e-6, 0.5 - w);
-    const keep = Math.min(1, Math.max(0, t));
-    return r + Math.sign(q - r) * keep * (d);
-  }
-  function strictSnap01(x, sharp){
-    const a = Math.max(1.0, sharp);
-    const y = Math.pow(x, a) / (Math.pow(x, a) + Math.pow(1 - x, a));
-    return y;
-  }
-
-  /* ------- State ------- */
-  const state = {
-    p:0, q:0, qSnap:0, step:0, open:1,
-    lastT: performance.now(),
-    prevStep: 0,
-    holdStart: null
-  };
-
-  /* ------- Pattern transforms ------- */
-  function applyPattern(stepIdx, open, qNorm){
-    const enabled = P.enabled;
-    const pattern = enabled[stepIdx % enabled.length];
-
-    vLayer.style.opacity  = (pattern===0)?1:0;
-    hLayer.style.opacity  = (pattern===1)?1:0;
-    gLayer.style.opacity  = (pattern===2)?1:0;
-    d1Layer.style.opacity = (pattern===3)?1:0;
-    d2Layer.style.opacity = (pattern===4)?1:0;
-
-    const vpMin = Math.min(window.innerWidth, window.innerHeight);
-    const longAmpBase = vpMin * 0.22;
-    const longE = open*open;
-    const phase = qNorm * 6.283;
-    const openScale = 0.035;
-
-    if(pattern===0){
-      const kids = vLayer.children;
-      for(let i=0;i<kids.length;i++){
-        const a = i/(kids.length-1);
-        const wobble = 0.015 * Math.sin((a*7.2 + phase));
-        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
-        const offset = Math.sin(phase + a*3.2) * longAmpBase * longE;
-        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
-      }
-    } else if(pattern===1){
-      const kids = hLayer.children;
-      for(let i=0;i<kids.length;i++){
-        const a = i/(kids.length-1);
-        const wobble = 0.015 * Math.cos((a*8.2 + phase));
-        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
-        const offset = Math.sin(phase*0.9 + a*3.6) * longAmpBase * longE;
-        kids[i].style.transform = `translateX(${offset.toFixed(2)}px) scaleY(${s})`;
-      }
-    } else if(pattern===2){
-      const kids = gLayer.children;
-      const maxShift = vpMin * 0.55;
-      const e = open*open;
-      for(let i=0;i<kids.length;i++){
-        const nx = parseFloat(kids[i].dataset.nx);
-        const ny = parseFloat(kids[i].dataset.ny);
-        const dx = nx * maxShift * e;
-        const dy = ny * maxShift * e;
-        const rot = (nx*ny) * 4.5 * open;
-        kids[i].style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
-      }
-    } else if(pattern===3){
-      const kids = d1Layer.children;
-      for(let i=0;i<kids.length;i++){
-        const a = i/(kids.length-1);
-        const wobble = 0.015 * Math.sin((a*6.4 + phase));
-        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
-        const offset = Math.sin(phase*0.8 + a*2.8) * longAmpBase * longE;
-        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
-      }
-    } else {
-      const kids = d2Layer.children;
-      for(let i=0;i<kids.length;i++){
-        const a = i/(kids.length-1);
-        const wobble = 0.015 * Math.cos((a*6.8 + phase));
-        const s = Math.max(0, Math.min(1, (1-open) + openScale*open + wobble * open));
-        const offset = Math.sin(phase*1.1 + a*3.1) * longAmpBase * longE;
-        kids[i].style.transform = `translateY(${offset.toFixed(2)}px) scaleX(${s})`;
-      }
-    }
-  }
-
-  /* ------- RAF loop ------- */
-  function tick(now){
-    const dt = Math.max(0.0005, (now - state.lastT) / 1000);
-    const Pnow = P; // capture
-
-    // Local scroll
-    const sceneTop = scene.getBoundingClientRect().top + window.scrollY;
-    const vpH = window.innerHeight || document.documentElement.clientHeight || 1;
-    const sceneHeight = Math.max(content.scrollHeight, bgStack.scrollHeight + vpH);
-    const maxScroll = Math.max(1, sceneHeight - vpH);
-    const localScroll = Math.max(0, Math.min(maxScroll, window.scrollY - sceneTop));
-
-    // Inertia smoothing for staging
-    const alpha = 1 - Math.exp(-dt / Pnow.SCROLL_TAU);
-    const pTarget = localScroll / maxScroll;
-    state.p = state.p + (pTarget - state.p) * alpha;
-
-    // Pattern stepping (decoupled from open/close)
-    const qRaw = state.p * Pnow.stages;
-    const qSnap = softQuantize(qRaw, Math.min(0.49, Pnow.snapWindow));
-    state.q = qRaw;
-    state.qSnap = qSnap;
-    const stepIdx = Math.floor(qSnap);
-    state.step = stepIdx;
-
-    // Openness from pixel-period mapping
-    const oHard = openFromPixels(localScroll, Pnow);          // not smoothed
-    const beta  = 1 - Math.exp(-dt / Pnow.OPEN_TAU);
-    state.open  = state.open + (oHard - state.open) * beta;
-    const appliedOpen = clamp(state.open,0,1);
-    const ph = openPhase(localScroll, Pnow);
-
-    // Commit rule: switch only at visual extremes AND in hold zones (which include stop-frames)
-    let committedStep = (state.prevStep ?? state.step);
-    if (Pnow.cleanSwitch){
-      const OPEN_FULL_THR   = 0.999;
-      const CLOSED_FULL_THR = 0.001;
-      const inHold = (ph.idx === 0 || ph.idx === 2 || ph.idx === 4); // open/closed holds
-      const atExtreme = (appliedOpen >= OPEN_FULL_THR) || (appliedOpen <= CLOSED_FULL_THR);
-
-      if (inHold && atExtreme){
-        if (state.holdStart == null) state.holdStart = now;
-        if ((now - state.holdStart) >= Pnow.holdMs){
-          committedStep = state.step;
-        }
-      } else {
-        state.holdStart = null;
-      }
-    } else {
-      committedStep = state.step; // free switching when cleanSwitch is off
-    }
-    state.prevStep = committedStep;
-
-    // Parallax
-    const y = (Pnow.C - 1) * localScroll;
-    imagesWrap.style.transform = `translateY(${y.toFixed(2)}px)`;
-
-    // Apply pattern
-    applyPattern(committedStep, appliedOpen, qSnap);
-
-    // HUD
-    if(hud.classList.contains('on')){
-      pBar.style.width = (state.p*100).toFixed(1)+'%';
-      pVal.textContent = state.p.toFixed(3);
-      qVal.textContent = qSnap.toFixed(3);
-      oVal.textContent = appliedOpen.toFixed(3);
-    }
-
-    state.lastT = now;
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
-
-  /* ------- Background drift ------- */
-  function updateBgDrift(){
-    const periodVH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--period'))||4000;
-    const periodPx = (periodVH/100) * (window.innerHeight || document.documentElement.clientHeight || 1);
-    const drift = (window.scrollY * 0.35) % periodPx;
-    const half = periodPx * 0.5;
-    document.body.style.backgroundPosition =
-      `center ${(-drift).toFixed(1)}px, center ${(-(drift+half)%periodPx).toFixed(1)}px`;
-  }
-  window.addEventListener('scroll', updateBgDrift, {passive:true});
-  window.addEventListener('resize', updateBgDrift, {passive:true});
-  updateBgDrift();
-
-  // Panel toggle
-  let panelOpen = false;
-  // (duplicate const fab removed here)
-  fab.addEventListener('click', ()=>{
-    panelOpen = !panelOpen;
-    panel.classList.toggle('open', panelOpen);
-    fab.setAttribute('aria-label', panelOpen?'Hide controls':'Show controls');
-  });
-
-  // HUD toggle
-  window.addEventListener('keydown', (e)=>{
-    if(e.key==='d' || e.key==='D'){ hud.classList.toggle('on'); }
-  }, {passive:true});
-
-  // Initial layout sizing
-  function afterDOMReady(){ updateLayout(); P=getParams(); reflectUI(P); }
-  if(document.readyState === 'complete' || document.readyState === 'interactive') afterDOMReady();
-  else window.addEventListener('DOMContentLoaded', afterDOMReady, {once:true});
-})();
-</script>
-</body>
-</html>
+    hudPeriod.textContent = P.per
