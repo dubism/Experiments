@@ -663,13 +663,11 @@
     }
     else { o = 1; }                             // trailing open hold
 
-    // Enforce extremes exactly in holds
     if (P.enforceExtremes){
       if (m < a1 || m >= a4) o = 1;
       if (m >= a2 && m < a3) o = 0;
     }
 
-    // Snap edges more decisively (visual crispness)
     o = clamp(o, 0, 1);
     o = strictSnap01(o, Math.max(1, P.snapSharp));
     return o;
@@ -687,7 +685,7 @@
     return {phase:'openHoldB', idx:4};
   }
 
-  /* ------- Snap helpers (for step quantization / pattern cycling) ------- */
+  /* ------- Snap helpers ------- */
   function softQuantize(q, w){
     const r = Math.round(q);
     const d = Math.abs(q - r);
@@ -851,7 +849,7 @@
   }
   requestAnimationFrame(tick);
 
-  /* ------- Background drift (unchanged) ------- */
+  /* ------- Background drift ------- */
   function updateBgDrift(){
     const periodVH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--period'))||4000;
     const periodPx = (periodVH/100) * (window.innerHeight || document.documentElement.clientHeight || 1);
@@ -866,7 +864,7 @@
 
   // Panel toggle
   let panelOpen = false;
-  const fab = document.getElementById('fab');
+  // (duplicate const fab removed here)
   fab.addEventListener('click', ()=>{
     panelOpen = !panelOpen;
     panel.classList.toggle('open', panelOpen);
