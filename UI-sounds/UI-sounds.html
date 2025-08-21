@@ -66,15 +66,15 @@
       <button id="stopAll" class="sound">⏹️ Stop All</button>
     </div>
     <p class="small" style="margin-top:10px">
-      We first try <code>sounds/manifest.json</code> (list of filenames). If missing, we probe <code>clip_001.wav…clip_300.wav</code>.
+      Discovery order: <code>sounds/files.json</code> → <code>sounds/manifest.json</code> → parse directory listing at <code>sounds/</code>.  
+      On hosts without directory listing (e.g., GitHub Pages) add <code>files.json</code> listing your WAVs.
     </p>
   </main>
 
 <script>
 const $ = s => document.querySelector(s);
 const statusEl=$("#status"), volEl=$("#vol"), cutEl=$("#cut"), foundEl=$("#found"),
-      chipsEl=$("#chips"), gridEl=$("#grid"), meterFill=$("#meterFill"),
-      audioStateEl=$("#audioState");
+      chipsEl=$("#chips"), gridEl=$("#grid"), meterFill=$("#meterFill"), audioStateEl=$("#audioState");
 document.body.addEventListener("touchstart", ()=>{}, {passive:true}); // enable :active on iOS
 
 function setStatus(m,ok=false){ statusEl.textContent=m; statusEl.classList.toggle("ok", ok); }
@@ -109,26 +109,47 @@ async function ensureUnlocked(){
   return unlockPromise;
 }
 
-// --- Discovery ---
+// --- Discovery (any .wav names) ---
 async function fetchJSON(url){ try{ const r=await fetch(url,{cache:"no-store"}); if(!r.ok) throw 0; return r.json(); }catch{return null} }
-async function head(url){ try{ const r=await fetch(url,{method:"HEAD",cache:"no-store"}); return r.ok }catch{return false} }
 function chip(name, ok){ const el=document.createElement("span"); el.className="chip"; el.innerHTML=`<span class="dot ${ok?"ok":"err"}"></span><span>${name}</span>`; chipsEl.appendChild(el); }
+
+async function tryAutoIndex(dirUrl){
+  try{
+    const r = await fetch(dirUrl, {cache:"no-store"});
+    if(!r.ok) return [];
+    const ct = r.headers.get("content-type")||"";
+    if(!ct.includes("text/html")) return [];
+    const html = await r.text();
+    const hrefs = [...html.matchAll(/href\s*=\s*"(.*?)"/gi)].map(m=>m[1]);
+    const wavs = hrefs
+      .map(h=>decodeURIComponent(h.split("?")[0].split("#")[0]))
+      .filter(h=>/\.wav$/i.test(h))
+      .map(h=> h.replace(/^\.\/|^\//,"").replace(/^sounds\//,""))
+      .filter(h=>!h.includes("/")); // only files in that folder
+    // de-dupe
+    return [...new Set(wavs)].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  }catch{ return []; }
+}
 
 let FILES=[];
 (async function discover(){
   setStatus("Scanning…");
-  const m=await fetchJSON("sounds/manifest.json");
+  // 1) files.json (preferred)
+  let m = await fetchJSON("sounds/files.json");
+  if(!m) m = await fetchJSON("sounds/manifest.json");
   if(m?.files?.length){
-    FILES=m.files.filter(f=>/\.wav$/i.test(f));
-    FILES.forEach(f=>chip(f,true)); foundEl.textContent=FILES.length; setStatus("Manifest loaded", true);
-  }else{
-    let miss=0; for(let i=1;i<=300;i++){
-      const name=`clip_${String(i).padStart(3,"0")}.wav`;
-      const ok=await head("sounds/"+name); chip(name, ok);
-      if(ok){ FILES.push(name); miss=0; } else { if(++miss>=25 && FILES.length) break; }
-      foundEl.textContent=FILES.length;
+    FILES = m.files.filter(f=>/\.wav$/i.test(f));
+    FILES.forEach(f=>chip(f,true)); foundEl.textContent = FILES.length; setStatus("Manifest loaded", true);
+  } else {
+    // 2) directory index parse
+    const names = await tryAutoIndex("sounds/");
+    if(names.length){
+      FILES = names;
+      FILES.forEach(f=>chip(f,true)); foundEl.textContent = FILES.length; setStatus("Autoindex parsed", true);
+    } else {
+      setStatus("No listing. Add sounds/files.json.", false);
+      FILES = []; // cannot discover unknown names on this host
     }
-    setStatus(FILES.length?"Probed files":"No files found", !!FILES.length);
   }
   if(FILES.length) loadAll();
 })();
