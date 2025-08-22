@@ -4,37 +4,36 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0b0d10">
-<title>UI Sounds — local /sounds/</title>
+<title>UI Sounds — /sounds/ clip_000..</title>
 <style>
   :root{--bg:#0b0d10;--ink:#e7eef6;--muted:#9ab0c6;--card:#0f1318;--line:#1b2330;--accent:#79f5cc;--accent2:#3bd4ff;--glow:0 8px 18px rgba(0,0,0,.45),0 0 0 1px #1b2330 inset,0 0 22px rgba(61,225,255,.18)}
   *{box-sizing:border-box}
-  html,body{height:100%;background:#0b0d10;color:var(--ink);color-scheme:dark;overscroll-behavior:none}
+  html,body{height:100%;background:#0b0d10;color:var(--ink);color-scheme:dark}
   body{margin:0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:radial-gradient(1200px 800px at 10% 0%,#10202b 0%,#0b0d10 40%,#0b0d10 100%);-webkit-tap-highlight-color:transparent}
-  header{position:sticky;top:0;background:rgba(15,19,24,.85);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:14px 12px;z-index:10}
-  h1{margin:0 0 4px;font-size:18px;letter-spacing:.2px}
-  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  .card{border:1px solid var(--line);background:rgba(15,19,24,.9);border-radius:16px;padding:14px;margin:14px;box-shadow:var(--glow)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-  .tile{display:flex;flex-direction:column;gap:6px}
-  button.sound{padding:12px 10px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,#14202b,#0f1318);color:var(--ink);cursor:pointer;box-shadow:var(--glow);position:relative;overflow:hidden;transition:transform .06s ease-out,box-shadow .18s ease;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
-  button.sound::after{content:"";position:absolute;inset:0;background:radial-gradient(120px 40px at 50% 0%,rgba(255,255,255,.08),transparent 55%);pointer-events:none}
-  button.sound:active,button.sound.pressed{transform:scale(.97);box-shadow:0 0 0 1px #2ad0ff inset,0 0 30px rgba(58,208,255,.35)}
-  .fname{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ok{color:var(--accent)}
+  header{position:sticky;top:0;background:rgba(15,19,24,.85);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px;z-index:10}
+  h1{margin:0 0 6px;font-size:18px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:#111823}
   input[type="range"]{width:220px}
   .small{font-size:12px;color:var(--muted)}
-  .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:#111823}
+  .card{border:1px solid var(--line);background:rgba(15,19,24,.9);border-radius:14px;padding:12px;margin:12px;box-shadow:var(--glow)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+  .tile{display:flex;flex-direction:column;gap:6px}
+  button.sound{padding:12px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,#14202b,#0f1318);color:var(--ink);cursor:pointer;box-shadow:var(--glow);display:flex;justify-content:center;align-items:center;gap:8px;transition:transform .06s,box-shadow .18s;user-select:none;touch-action:manipulation}
+  button.sound:active,button.sound.pressed{transform:scale(.97);box-shadow:0 0 0 1px #2ad0ff inset,0 0 30px rgba(58,208,255,.35)}
+  .fname{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .meter{height:10px;background:#0f1722;border:1px solid var(--line);border-radius:8px;overflow:hidden;min-width:180px}
   .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%}
+  .ok{color:var(--accent)}
 </style>
 </head>
 <body>
   <header>
-    <h1>UI Sounds — local /sounds/</h1>
+    <h1>UI Sounds — /sounds/</h1>
     <div class="row">
       <span class="pill"><span>Volume</span> <input id="vol" type="range" min="0" max="1" step="0.01" value="0.9"></span>
       <label class="pill"><input id="cut" type="checkbox" checked> Cut previous</label>
-      <span id="status" class="small">Scanning /sounds/…</span>
+      <span id="status" class="small">Scanning…</span>
       <span class="pill"><span>Found</span> <strong id="found">0</strong></span>
       <div class="meter"><div class="fill" id="meter"></div></div>
     </div>
@@ -42,97 +41,60 @@
 
   <main class="card">
     <div class="grid" id="grid"></div>
-    <div class="row" style="margin-top:16px">
+    <div class="row" style="margin-top:12px">
       <button id="seq" class="sound">▶️ Quick playthrough</button>
       <button id="stopAll" class="sound">⏹️ Stop All</button>
     </div>
   </main>
 
 <script>
-/* ===== Basics ===== */
-const DIR="sounds/";                 // folder to scan
-const PROBE_MAX=300;                 // probe up to N files
-const PROBE_PATTERNS=[i=>`clip_${String(i).padStart(3,"0")}.wav`, i=>`sound_${String(i).padStart(3,"0")}.wav`];
+/* ===== Config: ONLY clip_000.wav.. and stop on first miss ===== */
+const DIR = "sounds/";
+const START = 0;             // starts at clip_000.wav
+const PAD   = 3;             // zero-padding
+const PREFIX= "clip_";
+const SUFFIX= ".wav";
 
-const $=s=>document.querySelector(s);
+/* ===== Shorthands ===== */
+const $ = s => document.querySelector(s);
 const grid=$("#grid"), statusEl=$("#status"), foundEl=$("#found"), volEl=$("#vol"), cutEl=$("#cut"), meter=$("#meter");
 document.body.addEventListener("touchstart",()=>{}, {passive:true});
-const setStatus=(m,ok=false)=>{ statusEl.textContent=m; statusEl.classList.toggle("ok",ok); };
+const setStatus = (m, ok=false)=>{ statusEl.textContent=m; statusEl.classList.toggle("ok", ok); };
 
-/* ===== Audio (unlock only on first tap) ===== */
+/* ===== Audio (unlock on first tap only) ===== */
 let ctx, masterGain, unlocked=false, buffers=new Map(), voices=new Set();
 function createCtx(){ if(!ctx||ctx.state==="closed"){ ctx=new (window.AudioContext||window.webkitAudioContext)(); masterGain=ctx.createGain(); masterGain.gain.value=parseFloat(volEl.value); masterGain.connect(ctx.destination);} }
 async function ensureUnlocked(){ if(unlocked){ if(ctx?.state!=="running") await ctx.resume(); return; } createCtx(); try{ const silent=ctx.createBuffer(1,1,ctx.sampleRate); const src=ctx.createBufferSource(); src.buffer=silent; src.connect(masterGain); src.start(0); src.stop(0); await ctx.resume(); unlocked=true; }catch{} }
 volEl.addEventListener("input",()=>{ if(masterGain) masterGain.gain.setTargetAtTime(parseFloat(volEl.value), ctx.currentTime, .01); });
 
-/* ===== Discovery (same-origin only) ===== */
-// Try directory index HTML
-async function listFromAutoIndex(){
-  try{
-    const res=await fetch(DIR,{cache:"no-store"});
-    if(!res.ok) return [];
-    const ct=(res.headers.get("content-type")||"").toLowerCase();
-    if(!ct.includes("text/html")) return [];
-    const html=await res.text();
-    const hrefs=[...html.matchAll(/href\s*=\s*"(.*?)"/gi)].map(m=>m[1]);
-    const wavs=hrefs.map(h=>decodeURIComponent(h.split("?")[0].split("#")[0]))
-      .filter(h=>/\.wav$/i.test(h))
-      .map(h=>h.replace(/^\.\/|^\//,"").replace(/^sounds\//,""))
-      .filter(h=>!h.includes("/"));
-    return [...new Set(wavs)].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-  }catch{ return []; }
-}
-// Try local JSON lists if present
-async function listFromJson(){
-  for(const name of ["files.json","manifest.json","index.json"]){
-    try{
-      const r=await fetch(DIR+name,{cache:"no-store"});
-      if(!r.ok) continue;
-      const j=await r.json();
-      if(Array.isArray(j)) return j.filter(f=>/\.wav$/i.test(f));
-      if(j?.files?.length) return j.files.filter(f=>/\.wav$/i.test(f));
-    }catch{}
-  }
-  return [];
-}
-// Fallback: probe common names using small ranged GET
+/* ===== Discovery: sequential probe; stop at first miss ===== */
 async function exists(name){
   try{
-    const r=await fetch(DIR+name,{cache:"no-store",headers:{"Range":"bytes=0-0"}});
+    const r=await fetch(DIR+name, {cache:"no-store", headers:{"Range":"bytes=0-0"}});
     return r.ok;
   }catch{ return false; }
 }
-async function listByProbing(){
-  const out=[]; let gaps=0;
-  for(let i=1;i<=PROBE_MAX;i++){
-    let hit=false;
-    for(const pat of PROBE_PATTERNS){
-      const n=pat(i);
-      if(await exists(n)){ out.push(n); hit=true; }
-    }
-    if(hit) gaps=0; else if(++gaps>=25 && out.length) break;
-  }
-  return out;
-}
-
 async function discover(){
   setStatus("Scanning /sounds/…");
-  let files=await listFromAutoIndex();
-  if(!files.length) files=await listFromJson();
-  if(!files.length) files=await listByProbing();
-  foundEl.textContent=files.length;
-  setStatus(files.length?`Found ${files.length}`:"No WAVs found in /sounds/", !!files.length);
+  const files=[];
+  for(let i=START;;i++){
+    const name = `${PREFIX}${String(i).padStart(PAD,"0")}${SUFFIX}`;
+    const ok = await exists(name);
+    if(!ok) break;          // STOP on first miss
+    files.push(name);
+  }
+  foundEl.textContent = files.length;
+  setStatus(files.length?`Found ${files.length}`:"No files found", !!files.length);
   return files;
 }
 
-/* ===== Loading + UI ===== */
+/* ===== UI + Loading ===== */
 function addPress(el){
   const on=()=>{ el.classList.add("pressed"); try{navigator.vibrate&&navigator.vibrate(8);}catch{} };
   const off=()=> el.classList.remove("pressed");
   ["pointerdown","touchstart","mousedown"].forEach(ev=>el.addEventListener(ev,on,{passive:true}));
   ["pointerup","pointercancel","touchend","touchcancel","mouseleave","mouseup","blur"].forEach(ev=>el.addEventListener(ev,off));
 }
-
 function makeTile(name){
   const t=document.createElement("div"); t.className="tile";
   const b=document.createElement("button"); b.className="sound"; b.textContent="▶️ Play"; addPress(b);
@@ -140,7 +102,6 @@ function makeTile(name){
   b.addEventListener("pointerdown", async()=>{ await ensureUnlocked(); if(!buffers.has(name)) await loadOne(name); play(name,b); });
   t.appendChild(b); t.appendChild(l); return t;
 }
-
 function render(files){
   grid.innerHTML=""; files.forEach(n=>grid.appendChild(makeTile(n)));
   $("#seq").addEventListener("pointerdown", async e=>{
@@ -152,33 +113,26 @@ function render(files){
   });
   $("#stopAll").addEventListener("click", stopAll);
 }
-
 async function loadAll(files){
   setStatus(`Loading 0/${files.length}…`);
   for(let i=0;i<files.length;i++){
-    const url=DIR+files[i];
     try{
-      const res=await fetch(url,{cache:"no-store"});
-      const arr=await res.arrayBuffer();
-      if(!ctx) createCtx();            // DO NOT resume here (iOS)
-      const buf=await ctx.decodeAudioData(arr);
+      const arr = await (await fetch(DIR+files[i], {cache:"no-store"})).arrayBuffer();
+      if(!ctx) createCtx();                           // do NOT resume here
+      const buf = await ctx.decodeAudioData(arr);
       buffers.set(files[i], buf);
-      meter.style.width=Math.round(((i+1)/files.length)*100)+"%";
-      setStatus(`Loaded ${i+1}/${files.length}`, i+1===files.length);
+      meter.style.width = Math.round(((i+1)/files.length)*100) + "%";
+      setStatus(`Loading ${i+1}/${files.length}…`, i+1===files.length);
     }catch{ setStatus("Decode error "+files[i]); }
   }
+  setStatus("Ready", true);
 }
-
-async function loadOne(file){
-  setStatus("Decoding "+file);
+async function loadOne(name){
   try{
-    const res=await fetch(DIR+file,{cache:"no-store"});
-    const arr=await res.arrayBuffer();
-    if(!ctx) createCtx();              // DO NOT resume here
-    const buf=await ctx.decodeAudioData(arr);
-    buffers.set(file, buf);
-    setStatus("Ready", true);
-  }catch{ setStatus("Decode error "+file); }
+    const arr = await (await fetch(DIR+name, {cache:"no-store"})).arrayBuffer();
+    if(!ctx) createCtx();                             // do NOT resume here
+    buffers.set(name, await ctx.decodeAudioData(arr));
+  }catch{}
 }
 
 /* ===== Playback ===== */
@@ -187,10 +141,10 @@ function now(){ return ctx.currentTime; }
 function fadeInOut(g,start,durMs){
   const t=start, d=durMs/1000, A=Math.max(FADE_MS,1)/1000;
   g.gain.cancelScheduledValues(t);
-  g.gain.setValueAtTime(0.0,t);
-  g.gain.linearRampToValueAtTime(parseFloat(volEl.value), t+A);
-  g.gain.setValueAtTime(parseFloat(volEl.value), t+d-A);
-  g.gain.linearRampToValueAtTime(0.0, t+d);
+  g.gain.setValueAtTime(0.0, t);
+  g.gain.linearRampToValueAtTime(parseFloat(volEl.value), t + A);
+  g.gain.setValueAtTime(parseFloat(volEl.value), t + d - A);
+  g.gain.linearRampToValueAtTime(0.0, t + d);
 }
 function stopAll(){ voices.forEach(v=>{ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); }); voices.clear(); }
 function play(name,btn){
@@ -206,10 +160,10 @@ function play(name,btn){
 
 /* ===== Boot ===== */
 (async()=>{
-  const files = await discover();
+  const files = await discover();     // strictly sequential, stop at first miss
   if(files.length){
-    render(files);      // show buttons immediately
-    loadAll(files);     // preload in background (no await)
+    render(files);                     // show UI immediately
+    loadAll(files);                    // preload in background (no await)
   }
 })();
 document.addEventListener("visibilitychange",()=>{ if(!ctx) return; if(document.hidden) ctx.suspend().catch(()=>{}); else ctx.resume().catch(()=>{}); });
