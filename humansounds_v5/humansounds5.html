@@ -3,41 +3,102 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Human Sounds — Deterministic UI Sampler (v5)</title>
+<title>Human Sounds — Deterministic UI Sampler (spring-focused)</title>
 <style>
-  :root{ --bg:#f8fafc; --ink:#1e2430; --muted:#5c6a7c; --card:#ffffff; --line:#e6eaf1; --shadow:0 8px 24px rgba(16,24,40,.06), 0 1px 0 rgba(16,24,40,.06);
-          --peach:#ffd9c2; --mint:#c8f1e7; --sky:#d5e8ff; --rose:#ffd6e7; --lemon:#fbf3ba; --lilac:#e7dcff; --sage:#d9f0d7; --blue:#cfe0ff; --accent:#7f8cff; }
-  *{box-sizing:border-box} html,body{height:100%} body{margin:0; font:16px/1.5 ui-sans-serif,system-ui,Inter,Roboto,Segoe UI,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg);}
-  header{position:sticky; top:0; z-index:5; backdrop-filter:saturate(120%) blur(8px); background:linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.6)); border-bottom:1px solid var(--line);}
-  .wrap{max-width:1200px; margin:0 auto; padding:22px 16px} h1{margin:0; font-size:28px} .sub{color:var(--muted); margin-top:6px; font-size:14px}
-  .grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; margin-top:18px} .card{background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:16px}
-  .card h2{margin:0 0 10px 0; font-size:16px} .row{display:flex; flex-wrap:wrap; align-items:center; gap:10px}
-  .btn{appearance:none; border:0; padding:10px 14px; border-radius:12px; font-weight:700; letter-spacing:.2px; cursor:pointer; transition:transform .12s ease, box-shadow .2s ease, filter .15s ease; box-shadow:0 2px 0 rgba(0,0,0,.04) inset, 0 10px 20px rgba(0,0,0,.05); user-select:none; -webkit-user-select:none; -webkit-user-drag:none;}
-  .btn:active{transform:translateY(0) scale(.985)} .primary{background:var(--blue)} .secondary{background:var(--mint)} .ghost{background:transparent; border:1px dashed var(--line)} .danger{background:var(--rose)}
+  :root{
+    --bg:#f8fafc; --ink:#1e2430; --muted:#5c6a7c;
+    --card:#ffffff; --line:#e6eaf1; --shadow:0 8px 24px rgba(16,24,40,.06), 0 1px 0 rgba(16,24,40,.06);
+    --peach:#ffd9c2; --mint:#c8f1e7; --sky:#d5e8ff; --rose:#ffd6e7; --lemon:#fbf3ba; --lilac:#e7dcff; --sage:#d9f0d7; --blue:#cfe0ff;
+    --accent:#7f8cff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font:16px/1.5 ui-sans-serif,system-ui,Inter,Roboto,"Segoe UI",Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--bg);
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  }
+  header{position:sticky; top:0; z-index:5; backdrop-filter:saturate(120%) blur(8px);
+    background:linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.6)); border-bottom:1px solid var(--line);
+  }
+  .wrap{max-width:1200px; margin:0 auto; padding:22px 16px}
+  h1{margin:0; font-size:28px; letter-spacing:.2px}
+  .sub{color:var(--muted); margin-top:6px; font-size:14px}
+
+  .grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; margin-top:18px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:16px}
+  .card h2{margin:0 0 10px 0; font-size:16px; letter-spacing:.2px}
+  .row{display:flex; flex-wrap:wrap; align-items:center; gap:10px}
+
+  /* Buttons */
+  .btn{
+    appearance:none; border:0; padding:10px 14px; border-radius:12px; font-weight:700; letter-spacing:.2px; cursor:pointer;
+    transition:transform .12s ease, box-shadow .2s ease, filter .15s ease;
+    box-shadow:0 2px 0 rgba(0,0,0,.04) inset, 0 10px 20px rgba(0,0,0,.05);
+    user-select:none; -webkit-user-select:none; -webkit-user-drag:none;
+  }
+  .btn:active{transform:translateY(0) scale(.985)}
+  .primary{background:var(--blue)} .secondary{background:var(--mint)} .ghost{background:transparent; border:1px dashed var(--line)}
+  .danger{background:var(--rose)}
   .btn .subcap{display:block; font-size:11px; font-weight:600; color:#3a4250; opacity:.9}
-  .choice{display:flex; gap:16px; align-items:center; flex-wrap:wrap} .radio, .check{display:flex; gap:8px; align-items:center; background:#f2f5fb; border:1px solid var(--line); border-radius:12px; padding:8px 10px; cursor:pointer}
+
+  /* Radio & checkbox */
+  .choice{display:flex; gap:16px; align-items:center; flex-wrap:wrap}
+  .radio, .check{display:flex; gap:8px; align-items:center; background:#f2f5fb; border:1px solid var(--line); border-radius:12px; padding:8px 10px; cursor:pointer}
   .radio input, .check input{accent-color:#7f8cff; width:18px; height:18px}
+
+  /* Toggle */
   .toggle{position:relative; width:60px; height:32px; background:#e9edf3; border:1px solid var(--line); border-radius:999px; cursor:pointer; transition:background .2s ease}
-  .toggle::after{content:""; position:absolute; top:3px; left:3px; width:26px; height:26px; background:#fff; border-radius:50%; box-shadow:0 4px 10px rgba(0,0,0,.12); transition:transform .2s ease;}
-  .toggle.on{background:#d9e8ff} .toggle.on::after{transform:translateX(28px)}
+  .toggle::after{
+    content:""; position:absolute; top:3px; left:3px; width:26px; height:26px; background:#fff; border-radius:50%;
+    box-shadow:0 4px 10px rgba(0,0,0,.12); transition:transform .2s ease;
+  }
+  .toggle.on{background:#d9e8ff}
+  .toggle.on::after{transform:translateX(28px)}
+
+  /* Slider & knobs */
   .slider{appearance:none; width:100%; height:10px; background:#edf1f6; border-radius:999px; border:1px solid var(--line);}
-  .slider::-webkit-slider-thumb{appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); border:0; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.15);}
-  .dial, .knob{width:140px; height:140px; border-radius:50%; display:grid; place-items:center; margin:8px auto; background:#fff; border:1px solid var(--line); box-shadow:var(--shadow); position:relative; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-user-drag:none;}
+  .slider::-webkit-slider-thumb{
+    appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); border:0; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.15);
+  }
+  .dial, .knob{
+    width:140px; height:140px; border-radius:50%; display:grid; place-items:center; margin:8px auto; background:#fff; border:1px solid var(--line); box-shadow:var(--shadow);
+    position:relative; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-user-drag:none;
+  }
   .dial::after, .knob::after{content:""; position:absolute; width:6px; height:30px; background:var(--accent); top:14px; left:50%; transform-origin:50% 50%; border-radius:3px}
-  .dial .val, .knob .val{font-weight:700} .ticks{position:absolute; inset:6px; border-radius:50%; pointer-events:none; opacity:.5} .ticks canvas{width:100%; height:100%}
+  .dial .val, .knob .val{font-weight:700}
+  .ticks{position:absolute; inset:6px; border-radius:50%; pointer-events:none; opacity:.5}
+  .ticks canvas{width:100%; height:100%}
+
+  /* Drag & drop board */
   .board{display:grid; grid-template-columns:1fr 1fr; gap:12px; user-select:none; -webkit-user-select:none; -webkit-user-drag:none; touch-action:none}
   .bin{min-height:160px; border:2px dashed #dbe3ef; border-radius:14px; padding:12px; background:#f7faff; position:relative}
   .token{user-select:none; -webkit-user-select:none; -webkit-user-drag:none; display:inline-block; padding:8px 12px; border-radius:999px; background:#fff; border:1px solid var(--line); box-shadow:var(--shadow); margin:4px; cursor:grab; touch-action:none}
-  .token:active{cursor:grabbing} .bin h3{margin:0 0 8px 0; font-size:14px; color:var(--muted)}
-  .scrim{position:fixed; inset:0; background:rgba(10,12,16,.4); display:none; place-items:center; z-index:30; touch-action:none} .modal{width:min(560px,calc(100vw - 32px)); background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:var(--shadow)}
-  .toast-wrap{position:fixed; right:14px; bottom:14px; display:flex; flex-direction:column; gap:8px; z-index:40; pointer-events:none} .toast{background:#1f2530; color:#fff; padding:10px 12px; border-radius:12px; box-shadow:var(--shadow)} .toast.error{background:#e35050}
+  .token:active{cursor:grabbing}
+  .bin h3{margin:0 0 8px 0; font-size:14px; color:var(--muted)}
+
+  /* Overlay */
+  .scrim{position:fixed; inset:0; background:rgba(10,12,16,.4); display:none; place-items:center; z-index:30; touch-action:none}
+  .modal{width:min(560px,calc(100vw - 32px)); background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:var(--shadow)}
+
+  /* Toasts */
+  .toast-wrap{position:fixed; right:14px; bottom:14px; display:flex; flex-direction:column; gap:8px; z-index:40; pointer-events:none}
+  .toast{background:#1f2530; color:#fff; padding:10px 12px; border-radius:12px; box-shadow:var(--shadow)}
+  .toast.error{background:#e35050}
+
+  /* Gesture lab */
   .lab{height:240px; border:2px dashed #dbe3ef; border-radius:14px; position:relative; overflow:hidden; background:linear-gradient(180deg,#ffffff,#f6f9ff); touch-action:none; user-select:none; -webkit-user-select:none; -webkit-user-drag:none}
   .anchor{position:absolute; left:50%; top:50%; width:18px; height:18px; background:#7f8cff; border-radius:50%; transform:translate(-50%,-50%)}
   .mass{position:absolute; left:50%; top:50%; width:36px; height:36px; background:#ffdaba; border:2px solid #ffb98a; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 8px 18px rgba(0,0,0,.08); will-change:transform,left,top;}
-  .vector{position:absolute; left:50%; top:50%; width:2px; height:2px; background:#7f8cff; transform-origin:0 0} .lab .hint{position:absolute; left:8px; top:8px; font-size:12px; color:var(--muted)}
-  footer{margin-top:18px; color:var(--muted)} code{background:#eef2f8; padding:2px 6px; border-radius:6px}
+  .vector{position:absolute; left:50%; top:50%; width:2px; height:2px; background:#7f8cff; transform-origin:0 0}
+  .lab .hint{position:absolute; left:8px; top:8px; font-size:12px; color:var(--muted)}
+
+  footer{margin-top:18px; color:var(--muted)}
+  code{background:#eef2f8; padding:2px 6px; border-radius:6px}
+
   .enable{display:inline-block; margin-left:8px; font-size:13px; background:#eef2ff; border:1px solid #d7def5; padding:6px 10px; border-radius:10px; cursor:pointer; user-select:none}
-  .diag{margin-top:8px; font-size:12px; color:#667; display:none} .diag pre{white-space:pre-wrap; background:#f1f4fb; padding:8px; border-radius:8px; border:1px solid #e1e7f3}
+  .diag{margin-top:8px; font-size:12px; color:#667; display:none}
+  .diag pre{white-space:pre-wrap; background:#f1f4fb; padding:8px; border-radius:8px; border:1px solid #e1e7f3}
   .diag-toggle{margin-left:8px; font-size:12px; cursor:pointer; color:#556; text-decoration:underline}
 </style>
 </head>
@@ -56,14 +117,20 @@
 
   <main class="wrap">
     <section class="grid">
-      <div class="card"><h2>🎛️ Buttons (distinct states)</h2><div class="row">
-        <button class="btn primary" id="btnPrimary">Commit<span class="subcap">sound on release</span></button>
-        <button class="btn secondary" id="btnSecondary">Nudge<span class="subcap">sound on press</span></button>
-        <button class="btn ghost" id="btnGhost">Outline<span class="subcap">sound on release</span></button>
-        <button class="btn danger" id="btnPanic">Panic<span class="subcap">error toast</span></button>
-      </div></div>
+      <!-- Buttons -->
+      <div class="card">
+        <h2>🎛️ Buttons (distinct states)</h2>
+        <div class="row">
+          <button class="btn primary" id="btnPrimary">Commit<span class="subcap">sound on release</span></button>
+          <button class="btn secondary" id="btnSecondary">Nudge<span class="subcap">sound on press</span></button>
+          <button class="btn ghost" id="btnGhost">Outline<span class="subcap">sound on release</span></button>
+          <button class="btn danger" id="btnPanic">Panic<span class="subcap">error toast</span></button>
+        </div>
+      </div>
 
-      <div class="card"><h2>✅ Choices</h2>
+      <!-- Choices -->
+      <div class="card">
+        <h2>✅ Choices</h2>
         <div class="choice" role="radiogroup" aria-label="Modes">
           <label class="radio"><input type="radio" name="mode" value="Luna" checked/> Luna</label>
           <label class="radio"><input type="radio" name="mode" value="Kite"/> Kite</label>
@@ -74,157 +141,416 @@
         <div style="height:10px"></div>
         <div class="label">Glow</div>
         <div id="toggleGlow" class="toggle" role="switch" aria-checked="false" tabindex="0"></div>
-        <div class="sub" style="margin-top:6px">Radio/Check toggles now mix tones and taps, not just clicks.</div>
+        <div class="sub" style="margin-top:6px">Radio/Check/Toggle have richer cues; not only clicks.</div>
       </div>
 
-      <div class="card"><h2>🪄 Overlay & Melt</h2><div class="row">
-        <button class="btn" style="background:var(--lilac)" id="openOverlay">Show Overlay</button>
-        <button class="btn" style="background:var(--sage)" id="melt">Melt Card</button>
-      </div><div class="sub" style="margin-top:6px">Overlay sounds trimmed to first audible section.</div></div>
+      <!-- Overlay & Melt -->
+      <div class="card">
+        <h2>🪄 Overlay & Melt</h2>
+        <div class="row">
+          <button class="btn" style="background:var(--lilac)" id="openOverlay">Show Overlay</button>
+          <button class="btn" style="background:var(--sage)" id="melt">Melt Card</button>
+        </div>
+        <div class="sub" style="margin-top:6px">Overlay sounds trimmed to first audible section.</div>
+      </div>
 
-      <div class="card"><h2>🎚️ Slider (shortest sound)</h2><div><div>Steps: <span id="sliderOut">0</span></div><input id="stepSlider" class="slider" type="range" min="0" max="100" step="5" value="0"/></div><div class="sub" style="margin-top:6px">Tick uses <code>clip_008</code>.</div></div>
+      <!-- Slider -->
+      <div class="card">
+        <h2>🎚️ Slider (shortest sound)</h2>
+        <div>
+          <div>Steps: <span id="sliderOut">0</span></div>
+          <input id="stepSlider" class="slider" type="range" min="0" max="100" step="5" value="0"/>
+        </div>
+        <div class="sub" style="margin-top:6px">Tick uses <code>clip_008</code>.</div>
+      </div>
 
-      <div class="card"><h2>🧭 Knobs — Scrub vs. Snap</h2><div class="row" style="justify-content:space-between">
-        <div style="flex:1"><div class="dial" id="dial"><div class="val"><span id="dialVal">0</span>°</div></div><div class="sub" style="text-align:center">While scrubbing: continuous loop from <code>clip_010</code> mid-body; on release: full <code>clip_010</code>.</div></div>
-        <div style="flex:1"><div class="knob" id="knob"><div class="val"><span id="knobVal">0</span>°</div><div class="ticks"><canvas id="tickCanvas" width="140" height="140"></canvas></div></div><div class="sub" style="text-align:center">Snaps every 30°. Detent click uses <code>clip_024</code>.</div></div>
-      </div></div>
+      <!-- Knobs -->
+      <div class="card">
+        <h2>🧭 Knobs — Scrub vs. Snap</h2>
+        <div class="row" style="justify-content:space-between">
+          <div style="flex:1">
+            <div class="dial" id="dial">
+              <div class="val"><span id="dialVal">0</span>°</div>
+            </div>
+            <div class="sub" style="text-align:center">While scrubbing: continuous loop from <code>clip_010</code> mid-body; on release: full <code>clip_010</code>.</div>
+          </div>
+          <div style="flex:1">
+            <div class="knob" id="knob">
+              <div class="val"><span id="knobVal">0</span>°</div>
+              <div class="ticks"><canvas id="tickCanvas" width="140" height="140"></canvas></div>
+            </div>
+            <div class="sub" style="text-align:center">Snaps every 30°. Detent click uses <code>clip_024</code>.</div>
+          </div>
+        </div>
+      </div>
 
-      <div class="card"><h2>🧲 Drag & Drop Board</h2><div class="board"><div class="bin" id="binA"><h3>Nest</h3></div><div class="bin" id="binB"><h3>Orbit</h3></div></div><div class="sub" style="margin-top:6px">Custom pointer DnD. Friction while dragging, chime on drop.</div></div>
+      <!-- Drag & Drop -->
+      <div class="card">
+        <h2>🧲 Drag & Drop Board</h2>
+        <div class="board">
+          <div class="bin" id="binA"><h3>Nest</h3></div>
+          <div class="bin" id="binB"><h3>Orbit</h3></div>
+        </div>
+        <div class="sub" style="margin-top:6px">Custom pointer DnD. Friction while dragging, chime on drop.</div>
+      </div>
 
-      <div class="card"><h2>🧪 Gesture Lab — Spring</h2><div class="lab" id="lab"><div class="hint">Grab → tension → release. Now with continuous, quiet sticky friction while dragging.</div><div class="anchor"></div><div class="mass" id="mass"></div><div class="vector" id="vector"></div></div></div>
+      <!-- Gesture Lab -->
+      <div class="card">
+        <h2>🧪 Gesture Lab — Spring</h2>
+        <div class="lab" id="lab">
+          <div class="hint">Grab → continuous sticky drag → release. Consistent “sticky” family.</div>
+          <div class="anchor"></div>
+          <div class="mass" id="mass"></div>
+          <div class="vector" id="vector"></div>
+        </div>
+      </div>
     </section>
 
     <footer>
-      <div>Included sounds: <code id="have"></code></div>
-      <div>Missing (for reference): <code id="missing"></code></div>
+      <div>Expected sounds folder: <code>clip_001…025 (set provided)</code></div>
     </footer>
   </main>
 
-  <div class="scrim" id="scrim" aria-hidden="true"><div class="modal"><h3>Nova appears ✨</h3><p>Overlay sounds start mid-body to avoid silent ramps.</p><div class="row" style="margin-top:10px"><button class="btn secondary" id="closeOverlay">Dismiss</button></div></div></div>
+  <div class="scrim" id="scrim" aria-hidden="true">
+    <div class="modal">
+      <h3>Nova appears ✨</h3>
+      <p>Overlay sounds start mid-body to avoid silent ramps.</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn secondary" id="closeOverlay">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-wrap" id="toasts"></div>
 
 <script>
-const MAP = {"error": "clip_001", "btn_primary": "clip_002", "melt_card": "clip_003", "overlay_show": "clip_004", "overlay_hide": "clip_006", "slider_tick": "clip_008", "dial_rotate": "clip_010", "dnd_drop_success": "clip_013", "btn_secondary": "clip_017", "btn_ghost": "clip_018", "radio_select": "clip_019", "checkbox_toggle": "clip_020", "dnd_friction": "clip_021", "spring_tension": "clip_022", "spring_release": "clip_023", "snap_knob_detent": "clip_024", "spring_grab": "clip_025"};
-const HAVE = new Set(["clip_001", "clip_002", "clip_003", "clip_004", "clip_006", "clip_008", "clip_010", "clip_013", "clip_017", "clip_018", "clip_019", "clip_020", "clip_021", "clip_022", "clip_023", "clip_024", "clip_025"]);
-const MISSING = [];
+/* -------------------- Mapping -------------------- */
+const MAP = {
+  error: "clip_001",
+  btn_primary: "clip_002",
+  melt_card: "clip_003",
+  overlay_show: "clip_004",
+  overlay_hide: "clip_006",
+  slider_tick: "clip_008",
+  dial_rotate: "clip_010",
+  dnd_drop_success: "clip_013",
+  btn_secondary: "clip_017",
+  btn_ghost: "clip_018",
+  radio_select: "clip_019",
+  checkbox_toggle: "clip_020",
+  dnd_friction: "clip_021",
+  spring_tension: "clip_022",   // kept for reference, not used in spring playback anymore
+  spring_release: "clip_023",
+  snap_knob_detent: "clip_024",
+  spring_grab: "clip_025"       // will be overridden to 022 for coherence
+};
+
+/* -------------------- Diagnostics -------------------- */
 const audioState = document.getElementById('audioState');
 const diagBox = document.getElementById('diag'); const logBox = document.getElementById('log');
 document.getElementById('showDiag').onclick = ()=> diagBox.style.display = (diagBox.style.display==='block' ? 'none' : 'block');
 function log(m){ logBox.textContent += m + "\n"; }
 
-// ---- Audio pool with optional startAt trim ----
-class Pool { constructor(id, voices=5) { this.id=id; this.src=id?`sounds/${id}.wav`:null; this.vo=[]; for(let i=0;i<voices;i++){const a=new Audio(this.src||""); a.preload="auto"; a.playsInline = true; a.muted=false; a.load(); this.vo.push(a);} this.i=0; } play({rate=1, vol=1, startAt=null}={}){ if(!this.src) return; const a=this.vo[this.i++%this.vo.length]; try{ a.pause(); if(startAt!=null) try{ a.currentTime=startAt; }catch(_){} a.playbackRate=rate; a.volume=Math.max(0,Math.min(1,vol)); const pr=a.play(); if (pr && pr.catch) pr.catch(e=> log(`[play error] ${this.id} → ${e && e.message}`)); }catch(e){ log(`[play exception] ${this.id} → ${e && e.message}`); } } }
+/* -------------------- Audio Pool & SegmentLoop -------------------- */
+class Pool {
+  constructor(id, voices=5) {
+    this.id=id; this.src=id?`sounds/${id}.wav`:null; this.vo=[];
+    for(let i=0;i<voices;i++){
+      const a=new Audio(this.src||"");
+      a.preload="auto"; a.playsInline=true; a.muted=false; a.load();
+      this.vo.push(a);
+    }
+    this.i=0;
+  }
+  play({rate=1, vol=1, startAt=null}={}) {
+    if(!this.src) return;
+    const a=this.vo[this.i++%this.vo.length];
+    try{
+      a.pause();
+      if(startAt!=null) try{ a.currentTime=startAt; }catch(_){}
+      a.playbackRate=rate; a.volume=Math.max(0,Math.min(1,vol));
+      const pr=a.play(); if (pr && pr.catch) pr.catch(e=> log(`[play error] ${this.id} → ${e && e.message}`));
+    }catch(e){ log(`[play exception] ${this.id} → ${e && e.message}`); }
+  }
+}
 
-// ---- SegmentLoop using <audio> with region loop ----
 class SegmentLoop {
-  constructor(src, {start=0, end=null, volume=1, rate=1}={}){
-    this.src = src; this.a = new Audio(src); this.a.preload="auto"; this.a.playsInline=true; this.a.loop=false;
+  constructor(src, {start=0, end=null, volume=1, rate=1}={}) {
+    this.src = src;
+    this.a = new Audio(src);
+    this.a.preload="auto"; this.a.playsInline=true; this.a.loop=false;
     this.start = start; this.end = end; this._raf = null; this._playing=false;
     this.a.addEventListener('loadedmetadata', ()=>{ if(this.end==null) this.end = Math.max(0, this.a.duration - 0.02); });
     this.setVolume(volume); this.setRate(rate);
   }
-  async _ensureMeta(){ if (isNaN(this.a.duration) || !isFinite(this.a.duration) || this.a.duration===0){ await new Promise(r=> this.a.addEventListener('loadedmetadata', r, {once:true})); } }
-  async play(){ await this._ensureMeta(); try{ this.a.currentTime = Math.min(Math.max(0,this.start), (this.end||this.a.duration)-0.01); this._playing=true; await this.a.play(); this._tick(); } catch(e){ log(`[loop play error] ${this.src} → ${e && e.message}`); } }
-  _tick(){ if(!this._playing) return; if (this.a.currentTime >= (this.end||0)) { try{ this.a.currentTime = this.start; this.a.play(); }catch(e){} } this._raf = requestAnimationFrame(()=>this._tick()); }
+  async _ensureMeta(){
+    if (isNaN(this.a.duration) || !isFinite(this.a.duration) || this.a.duration===0){
+      await new Promise(r=> this.a.addEventListener('loadedmetadata', r, {once:true}));
+    }
+  }
+  async play(){
+    await this._ensureMeta();
+    try{
+      this.a.currentTime = Math.min(Math.max(0,this.start), (this.end||this.a.duration)-0.01);
+      this._playing=true; await this.a.play(); this._tick();
+    } catch(e){ log(`[loop play error] ${this.src} → ${e && e.message}`); }
+  }
+  _tick(){
+    if(!this._playing) return;
+    if (this.a.currentTime >= (this.end||0)) {
+      try{ this.a.currentTime = this.start; this.a.play(); }catch(e){}
+    }
+    this._raf = requestAnimationFrame(()=>this._tick());
+  }
   stop(){ this._playing=false; try{ this.a.pause(); }catch(e){} if(this._raf) cancelAnimationFrame(this._raf); this._raf=null; }
   setVolume(v){ this.a.volume = Math.min(1,Math.max(0,v)); }
   setRate(r){ try{ this.a.playbackRate = r; }catch(e){} }
   setRegion(start,end){ this.start=start; this.end=end; }
 }
 
-// Build pools
-const pools = {}; for (const [k, id] of Object.entries(MAP)) pools[k] = new Pool(id);
+/* -------------------- Build pools -------------------- */
+const pools = {};
+for (const [k, id] of Object.entries(MAP)) pools[k] = new Pool(id);
 
-document.getElementById('have').textContent = Array.from(HAVE).sort().join(', ');
-document.getElementById('missing').textContent = MISSING.join(', ');
+/* Spring: consolidate timbre (sticky family) */
+pools.spring_grab    = new Pool('clip_022'); // tack/grab from sticky family
+pools.spring_release = new Pool('clip_023'); // release from same family
+// pools.spring_tension exists but is not used in spring anymore (loop carries tension)
 
-// WebAudio beep test + unlock
+/* -------------------- Unlock (beep + HTMLAudio unlock) -------------------- */
 let ctx=null;
-async function enableAudio(){ try{ const AC = window.AudioContext || window.webkitAudioContext; if (!ctx) ctx = new AC(); if (ctx.state === 'suspended') await ctx.resume(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type='sine'; osc.frequency.value=880; gain.gain.value=0.2; osc.connect(gain).connect(ctx.destination); osc.start(); setTimeout(()=>{ osc.stop(); }, 150);
-  // unlock all HTMLAudio elements
-  for (const key of Object.keys(pools)) { const p = pools[key]; for (const a of p.vo) { try { a.muted=false; await a.play(); a.pause(); a.currentTime=0; } catch(e) { log(`[unlock fail] ${key} → ${e && e.message}`); } } }
-  audioState.innerHTML = 'Audio: <b>ready</b>'; } catch(e) { log('[enableAudio error] '+(e&&e.message)); } }
+async function enableAudio(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!ctx) ctx = new AC();
+    if (ctx.state === 'suspended') await ctx.resume();
+    // Beep for confirmation
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.type='sine'; osc.frequency.value=880; gain.gain.value=0.2;
+    osc.connect(gain).connect(ctx.destination); osc.start(); setTimeout(()=>{ osc.stop(); }, 150);
+    // Unlock all HTMLAudio
+    for (const key of Object.keys(pools)) {
+      const p = pools[key];
+      for (const a of p.vo) {
+        try { a.muted=false; await a.play(); a.pause(); a.currentTime=0; } catch(e) { log(`[unlock fail] ${key} → ${e && e.message}`); }
+      }
+    }
+    audioState.innerHTML = 'Audio: <b>ready</b>';
+  } catch(e){ log('[enableAudio error] '+(e&&e.message)); }
+}
 document.getElementById('enableAudio').addEventListener('click', enableAudio);
 
-// Toasts
+/* -------------------- UI Utilities -------------------- */
 const toasts = document.getElementById('toasts');
-function toast(text, kind="ok", life=1800){ const el = document.createElement('div'); el.className = 'toast' + (kind==="error" ? ' error' : ''); el.textContent = text; toasts.appendChild(el); setTimeout(()=>{ el.remove(); }, life); }
+function toast(text, kind="ok", life=1800){
+  const el = document.createElement('div'); el.className = 'toast' + (kind==="error" ? ' error' : '');
+  el.textContent = text; toasts.appendChild(el); setTimeout(()=>{ el.remove(); }, life);
+}
 
-// Buttons
+/* -------------------- Buttons -------------------- */
 const btnPrimary = document.getElementById('btnPrimary');
 btnPrimary.addEventListener('pointerup', (e)=>{ e.preventDefault(); pools.btn_primary.play(); btnPrimary.animate([{transform:'scale(1)'},{transform:'scale(1.05)'},{transform:'scale(1)'}],{duration:160}); });
+
 const btnSecondary = document.getElementById('btnSecondary');
 btnSecondary.addEventListener('pointerdown', (e)=>{ e.preventDefault(); pools.btn_secondary.play(); btnSecondary.animate([{transform:'translateY(0)'},{transform:'translateY(-2px)'},{transform:'translateY(0)'}],{duration:140}); });
+
 const btnGhost = document.getElementById('btnGhost');
 btnGhost.addEventListener('pointerup', (e)=>{ e.preventDefault(); pools.btn_ghost.play(); btnGhost.animate([{filter:'none'},{filter:'brightness(1.08)'},{filter:'none'}],{duration:180}); });
+
 const btnPanic = document.getElementById('btnPanic');
 btnPanic.addEventListener('click', ()=>{ pools.error.play(); toast('Critical: something broke.', 'error', 1600); });
 
-// Choices — richer palette
-document.querySelectorAll('input[name="mode"]').forEach(r=>{ r.addEventListener('change', ()=>{ if(r.checked) { pools.radio_select.play({rate:1.05, vol:.7}); /* soft layer */ pools.btn_ghost.play({rate:1.2, vol:.18}); } }); });
-document.getElementById('agree').addEventListener('change', (e)=>{ const on=e.target.checked; pools.checkbox_toggle.play({rate:on?1.0:0.9, vol:.7}); /* subtle detent layer */ pools.snap_knob_detent.play({vol:.12, startAt:0.02}); });
+/* -------------------- Choices: richer cues -------------------- */
+document.querySelectorAll('input[name="mode"]').forEach(r=>{
+  r.addEventListener('change', ()=>{
+    if(r.checked) {
+      pools.radio_select.play({rate:1.05, vol:.7});     // 019 main
+      pools.btn_ghost.play({rate:1.2, vol:.18});        // 018 soft layer
+    }
+  });
+});
+document.getElementById('agree').addEventListener('change', (e)=>{
+  const on=e.target.checked;
+  pools.checkbox_toggle.play({rate:on?1.0:0.9, vol:.7}); // 020
+  pools.snap_knob_detent.play({vol:.12, startAt:0.02});  // 024 subtle detent layer
+});
 
-// Toggle with own voice
-const toggleGlow = document.getElementById('toggleGlow'); const setToggle=(on)=>{ toggleGlow.classList.toggle('on', on); toggleGlow.setAttribute('aria-checked', on?'true':'false'); pools.spring_grab.play({vol:on?.5:.35, rate:on?1.08:.92}); };
+/* Toggle with its own voice (re-using spring_grab timbre now set to 022) */
+const toggleGlow = document.getElementById('toggleGlow');
+const setToggle=(on)=>{
+  toggleGlow.classList.toggle('on', on);
+  toggleGlow.setAttribute('aria-checked', on?'true':'false');
+  pools.spring_grab.play({vol: on?0.5:0.35, rate: on?1.08:0.92, startAt:0.03});
+};
 toggleGlow.addEventListener('click', ()=>setToggle(!toggleGlow.classList.contains('on')));
-toggleGlow.addEventListener('keydown', (e)=>{ if(e.key===' '||e.key==='Enter') { e.preventDefault(); setToggle(!toggleGlow.classList.contains('on')); } });
+toggleGlow.addEventListener('keydown', (e)=>{ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); setToggle(!toggleGlow.classList.contains('on')); }});
 
-// Overlay & Melt (trimmed starts)
+/* -------------------- Overlay & Melt (trimmed starts) -------------------- */
 const scrim = document.getElementById('scrim');
 document.getElementById('openOverlay').addEventListener('click', ()=>{ scrim.style.display='grid'; pools.overlay_show.play({startAt:.12, vol:.9}); });
 document.getElementById('closeOverlay').addEventListener('click', ()=>{ scrim.style.display='none'; pools.overlay_hide.play({startAt:.10, vol:.9}); });
 scrim.addEventListener('click', (e)=>{ if (e.target===scrim) { scrim.style.display='none'; pools.overlay_hide.play({startAt:.10, vol:.9}); } });
-document.getElementById('melt').addEventListener('click', ()=>{ pools.melt_card.play({startAt:.05}); const tmp=document.createElement('div'); tmp.className='toast'; tmp.textContent='Melting…'; toasts.appendChild(tmp); tmp.animate([{opacity:1},{opacity:0}],{duration:750, fill:'forwards'}); setTimeout(()=>tmp.remove(),760); });
 
-// Slider
+document.getElementById('melt').addEventListener('click', ()=>{
+  pools.melt_card.play({startAt:.05});
+  const tmp=document.createElement('div'); tmp.className='toast'; tmp.textContent='Melting…'; toasts.appendChild(tmp);
+  tmp.animate([{opacity:1},{opacity:0}],{duration:750, fill:'forwards'}); setTimeout(()=>tmp.remove(),760);
+});
+
+/* -------------------- Slider -------------------- */
 const stepSlider = document.getElementById('stepSlider'); const sliderOut = document.getElementById('sliderOut'); let lastStep = 0;
-stepSlider.addEventListener('input', (e)=>{ const v = +e.target.value; const step = Math.round(v/5); sliderOut.textContent = v; if (step !== lastStep) { lastStep = step; pools.slider_tick.play({startAt:.02}); } });
+stepSlider.addEventListener('input', (e)=>{
+  const v = +e.target.value; const step = Math.round(v/5); sliderOut.textContent = v;
+  if (step !== lastStep) { lastStep = step; pools.slider_tick.play({startAt:.02}); }
+});
 
-// Helpers
-function getAngle(el, ev){ const r=el.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; const x=(ev.clientX|| (ev.touches&&ev.touches[0].clientX)), y=(ev.clientY||(ev.touches&&ev.touches[0].clientY)); return Math.atan2(y-cy, x-cx)*180/Math.PI + 90; }
+/* -------------------- Helpers -------------------- */
+function getAngle(el, ev){
+  const r=el.getBoundingClientRect();
+  const cx=r.left+r.width/2, cy=r.top+r.height/2;
+  const x=(ev.clientX|| (ev.touches&&ev.touches[0].clientX)), y=(ev.clientY||(ev.touches&&ev.touches[0].clientY));
+  return Math.atan2(y-cy, x-cx)*180/Math.PI + 90;
+}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
-// Dial: continuous loop while scrubbing
+/* -------------------- Dial: continuous loop while scrubbing -------------------- */
 const dial = document.getElementById('dial'); const dialVal = document.getElementById('dialVal');
 let dialGrab=false, dialAngle=0, lastAngle=0, lastTime=0;
-const dialLoop = new SegmentLoop(`sounds/${MAP.dial_rotate}.wav`, {start:.15, end:.45, volume:.35, rate:1.0});
-dial.addEventListener('pointerdown', async (e)=>{ e.preventDefault(); dialGrab=true; dial.setPointerCapture(e.pointerId); lastTime=performance.now(); lastAngle=(getAngle(dial,e)+360)%360; dialLoop.setVolume(.35); await dialLoop.play(); });
-window.addEventListener('pointermove', (e)=>{ if(!dialGrab) return; e.preventDefault(); const now=performance.now(); const a = (getAngle(dial,e)+360)%360; const da = Math.min(180, Math.abs(a-lastAngle)); const dt = Math.max(16, now-lastTime); const speed = da/dt; // deg per ms
-  // modulate loop
+// Measured 010: stable mid-body ≈ 0.27–0.57s
+const dialLoop = new SegmentLoop(`sounds/${MAP.dial_rotate}.wav`, { start:0.27, end:0.57, volume:0.30, rate:1.0 });
+
+dial.addEventListener('pointerdown', async (e)=>{
+  e.preventDefault(); dialGrab=true; dial.setPointerCapture(e.pointerId);
+  lastTime=performance.now(); lastAngle=(getAngle(dial,e)+360)%360;
+  dialLoop.setVolume(.30); await dialLoop.play();
+});
+window.addEventListener('pointermove', (e)=>{
+  if(!dialGrab) return; e.preventDefault();
+  const now=performance.now(); const a = (getAngle(dial,e)+360)%360;
+  const da = Math.min(180, Math.abs(a-lastAngle)); const dt = Math.max(16, now-lastTime);
+  const speed = da/dt; // deg per ms proxy
   dialLoop.setVolume(Math.min(.7, .25 + speed*12));
   dialLoop.setRate(Math.min(1.25, .95 + speed*8));
   dialAngle = a; dial.style.transform = `rotate(${dialAngle}deg)`; dialVal.textContent = Math.round(dialAngle);
   lastAngle=a; lastTime=now;
 });
-window.addEventListener('pointerup', (e)=>{ if(!dialGrab) return; e.preventDefault(); dialGrab=false; dialLoop.stop(); pools.dial_rotate.play({startAt:.0}); });
+window.addEventListener('pointerup', (e)=>{
+  if(!dialGrab) return; e.preventDefault(); dialGrab=false;
+  dialLoop.stop(); pools.dial_rotate.play({startAt:0.0});
+});
 
-// Knob with detents
+/* -------------------- Knob with detents -------------------- */
 const knob = document.getElementById('knob'); const knobVal = document.getElementById('knobVal'); const tickCanvas = document.getElementById('tickCanvas'); const ctx2 = tickCanvas.getContext('2d');
-function drawTicks(){ const c=tickCanvas; const cx=c.width/2, cy=c.height/2; ctx2.clearRect(0,0,c.width,c.height); for(let a=0;a<360;a+=30){ const rad=(a-90)*Math.PI/180; const r1=48, r2=60; ctx2.beginPath(); ctx2.moveTo(cx+Math.cos(rad)*r1, cy+Math.sin(rad)*r1); ctx2.lineTo(cx+Math.cos(rad)*r2, cy+Math.sin(rad)*r2); ctx2.strokeStyle="#b8c3d9"; ctx2.lineWidth=2; ctx2.stroke(); } } drawTicks();
+function drawTicks(){ const c=tickCanvas; const cx=c.width/2, cy=c.height/2; ctx2.clearRect(0,0,c.width,c.height);
+  for(let a=0;a<360;a+=30){ const rad=(a-90)*Math.PI/180; const r1=48, r2=60;
+    ctx2.beginPath(); ctx2.moveTo(cx+Math.cos(rad)*r1, cy+Math.sin(rad)*r1); ctx2.lineTo(cx+Math.cos(rad)*r2, cy+Math.sin(rad)*r2);
+    ctx2.strokeStyle="#b8c3d9"; ctx2.lineWidth=2; ctx2.stroke();
+  }
+}
+drawTicks();
 let kGrab=false, lastDetent=null;
 knob.addEventListener('pointerdown', (e)=>{ e.preventDefault(); kGrab=true; knob.setPointerCapture(e.pointerId); });
-window.addEventListener('pointermove', (e)=>{ if(!kGrab) return; e.preventDefault(); const ang=(getAngle(knob,e)+360)%360; const det=Math.round(ang/30)*30%360; knob.style.transform=`rotate(${det}deg)`; knobVal.textContent=det; if(det!==lastDetent){ pools.snap_knob_detent.play({startAt:.02}); lastDetent=det; } });
+window.addEventListener('pointermove', (e)=>{
+  if(!kGrab) return; e.preventDefault();
+  const ang=(getAngle(knob,e)+360)%360; const det=Math.round(ang/30)*30%360;
+  knob.style.transform=`rotate(${det}deg)`; knobVal.textContent=det;
+  if(det!==lastDetent){ pools.snap_knob_detent.play({startAt:.02}); lastDetent=det; }
+});
 window.addEventListener('pointerup', (e)=>{ if(!kGrab) return; e.preventDefault(); kGrab=false; });
 
-// Drag & Drop (custom pointer)
+/* -------------------- Drag & Drop (custom pointer) -------------------- */
 const binA = document.getElementById('binA'); const binB = document.getElementById('binB');
 ['Luma','Sprig','Echo'].forEach(n=> makeToken(n, binA));
 function makeToken(name, parent){ const el=document.createElement('div'); el.className='token'; el.textContent=name; parent.appendChild(el); bindDrag(el); return el; }
 let dragState=null, frictionTick=0;
-function bindDrag(el){ el.addEventListener('pointerdown', (e)=>{ e.preventDefault(); el.setPointerCapture(e.pointerId); const r=el.getBoundingClientRect(); dragState={ el, ox:e.clientX-r.left, oy:e.clientY-r.top, startParent: el.parentElement }; el.style.position='fixed'; el.style.left=r.left+'px'; el.style.top=r.top+'px'; el.style.zIndex=1000; document.body.appendChild(el); pools.dnd_friction.play({vol:.45, startAt:.05}); }); }
-window.addEventListener('pointermove', (e)=>{ if(!dragState) return; e.preventDefault(); const {el,ox,oy} = dragState; el.style.left = (e.clientX-ox)+'px'; el.style.top=(e.clientY-oy)+'px'; const now=performance.now(); if(now - frictionTick > 260){ pools.dnd_friction.play({vol:.28, startAt:.05}); frictionTick = now; } });
-window.addEventListener('pointerup', (e)=>{ if(!dragState) return; e.preventDefault(); const {el,startParent}=dragState; dragState=null; const drop = getDropTarget(e.clientX,e.clientY); el.style.position=''; el.style.left=''; el.style.top=''; el.style.zIndex=''; if (drop) { drop.appendChild(el); pools.dnd_drop_success.play({startAt:.02}); } else { startParent.appendChild(el); } });
-function getDropTarget(x,y){ const zones=[binA,binB]; for(const z of zones){ const r=z.getBoundingClientRect(); if(x>=r.left && x<=r.right && y>=r.top && y<=r.bottom) return z; } return null; }
+function bindDrag(el){
+  el.addEventListener('pointerdown', (e)=>{
+    e.preventDefault(); el.setPointerCapture(e.pointerId);
+    const r=el.getBoundingClientRect();
+    dragState={ el, ox:e.clientX-r.left, oy:e.clientY-r.top, startParent: el.parentElement };
+    el.style.position='fixed'; el.style.left=r.left+'px'; el.style.top=r.top+'px'; el.style.zIndex=1000; document.body.appendChild(el);
+    pools.dnd_friction.play({vol:.45, startAt:.05});
+  });
+}
+window.addEventListener('pointermove', (e)=>{
+  if(!dragState) return; e.preventDefault();
+  const {el,ox,oy} = dragState; el.style.left = (e.clientX-ox)+'px'; el.style.top=(e.clientY-oy)+'px';
+  const now=performance.now(); if(now - frictionTick > 260){ pools.dnd_friction.play({vol:.28, startAt:.05}); frictionTick = now; }
+});
+window.addEventListener('pointerup', (e)=>{
+  if(!dragState) return; e.preventDefault();
+  const {el,startParent}=dragState; dragState=null;
+  const drop = getDropTarget(e.clientX,e.clientY);
+  el.style.position=''; el.style.left=''; el.style.top=''; el.style.zIndex='';
+  if (drop) { drop.appendChild(el); pools.dnd_drop_success.play({startAt:.02}); } else { startParent.appendChild(el); }
+});
+function getDropTarget(x,y){
+  const zones=[binA,binB]; for(const z of zones){ const r=z.getBoundingClientRect(); if(x>=r.left && x<=r.right && y>=r.top && y<=r.bottom) return z; }
+  return null;
+}
 
-// Gesture lab (spring) + continuous quiet friction during drag
-const lab = document.getElementById('lab'); const mass = document.getElementById('mass'); const vector = document.getElementById('vector');
-let mGrab=false; let vx=0, vy=0; let lastX=0, lastY=0, lastT=0; const springK=0.05; const damping=0.08;
-function setMass(x,y){ mass.style.left = x+'px'; mass.style.top = y+'px'; mass.style.transform = 'translate(-50%,-50%)'; }
-function setVector(cx,cy,x,y){ const dx=x-cx, dy=y-cy; const len=Math.hypot(dx,dy); const angle=Math.atan2(dy,dx); vector.style.left=cx+'px'; vector.style.top=cy+'px'; vector.style.width=len+'px'; vector.style.transform = `rotate(${angle}rad)`; }
-const springFrictionLoop = new SegmentLoop(`sounds/${MAP.dnd_friction}.wav`, {start:.05, end:.25, volume:.2, rate:1.0});
-lab.addEventListener('pointerdown',(e)=>{ e.preventDefault(); const r=lab.getBoundingClientRect(); mGrab=true; lab.setPointerCapture(e.pointerId); const x=e.clientX - r.left, y=e.clientY - r.top; lastX=x; lastY=y; lastT=performance.now(); pools.spring_grab.play({startAt:.02}); springFrictionLoop.play(); });
-lab.addEventListener('pointermove',(e)=>{ if(!mGrab) return; e.preventDefault(); const r=lab.getBoundingClientRect(); const cx=r.width/2, cy=r.height/2; const x=e.clientX - r.left, y=e.clientY - r.top; const now=performance.now(); const dt=Math.max(1, now-lastT); vx = (x - lastX) / dt * 16;  vy = (y - lastY) / dt * 16;  lastX=x; lastY=y; lastT=now; setMass(x,y); setVector(cx,cy,x,y); const dx=x-cx, dy=y-cy; const angDeg=((Math.atan2(dy,dx)*180/Math.PI)+360)%360; const dist=Math.min(1, Math.hypot(dx,dy)/Math.min(r.width,r.height)); const rate = 0.9 + (angDeg/360)*0.2; const vol  = 0.12 + dist*0.35; springFrictionLoop.setRate(rate); springFrictionLoop.setVolume(vol); if(!lab._lastT || now - lab._lastT > 300){ pools.spring_tension.play({rate: 0.9 + dist*0.4, vol: 0.25 + dist*0.55}); lab._lastT = now; } });
-lab.addEventListener('pointerup', (e)=>{ if(!mGrab) return; e.preventDefault(); mGrab=false; const vmag = Math.min(1.7, Math.hypot(vx,vy)/12 + 1); springFrictionLoop.stop(); pools.spring_release.play({rate: vmag, vol: 0.8}); });
-function tick(){ const r=lab.getBoundingClientRect(); const cx=r.width/2, cy=r.height/2; const rect=mass.getBoundingClientRect(); let x=rect.left - r.left + rect.width/2, y=rect.top - r.top + rect.height/2; if(!mGrab){ const dx=cx-x, dy=cy-y; const ax=dx*springK, ay=dy*springK; vx+=ax; vy+=ay; vx*=(1-damping); vy*=(1-damping); x+=vx; y+=vy; setMass(x,y); setVector(cx,cy,x,y); } requestAnimationFrame(tick); } (function init(){ const r=lab.getBoundingClientRect(); setMass(r.width/2, r.height/2); requestAnimationFrame(tick); })();
+/* -------------------- Gesture Lab (spring) — coherent sticky family -------------------- */
+const lab   = document.getElementById('lab');
+const mass  = document.getElementById('mass');
+const vector= document.getElementById('vector');
+
+let mGrab=false; let vx=0, vy=0; let lastX=0, lastY=0, lastT=0;
+const K=0.05, D=0.08;
+
+function setMass(x,y){ mass.style.left = x+'px'; mass.style.top = y+'px'; mass.style.transform='translate(-50%,-50%)'; }
+function setVector(cx,cy,x,y){
+  const dx=x-cx, dy=y-cy, len=Math.hypot(dx,dy), ang=Math.atan2(dy,dx);
+  vector.style.left=cx+'px'; vector.style.top=cy+'px'; vector.style.width=len+'px'; vector.style.transform=`rotate(${ang}rad)`;
+}
+
+// Continuous sticky friction loop from 021 mid-body
+const springLoop = new SegmentLoop('sounds/clip_021.wav', { start:0.15, end:0.45, volume:0.14, rate:1.0 });
+
+function modulateLoop({dist, speed}) {
+  const vol = clamp(0.10 + dist*0.35 + speed*0.10, 0.10, 0.60);
+  const rate= clamp(0.95 + dist*0.20 + speed*0.10, 0.90, 1.25);
+  springLoop.setVolume(vol);
+  springLoop.setRate(rate);
+}
+
+lab.addEventListener('pointerdown',(e)=>{
+  e.preventDefault(); const r=lab.getBoundingClientRect(); mGrab=true; lab.setPointerCapture(e.pointerId);
+  const x=e.clientX-r.left, y=e.clientY-r.top; lastX=x; lastY=y; lastT=performance.now();
+  pools.spring_grab.play({ startAt:0.03, vol:0.50 }); // 022 tack
+  springLoop.play();                                   // 021 continuous bed
+});
+
+lab.addEventListener('pointermove',(e)=>{
+  if(!mGrab) return; e.preventDefault();
+  const r=lab.getBoundingClientRect(); const cx=r.width/2, cy=r.height/2;
+  const x=e.clientX-r.left, y=e.clientY-r.top;
+  const now=performance.now(); const dt=Math.max(1, now-lastT);
+  vx=(x-lastX)/dt*16; vy=(y-lastY)/dt*16; lastX=x; lastY=y; lastT=now;
+  setMass(x,y); setVector(cx,cy,x,y);
+  const dx=x-cx, dy=y-cy; const dist=clamp(Math.hypot(dx,dy)/Math.min(r.width,r.height), 0, 1);
+  const speed=clamp(Math.hypot(vx,vy)/400, 0, 1);
+  modulateLoop({dist, speed});
+  // No discrete tension blips; the loop conveys force.
+});
+
+lab.addEventListener('pointerup',(e)=>{
+  if(!mGrab) return; e.preventDefault(); mGrab=false;
+  springLoop.stop();
+  const vmag = clamp(Math.hypot(vx,vy)/12 + 1, 1.0, 1.7);
+  pools.spring_release.play({ startAt:0.03, vol:0.80, rate:vmag }); // 023 release
+});
+
+// Physics integrator
+(function tick(){
+  const r=lab.getBoundingClientRect(); const cx=r.width/2, cy=r.height/2;
+  const rect=mass.getBoundingClientRect(); let x=rect.left-r.left+rect.width/2, y=rect.top-r.top+rect.height/2;
+  if(!mGrab){
+    const dx=cx-x, dy=cy-y; const ax=dx*K, ay=dy*K; vx+=ax; vy+=ay; vx*=1-D; vy*=1-D; x+=vx; y+=vy;
+    setMass(x,y); setVector(cx,cy,x,y);
+  }
+  requestAnimationFrame(tick);
+})();
+
 </script>
 </body>
 </html>
