@@ -6,43 +6,30 @@
 <meta name="theme-color" content="#0b0d10">
 <title>UI Sounds — iPhone</title>
 <style>
-  :root{
-    --bg:#0b0d10; --ink:#e7eef6; --muted:#9ab0c6;
-    --card:#0f1318; --line:#1b2330; --accent:#79f5cc; --accent2:#3bd4ff;
-    --glow: 0 8px 18px rgba(0,0,0,.45), 0 0 0 1px #1b2330 inset, 0 0 22px rgba(61,225,255,.18);
-  }
+  :root{--bg:#0b0d10;--ink:#e7eef6;--muted:#9ab0c6;--card:#0f1318;--line:#1b2330;--accent:#79f5cc;--accent2:#3bd4ff;--glow:0 8px 18px rgba(0,0,0,.45),0 0 0 1px #1b2330 inset,0 0 22px rgba(61,225,255,.18)}
   *{box-sizing:border-box}
-  html,body{height:100%; background:#0b0d10; color:var(--ink); color-scheme:dark; overscroll-behavior:none}
-  body{
-    margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
-    background: radial-gradient(1200px 800px at 10% 0%, #10202b 0%, #0b0d10 40%, #0b0d10 100%);
-    -webkit-tap-highlight-color: transparent;
-  }
-  header{position:sticky;top:0;background:rgba(15,19,24,.85);backdrop-filter: blur(6px);border-bottom:1px solid var(--line);padding:14px 12px;z-index:10}
+  html,body{height:100%;background:#0b0d10;color:var(--ink);color-scheme:dark;overscroll-behavior:none}
+  body{margin:0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:radial-gradient(1200px 800px at 10% 0%,#10202b 0%,#0b0d10 40%,#0b0d10 100%);-webkit-tap-highlight-color:transparent}
+  header{position:sticky;top:0;background:rgba(15,19,24,.85);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:14px 12px;z-index:10}
   h1{margin:0 0 4px;font-size:18px;letter-spacing:.2px}
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .card{border:1px solid var(--line);background:rgba(15,19,24,.9);border-radius:16px;padding:14px;margin:14px;box-shadow:var(--glow)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-  button.sound{
-    padding:14px 10px;border-radius:18px;border:1px solid var(--line);
-    background:linear-gradient(180deg,#14202b,#0f1318);
-    color:var(--ink);cursor:pointer;box-shadow:var(--glow); position:relative; overflow:hidden;
-    transition:transform .06s ease-out, box-shadow .18s ease;
-    display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px;
-    touch-action:manipulation; user-select:none; -webkit-user-select:none;
-  }
-  button.sound::after{content:"";position:absolute;inset:0;background:radial-gradient(120px 40px at 50% 0%, rgba(255,255,255,.08), transparent 55%);pointer-events:none}
-  button.sound:active, button.sound.pressed{transform:scale(.97); box-shadow:0 0 0 1px #2ad0ff inset, 0 0 30px rgba(58,208,255,.35)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .tile{display:flex;flex-direction:column;gap:6px}
+  button.sound{padding:12px 10px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,#14202b,#0f1318);color:var(--ink);cursor:pointer;box-shadow:var(--glow);position:relative;overflow:hidden;transition:transform .06s ease-out,box-shadow .18s ease;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+  button.sound::after{content:"";position:absolute;inset:0;background:radial-gradient(120px 40px at 50% 0%,rgba(255,255,255,.08),transparent 55%);pointer-events:none}
+  button.sound:active,button.sound.pressed{transform:scale(.97);box-shadow:0 0 0 1px #2ad0ff inset,0 0 30px rgba(58,208,255,.35)}
+  .fname{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ok{color:var(--accent)}
   input[type="range"]{width:220px}
   .small{font-size:12px;color:var(--muted)}
   .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);padding:8px 12px;border-radius:999px;background:#111823}
   .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#0f151f;margin:4px 6px;font-size:12px}
   .dot{width:8px;height:8px;border-radius:50%;background:#6b7685;box-shadow:0 0 0 1px #1b2330}
-  .dot.ok{background:#67f3c4} .dot.err{background:#ff6b6b}
+  .dot.ok{background:#67f3c4}.dot.err{background:#ff6b6b}
   .scroller{display:flex;flex-wrap:wrap;margin-top:8px}
   .meter{height:10px;background:#0f1722;border:1px solid var(--line);border-radius:8px;overflow:hidden;min-width:180px}
-  .fill{height:100%; background:linear-gradient(90deg, var(--accent), var(--accent2)); width:0%}
+  .fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%}
 </style>
 </head>
 <body>
@@ -66,89 +53,69 @@
       <button id="stopAll" class="sound">⏹️ Stop All</button>
     </div>
     <p class="small" style="margin-top:10px">
-      Discovery order: <code>sounds/files.json</code> → <code>sounds/manifest.json</code> → parse directory listing at <code>sounds/</code>.  
-      On hosts without directory listing (e.g., GitHub Pages) add <code>files.json</code> listing your WAVs.
+      Discovery: <code>sounds/files.json</code> → <code>sounds/manifest.json</code> → <code>?files=a.wav,b.wav</code> → probe <code>clip_001..999</code> / <code>sound_001..999</code>.
     </p>
   </main>
 
 <script>
-const $ = s => document.querySelector(s);
-const statusEl=$("#status"), volEl=$("#vol"), cutEl=$("#cut"), foundEl=$("#found"),
-      chipsEl=$("#chips"), gridEl=$("#grid"), meterFill=$("#meterFill"), audioStateEl=$("#audioState");
-document.body.addEventListener("touchstart", ()=>{}, {passive:true}); // enable :active on iOS
+const $=s=>document.querySelector(s);
+const statusEl=$("#status"),volEl=$("#vol"),cutEl=$("#cut"),foundEl=$("#found"),
+      chipsEl=$("#chips"),gridEl=$("#grid"),meterFill=$("#meterFill"),audioStateEl=$("#audioState");
+document.body.addEventListener("touchstart",()=>{}, {passive:true}); // enable :active on iOS
 
-function setStatus(m,ok=false){ statusEl.textContent=m; statusEl.classList.toggle("ok", ok); }
-let ctx, masterGain, buffers=new Map(), voices=new Set(), unlocked=false, ready=false;
-function setAudioState(){ audioStateEl.textContent = unlocked ? "Unlocked" : "Locked"; }
+function setStatus(m,ok=false){statusEl.textContent=m;statusEl.classList.toggle("ok",ok)}
+let ctx,masterGain,buffers=new Map(),voices=new Set(),unlocked=false,ready=false;
+function setAudioState(){audioStateEl.textContent=unlocked?"Unlocked":"Locked"}
 
-function createCtx(){
-  if(!ctx||ctx.state==="closed"){
-    ctx=new (window.AudioContext||window.webkitAudioContext)();
-    masterGain=ctx.createGain(); masterGain.gain.value=parseFloat(volEl.value); masterGain.connect(ctx.destination);
-  }
-  setAudioState();
-}
-function setVolume(){ if(masterGain) masterGain.gain.setTargetAtTime(parseFloat(volEl.value), ctx.currentTime, .01); }
-volEl.addEventListener("input", setVolume);
+function createCtx(){if(!ctx||ctx.state==="closed"){ctx=new (window.AudioContext||window.webkitAudioContext)();masterGain=ctx.createGain();masterGain.gain.value=parseFloat(volEl.value);masterGain.connect(ctx.destination)}setAudioState()}
+function setVolume(){if(masterGain) masterGain.gain.setTargetAtTime(parseFloat(volEl.value),ctx.currentTime,.01)}
+volEl.addEventListener("input",setVolume)
 
-// Silent, invisible unlock on first tap
+// Silent unlock on first tap (no popup)
 let unlockPromise=null;
 async function ensureUnlocked(){
-  if(unlocked){ if(ctx?.state!=="running") await ctx.resume(); return true; }
-  if(unlockPromise) return unlockPromise;
-  unlockPromise=(async ()=>{
-    createCtx();
-    try{
-      const silent=ctx.createBuffer(1,1,ctx.sampleRate);
-      const src=ctx.createBufferSource(); src.buffer=silent; src.connect(masterGain); src.start(0); src.stop(0);
-      await ctx.resume(); unlocked=true;
-    }catch(_){}
-    setAudioState();
-    return true;
-  })();
-  return unlockPromise;
+  if(unlocked){if(ctx?.state!=="running") await ctx.resume();return true}
+  if(unlockPromise) return unlockPromise
+  unlockPromise=(async()=>{createCtx();try{const silent=ctx.createBuffer(1,1,ctx.sampleRate);const src=ctx.createBufferSource();src.buffer=silent;src.connect(masterGain);src.start(0);src.stop(0);await ctx.resume();unlocked=true}catch(_){}setAudioState();return true})()
+  return unlockPromise
 }
 
-// --- Discovery (any .wav names) ---
-async function fetchJSON(url){ try{ const r=await fetch(url,{cache:"no-store"}); if(!r.ok) throw 0; return r.json(); }catch{return null} }
-function chip(name, ok){ const el=document.createElement("span"); el.className="chip"; el.innerHTML=`<span class="dot ${ok?"ok":"err"}"></span><span>${name}</span>`; chipsEl.appendChild(el); }
-
-async function tryAutoIndex(dirUrl){
-  try{
-    const r = await fetch(dirUrl, {cache:"no-store"});
-    if(!r.ok) return [];
-    const ct = r.headers.get("content-type")||"";
-    if(!ct.includes("text/html")) return [];
-    const html = await r.text();
-    const hrefs = [...html.matchAll(/href\s*=\s*"(.*?)"/gi)].map(m=>m[1]);
-    const wavs = hrefs
-      .map(h=>decodeURIComponent(h.split("?")[0].split("#")[0]))
-      .filter(h=>/\.wav$/i.test(h))
-      .map(h=> h.replace(/^\.\/|^\//,"").replace(/^sounds\//,""))
-      .filter(h=>!h.includes("/")); // only files in that folder
-    // de-dupe
-    return [...new Set(wavs)].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-  }catch{ return []; }
-}
+// --- Discovery helpers ---
+async function fetchJSON(url){try{const r=await fetch(url,{cache:"no-store"});if(!r.ok) throw 0;return r.json()}catch{return null}}
+async function head(url){try{const r=await fetch(url,{method:"HEAD",cache:"no-store"});return r.ok}catch{return false}}
+function chip(name,ok){const el=document.createElement("span");el.className="chip";el.innerHTML=`<span class="dot ${ok?"ok":"err"}"></span><span>${name}</span>`;chipsEl.appendChild(el)}
+function qsFiles(){const q=new URLSearchParams(location.search).get("files");return q? q.split(",").map(s=>decodeURIComponent(s.trim())).filter(Boolean):[]}
 
 let FILES=[];
 (async function discover(){
   setStatus("Scanning…");
-  // 1) files.json (preferred)
-  let m = await fetchJSON("sounds/files.json");
-  if(!m) m = await fetchJSON("sounds/manifest.json");
+  // 1) files.json
+  let m=await fetchJSON("sounds/files.json");
+  // 2) manifest.json
+  if(!m) m=await fetchJSON("sounds/manifest.json");
   if(m?.files?.length){
-    FILES = m.files.filter(f=>/\.wav$/i.test(f));
-    FILES.forEach(f=>chip(f,true)); foundEl.textContent = FILES.length; setStatus("Manifest loaded", true);
-  } else {
-    // 2) directory index parse
-    const names = await tryAutoIndex("sounds/");
-    if(names.length){
-      FILES = names;
-      FILES.forEach(f=>chip(f,true)); foundEl.textContent = FILES.length; setStatus("Autoindex parsed", true);
-    } else {
-      setStatus("No listing. Add sounds/files.json.", false);
-      FILES = []; // cannot discover unknown names on this host
+    FILES=m.files.filter(f=>/\.wav$/i.test(f));
+    FILES.forEach(f=>chip(f,true)); foundEl.textContent=FILES.length; setStatus("Manifest loaded",true);
+  }else{
+    // 3) ?files=foo.wav,bar.wav
+    FILES=qsFiles().filter(f=>/\.wav$/i.test(f));
+    if(FILES.length){ FILES.forEach(f=>chip(f,true)); foundEl.textContent=FILES.length; setStatus("From ?files",true); }
+    // 4) probe common patterns for packs
+    if(!FILES.length){
+      const patterns=[i=>`clip_${String(i).padStart(3,"0")}.wav`, i=>`sound_${String(i).padStart(3,"0")}.wav`];
+      let miss=0;
+      for(let i=1;i<=999;i++){
+        for(const p of patterns){
+          const name=p(i);
+          const ok=await head("sounds/"+name);
+          chip(name,ok);
+          if(ok){ FILES.push(name); miss=0; }
+          else{ miss++; }
+        }
+        if(miss>50 && FILES.length) break;
+        foundEl.textContent=FILES.length;
+      }
+      setStatus(FILES.length?"Probed files":"No files found", !!FILES.length);
     }
   }
   if(FILES.length) loadAll();
@@ -162,61 +129,46 @@ async function loadAll(){
     try{
       const res=await fetch(url,{cache:"no-store"}); const arr=await res.arrayBuffer();
       if(!ctx) createCtx(); if(ctx.state==="suspended") await ctx.resume();
-      const buf=await ctx.decodeAudioData(arr); buffers.set(FILES[i], buf);
+      const buf=await ctx.decodeAudioData(arr); buffers.set(FILES[i],buf);
       meterFill.style.width=Math.round(((i+1)/FILES.length)*100)+"%";
       setStatus(`Loaded ${i+1}/${FILES.length}`, i+1===FILES.length);
     }catch{ setStatus("Decode error "+FILES[i]); }
   }
   ready=true; renderGrid();
 }
-function addPressFeedback(el){
-  const add = ()=>{ el.classList.add("pressed"); try{ navigator.vibrate&&navigator.vibrate(8); }catch{} };
-  const remove = ()=> el.classList.remove("pressed");
-  ["pointerdown","touchstart","mousedown"].forEach(ev=> el.addEventListener(ev, add,{passive:true}));
-  ["pointerup","pointercancel","touchend","touchcancel","mouseleave","mouseup","blur"].forEach(ev=> el.addEventListener(ev, remove));
+function addPressFeedback(el){const add=()=>{el.classList.add("pressed");try{navigator.vibrate&&navigator.vibrate(8)}catch{}};const rm=()=>el.classList.remove("pressed");["pointerdown","touchstart","mousedown"].forEach(ev=>el.addEventListener(ev,add,{passive:true}));["pointerup","pointercancel","touchend","touchcancel","mouseleave","mouseup","blur"].forEach(ev=>el.addEventListener(ev,rm))}
+function makeButton(file){
+  const t=document.createElement("div");t.className="tile";
+  const b=document.createElement("button");b.className="sound";b.innerHTML="▶️ Play";addPressFeedback(b);
+  const label=document.createElement("div");label.className="fname";label.textContent=file;
+  b.addEventListener("pointerdown", async()=>{await ensureUnlocked(); if(!buffers.has(file)) await loadOne(file); play(file,b);});
+  t.appendChild(b); t.appendChild(label); return t;
 }
-function makeButton(file, idx){
-  const b=document.createElement("button");
-  b.className="sound"; b.innerHTML=`▶️ <span>${String(idx+1).padStart(2,"0")}</span>`; b.title=file; addPressFeedback(b);
-  b.addEventListener("pointerdown", async()=>{ await ensureUnlocked(); if(!buffers.has(file)) await loadOne(file); play(file,b); });
-  b.addEventListener("keydown", async e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); await ensureUnlocked(); if(!buffers.has(file)) await loadOne(file); play(file,b);} });
-  return b;
-}
-function renderGrid(){ gridEl.innerHTML=""; FILES.forEach((f,i)=> gridEl.appendChild(makeButton(f,i))); }
-async function loadOne(file){
-  setStatus("Decoding "+file);
-  try{
-    const res=await fetch("sounds/"+file,{cache:"no-store"}); const arr=await res.arrayBuffer();
-    if(ctx.state==="suspended") await ctx.resume();
-    const buf=await ctx.decodeAudioData(arr); buffers.set(file,buf); setStatus("Ready",true);
-  }catch{ setStatus("Decode error "+file); }
-}
+function renderGrid(){ gridEl.innerHTML=""; FILES.forEach(f=> gridEl.appendChild(makeButton(f))); }
+async function loadOne(file){ setStatus("Decoding "+file); try{ const res=await fetch("sounds/"+file,{cache:"no-store"}); const arr=await res.arrayBuffer(); if(ctx.state==="suspended") await ctx.resume(); const buf=await ctx.decodeAudioData(arr); buffers.set(file,buf); setStatus("Ready",true);}catch{ setStatus("Decode error "+file); } }
 const FADE_MS=8, MAX_POLYPHONY=16;
-function now(){ return ctx.currentTime; }
-function fadeInOut(g,start,durMs){ const t=start, d=durMs/1000, A=Math.max(FADE_MS,1)/1000;
-  g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0.0,t); g.gain.linearRampToValueAtTime(parseFloat(volEl.value),t+A);
-  g.gain.setValueAtTime(parseFloat(volEl.value),t+d-A); g.gain.linearRampToValueAtTime(0.0,t+d); }
-function stopAll(){ voices.forEach(v=>{ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); }); voices.clear(); }
-document.getElementById("stopAll").addEventListener("click", stopAll);
-function play(file, btn){
+function now(){return ctx.currentTime}
+function fadeInOut(g,start,durMs){const t=start,d=durMs/1000,A=Math.max(FADE_MS,1)/1000;g.gain.cancelScheduledValues(t);g.gain.setValueAtTime(0.0,t);g.gain.linearRampToValueAtTime(parseFloat(volEl.value),t+A);g.gain.setValueAtTime(parseFloat(volEl.value),t+d-A);g.gain.linearRampToValueAtTime(0.0,t+d)}
+function stopAll(){voices.forEach(v=>{try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect();}); voices.clear()}
+document.getElementById("stopAll").addEventListener("click",stopAll);
+function play(file,btn){
   if(!buffers.has(file)) return;
-  if(voices.size>=MAX_POLYPHONY){ const oldest=voices.values().next().value; try{oldest.src.stop()}catch{} oldest.src.disconnect(); oldest.g.disconnect(); voices.delete(oldest); }
+  if(voices.size>=MAX_POLYPHONY){const oldest=voices.values().next().value;try{oldest.src.stop()}catch{} oldest.src.disconnect(); oldest.g.disconnect(); voices.delete(oldest)}
   const buf=buffers.get(file); if(!buf) return;
-  if(cutEl.checked){ for(const v of Array.from(voices)){ if(v.file===file){ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); voices.delete(v); } } }
+  if(cutEl.checked){ for(const v of Array.from(voices)){ if(v.file===file){ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); voices.delete(v);} } }
   const src=ctx.createBufferSource(), g=ctx.createGain(); src.buffer=buf; src.connect(g).connect(masterGain);
   const t=now(); fadeInOut(g,t,buf.duration*1000); src.start(t);
   const voice={file,src,g,btn}; voices.add(voice); btn&&btn.classList.add("pressed");
   src.onended=()=>{ try{src.disconnect(); g.disconnect();}catch{} voices.delete(voice); btn&&btn.classList.remove("pressed"); };
 }
 document.getElementById("seq").addEventListener("pointerdown", async e=>{
-  const button=e.currentTarget; button.classList.add("pressed");
-  await ensureUnlocked();
-  if(!ready && FILES.length) await loadAll();
-  let t=0, btns=Array.from(document.querySelectorAll("button.sound")).filter(b=>b!==button);
-  for(let i=0;i<FILES.length;i++){ const f=FILES[i]; if(!buffers.has(f)) await loadOne(f); const b=btns[i]; setTimeout(()=>play(f,b), t); t+=120; }
-  setTimeout(()=>button.classList.remove("pressed"), 220);
+  const b=e.currentTarget; b.classList.add("pressed");
+  await ensureUnlocked(); if(!ready && FILES.length) await loadAll();
+  let t=0; const btns=[...document.querySelectorAll(".tile > .sound")];
+  for(let i=0;i<FILES.length;i++){ const f=FILES[i]; if(!buffers.has(f)) await loadOne(f); const bb=btns[i]; setTimeout(()=>play(f,bb), t); t+=120; }
+  setTimeout(()=>b.classList.remove("pressed"), 220);
 });
-document.addEventListener("visibilitychange", ()=>{ if(!ctx) return; if(document.hidden) ctx.suspend().catch(()=>{}); else ctx.resume().catch(()=>{}); });
+document.addEventListener("visibilitychange",()=>{ if(!ctx) return; if(document.hidden) ctx.suspend().catch(()=>{}); else ctx.resume().catch(()=>{}); });
 </script>
 </body>
 </html>
