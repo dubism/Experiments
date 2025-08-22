@@ -17,8 +17,10 @@
   input[type="range"]{width:220px}
   .small{font-size:12px;color:var(--muted)}
   .card{border:1px solid var(--line);background:rgba(15,19,24,.9);border-radius:14px;padding:12px;margin:12px;box-shadow:var(--glow)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
-  .tile{display:flex;flex-direction:column;gap:6px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .tile{position:relative;display:flex;flex-direction:column;gap:6px}
+  .kill{position:absolute;top:6px;right:6px; width:26px;height:26px;border-radius:13px;border:1px solid var(--line);background:#0f151c;color:#cfd6de;display:flex;align-items:center;justify-content:center;font-weight:600;cursor:pointer;box-shadow:var(--glow);opacity:.9}
+  .kill:active{transform:scale(.92)}
   button.sound{padding:12px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,#14202b,#0f1318);color:var(--ink);cursor:pointer;box-shadow:var(--glow);display:flex;justify-content:center;align-items:center;gap:8px;transition:transform .06s,box-shadow .18s;user-select:none;touch-action:manipulation}
   button.sound:active,button.sound.pressed{transform:scale(.97);box-shadow:0 0 0 1px #2ad0ff inset,0 0 30px rgba(58,208,255,.35)}
   .fname{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -34,7 +36,7 @@
       <span class="pill"><span>Volume</span> <input id="vol" type="range" min="0" max="1" step="0.01" value="0.9"></span>
       <label class="pill"><input id="cut" type="checkbox" checked> Cut previous</label>
       <span id="status" class="small">Scanning…</span>
-      <span class="pill"><span>Found</span> <strong id="found">0</strong></span>
+      <span class="pill"><span>Shown</span> <strong id="shown">0</strong>/<strong id="found">0</strong></span>
       <div class="meter"><div class="fill" id="meter"></div></div>
     </div>
   </header>
@@ -48,45 +50,45 @@
   </main>
 
 <script>
-/* ===== Config: ONLY clip_001.wav.. and stop at first gap ===== */
-const DIR = "sounds/";
-const START = 1;             // starts at clip_001.wav
-const PAD   = 3;
-const PREFIX= "clip_";
-const SUFFIX= ".wav";
+/* ===== Config: ONLY clip_001.wav..; stop at first gap ===== */
+const DIR="sounds/"; const START=1; const PAD=3; const PREFIX="clip_"; const SUFFIX=".wav";
 
 /* ===== Shorthands ===== */
-const $ = s => document.querySelector(s);
-const grid=$("#grid"), statusEl=$("#status"), foundEl=$("#found"), volEl=$("#vol"), cutEl=$("#cut"), meter=$("#meter");
+const $=s=>document.querySelector(s);
+const grid=$("#grid"), statusEl=$("#status"), shownEl=$("#shown"), foundEl=$("#found"),
+      volEl=$("#vol"), cutEl=$("#cut"), meter=$("#meter");
 document.body.addEventListener("touchstart",()=>{}, {passive:true});
-const setStatus = (m, ok=false)=>{ statusEl.textContent=m; statusEl.classList.toggle("ok", ok); };
+const setStatus=(m,ok=false)=>{ statusEl.textContent=m; statusEl.classList.toggle("ok",ok); };
 
-/* ===== Audio (unlock on first tap only) ===== */
+/* ===== Audio (unlock on first tap) ===== */
 let ctx, masterGain, unlocked=false, buffers=new Map(), voices=new Set();
 function createCtx(){ if(!ctx||ctx.state==="closed"){ ctx=new (window.AudioContext||window.webkitAudioContext)(); masterGain=ctx.createGain(); masterGain.gain.value=parseFloat(volEl.value); masterGain.connect(ctx.destination);} }
 async function ensureUnlocked(){ if(unlocked){ if(ctx?.state!=="running") await ctx.resume(); return; } createCtx(); try{ const silent=ctx.createBuffer(1,1,ctx.sampleRate); const src=ctx.createBufferSource(); src.buffer=silent; src.connect(masterGain); src.start(0); src.stop(0); await ctx.resume(); unlocked=true; }catch{} }
 volEl.addEventListener("input",()=>{ if(masterGain) masterGain.gain.setTargetAtTime(parseFloat(volEl.value), ctx.currentTime, .01); });
 
-/* ===== Discovery: sequential probe; stop at first miss ===== */
+/* ===== Discovery ===== */
 async function exists(name){
-  try{
-    const r=await fetch(DIR+name, {cache:"no-store", headers:{"Range":"bytes=0-0"}});
-    return r.ok;
-  }catch{ return false; }
+  try{ const r=await fetch(DIR+name,{cache:"no-store",headers:{"Range":"bytes=0-0"}}); return r.ok; }
+  catch{ return false; }
 }
 async function discover(){
   setStatus("Scanning /sounds/…");
-  const files=[];
+  const out=[];
   for(let i=START;;i++){
-    const name = `${PREFIX}${String(i).padStart(PAD,"0")}${SUFFIX}`;
-    const ok = await exists(name);
-    if(!ok) break;          // STOP on first miss
-    files.push(name);
+    const name=`${PREFIX}${String(i).padStart(PAD,"0")}${SUFFIX}`;
+    if(!(await exists(name))) break;
+    out.push(name);
   }
-  foundEl.textContent = files.length;
-  setStatus(files.length?`Found ${files.length}`:"No files found", !!files.length);
-  return files;
+  foundEl.textContent=out.length;
+  setStatus(out.length?`Found ${out.length}`:"No files found", !!out.length);
+  return out;
 }
+
+/* ===== State for shown/hidden ===== */
+let allFiles=[];       // discovered
+let activeFiles=[];    // currently shown (quick playthrough uses this)
+
+function updateCount(){ shownEl.textContent=String(activeFiles.length); }
 
 /* ===== UI + Loading ===== */
 function addPress(el){
@@ -95,42 +97,73 @@ function addPress(el){
   ["pointerdown","touchstart","mousedown"].forEach(ev=>el.addEventListener(ev,on,{passive:true}));
   ["pointerup","pointercancel","touchend","touchcancel","mouseleave","mouseup","blur"].forEach(ev=>el.addEventListener(ev,off));
 }
+
+function stopVoicesByFile(name){
+  for(const v of Array.from(voices)){ if(v.name===name){ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); voices.delete(v);} }
+}
+
 function makeTile(name){
-  const t=document.createElement("div"); t.className="tile";
+  const t=document.createElement("div"); t.className="tile"; t.dataset.file=name;
+
+  const kill=document.createElement("button");
+  kill.className="kill"; kill.type="button"; kill.title="Hide";
+  kill.textContent="×";
+  kill.addEventListener("click",()=>{
+    // remove from active set + DOM
+    activeFiles = activeFiles.filter(f=>f!==name);
+    stopVoicesByFile(name);
+    t.remove();
+    updateCount();
+  });
+
   const b=document.createElement("button"); b.className="sound"; b.textContent="▶️ Play"; addPress(b);
   const l=document.createElement("div"); l.className="fname"; l.textContent=name;
+
   b.addEventListener("pointerdown", async()=>{ await ensureUnlocked(); if(!buffers.has(name)) await loadOne(name); play(name,b); });
-  t.appendChild(b); t.appendChild(l); return t;
+
+  t.appendChild(kill); t.appendChild(b); t.appendChild(l);
+  return t;
 }
-function render(files){
-  grid.innerHTML=""; files.forEach(n=>grid.appendChild(makeTile(n)));
-  $("#seq").addEventListener("pointerdown", async e=>{
-    const btn=e.currentTarget; btn.classList.add("pressed");
+
+function render(){
+  grid.innerHTML="";
+  activeFiles.forEach(n=>grid.appendChild(makeTile(n)));
+  updateCount();
+
+  $("#seq").onclick = async (e)=>{
+    e.currentTarget.classList.add("pressed");
     await ensureUnlocked();
     let t=0, btns=[...document.querySelectorAll(".tile > .sound")];
-    for(let i=0;i<files.length;i++){ const f=files[i]; if(!buffers.has(f)) await loadOne(f); setTimeout(()=>play(f,btns[i]), t); t+=120; }
-    setTimeout(()=>btn.classList.remove("pressed"),220);
-  });
-  $("#stopAll").addEventListener("click", stopAll);
+    for(let i=0;i<activeFiles.length;i++){
+      const f=activeFiles[i];
+      if(!buffers.has(f)) await loadOne(f);
+      const bb=btns[i];
+      setTimeout(()=>play(f,bb), t);
+      t+=120;
+    }
+    setTimeout(()=>e.currentTarget.classList.remove("pressed"),220);
+  };
+  $("#stopAll").onclick = stopAll;
 }
+
 async function loadAll(files){
   setStatus(`Loading 0/${files.length}…`);
   for(let i=0;i<files.length;i++){
     try{
-      const arr = await (await fetch(DIR+files[i], {cache:"no-store"})).arrayBuffer();
-      if(!ctx) createCtx();                           // do NOT resume here
-      const buf = await ctx.decodeAudioData(arr);
+      const arr=await (await fetch(DIR+files[i],{cache:"no-store"})).arrayBuffer();
+      if(!ctx) createCtx();                      // do NOT resume here
+      const buf=await ctx.decodeAudioData(arr);
       buffers.set(files[i], buf);
-      meter.style.width = Math.round(((i+1)/files.length)*100) + "%";
+      meter.style.width=Math.round(((i+1)/files.length)*100)+"%";
       setStatus(`Loading ${i+1}/${files.length}…`, i+1===files.length);
     }catch{ setStatus("Decode error "+files[i]); }
   }
-  setStatus("Ready", true);
+  setStatus("Ready",true);
 }
 async function loadOne(name){
   try{
-    const arr = await (await fetch(DIR+name, {cache:"no-store"})).arrayBuffer();
-    if(!ctx) createCtx();                             // do NOT resume here
+    const arr=await (await fetch(DIR+name,{cache:"no-store"})).arrayBuffer();
+    if(!ctx) createCtx();
     buffers.set(name, await ctx.decodeAudioData(arr));
   }catch{}
 }
@@ -141,17 +174,17 @@ function now(){ return ctx.currentTime; }
 function fadeInOut(g,start,durMs){
   const t=start, d=durMs/1000, A=Math.max(FADE_MS,1)/1000;
   g.gain.cancelScheduledValues(t);
-  g.gain.setValueAtTime(0.0, t);
-  g.gain.linearRampToValueAtTime(parseFloat(volEl.value), t + A);
-  g.gain.setValueAtTime(parseFloat(volEl.value), t + d - A);
-  g.gain.linearRampToValueAtTime(0.0, t + d);
+  g.gain.setValueAtTime(0.0,t);
+  g.gain.linearRampToValueAtTime(parseFloat(volEl.value), t+A);
+  g.gain.setValueAtTime(parseFloat(volEl.value), t+d-A);
+  g.gain.linearRampToValueAtTime(0.0, t+d);
 }
 function stopAll(){ voices.forEach(v=>{ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); }); voices.clear(); }
 function play(name,btn){
   if(!buffers.has(name)) return;
   if(voices.size>=MAX_POLYPHONY){ const v=voices.values().next().value; try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); voices.delete(v); }
   const buf=buffers.get(name); if(!buf) return;
-  if(cutEl.checked){ for(const v of Array.from(voices)){ if(v.name===name){ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); voices.delete(v); } } }
+  if(cutEl.checked){ stopVoicesByFile(name); }
   const src=ctx.createBufferSource(), g=ctx.createGain(); src.buffer=buf; src.connect(g).connect(masterGain);
   const t=now(); fadeInOut(g,t,buf.duration*1000); src.start(t);
   const voice={name,src,g,btn}; voices.add(voice); btn&&btn.classList.add("pressed");
@@ -160,10 +193,11 @@ function play(name,btn){
 
 /* ===== Boot ===== */
 (async()=>{
-  const files = await discover();     // strictly sequential from 001; stop at first gap
-  if(files.length){
-    render(files);                     // show UI
-    loadAll(files);                    // preload in background
+  allFiles = await discover();           // clip_001, clip_002, … stop on first miss
+  activeFiles = allFiles.slice();        // start with all; user can hide
+  if(activeFiles.length){
+    render();                            // show UI
+    loadAll(activeFiles);                // preload in background
   }
 })();
 document.addEventListener("visibilitychange",()=>{ if(!ctx) return; if(document.hidden) ctx.suspend().catch(()=>{}); else ctx.resume().catch(()=>{}); });
