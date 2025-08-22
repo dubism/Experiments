@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0b0d10">
-<title>UI Sounds — /sounds/ clip_000..</title>
+<title>UI Sounds — /sounds/ clip_001…</title>
 <style>
   :root{--bg:#0b0d10;--ink:#e7eef6;--muted:#9ab0c6;--card:#0f1318;--line:#1b2330;--accent:#79f5cc;--accent2:#3bd4ff;--glow:0 8px 18px rgba(0,0,0,.45),0 0 0 1px #1b2330 inset,0 0 22px rgba(61,225,255,.18)}
   *{box-sizing:border-box}
@@ -48,10 +48,10 @@
   </main>
 
 <script>
-/* ===== Config: ONLY clip_000.wav.. and stop on first miss ===== */
+/* ===== Config: ONLY clip_001.wav.. and stop at first gap ===== */
 const DIR = "sounds/";
-const START = 0;             // starts at clip_000.wav
-const PAD   = 3;             // zero-padding
+const START = 1;             // starts at clip_001.wav
+const PAD   = 3;
 const PREFIX= "clip_";
 const SUFFIX= ".wav";
 
@@ -160,10 +160,10 @@ function play(name,btn){
 
 /* ===== Boot ===== */
 (async()=>{
-  const files = await discover();     // strictly sequential, stop at first miss
+  const files = await discover();     // strictly sequential from 001; stop at first gap
   if(files.length){
-    render(files);                     // show UI immediately
-    loadAll(files);                    // preload in background (no await)
+    render(files);                     // show UI
+    loadAll(files);                    // preload in background
   }
 })();
 document.addEventListener("visibilitychange",()=>{ if(!ctx) return; if(document.hidden) ctx.suspend().catch(()=>{}); else ctx.resume().catch(()=>{}); });
