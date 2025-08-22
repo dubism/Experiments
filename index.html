@@ -1,3 +1,108 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Experiments — Auto Index (cached, fast)</title>
+<style>
+  :root{
+    --bg:#0a0b0d; --ink:#f5f6f8; --muted:#a8afbb;
+    --card:#0f1117; --card2:#10131a; --line:#1a2130;
+    --cardSub:#121823; --card2Sub:#141d2a;
+    --shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 0 0 1px #1a2130, 0 8px 18px rgba(0,0,0,.45);
+    --shadow-hover:0 1px 0 rgba(255,255,255,.03) inset, 0 0 0 1px #24304a, 0 14px 28px rgba(0,0,0,.6);
+    --radius:14px;
+
+    --t0:#82FFB5; --t1:#66F5C8; --t2:#4FDEDE; --t3:#4BC5F2; --t4:#5AAAF5;
+    --t5:#7D96F0; --t6:#9CA6CC; --t7:#A9B6E0; --t8:#B9C2E0; --t9:#B8B8B8;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif}
+  header{position:sticky;top:0;z-index:10;background:linear-gradient(#10131a,#0c0f15);border-bottom:1px solid #1c2537}
+  .wrap{max-width:1240px;margin:0 auto;padding:12px 14px}
+  h1{margin:0;font-size:16px;letter-spacing:.3px}
+  main{max-width:1240px;margin:0 auto;padding:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=search]{
+    flex:1;min-width:260px;background:#0b0f16;border:1px solid #1e293e;border-radius:10px;
+    padding:.55rem .7rem;color:var(--ink);outline:none;
+    transition:border-color .2s, background .2s, box-shadow .25s;
+    box-shadow:0 0 0 0 rgba(74,163,255,.0);
+  }
+  input[type=search]::placeholder{color:#8e97a6}
+  input[type=search]:focus{border-color:#2b3f65;background:#0d1220;box-shadow:0 0 0 5px rgba(74,163,255,.06)}
+  button{
+    border:1px solid #25324a;background:#131a26;color:var(--ink);
+    padding:.5rem .75rem;border-radius:10px;cursor:pointer;font-weight:650;letter-spacing:.2px;
+    transition:transform .15s, box-shadow .2s, border-color .2s, background .2s;
+    box-shadow:var(--shadow);
+  }
+  button:hover{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#31456b;background:#141e2c}
+  .status{font-size:12px;color:#9aa3b2}
+  .seg{display:inline-flex;border:1px solid #27324a;border-radius:10px;overflow:hidden}
+  .seg button{border:0;border-right:1px solid #27324a;background:#101622;padding:.45rem .7rem}
+  .seg button:last-child{border-right:0}
+  .seg button[aria-pressed="true"]{background:#162133}
+  .seg button[aria-pressed="true"] span{opacity:1}
+  .seg button span{opacity:.85}
+  .grp{margin-top:16px}
+  .grp h2{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa3b2;margin:6px 2px 10px;letter-spacing:.25px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+  .card{
+    position:relative; overflow:hidden; text-decoration:none; color:inherit;
+    background:linear-gradient(180deg,var(--card),var(--card2));
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; box-shadow:var(--shadow);
+    transition:transform .18s, box-shadow .22s, border-color .2s, background .25s;
+    display:flex; flex-direction:column; gap:10px; min-width:0;
+  }
+  .card.sub{background:linear-gradient(180deg,var(--cardSub),var(--card2Sub));border-color:#22314a}
+  .card:before{
+    content:""; position:absolute; inset:-1px; border-radius:var(--radius);
+    background:radial-gradient(120px 80px at 0% 0%, rgba(74,163,255,.08), transparent 60%),
+               radial-gradient(160px 100px at 100% 0%, rgba(39,255,136,.05), transparent 60%);
+    pointer-events:none;
+  }
+  .card:hover,.card:focus-visible{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#2a3755;outline:none}
+  .top{display:flex;align-items:center;gap:12px;min-width:0}
+  .ic{flex:0 0 32px; width:32px; height:32px; display:grid; place-items:center; background:#0c1119; border:1px solid #1f2a42; border-radius:10px}
+  .titleWrap{min-width:0; display:flex; flex:1 1 auto; flex-direction:column; gap:2px}
+  .name{font-weight:750; letter-spacing:.2px; line-height:1.2; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .path{font-size:11px; color:#97a1b1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .openVis{flex:0 0 auto; font-size:12px; color:#cfd5df; opacity:.9; display:inline-flex; gap:6px; align-items:center; pointer-events:none}
+  .bottom{display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0}
+  .meta{display:flex; align-items:center; gap:10px; min-width:0; overflow:hidden}
+  .ago{font-size:11px; font-weight:700; letter-spacing:.3px; display:inline-flex; align-items:center; gap:6px; flex:0 0 auto}
+  .ago .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.95}
+  .ago.t0{color:var(--t0)} .ago.t1{color:var(--t1)} .ago.t2{color:var(--t2)}
+  .ago.t3{color:var(--t3)} .ago.t4{color:var(--t4)} .ago.t5{color:var(--t5)}
+  .ago.t6{color:var(--t6)} .ago.t7{color:var(--t7)} .ago.t8{color:var(--t8)} .ago.t9{color:var(--t9)}
+  .exact{font-size:11px;color:#cfd5df;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  footer{color:#9aa3b2;text-align:center;padding:18px;border-top:1px solid #161b25}
+  @media (max-width:900px){.cards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}}
+  @media (max-width:480px){.cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}.openVis{display:none}}
+  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🧪 Experiments — Auto Index</h1>
+    <div class="row" style="margin-top:8px">
+      <input id="q" type="search" placeholder="Filter by name or path…">
+      <div class="seg" role="group" aria-label="Sort">
+        <button id="sortTime" aria-pressed="true" title="Newest → Oldest"><span>Time</span></button>
+        <button id="sortName" aria-pressed="false" title="A → Z by name"><span>Name</span></button>
+      </div>
+      <button id="refresh" aria-label="Refresh list">Refresh</button>
+      <span id="status" class="status">—</span>
+    </div>
+  </div>
+</header>
+
+<main><div id="list"></div></main>
+<footer>Uses branch-SHA cache + ETag; no manual steps needed.</footer>
+
 <script>
 /* ===== Config ===== */
 const USER = "dubism";
@@ -11,7 +116,6 @@ const qEl = document.getElementById('q');
 const sortTimeBtn = document.getElementById('sortTime');
 const sortNameBtn = document.getElementById('sortName');
 document.getElementById('refresh').onclick = fetchIndex;
-qEl.oninput = applyFilter;
 
 /* ===== State ===== */
 let allItems = [];
@@ -55,7 +159,7 @@ function timeAgoClassAndText(d){
 function fileIcon(){return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h6l4 4v14H7z" stroke="#9fb3d6" stroke-width="1.3"/><path d="M13 3v5h5" stroke="#9fb3d6" stroke-width="1.3"/></svg>`;}
 function folderIcon(){return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 8h7l2 2h9v9H3z" stroke="#8ea2c6" stroke-width="1.3"/></svg>`;}
 function arrowIcon(){return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17l7-7M10 7h7v7" stroke="#cdd7e6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;}
-function encode(p){return p.split('/').map(encodeURIComponent).join('/');}
+const EXCLUDE_TOP = /^(?:assets?|img|images?|icons?|fonts?|audio|sounds?|video|media|dist|build|node_modules|\.github|\.git)\b/i;
 
 /* ===== Rendering ===== */
 function buildCard(it){
@@ -63,6 +167,7 @@ function buildCard(it){
   a.className = 'card';
   if(it.depth >= 2) a.classList.add('sub');
   a.href = `https://${USER}.github.io/${REPO}/${it.path}`;
+
   const top = document.createElement('div'); top.className = 'top';
   const ic = document.createElement('div'); ic.className = 'ic'; ic.innerHTML = fileIcon();
   const titleWrap = document.createElement('div'); titleWrap.className = 'titleWrap';
@@ -90,7 +195,7 @@ function buildCard(it){
 }
 
 function render(items){
-  const q = qEl.value.trim().toLowerCase();
+  const q = qEl.value?.trim().toLowerCase() ?? '';
   let list = !q ? items : items.filter(it =>
     it.name.toLowerCase().includes(q) || it.path.toLowerCase().includes(q)
   );
@@ -127,16 +232,16 @@ function render(items){
   }
 }
 
+/* ✅ MISSING BEFORE — now included */
+function applyFilter(){ render(allItems); }
+
 /* ===== API helpers ===== */
 async function getJSON(url, headers = {}){
   const r = await fetch(url, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...headers}});
   if(!r.ok) throw new Error(`${url} HTTP ${r.status}`);
   return {json: await r.json(), resp: r};
 }
-const EXCLUDE_TOP = /^(?:assets?|img|images?|icons?|fonts?|audio|sounds?|video|media|dist|build|node_modules|\.github|\.git)\b/i;
-
 function makeItemsFromTree(tree){
-  // keep only files we care about; drop obvious non-HTML folders
   const files = tree.tree.filter(n => {
     if(n.type !== 'blob') return false;
     if(!/\.html?$/i.test(n.path)) return false;
@@ -147,7 +252,7 @@ function makeItemsFromTree(tree){
   return files.map(n => ({
     path: n.path,
     name: n.path.split('/').pop(),
-    updatedAt: null, // can be filled later if you want
+    updatedAt: null,
     depth: (n.path.match(/\//g)||[]).length + 1
   }));
 }
@@ -156,23 +261,23 @@ function makeItemsFromTree(tree){
 async function fetchIndex(){
   try{
     statusEl.textContent = 'Checking cache…';
-    // 1) Get current branch SHA (tiny)
+    // 1) Current branch SHA (tiny)
     const {json: branch} = await getJSON(`https://api.github.com/repos/${USER}/${REPO}/branches/${encodeURIComponent(REF)}`);
     const sha = branch.commit.sha;
 
-    // 2) If SHA unchanged, paint instantly from cache
+    // 2) Cache hit → instant paint
     const cachedSha  = localStorage.getItem(SHA_KEY);
     const cachedData = localStorage.getItem(DATA_KEY);
     if(cachedSha === sha && cachedData){
       allItems = JSON.parse(cachedData);
       render(allItems);
-      statusEl.textContent = `Loaded ${allItems.length} file(s) from cache (SHA unchanged).`;
-      // Revalidate in background (won't block UI)
+      statusEl.textContent = `Loaded ${allItems.length} file(s) from cache.`;
+      // Background revalidation
       revalidateTree(sha).catch(()=>{});
       return;
     }
 
-    // 3) Otherwise fetch the tree with ETag
+    // 3) Fetch tree with ETag (or full if first time)
     await revalidateTree(sha, true);
   }catch(e){
     console.error(e);
@@ -184,8 +289,8 @@ async function revalidateTree(sha, paintOnSuccess=false){
   const treeUrl = `https://api.github.com/repos/${USER}/${REPO}/git/trees/${sha}?recursive=1`;
   const etag = localStorage.getItem(ETAG_KEY);
   const headers = etag ? {'If-None-Match': etag} : {};
-
   statusEl.textContent = etag ? 'Revalidating tree…' : 'Loading tree…';
+
   const r = await fetch(treeUrl, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...headers}});
   if(r.status === 304){
     statusEl.textContent = 'Up to date (HTTP 304).';
@@ -197,7 +302,6 @@ async function revalidateTree(sha, paintOnSuccess=false){
   const newEtag = r.headers.get('etag') || '';
   const items = makeItemsFromTree(tree);
 
-  // Persist
   localStorage.setItem(SHA_KEY, sha);
   localStorage.setItem(ETAG_KEY, newEtag);
   localStorage.setItem(DATA_KEY, JSON.stringify(items));
@@ -211,4 +315,6 @@ async function revalidateTree(sha, paintOnSuccess=false){
 
 /* init */
 fetchIndex();
+qEl.addEventListener('input', applyFilter);
 </script>
+</body></html>
