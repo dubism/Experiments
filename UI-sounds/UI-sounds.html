@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0b0d10">
-<title>UI Sounds — local /sounds/ only</title>
+<title>UI Sounds — local /sounds/</title>
 <style>
   :root{--bg:#0b0d10;--ink:#e7eef6;--muted:#9ab0c6;--card:#0f1318;--line:#1b2330;--accent:#79f5cc;--accent2:#3bd4ff;--glow:0 8px 18px rgba(0,0,0,.45),0 0 0 1px #1b2330 inset,0 0 22px rgba(61,225,255,.18)}
   *{box-sizing:border-box}
@@ -36,7 +36,7 @@
       <label class="pill"><input id="cut" type="checkbox" checked> Cut previous</label>
       <span id="status" class="small">Scanning /sounds/…</span>
       <span class="pill"><span>Found</span> <strong id="found">0</strong></span>
-      <div class="meter"><div class="fill" id="meterFill"></div></div>
+      <div class="meter"><div class="fill" id="meter"></div></div>
     </div>
   </header>
 
@@ -49,80 +49,56 @@
   </main>
 
 <script>
-/* ---------- Config (local-only) ---------- */
-const DIR = "sounds/";            // relative folder to scan
-const PROBE_MAX = 300;            // fallback probe limit
-const PROBE_PATTERNS = [
-  i => `clip_${String(i).padStart(3,"0")}.wav`,
-  i => `sound_${String(i).padStart(3,"0")}.wav`
-];
+/* ===== Basics ===== */
+const DIR="sounds/";                 // folder to scan
+const PROBE_MAX=300;                 // probe up to N files
+const PROBE_PATTERNS=[i=>`clip_${String(i).padStart(3,"0")}.wav`, i=>`sound_${String(i).padStart(3,"0")}.wav`];
 
-/* ---------- Shortcuts ---------- */
-const $ = s => document.querySelector(s);
-const grid=$("#grid"), statusEl=$("#status"), foundEl=$("#found"),
-      volEl=$("#vol"), cutEl=$("#cut"), meterFill=$("#meterFill");
-document.body.addEventListener("touchstart",()=>{}, {passive:true}); // enable :active on iOS
-const setStatus=(m,ok=false)=>{ statusEl.textContent=m; statusEl.classList.toggle("ok", ok); };
+const $=s=>document.querySelector(s);
+const grid=$("#grid"), statusEl=$("#status"), foundEl=$("#found"), volEl=$("#vol"), cutEl=$("#cut"), meter=$("#meter");
+document.body.addEventListener("touchstart",()=>{}, {passive:true});
+const setStatus=(m,ok=false)=>{ statusEl.textContent=m; statusEl.classList.toggle("ok",ok); };
 
-/* ---------- Audio (unlock on first tap) ---------- */
+/* ===== Audio (unlock only on first tap) ===== */
 let ctx, masterGain, unlocked=false, buffers=new Map(), voices=new Set();
-function createCtx(){
-  if(!ctx || ctx.state==="closed"){
-    ctx = new (window.AudioContext||window.webkitAudioContext)();
-    masterGain = ctx.createGain();
-    masterGain.gain.value = parseFloat(volEl.value);
-    masterGain.connect(ctx.destination);
-  }
-}
-async function ensureUnlocked(){
-  if(unlocked){ if(ctx?.state!=="running") await ctx.resume(); return; }
-  createCtx();
-  try{
-    const silent = ctx.createBuffer(1,1,ctx.sampleRate);
-    const src = ctx.createBufferSource();
-    src.buffer = silent; src.connect(masterGain); src.start(0); src.stop(0);
-    await ctx.resume(); unlocked = true;
-  }catch{}
-}
+function createCtx(){ if(!ctx||ctx.state==="closed"){ ctx=new (window.AudioContext||window.webkitAudioContext)(); masterGain=ctx.createGain(); masterGain.gain.value=parseFloat(volEl.value); masterGain.connect(ctx.destination);} }
+async function ensureUnlocked(){ if(unlocked){ if(ctx?.state!=="running") await ctx.resume(); return; } createCtx(); try{ const silent=ctx.createBuffer(1,1,ctx.sampleRate); const src=ctx.createBufferSource(); src.buffer=silent; src.connect(masterGain); src.start(0); src.stop(0); await ctx.resume(); unlocked=true; }catch{} }
 volEl.addEventListener("input",()=>{ if(masterGain) masterGain.gain.setTargetAtTime(parseFloat(volEl.value), ctx.currentTime, .01); });
 
-/* ---------- Discovery (same-origin only) ---------- */
-// 1) Try directory listing HTML at /sounds/ and parse <a href="*.wav">.
+/* ===== Discovery (same-origin only) ===== */
+// Try directory index HTML
 async function listFromAutoIndex(){
   try{
-    const res = await fetch(DIR, {cache:"no-store"});          // same-origin only
+    const res=await fetch(DIR,{cache:"no-store"});
     if(!res.ok) return [];
-    const ct = (res.headers.get("content-type")||"").toLowerCase();
+    const ct=(res.headers.get("content-type")||"").toLowerCase();
     if(!ct.includes("text/html")) return [];
-    const html = await res.text();
-    const hrefs = [...html.matchAll(/href\s*=\s*"(.*?)"/gi)].map(m=>m[1]);
-    const wavs = hrefs
-      .map(h => decodeURIComponent(h.split("?")[0].split("#")[0]))
-      .filter(h => /\.wav$/i.test(h))
-      .map(h => h.replace(/^\.\/|^\//,"").replace(/^sounds\//,""))
-      .filter(h => !h.includes("/"));
+    const html=await res.text();
+    const hrefs=[...html.matchAll(/href\s*=\s*"(.*?)"/gi)].map(m=>m[1]);
+    const wavs=hrefs.map(h=>decodeURIComponent(h.split("?")[0].split("#")[0]))
+      .filter(h=>/\.wav$/i.test(h))
+      .map(h=>h.replace(/^\.\/|^\//,"").replace(/^sounds\//,""))
+      .filter(h=>!h.includes("/"));
     return [...new Set(wavs)].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
   }catch{ return []; }
 }
-
-// 2) Try local JSON lists if present.
+// Try local JSON lists if present
 async function listFromJson(){
   for(const name of ["files.json","manifest.json","index.json"]){
     try{
-      const r = await fetch(DIR+name, {cache:"no-store"});
+      const r=await fetch(DIR+name,{cache:"no-store"});
       if(!r.ok) continue;
-      const j = await r.json();
+      const j=await r.json();
       if(Array.isArray(j)) return j.filter(f=>/\.wav$/i.test(f));
       if(j?.files?.length) return j.files.filter(f=>/\.wav$/i.test(f));
     }catch{}
   }
   return [];
 }
-
-// 3) Fallback: probe common names by making a tiny ranged GET (no externals).
+// Fallback: probe common names using small ranged GET
 async function exists(name){
   try{
-    const r = await fetch(DIR+name, {cache:"no-store", headers:{"Range":"bytes=0-0"}});
+    const r=await fetch(DIR+name,{cache:"no-store",headers:{"Range":"bytes=0-0"}});
     return r.ok;
   }catch{ return false; }
 }
@@ -131,83 +107,94 @@ async function listByProbing(){
   for(let i=1;i<=PROBE_MAX;i++){
     let hit=false;
     for(const pat of PROBE_PATTERNS){
-      const n = pat(i);
+      const n=pat(i);
       if(await exists(n)){ out.push(n); hit=true; }
     }
-    if(hit){ gaps=0; } else if(++gaps>=25 && out.length) break;
+    if(hit) gaps=0; else if(++gaps>=25 && out.length) break;
   }
   return out;
 }
 
 async function discover(){
   setStatus("Scanning /sounds/…");
-  let files = await listFromAutoIndex();
-  if(!files.length) files = await listFromJson();
-  if(!files.length) files = await listByProbing();
-  foundEl.textContent = files.length;
+  let files=await listFromAutoIndex();
+  if(!files.length) files=await listFromJson();
+  if(!files.length) files=await listByProbing();
+  foundEl.textContent=files.length;
   setStatus(files.length?`Found ${files.length}`:"No WAVs found in /sounds/", !!files.length);
   return files;
 }
 
-/* ---------- Loading + UI ---------- */
-async function loadAll(files){
-  setStatus(`Loading 0/${files.length}…`);
-  for(let i=0;i<files.length;i++){
-    const url = DIR + files[i];
-    try{
-      const res = await fetch(url, {cache:"no-store"});
-      const arr = await res.arrayBuffer();
-      if(!ctx) createCtx(); if(ctx.state==="suspended") await ctx.resume();
-      const buf = await ctx.decodeAudioData(arr);
-      buffers.set(files[i], buf);
-      meterFill.style.width = Math.round(((i+1)/files.length)*100) + "%";
-      setStatus(`Loaded ${i+1}/${files.length}`, i+1===files.length);
-    }catch{ setStatus("Decode error "+files[i]); }
-  }
-  render(files);
-}
-
+/* ===== Loading + UI ===== */
 function addPress(el){
-  const on=()=>{ el.classList.add("pressed"); try{ navigator.vibrate && navigator.vibrate(8); }catch{} };
+  const on=()=>{ el.classList.add("pressed"); try{navigator.vibrate&&navigator.vibrate(8);}catch{} };
   const off=()=> el.classList.remove("pressed");
-  ["pointerdown","touchstart","mousedown"].forEach(ev=> el.addEventListener(ev,on,{passive:true}));
-  ["pointerup","pointercancel","touchend","touchcancel","mouseleave","mouseup","blur"].forEach(ev=> el.addEventListener(ev,off));
+  ["pointerdown","touchstart","mousedown"].forEach(ev=>el.addEventListener(ev,on,{passive:true}));
+  ["pointerup","pointercancel","touchend","touchcancel","mouseleave","mouseup","blur"].forEach(ev=>el.addEventListener(ev,off));
 }
 
 function makeTile(name){
   const t=document.createElement("div"); t.className="tile";
   const b=document.createElement("button"); b.className="sound"; b.textContent="▶️ Play"; addPress(b);
   const l=document.createElement("div"); l.className="fname"; l.textContent=name;
-  b.addEventListener("pointerdown", async()=>{ await ensureUnlocked(); if(!buffers.has(name)) return; play(name,b); });
+  b.addEventListener("pointerdown", async()=>{ await ensureUnlocked(); if(!buffers.has(name)) await loadOne(name); play(name,b); });
   t.appendChild(b); t.appendChild(l); return t;
 }
 
 function render(files){
-  grid.innerHTML = "";
-  files.forEach(n => grid.appendChild(makeTile(n)));
+  grid.innerHTML=""; files.forEach(n=>grid.appendChild(makeTile(n)));
   $("#seq").addEventListener("pointerdown", async e=>{
     const btn=e.currentTarget; btn.classList.add("pressed");
     await ensureUnlocked();
     let t=0, btns=[...document.querySelectorAll(".tile > .sound")];
-    files.forEach((f,i)=>{ setTimeout(()=>play(f,btns[i]), t); t+=120; });
-    setTimeout(()=>btn.classList.remove("pressed"), 220);
+    for(let i=0;i<files.length;i++){ const f=files[i]; if(!buffers.has(f)) await loadOne(f); setTimeout(()=>play(f,btns[i]), t); t+=120; }
+    setTimeout(()=>btn.classList.remove("pressed"),220);
   });
   $("#stopAll").addEventListener("click", stopAll);
 }
 
-/* ---------- Playback ---------- */
+async function loadAll(files){
+  setStatus(`Loading 0/${files.length}…`);
+  for(let i=0;i<files.length;i++){
+    const url=DIR+files[i];
+    try{
+      const res=await fetch(url,{cache:"no-store"});
+      const arr=await res.arrayBuffer();
+      if(!ctx) createCtx();            // DO NOT resume here (iOS)
+      const buf=await ctx.decodeAudioData(arr);
+      buffers.set(files[i], buf);
+      meter.style.width=Math.round(((i+1)/files.length)*100)+"%";
+      setStatus(`Loaded ${i+1}/${files.length}`, i+1===files.length);
+    }catch{ setStatus("Decode error "+files[i]); }
+  }
+}
+
+async function loadOne(file){
+  setStatus("Decoding "+file);
+  try{
+    const res=await fetch(DIR+file,{cache:"no-store"});
+    const arr=await res.arrayBuffer();
+    if(!ctx) createCtx();              // DO NOT resume here
+    const buf=await ctx.decodeAudioData(arr);
+    buffers.set(file, buf);
+    setStatus("Ready", true);
+  }catch{ setStatus("Decode error "+file); }
+}
+
+/* ===== Playback ===== */
 const FADE_MS=8, MAX_POLYPHONY=16;
 function now(){ return ctx.currentTime; }
 function fadeInOut(g,start,durMs){
   const t=start, d=durMs/1000, A=Math.max(FADE_MS,1)/1000;
   g.gain.cancelScheduledValues(t);
-  g.gain.setValueAtTime(0.0, t);
-  g.gain.linearRampToValueAtTime(parseFloat(volEl.value), t + A);
-  g.gain.setValueAtTime(parseFloat(volEl.value), t + d - A);
-  g.gain.linearRampToValueAtTime(0.0, t + d);
+  g.gain.setValueAtTime(0.0,t);
+  g.gain.linearRampToValueAtTime(parseFloat(volEl.value), t+A);
+  g.gain.setValueAtTime(parseFloat(volEl.value), t+d-A);
+  g.gain.linearRampToValueAtTime(0.0, t+d);
 }
 function stopAll(){ voices.forEach(v=>{ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); }); voices.clear(); }
 function play(name,btn){
+  if(!buffers.has(name)) return;
   if(voices.size>=MAX_POLYPHONY){ const v=voices.values().next().value; try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); voices.delete(v); }
   const buf=buffers.get(name); if(!buf) return;
   if(cutEl.checked){ for(const v of Array.from(voices)){ if(v.name===name){ try{v.src.stop()}catch{} v.src.disconnect(); v.g.disconnect(); voices.delete(v); } } }
@@ -217,8 +204,14 @@ function play(name,btn){
   src.onended=()=>{ try{src.disconnect(); g.disconnect();}catch{} voices.delete(voice); btn&&btn.classList.remove("pressed"); };
 }
 
-/* ---------- Boot ---------- */
-(async()=>{ const files = await discover(); if(files.length) await loadAll(files); })();
+/* ===== Boot ===== */
+(async()=>{
+  const files = await discover();
+  if(files.length){
+    render(files);      // show buttons immediately
+    loadAll(files);     // preload in background (no await)
+  }
+})();
 document.addEventListener("visibilitychange",()=>{ if(!ctx) return; if(document.hidden) ctx.suspend().catch(()=>{}); else ctx.resume().catch(()=>{}); });
 </script>
 </body>
