@@ -33,8 +33,8 @@
   input[type=search]:focus{border-color:#2b3f65;background:#0d1220;box-shadow:0 0 0 5px rgba(74,163,255,.06)}
   button{
     border:1px solid #25324a;background:#131a26;color:var(--ink);
-    padding:.5rem .75rem;border-radius:10px;cursor:pointer;font-weight:650;letter-spacing:.2px;
-    transition:transform .15s, box-shadow .2s, border-color .2s, background .2s;
+    padding:.45rem .65rem;border-radius:10px;cursor:pointer;font-weight:650;letter-spacing:.2px;
+    transition:transform .15s, box-shadow .2s, border-color .2s, background .2s, filter .2s;
     box-shadow:var(--shadow);
   }
   button:hover{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#31456b;background:#141e2c}
@@ -49,7 +49,7 @@
   .grp h2{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa3b2;margin:6px 2px 10px;letter-spacing:.25px}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
   .card{
-    position:relative; overflow:hidden; text-decoration:none; color:inherit;
+    position:relative; overflow:hidden; color:inherit;
     background:linear-gradient(180deg,var(--card),var(--card2));
     border:1px solid var(--line); border-radius:var(--radius);
     padding:14px 16px; box-shadow:var(--shadow);
@@ -63,7 +63,7 @@
                radial-gradient(160px 100px at 100% 0%, rgba(39,255,136,.05), transparent 60%);
     pointer-events:none;
   }
-  .card:hover,.card:focus-visible{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#2a3755;outline:none}
+  .card:hover,.card:focus-within{transform:translateY(-1px);box-shadow:var(--shadow-hover);border-color:#2a3755;outline:none}
   .top{display:flex;align-items:center;gap:12px;min-width:0}
   .ic{flex:0 0 32px; width:32px; height:32px; display:grid; place-items:center; background:#0c1119; border:1px solid #1f2a42; border-radius:10px}
   .titleWrap{min-width:0; display:flex; flex:1 1 auto; flex-direction:column; gap:2px}
@@ -79,9 +79,7 @@
   .ago.t6{color:var(--t6)} .ago.t7{color:var(--t7)} .ago.t8{color:var(--t8)} .ago.t9{color:var(--t9)}
   .exact{font-size:11px;color:#cfd5df;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   footer{color:#9aa3b2;text-align:center;padding:18px;border-top:1px solid #161b25}
-  dialog::backdrop{background:rgba(0,0,0,.55)}
-  dialog{border:1px solid #22314a;border-radius:12px;background:#0f131a;color:var(--ink);padding:12px;max-width:96vw}
-  textarea{tab-size:2}
+  .copy-ok{filter:drop-shadow(0 0 10px rgba(130,255,181,.35));}
   @media (max-width:900px){.cards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}}
   @media (max-width:480px){.cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}.openVis{display:none}}
   @media (prefers-reduced-motion: reduce){*{transition:none !important}}
@@ -98,29 +96,13 @@
         <button id="sortName" aria-pressed="false" title="A → Z by name"><span>Name</span></button>
       </div>
       <button id="refresh" aria-label="Refresh list">Refresh</button>
-      <button id="auth" aria-label="Auth">🔑</button>
-      <span id="status" class="status">—</span>
+      <span id="status" class="status" aria-live="polite">—</span>
     </div>
   </div>
 </header>
 
 <main><div id="list"></div></main>
-<footer>Uses branch-SHA cache + ETag; timestamps are hydrated & cached. In-place editor requires a GitHub PAT.</footer>
-
-<!-- Editor dialog -->
-<dialog id="editor">
-  <form method="dialog" style="display:flex;flex-direction:column;gap:8px;min-width:min(960px,96vw);min-height:60vh">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <strong id="ed-path" style="font-size:13px;letter-spacing:.2px"></strong>
-      <div style="display:flex;gap:8px">
-        <button id="ed-cancel">Cancel</button>
-        <button id="ed-save" value="save" style="font-weight:700">Save</button>
-      </div>
-    </div>
-    <textarea id="ed-text" spellcheck="false" style="flex:1;resize:vertical;background:#0b0f16;color:#f5f6f8;border:1px solid #27324a;border-radius:10px;padding:10px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"></textarea>
-    <div id="ed-status" class="status">—</div>
-  </form>
-</dialog>
+<footer>Uses branch-SHA cache + ETag; timestamps are hydrated & cached. Copy button fetches raw HTML and copies to clipboard.</footer>
 
 <script>
 /* ===== Config ===== */
@@ -146,26 +128,7 @@ sortNameBtn.onclick = () => setSort('name');
 const SHA_KEY   = `idx:sha:${USER}/${REPO}@${REF}`;
 const DATA_KEY  = `idx:data:${USER}/${REPO}@${REF}`;
 const ETAG_KEY  = `idx:etag:${USER}/${REPO}@${REF}`;
-const TOKEN_KEY = `gh:token:${USER}`;
-
-/* ===== Auth / headers ===== */
-let GH_TOKEN = localStorage.getItem(TOKEN_KEY) || '';
-function setToken(t){
-  GH_TOKEN = t || '';
-  if (t) localStorage.setItem(TOKEN_KEY, t);
-  else localStorage.removeItem(TOKEN_KEY);
-}
-function authHeaders(h={}){ return GH_TOKEN ? {...h, Authorization:`Bearer ${GH_TOKEN}`} : h; }
 function datesKey(sha){ return `idx:dates:${USER}/${REPO}@${REF}:${sha}`; }
-
-/* ===== UI: auth button ===== */
-document.getElementById('auth').onclick = ()=>{
-  const hint = GH_TOKEN ? '********' : '';
-  const t = prompt('Paste a GitHub fine-grained PAT (with “Contents: Read and Write” on this repo). Leave empty to clear:', hint);
-  if (t === null) return;
-  setToken(t && t!=='********' ? t.trim() : '');
-  statusEl.textContent = GH_TOKEN ? 'Auth set.' : 'Auth cleared.';
-};
 
 /* ===== Utils ===== */
 function setSort(mode){
@@ -202,27 +165,19 @@ const EXCLUDE_TOP = /^(?:assets?|img|images?|icons?|fonts?|audio|sounds?|video|m
 
 /* ===== Rendering ===== */
 function buildCard(it){
-  // Card root as a div (keyboard-accessible "link")
   const card = document.createElement('div');
   card.className = 'card';
   if(it.depth >= 2) card.classList.add('sub');
-  card.setAttribute('role','link');
-  card.setAttribute('tabindex','0');
+  card.setAttribute('role','group');
+
   const href = `https://${USER}.github.io/${REPO}/${it.path}`;
-  card.addEventListener('click', (e)=>{
-    // ignore clicks on buttons inside
-    if (e.target.closest('button')) return;
-    window.open(href, '_blank', 'noopener');
-  });
-  card.addEventListener('keydown', (e)=>{
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.open(href,'_blank','noopener'); }
-  });
 
   const top = document.createElement('div'); top.className = 'top';
   const ic = document.createElement('div'); ic.className = 'ic'; ic.innerHTML = fileIcon();
   const titleWrap = document.createElement('div'); titleWrap.className = 'titleWrap';
   titleWrap.innerHTML = `<div class="name">${prettyName(it.name)}</div><div class="path">${it.path}</div>`;
-  const open = document.createElement('div'); open.className = 'openVis'; open.innerHTML = `Open ${arrowIcon()}`;
+  const open = document.createElement('a'); open.className = 'openVis'; open.innerHTML = `Open ${arrowIcon()}`;
+  open.href = href; open.target = "_blank"; open.rel = "noopener";
   top.append(ic, titleWrap, open);
 
   const bottom = document.createElement('div'); bottom.className = 'bottom';
@@ -243,13 +198,15 @@ function buildCard(it){
   const actions = document.createElement('div');
   actions.style.display = 'flex';
   actions.style.gap = '8px';
-  const editBtn = document.createElement('button');
-  editBtn.textContent = 'Edit';
-  editBtn.title = `Edit ${it.path}`;
-  editBtn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); openEditor(it.path); };
-  actions.append(editBtn);
 
+  const copyBtn = document.createElement('button');
+  copyBtn.textContent = 'Copy code';
+  copyBtn.title = `Copy HTML of ${it.path}`;
+  copyBtn.onclick = (e)=>{ e.preventDefault(); handleCopy(it.path, copyBtn, card); };
+
+  actions.append(copyBtn);
   bottom.append(meta, actions);
+
   card.append(top, bottom);
   return card;
 }
@@ -297,7 +254,7 @@ function applyFilter(){ render(allItems); }
 
 /* ===== API helpers ===== */
 async function getJSON(url, headers = {}){
-  const r = await fetch(url, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...authHeaders(headers)}});
+  const r = await fetch(url, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...headers}});
   if(!r.ok) throw new Error(`${url} HTTP ${r.status}`);
   return {json: await r.json(), resp: r};
 }
@@ -324,8 +281,6 @@ async function getLastCommitISO(path){
   const c = json && json[0] && json[0].commit;
   return c?.committer?.date || c?.author?.date || null;
 }
-
-// simple concurrency limiter
 async function mapLimit(arr, limit, worker){
   const ret = Array(arr.length);
   let i=0, active=0, done=0;
@@ -342,7 +297,6 @@ async function mapLimit(arr, limit, worker){
     pump();
   });
 }
-
 async function hydrateUpdatedAt(items, sha){
   const key = datesKey(sha);
   const memo = JSON.parse(localStorage.getItem(key) || '{}');
@@ -355,9 +309,9 @@ async function hydrateUpdatedAt(items, sha){
 
   if(!todoIdx.length) return;
 
-  statusEl.textContent = `Fetching timestamps (${todoIdx.length})… ${GH_TOKEN?'(authed)':''}`;
+  statusEl.textContent = `Fetching timestamps (${todoIdx.length})…`;
 
-  const limit = GH_TOKEN ? 8 : 4;
+  const limit = 6;
   try{
     await mapLimit(todoIdx, limit, async (idx)=>{
       const it = items[idx];
@@ -365,12 +319,11 @@ async function hydrateUpdatedAt(items, sha){
         const iso = await getLastCommitISO(it.path);
         if(iso){ it.updatedAt = iso; memo[it.path] = iso; }
       }catch(e){
-        // swallow non-fatal errors; leave missing
         if(String(e?.message||e).includes('HTTP 403')) throw e;
       }
     });
   }catch(e){
-    statusEl.textContent = 'Rate-limited by GitHub. Add a PAT (🔑) for faster/higher quota.';
+    statusEl.textContent = 'Rate-limited by GitHub while fetching timestamps.';
   }
   localStorage.setItem(key, JSON.stringify(memo));
 }
@@ -379,11 +332,9 @@ async function hydrateUpdatedAt(items, sha){
 async function fetchIndex(){
   try{
     statusEl.textContent = 'Checking cache…';
-    // 1) Current branch SHA (tiny)
     const {json: branch} = await getJSON(`https://api.github.com/repos/${USER}/${REPO}/branches/${encodeURIComponent(REF)}`);
     const sha = branch.commit.sha;
 
-    // 2) Cache hit → instant paint + ensure dates
     const cachedSha  = localStorage.getItem(SHA_KEY);
     const cachedData = localStorage.getItem(DATA_KEY);
     if(cachedSha === sha && cachedData){
@@ -391,12 +342,10 @@ async function fetchIndex(){
       await hydrateUpdatedAt(allItems, sha);
       render(allItems);
       statusEl.textContent = `Loaded ${allItems.length} file(s) from cache.`;
-      // Background revalidation
       revalidateTree(sha).catch(()=>{});
       return;
     }
 
-    // 3) Fetch tree with ETag (or full if first time)
     await revalidateTree(sha, true);
   }catch(e){
     console.error(e);
@@ -410,7 +359,7 @@ async function revalidateTree(sha, paintOnSuccess=false){
   const headers = etag ? {'If-None-Match': etag} : {};
   statusEl.textContent = etag ? 'Revalidating tree…' : 'Loading tree…';
 
-  const r = await fetch(treeUrl, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...authHeaders(headers)}});
+  const r = await fetch(treeUrl, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...headers}});
   if(r.status === 304){
     statusEl.textContent = 'Up to date (HTTP 304).';
     return;
@@ -425,7 +374,6 @@ async function revalidateTree(sha, paintOnSuccess=false){
   localStorage.setItem(ETAG_KEY, newEtag);
   localStorage.setItem(DATA_KEY, JSON.stringify(items));
 
-  // Hydrate timestamps then paint
   allItems = items;
   await hydrateUpdatedAt(allItems, sha);
   if(paintOnSuccess){
@@ -434,106 +382,58 @@ async function revalidateTree(sha, paintOnSuccess=false){
   }
 }
 
-/* ===== File I/O (read & write) ===== */
-function toBase64(str){
-  const bytes = new TextEncoder().encode(str);
-  let bin = ''; const step = 0x8000;
-  for(let i=0;i<bytes.length;i+=step){
-    bin += String.fromCharCode(...bytes.subarray(i,i+step));
-  }
-  return btoa(bin);
-}
-function fromBase64(b64){
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
-}
-
+/* ===== Copy-to-clipboard ===== */
 async function getFileText(path){
-  // Try raw first
   const rawUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(REF)}`;
-  const r = await fetch(rawUrl, {headers: {'Accept':'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28', ...authHeaders()}});
+  const r = await fetch(rawUrl, {headers: {'Accept':'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28'}});
   if(r.ok){
     const ct = r.headers.get('content-type') || '';
     if(!ct.includes('json')) return await r.text();
   }
-  // Fallback to JSON and decode base64
+  // Fallback to JSON (base64)
   const {json} = await getJSON(rawUrl);
-  if(json && json.content) return fromBase64(json.content.replace(/\n/g,''));
+  if(json && json.content){
+    const bin = atob(json.content.replace(/\n/g,''));
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
   throw new Error(`Unable to load ${path}`);
 }
 
-async function getFileMeta(path){
-  const url = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(REF)}`;
-  const {json} = await getJSON(url);
-  return json; // includes .sha
-}
-
-async function putFileText(path, newText, message=`Edit ${path} via Auto Index`){
-  if(!GH_TOKEN) throw new Error('Missing GitHub token. Click 🔑 and paste a PAT.');
-  const meta = await getFileMeta(path);
-  const body = {
-    message,
-    content: toBase64(newText),
-    sha: meta.sha,
-    branch: REF
-  };
-  const url = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodeURIComponent(path)}`;
-  const r = await fetch(url, {
-    method: 'PUT',
-    headers: {'Accept':'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28', ...authHeaders()},
-    body: JSON.stringify(body)
-  });
-  if(!r.ok){
-    const t = await r.text().catch(()=> '');
-    throw new Error(`Save failed: HTTP ${r.status} ${t}`);
+async function copyToClipboard(text){
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
   }
-  return await r.json(); // contains .commit.committer.date
+  // Fallback
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ const ok = document.execCommand('copy'); document.body.removeChild(ta); return ok; }
+  catch(e){ document.body.removeChild(ta); throw e; }
 }
 
-/* ===== Editor UI ===== */
-const ed = {
-  dlg: document.getElementById('editor'),
-  path: document.getElementById('ed-path'),
-  text: document.getElementById('ed-text'),
-  status: document.getElementById('ed-status'),
-  saveBtn: document.getElementById('ed-save'),
-  cancelBtn: document.getElementById('ed-cancel')
-};
-
-async function openEditor(path){
+async function handleCopy(path, btn, card){
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Copying…';
   try{
-    ed.path.textContent = path;
-    ed.status.textContent = 'Loading…';
-    ed.text.value = await getFileText(path);
-    ed.status.textContent = 'Loaded.';
-    ed.dlg.showModal();
+    const txt = await getFileText(path);
+    await copyToClipboard(txt);
+    btn.textContent = 'Copied ✓';
+    card.classList.add('copy-ok');
+    statusEl.textContent = `Copied: ${path}`;
+    await new Promise(r=>setTimeout(r,1200));
   }catch(e){
-    alert(`Open failed: ${e.message||e}`);
+    console.error(e);
+    btn.textContent = 'Copy failed';
+    statusEl.textContent = `Copy failed for ${path}: ${e.message||e}`;
+    await new Promise(r=>setTimeout(r,1500));
+  }finally{
+    btn.disabled = false; btn.textContent = orig;
+    card.classList.remove('copy-ok');
   }
 }
-
-ed.dlg.addEventListener('close', ()=>{
-  ed.text.value=''; ed.status.textContent='—';
-});
-
-ed.saveBtn.addEventListener('click', async (ev)=>{
-  ev.preventDefault();
-  try{
-    ed.status.textContent = 'Saving…';
-    const res = await putFileText(ed.path.textContent, ed.text.value);
-    ed.status.textContent = 'Saved. Refreshing…';
-    // Invalidate caches and fully reload index (branch SHA changes on commit)
-    localStorage.removeItem(SHA_KEY);
-    localStorage.removeItem(DATA_KEY);
-    localStorage.removeItem(ETAG_KEY);
-    ed.dlg.close();
-    await fetchIndex();
-  }catch(e){
-    ed.status.textContent = `Error: ${e.message||e}`;
-  }
-});
 
 /* ===== init ===== */
 fetchIndex();
