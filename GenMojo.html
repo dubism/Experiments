@@ -1,549 +1,95 @@
-Adding a bottom glass footer with: 1) the reactive ✅➔ CTA and 2) a label-less input (emoji or text). Emojis you type become floating seeds; any text becomes a style hint merged into the prompt. Unplaced input-emojis are included as non-positioned elements.
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Emoji → Image · Demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Emoji → Pollinations Image</title>
 <style>
-  :root{
-    --bg1:#e9f3ff; --bg2:#ffe9f7; --bg3:#e9fff6; --bg4:#f7f3ff;
-    --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
-    --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
-    --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
-    --ease:cubic-bezier(.2,.8,.2,1);
-    --glass:#ffffff6a; --glassEdge:#ffffff80; --glassStroke:#0000000f;
-  }
-
-  html,body{height:100%;margin:0}
-  body{
-    background:
-      radial-gradient(60vmax 60vmax at 15% 10%, var(--t1), transparent 60%),
-      radial-gradient(70vmax 60vmax at 85% 20%, var(--t2), transparent 60%),
-      radial-gradient(60vmax 70vmax at 20% 85%, var(--t3), transparent 60%),
-      radial-gradient(70vmax 70vmax at 80% 85%, var(--t4), transparent 60%),
-      conic-gradient(from 0deg at 50% 50%, var(--bg1), var(--bg2), var(--bg3), var(--bg4), var(--bg1));
-    background-attachment:fixed;
-    animation:hue 24s linear infinite alternate;
-    overflow:hidden; touch-action:none; -webkit-tap-highlight-color:transparent;
-    font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
-  }
-  @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
-
-  .stage{position:fixed; inset:0; display:grid; place-items:center}
-
-  /* floating seeds layer */
-  .seeds{position:fixed; inset:0; pointer-events:none; z-index:5}
-  .seed{
-    position:absolute; width:56px; height:56px; border-radius:50%;
-    display:grid; place-items:center; user-select:none; pointer-events:auto;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
-    transform:translate(-50%,-50%) scale(1);
-    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease), opacity .18s var(--ease);
-    animation:float var(--dur,8s) ease-in-out infinite var(--delay,0s);
-    will-change:transform;
-  }
-  .seed .e{font-size:28px}
-  @keyframes float{
-    0%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) scale(1); }
-    50%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px)) scale(1.02); }
-    100%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) scale(1); }
-  }
-  .seed:hover{ transform:translate(-50%,-50%) scale(1.12) rotate(-2deg); box-shadow:var(--shadow-strong); }
-
-  /* central circle */
-  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1/1; perspective:900px; z-index:20; display:grid; place-items:center }
-  .cauldron{
-    position:relative; width:100%; height:100%; border-radius:50%;
-    background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
-    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
-    outline:1px solid var(--ring2);
-    transition:transform .45s var(--ease), filter .45s var(--ease), box-shadow .3s var(--ease);
-    overflow:hidden;
-  }
-  .cauldron::before{
-    content:""; position:absolute; inset:-20%;
-    background:conic-gradient(from 0deg at 50% 50%, #ffffff22 0 10%, transparent 10% 40%, #ffffff18 40% 45%, transparent 45% 80%, #ffffff12 80% 85%, transparent 85% 100%);
-    animation:sweep 7.5s var(--ease) infinite; mix-blend-mode:screen; pointer-events:none;
-  }
-  @keyframes sweep{to{transform:rotate(360deg)}}
-
-  .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
-  .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
-  .cauldron.over .ring{ box-shadow:inset 0 0 0 9px #00c8ff15 }
-
-  /* placed inside */
-  .placed{
-    position:absolute; width:12vmin; max-width:72px; aspect-ratio:1/1; border-radius:50%;
-    display:grid; place-items:center; user-select:none; cursor:grab;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
-    transform:translate(-50%,-50%) scale(1);
-    transition:transform .25s var(--ease), filter .25s var(--ease), opacity .25s var(--ease);
-  }
-  .placed:active{cursor:grabbing}
-  .placed .e{font-size:clamp(24px, 8vmin, 44px); filter:drop-shadow(0 1px 0 #ffffffcc)}
-  .placed.dropin{ animation:drop .38s var(--ease) }
-  @keyframes drop{ 0%{transform:translate(-50%,-50%) scale(.72)} 70%{transform:translate(-50%,-50%) scale(1.14)} 100%{transform:translate(-50%,-50%) scale(1)} }
-  .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
-  @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
-
-  /* mixing + reveal */
-  .cauldron.mixing{ filter:saturate(1.2) contrast(1.02) }
-  .cauldron.mixing .placed{ animation:swirl 2.2s var(--ease) infinite, popZ 1.8s ease-in-out infinite; transform-origin:50% 50% -120px }
-  @keyframes swirl{ 0%{transform:translate(var(--tx),var(--ty)) translate(-50%,-50%) rotate(0deg) scale(1)} 50%{transform:translate(calc(var(--tx)*.6),calc(var(--ty)*.6)) translate(-50%,-50%) rotate(180deg) scale(1.06)} 100%{transform:translate(var(--tx),var(--ty)) translate(-50%,-50%) rotate(360deg) scale(1)} }
-  @keyframes popZ{ 0%{filter:drop-shadow(0 3px 10px #0001)} 50%{filter:drop-shadow(0 10px 24px #0002)} 100%{filter:drop-shadow(0 3px 10px #0001)} }
-
-  .image{ position:absolute; inset:0; border-radius:50%; overflow:hidden; opacity:0; transform:scale(.92); transition:opacity .6s var(--ease), transform .8s var(--ease) .1s; background-position:center; background-size:cover; background-repeat:no-repeat }
-  .image.revealed{ opacity:1; transform:scale(1) }
-  .cauldron.reveal{ animation:boom .9s var(--ease) }
-  @keyframes boom{ 0%{transform:scale(1)} 55%{transform:scale(1.22)} 100%{transform:scale(1.08)} }
-
-  /* bottom footer (glass) */
-  .footer{
-    position:fixed; left:16px; right:16px; bottom:16px; z-index:40;
-    display:flex; gap:12px; align-items:center; justify-content:center;
-    padding:12px; border-radius:20px;
-    background:linear-gradient(180deg, var(--glass), #ffffff3c);
-    backdrop-filter: blur(10px) saturate(1.1);
-    box-shadow:var(--shadow), inset 0 0 0 1px var(--glassStroke), inset 0 1px 0 var(--glassEdge);
-  }
-  .pill{
-    flex:1; min-width:120px; height:52px; border-radius:14px;
-    display:flex; align-items:center; gap:8px; padding:0 12px;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffdd, #ffffffb0 60%, #ffffff90 100%);
-    box-shadow: inset 0 1px 0 #ffffff, 0 1px 0 #00000005;
-  }
-  .input{
-    flex:1; height:36px; border-radius:10px; padding:6px 10px;
-    outline:none; border:none; background:#ffffffc0;
-    box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000010;
-    overflow:hidden; white-space:nowrap;
-  }
-  .input[contenteditable="true"]{ -webkit-user-select:text; user-select:text }
-  .add{
-    width:44px; height:44px; border-radius:12px; display:grid; place-items:center; cursor:pointer;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffff, #ffffffc8 60%, #ffffffa8 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
-    transition:transform .16s var(--ease);
-  }
-  .add:active{ transform:scale(.95) }
-
-  .cta{
-    width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffb8 60%, #ffffff90 100%);
-    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffff;
-    transition:transform .18s var(--ease), box-shadow .18s var(--ease);
-    overflow:hidden;
-  }
-  .cta:hover{ transform:scale(1.08) }
-  .cta:active{ transform:scale(.96) }
-  .cta .stack{ position:relative }
-  .cta .check{ font-size:30px; filter:drop-shadow(0 1px 0 #fff) }
-  .cta .arrow{ position:absolute; inset:0; display:grid; place-items:center }
-  .cta .arrow span{ display:block; transform:translateX(-10px); opacity:0; transition:transform .25s var(--ease), opacity .25s var(--ease) }
-  .cta:hover .arrow span{ transform:translateX(8px); opacity:.9 }
-  .cta.launch .arrow span{ animation:shoot .5s var(--ease) }
-  @keyframes shoot{ 0%{transform:translateX(0); opacity:1} 80%{transform:translateX(36px); opacity:0} 100%{transform:translateX(36px); opacity:0} }
-
-  ::selection{background:transparent}
+  body{margin:0;height:100%;display:grid;place-items:center;
+    background:radial-gradient(circle at 30% 30%,#f0faff,#fff0fa,#fafff0);}
+  .stage{position:relative;width:min(70vmin,500px);aspect-ratio:1/1;}
+  .cauldron{position:relative;width:100%;height:100%;border-radius:50%;
+    background:#ffffff66;box-shadow:0 4px 20px #0002,inset 0 2px 6px #fff9;
+    overflow:hidden;display:grid;place-items:center;}
+  .ring{position:absolute;inset:6%;border:2px dashed #0002;border-radius:50%;}
+  .placed{position:absolute;width:64px;height:64px;border-radius:50%;
+    display:grid;place-items:center;background:#fff8;
+    box-shadow:0 2px 6px #0002;cursor:grab;transform:translate(-50%,-50%);}
+  .placed .e{font-size:32px;}
+  .image{position:absolute;inset:0;border-radius:50%;background-size:cover;
+    background-position:center;opacity:0;transition:.6s ease;}
+  .image.revealed{opacity:1;}
+  .footer{margin-top:20px;display:flex;gap:12px;justify-content:center}
+  .input{min-width:200px;padding:6px 10px;border-radius:10px;border:1px solid #0002}
+  .cta{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;
+    font-size:26px;cursor:pointer;background:#fff;box-shadow:0 2px 6px #0003;}
 </style>
 </head>
 <body>
-  <div class="stage">
-    <div class="seeds" id="seeds"></div>
-
-    <div class="cauldron-wrap" id="wrap">
-      <div class="cauldron" id="cauldron" aria-label="drop area">
+  <div>
+    <div class="stage">
+      <div class="cauldron" id="cauldron">
         <div class="ring"></div>
         <div class="image" id="image"></div>
       </div>
     </div>
-  </div>
-
-  <!-- Bottom footer: input + CTA -->
-  <div class="footer">
-    <div class="pill">
-      <div class="input" id="freeInput" contenteditable="true" aria-label="input"></div>
-      <button class="add" id="addBtn" aria-label="add"><span style="font-size:22px">➕</span></button>
+    <div class="footer">
+      <input class="input" id="freeInput" placeholder="type text or emoji…"/>
+      <button class="cta" id="cta">✅➔</button>
     </div>
-    <button class="cta" id="cta" aria-label="generate">
-      <div class="stack">
-        <span class="check">✅</span>
-        <div class="arrow"><span>➡️</span></div>
-      </div>
-    </button>
   </div>
 
 <script>
-/* ==== CONFIG ==== */
-const EMOJI_POOL = ["😂","❤️","🤣","👍","😭","🙏","🥰","😍","😊","😅","🔥","👏","😁","💀","😉","✨","🎉","🤔","😎","🎨","🎵","🎧","📷","🎥","🧸","💎","🧠","🐶","🐱","🦊","🐼","🦄","🐧","🐸","🐢","🐙","🦋","🐝","🌸","🌼","🌻","🌿","🍃","🌊","🌈","⛰️","🏙️","☀️","🌙","⭐","⚡","💧","🍎","🍊","🍓","🍩","🍕","🍪"];
-const INITIAL_SEEDS = 20;
-const USE_STUB = true;
-
-/* emoji → words */
-const EMOJI_WORDS = new Map(Object.entries({
-  "😂":"laughing / joy","❤️":"a red heart","🤣":"hysterical laughter","👍":"approval / thumbs up","😭":"tears / crying",
-  "🙏":"gratitude","🥰":"love / affection","😍":"adoration","😊":"smile","😅":"relief",
-  "🔥":"fire / flames","✨":"sparkles","🎉":"confetti","💀":"a skull","😉":"a wink",
-  "🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🐧":"a penguin","🐸":"a frog","🐢":"a turtle","🐙":"an octopus",
-  "🦋":"a butterfly","🐝":"a bee","🌸":"a cherry blossom","🌼":"a daisy","🌻":"a sunflower","🌿":"green leaves","🍃":"leaf flutter",
-  "🌊":"ocean waves","🌈":"a rainbow","⛰️":"mountains","🏙️":"a city skyline",
-  "☀️":"sun","🌙":"moon","⭐":"stars","⚡":"lightning","💧":"a water drop",
-  "🍎":"an apple","🍊":"an orange","🍓":"strawberries","🍩":"a donut","🍕":"pizza","🍪":"a cookie",
-  "🎨":"paint","🎵":"a music note","🎧":"headphones","📷":"a camera","🎥":"a film camera","🧸":"a teddy bear","💎":"a diamond","🧠":"a brain"
-}));
-
-/* ==== DOM ==== */
-const wrap = document.getElementById('wrap');
 const cauldron = document.getElementById('cauldron');
 const imageEl = document.getElementById('image');
-const seedsEl = document.getElementById('seeds');
-const freeInput = document.getElementById('freeInput');
-const addBtn = document.getElementById('addBtn');
 const cta = document.getElementById('cta');
+const freeInput = document.getElementById('freeInput');
 
-/* ==== STATE ==== */
-let seeds = [];     // {id, emoji, x, y, fromInput}
-let placed = [];    // {id, emoji, x%, y%}
-let dragging = null;
-let styleHint = ""; // free text (non-emoji) gathered from input
-let inputEmojiInbox = new Set(); // emojis entered but not placed
+let placed = []; // {emoji, x%, y%}
 
-/* ==== INIT ==== */
-initSeeds();
-renderSeeds();
-window.addEventListener('resize', () => { initSeeds(true); renderSeeds(); }, {passive:true});
-
-/* ==== Footer input handlers ==== */
-addBtn.addEventListener('click', consumeInput);
-freeInput.addEventListener('keydown', e=>{
-  if (e.key==='Enter'){
-    e.preventDefault();
-    consumeInput();
-  }
+// place some starter emojis
+['🐶','❤️','🌈'].forEach((emo,i)=>{
+  const angle = (i/3)*2*Math.PI;
+  const x = 50 + 30*Math.cos(angle);
+  const y = 50 + 30*Math.sin(angle);
+  addPlaced(emo,x,y);
 });
 
-function consumeInput(){
-  const raw = freeInput.innerText || "";
-  const {emojis, text} = splitTextAndEmojis(raw);
-  styleHint = text.trim();
-  if (emojis.length){
-    spawnInputEmojis(emojis);
-  }
-  freeInput.innerText = "";
-  pulse(addBtn);
+function addPlaced(emoji,x,y){
+  const id = Math.random().toString(36).slice(2);
+  placed.push({id,emoji,x,y});
+  const n = document.createElement('div');
+  n.className='placed'; n.dataset.id=id;
+  n.style.left=x+'%'; n.style.top=y+'%';
+  n.innerHTML=`<span class="e">${emoji}</span>`;
+  cauldron.appendChild(n);
 }
 
-function splitTextAndEmojis(str){
-  // extract emojis
-  const chars = Array.from(str);
-  const emojis = [];
-  const plain = [];
-  for (const ch of chars){
-    if (isEmoji(ch)) emojis.push(ch); else plain.push(ch);
-  }
-  return {emojis, text: plain.join('').replace(/\s+/g,' ').trim()};
-}
-function isEmoji(ch){
-  // loose detection: treat pictographic range & emoji presentation as emoji
-  const cp = ch.codePointAt(0);
-  return /\p{Extended_Pictographic}/u.test(ch) || (cp>=0x1F300 && cp<=0x1FAFF);
+function buildPrompt(){
+  const parts = placed.map(p=>p.emoji);
+  const text = freeInput.value.trim();
+  return [...parts,text].filter(Boolean).join(' , ');
 }
 
-function spawnInputEmojis(list){
-  // drop near the bottom bar, non-overlapping, outside bowl
-  const rect = document.body.getBoundingClientRect();
-  const bowl = cauldron.getBoundingClientRect();
-  const seedR = 28, margin=10;
-  const minY = rect.height - 180, maxY = rect.height - 90;
-
-  for (const e of list){
-    inputEmojiInbox.add(e);
-    const x = rand(seedR+margin, rect.width - seedR - margin);
-    const y = rand(minY, maxY);
-    seeds.push({id:crypto.randomUUID(), emoji:e, x, y, fromInput:true});
-  }
-  renderSeeds();
+async function callPollinations(prompt){
+  const url = "https://image.pollinations.ai/prompt/" +
+              encodeURIComponent(prompt) + "?width=768&height=768";
+  const res = await fetch(url,{mode:"cors"});
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
-/* ==== SEEDS LAYOUT (random, non-overlap, NOT inside cauldron) ==== */
-function initSeeds(keepEmojis=false){
-  const rect = document.body.getBoundingClientRect();
-  const bowl = cauldron.getBoundingClientRect();
-  const R = bowl.width/2;
-  const cx = bowl.left + R, cy = bowl.top + R;
-  const margin = 10, seedR = 28;
-
-  const emojis = keepEmojis ? seeds.map(s=>s.emoji) : [];
-  if (!keepEmojis){
-    for(let i=0;i<INITIAL_SEEDS;i++) emojis.push(nextEmoji());
-  }
-
-  seeds = [];
-  const spots = [];
-  const maxTries = 1200;
-  let tries = 0, idx = 0;
-
-  while (idx<emojis.length && tries<maxTries){
-    tries++;
-    const x = rand(seedR+margin, rect.width - seedR - margin);
-    const y = rand(seedR+margin, rect.height - seedR - margin);
-    const d = Math.hypot(x - cx, y - cy);
-    if (d < R + seedR + 26) continue; // keep outside bowl
-    let ok = true;
-    for(const s of spots){ if (Math.hypot(x - s.x, y - s.y) < seedR*2 + 16){ ok = false; break; } }
-    if (!ok) continue;
-    spots.push({x,y});
-    seeds.push({id:crypto.randomUUID(), emoji:emojis[idx], x, y, fromInput:false});
-    idx++;
-  }
-}
-
-function renderSeeds(){
-  seedsEl.innerHTML = '';
-  for(const s of seeds){
-    const n = document.createElement('button');
-    n.className = 'seed';
-    n.style.left = s.x+'px'; n.style.top = s.y+'px';
-    n.style.setProperty('--delay', `${(Math.random()*-6).toFixed(2)}s`);
-    n.style.setProperty('--dur', `${(6+Math.random()*4).toFixed(2)}s`);
-    n.style.setProperty('--fx', `${(Math.random()*8-4).toFixed(1)}px`);
-    n.style.setProperty('--fy', `${(Math.random()*4-2).toFixed(1)}px`);
-    n.dataset.id = s.id;
-    n.innerHTML = `<span class="e">${s.emoji}</span>`;
-    seedsEl.appendChild(n);
-    n.addEventListener('pointerdown', e => startDragSeed(e, s.id));
-  }
-}
-
-/* ==== DRAGGING ==== */
-function startDragSeed(ev, id){
-  ev.preventDefault();
-  const idx = seeds.findIndex(s=>s.id===id);
-  if (idx<0) return;
-  const seedNode = [...seedsEl.children].find(n=>n.dataset.id===id);
-  seedNode.style.transition = 'transform .12s var(--ease)';
-  seedNode.style.transform = 'translate(-50%,-50%) scale(1.28)';
-  seedNode.style.boxShadow = 'var(--shadow-strong)';
-  tryVibrate(10);
-
-  const ghost = makeGhost(seeds[idx].emoji);
-  dragging = {type:'seed', idx, emoji:seeds[idx].emoji, fromInput: seeds[idx].fromInput, ghostEl:ghost};
-  pointerMove(ev);
-  window.addEventListener('pointermove', pointerMove);
-  window.addEventListener('pointerup', pointerUp);
-}
-function startDragPlaced(ev, id){
-  ev.preventDefault();
-  const idx = placed.findIndex(p=>p.id===id);
-  if (idx<0) return;
-  const ghost = makeGhost(placed[idx].emoji);
-  dragging = {type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
-  pointerMove(ev);
-  window.addEventListener('pointermove', pointerMove);
-  window.addEventListener('pointerup', pointerUp);
-}
-
-function makeGhost(emoji){
-  const g = document.createElement('div');
-  g.className='seed';
-  g.style.width='64px'; g.style.height='64px'; g.style.zIndex=30;
-  g.style.position='fixed'; g.style.transform='translate(-50%,-50%) scale(1.0)';
-  g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
-  g.innerHTML = `<span class="e">${emoji}</span>`;
-  document.body.appendChild(g);
-  return g;
-}
-
-function pointerMove(ev){
-  if (!dragging) return;
-  dragging.ghostEl.style.left = ev.clientX+'px';
-  dragging.ghostEl.style.top  = ev.clientY+'px';
-  const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
-  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
-  dragging.ghostEl.style.opacity = inside? '1' : '0.9';
-  cauldron.classList.toggle('over', inside);
-}
-
-function pointerUp(ev){
-  if (!dragging) return cleanupDrag();
-  const {inside, px, py} = coordsInCauldron(ev.clientX, ev.clientY);
-  cauldron.classList.remove('over');
-
-  if (inside){
-    if (dragging.type==='seed'){
-      const id = crypto.randomUUID();
-      placed.push({id, emoji:dragging.emoji, x:px, y:py});
-      renderPlaced(true);
-      // if this emoji came from input inbox, mark as used
-      if (dragging.fromInput) inputEmojiInbox.delete(dragging.emoji);
-      // replace that seed's emoji (seed stays floating)
-      const idx = dragging.idx;
-      seeds[idx].emoji = nextEmoji();
-      seeds[idx].fromInput = false;
-      const node = [...seedsEl.children][idx];
-      node.innerHTML = `<span class="e">${seeds[idx].emoji}</span>`;
-      gentlePop(); tryVibrate(20);
-    } else {
-      placed[dragging.idx].x = px; placed[dragging.idx].y = py;
-      renderPlaced(false); gentlePop();
-    }
-  } else {
-    // cancel: if dragging placed → remove
-    if (dragging.type==='placed'){
-      const id = placed[dragging.idx].id;
-      const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
-      if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); }
-      placed.splice(dragging.idx,1);
-      tryVibrate(15);
-    }
-  }
-
-  cleanupDrag();
-}
-
-function cleanupDrag(){
-  window.removeEventListener('pointermove', pointerMove);
-  window.removeEventListener('pointerup', pointerUp);
-  if (dragging?.ghostEl) dragging.ghostEl.remove();
-  dragging = null;
-}
-
-/* coords inside bowl */
-function coordsInCauldron(cx, cy){
-  const r = cauldron.getBoundingClientRect();
-  const mx = cx - (r.left + r.width/2);
-  const my = cy - (r.top  + r.height/2);
-  const dist = Math.hypot(mx,my);
-  const inside = dist <= r.width/2;
-  const px = ((mx + r.width/2) / r.width) * 100;
-  const py = ((my + r.height/2) / r.height) * 100;
-  return {inside, px: clamp(px,5,95), py: clamp(py,5,95)};
-}
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-
-/* ==== placed render ==== */
-function renderPlaced(playDrop=false){
-  Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
-  for (const p of placed){
-    const n = document.createElement('div');
-    n.className='placed'; n.dataset.id=p.id;
-    n.style.left=p.x+'%'; n.style.top=p.y+'%';
-    n.style.setProperty('--tx', `${(p.x-50)}%`);
-    n.style.setProperty('--ty', `${(p.y-50)}%`);
-    n.innerHTML=`<span class="e">${p.emoji}</span>`;
-    if (playDrop) n.classList.add('dropin');
-    n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id));
-    cauldron.appendChild(n);
-  }
-}
-
-/* ==== CTA ==== */
 cta.addEventListener('click', async ()=>{
-  if (placed.length===0 && !styleHint && inputEmojiInbox.size===0){
-    cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}], {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'});
-    return;
-  }
-  cta.classList.add('launch');
-
-  const prompt = buildPrompt(placed, styleHint, [...inputEmojiInbox]);
-  console.log('Prompt → demo.ai:\n', prompt);
-
-  cauldron.classList.add('mixing');
-
+  const prompt = buildPrompt();
+  console.log("Prompt →",prompt);
+  imageEl.classList.remove('revealed');
+  imageEl.style.backgroundImage='';
   try{
-    const imgURL = await callDemoAI(prompt, placed);
+    const imgURL = await callPollinations(prompt);
     imageEl.style.backgroundImage = `url(${imgURL})`;
     imageEl.classList.add('revealed');
-    cauldron.classList.remove('mixing');
-    cauldron.classList.add('reveal');
-    confettiPop();
-    setTimeout(()=> cauldron.classList.remove('reveal'), 980);
-  }catch(e){
-    cauldron.classList.remove('mixing');
-  }finally{
-    setTimeout(()=>cta.classList.remove('launch'), 600);
-  }
+  }catch(e){ console.error(e); }
 });
-
-/* ==== prompt ==== */
-function buildPrompt(items, hintText, looseEmojis){
-  const parts = items.map(p=>{
-    const dx=p.x-50, dy=p.y-50;
-    const angle=(Math.atan2(dy,dx)*180/Math.PI+360)%360;
-    const where=clockFromAngle(angle);
-    const what=EMOJI_WORDS.get(p.emoji)||`the ${p.emoji} emoji`;
-    return `${what} at the ${where}`;
-  });
-
-  const extras = [];
-  if (looseEmojis && looseEmojis.length){
-    for (const e of looseEmojis){
-      const w = EMOJI_WORDS.get(e) || `the ${e} emoji`;
-      extras.push(`${w} (unplaced element)`);
-    }
-  }
-  const textHint = hintText ? `Also reflect: “${hintText}”.` : '';
-
-  return `Combine: ${parts.join(', ')}${parts.length&&extras.length?', ':''}${extras.join(', ')}. ${textHint} Harmonize styles naturally. Soft lighting, balanced composition. No words, no borders.`;
-}
-function clockFromAngle(a){
-  const sectors=[{t:"3 o’clock (right)",v:0},{t:"2 o’clock (upper-right)",v:45},{t:"12 o’clock (top)",v:90},{t:"10 o’clock (upper-left)",v:135},{t:"9 o’clock (left)",v:180},{t:"8 o’clock (lower-left)",v:225},{t:"6 o’clock (bottom)",v:270},{t:"4 o’clock (lower-right)",v:315},{t:"3 o’clock (right)",v:360}];
-  let best=sectors[0].t,min=999; for(const s of sectors){const d=Math.abs(a-s.v); if(d<min){min=d; best=s.t}}
-  return best;
-}
-
-/* ==== demo.ai stub ==== */
-async function callDemoAI(prompt, items){
-  if(!USE_STUB){ /* wire your endpoint here */ }
-  await wait(1200+Math.random()*900);
-  const size=1024, c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d');
-  const g=ctx.createRadialGradient(size*.3,size*.3,size*.1,size*.6,size*.7,size*.9);
-  g.addColorStop(0,'#fffdfb'); g.addColorStop(1,'#f4fbff'); ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
-  ctx.font=`${Math.floor(size*0.12)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  items.forEach((p,i)=>{
-    const x=p.x/100*size, y=p.y/100*size;
-    const r=size*(0.08+0.05*Math.sin(i*1.2+0.7));
-    const grd=ctx.createRadialGradient(x,y,r*.2,x,y,r);
-    grd.addColorStop(0, rgba(180+(i*17)%60,200,(i*41)%120, .28));
-    grd.addColorStop(1, rgba(180,200,220,.02));
-    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-    ctx.save(); ctx.globalAlpha=.18; ctx.translate(x,y); ctx.rotate(((i*37)%360)*Math.PI/180); ctx.fillText(p.emoji,0,0); ctx.restore();
-  });
-  return c.toDataURL('image/png');
-}
-
-/* ==== utils ==== */
-function nextEmoji(){ return EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)] }
-function rand(a,b){ return a + Math.random()*(b-a) }
-function wait(ms){ return new Promise(r=>setTimeout(r,ms)) }
-function rgba(r,g,b,a){ return `rgba(${r|0},${g|0},${b|0},${a})` }
-function gentlePop(){
-  cauldron.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'});
-}
-function tryVibrate(ms){ if (navigator.vibrate) try{ navigator.vibrate(ms) }catch{} }
-function pulse(el){
-  el.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'});
-}
-
-function confettiPop(){
-  const N=24, rect=cauldron.getBoundingClientRect();
-  for(let i=0;i<N;i++){
-    const dot=document.createElement('div');
-    const x=rect.left+rect.width/2, y=rect.top+rect.height/2;
-    Object.assign(dot.style,{position:'fixed',left:x+'px',top:y+'px',width:'10px',height:'10px',borderRadius:'50%',background:`hsl(${Math.random()*360},90%,70%)`,boxShadow:'0 4px 12px #0002',pointerEvents:'none',transform:'translate(-50%,-50%)',zIndex:40});
-    document.body.appendChild(dot);
-    const ang=Math.random()*Math.PI*2, dist=80+Math.random()*140, tx=Math.cos(ang)*dist, ty=Math.sin(ang)*dist;
-    dot.animate([{transform:'translate(-50%,-50%) scale(1)',opacity:1},{transform:`translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(.6)`,opacity:0}],{duration:700+Math.random()*300,easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish=()=>dot.remove();
-  }
-}
-
-/* iOS pinch-zoom guard */
-document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
 </body>
 </html>
