@@ -51,13 +51,18 @@
   .seed:hover{ transform:translate(-50%,-50%) scale(1.12) rotate(-2deg); box-shadow:var(--shadow-strong); }
 
   /* central circle */
-  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1/1; perspective:900px; z-index:10 }
+  .cauldron-wrap{
+    position:relative; width:min(64vmin,520px); aspect-ratio:1/1;
+    perspective:900px; z-index:20; /* above seeds */
+    display:grid; place-items:center;
+  }
   .cauldron{
-    position:relative; width:100%; height:100%; border-radius:50%; overflow:hidden;
+    position:relative; width:100%; height:100%; border-radius:50%;
     background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
     box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
     outline:1px solid var(--ring2);
     transition:transform .45s var(--ease), filter .45s var(--ease), box-shadow .3s var(--ease);
+    overflow:hidden;
   }
   .cauldron::before{
     content:""; position:absolute; inset:-20%;
@@ -83,22 +88,26 @@
   .placed .e{font-size:clamp(24px, 8vmin, 44px); filter:drop-shadow(0 1px 0 #ffffffcc)}
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{ 0%{transform:translate(-50%,-50%) scale(.72)} 70%{transform:translate(-50%,-50%) scale(1.14)} 100%{transform:translate(-50%,-50%) scale(1)} }
+  .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
+  @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
 
-  /* CTA outside the circle */
+  /* CTA: now SIBLING of the bowl, so not clipped */
   .cta{
-    position:absolute; top:50%; left:100%; transform:translate(22px,-50%) scale(1);
-    width:68px; height:68px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none;
+    position:absolute;
+    right:-6px; bottom:-6px; /* slightly outside */
+    width:72px; height:72px; border-radius:50%;
+    display:grid; place-items:center; cursor:pointer; user-select:none;
     background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffb8 60%, #ffffff90 100%);
     box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffff;
     transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease);
-    overflow:hidden;
+    overflow:hidden; z-index:30;
   }
-  .cta:hover{ transform:translate(22px,-50%) scale(1.08) }
-  .cta:active{ transform:translate(22px,-50%) scale(.96) }
-  .cta .stack{ position:relative; }
+  .cta:hover{ transform:scale(1.08) }
+  .cta:active{ transform:scale(.96) }
+  .cta .stack{ position:relative }
   .cta .check{ font-size:30px; filter:drop-shadow(0 1px 0 #fff) }
-  .cta .arrow{ position:absolute; left:0; top:0; right:0; bottom:0; display:grid; place-items:center; }
-  .cta .arrow span{ display:block; transform:translateX(-10px); opacity:.0; transition:transform .25s var(--ease), opacity .25s var(--ease) }
+  .cta .arrow{ position:absolute; inset:0; display:grid; place-items:center }
+  .cta .arrow span{ display:block; transform:translateX(-10px); opacity:0; transition:transform .25s var(--ease), opacity .25s var(--ease) }
   .cta:hover .arrow span{ transform:translateX(8px); opacity:.9 }
   .cta.launch .arrow span{ animation:shoot .5s var(--ease) }
   @keyframes shoot{ 0%{transform:translateX(0); opacity:1} 80%{transform:translateX(36px); opacity:0} 100%{transform:translateX(36px); opacity:0} }
@@ -122,20 +131,20 @@
     <!-- floating seeds around -->
     <div class="seeds" id="seeds"></div>
 
-    <!-- central circle -->
+    <!-- central circle + CTA (CTA is sibling, not clipped) -->
     <div class="cauldron-wrap" id="wrap">
       <div class="cauldron" id="cauldron" aria-label="drop area">
         <div class="ring"></div>
         <div class="image" id="image"></div>
-
-        <!-- CTA outside the circle -->
-        <button class="cta" id="cta" aria-label="generate">
-          <div class="stack">
-            <span class="check">✅</span>
-            <div class="arrow"><span>➡️</span></div>
-          </div>
-        </button>
       </div>
+
+      <!-- CTA outside the circle -->
+      <button class="cta" id="cta" aria-label="generate">
+        <div class="stack">
+          <span class="check">✅</span>
+          <div class="arrow"><span>➡️</span></div>
+        </div>
+      </button>
     </div>
   </div>
 
@@ -145,10 +154,10 @@ const EMOJI_POOL = ["😂","❤️","🤣","👍","😭","🙏","🥰","😍","�
 const INITIAL_SEEDS = 20;
 const USE_STUB = true;
 
-/* minimal emoji → words */
+/* minimal emoji → words (prompt specifics) */
 const EMOJI_WORDS = new Map(Object.entries({
   "😂":"laughing / joy","❤️":"a red heart","🤣":"hysterical laughter","👍":"approval / thumbs up","😭":"tears / crying",
-  "🙏":"prayer / gratitude","🥰":"love / affection","😍":"adoration","😊":"smile","😅":"relief",
+  "🙏":"gratitude","🥰":"love / affection","😍":"adoration","😊":"smile","😅":"relief",
   "🔥":"fire / flames","✨":"sparkles","🎉":"confetti","💀":"a skull","😉":"a wink",
   "🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🐧":"a penguin","🐸":"a frog","🐢":"a turtle","🐙":"an octopus",
   "🦋":"a butterfly","🐝":"a bee","🌸":"a cherry blossom","🌼":"a daisy","🌻":"a sunflower","🌿":"green leaves","🍃":"leaf flutter",
@@ -195,7 +204,6 @@ function initSeeds(keepEmojis=false){
 
   while (idx<emojis.length && tries<maxTries){
     tries++;
-    // candidate anywhere with safe inset
     const x = rand(seedR+margin, rect.width - seedR - margin);
     const y = rand(seedR+margin, rect.height - seedR - margin);
 
@@ -216,8 +224,6 @@ function initSeeds(keepEmojis=false){
 
 function renderSeeds(){
   seedsEl.innerHTML = '';
-  const rect = document.body.getBoundingClientRect();
-
   for(const s of seeds){
     const n = document.createElement('button');
     n.className = 'seed';
@@ -239,8 +245,6 @@ function startDragSeed(ev, id){
   const idx = seeds.findIndex(s=>s.id===id);
   if (idx<0) return;
   const seedNode = [...seedsEl.children].find(n=>n.dataset.id===id);
-
-  // Visual lift
   seedNode.style.transition = 'transform .12s var(--ease)';
   seedNode.style.transform = 'translate(-50%,-50%) scale(1.28)';
   seedNode.style.boxShadow = 'var(--shadow-strong)';
@@ -265,7 +269,7 @@ function startDragPlaced(ev, id){
 
 function makeGhost(emoji){
   const g = document.createElement('div');
-  g.className='seed'; // reuse style for heft
+  g.className='seed';
   g.style.width='64px'; g.style.height='64px'; g.style.zIndex=30;
   g.style.position='fixed'; g.style.transform='translate(-50%,-50%) scale(1.0)';
   g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
@@ -278,9 +282,9 @@ function pointerMove(ev){
   if (!dragging) return;
   dragging.ghostEl.style.left = ev.clientX+'px';
   dragging.ghostEl.style.top  = ev.clientY+'px';
-
   const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
   dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
+  dragging.ghostEl.style.opacity = inside? '1' : '0.9';
   cauldron.classList.toggle('over', inside);
 }
 
@@ -291,7 +295,6 @@ function pointerUp(ev){
 
   if (inside){
     if (dragging.type==='seed'){
-      // add new placed
       const id = crypto.randomUUID();
       placed.push({id, emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
@@ -299,21 +302,28 @@ function pointerUp(ev){
       seeds[dragging.idx].emoji = nextEmoji();
       const node = [...seedsEl.children][dragging.idx];
       node.innerHTML = `<span class="e">${seeds[dragging.idx].emoji}</span>`;
-      // seed snapback pop
-      gentlePop();
-      tryVibrate(20);
-    }else{
+      gentlePop(); tryVibrate(20);
+    } else {
       placed[dragging.idx].x = px; placed[dragging.idx].y = py;
       renderPlaced(false);
       gentlePop();
     }
-  }else{
-    // throwback bounce
-    dragging.ghostEl.animate(
-      [{transform:'translate(-50%,-50%) scale(1.1)'},{transform:'translate(-50%,-50%) scale(.96)'},{transform:'translate(-50%,-50%) scale(1)'}],
-      {duration:220, easing:'cubic-bezier(.3,.8,.2,1)'}
-    );
+  } else {
+    // CANCEL GESTURE: if dragging a placed one and dropped outside → remove
+    if (dragging.type==='placed'){
+      const id = placed[dragging.idx].id;
+      // little puff + fade
+      const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
+      if (node){
+        node.classList.add('fadeout');
+        setTimeout(()=> node.remove(), 260);
+      }
+      placed.splice(dragging.idx,1);
+      tryVibrate(15);
+    }
+    // if it was a seed, just snap back (no change)
   }
+
   cleanupDrag();
 }
 
@@ -328,7 +338,7 @@ function cleanupDrag(){
 function coordsInCauldron(cx, cy){
   const r = cauldron.getBoundingClientRect();
   const mx = cx - (r.left + r.width/2);
-  const my = cy - (r.top + r.height/2);
+  const my = cy - (r.top  + r.height/2);
   const dist = Math.hypot(mx,my);
   const inside = dist <= r.width/2;
   const px = ((mx + r.width/2) / r.width) * 100;
