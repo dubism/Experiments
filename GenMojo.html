@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Emoji → Image · Demo</title>
+<style>
+  :root{
+    --bg1:#e9f3ff; --bg2:#ffe9f7; --bg3:#e9fff6; --bg4:#f7f3ff;
+    --tint1:#7fd1ff40; --tint2:#ff86d640; --tint3:#7dffcc40; --tint4:#b59bff40;
+    --ink:#0c1016;
+    --glass:#ffffff55; --glass2:#ffffff2a;
+    --ring:#ffffff88; --ring2:#00000012;
+    --seed:#ffffffaa; --seedEdge:#00000010;
+    --ok:#00ce72;
+    --shadow: 0 8px 24px #0000001e, 0 2px 8px #00000012;
+    --shadow-strong: 0 14px 40px #00000026, 0 4px 16px #0000001f;
+    --ease: cubic-bezier(.2,.8,.2,1);
+  }
+
+  /* Iridescent, multi-point, very light background with subtle motion */
+  html,body{height:100%;margin:0}
+  body{
+    color:var(--ink);
+    background:
+      radial-gradient(60vmax 60vmax at 15% 10%, var(--tint1), transparent 60%),
+      radial-gradient(70vmax 60vmax at 85% 20%, var(--tint2), transparent 60%),
+      radial-gradient(60vmax 70vmax at 20% 85%, var(--tint3), transparent 60%),
+      radial-gradient(70vmax 70vmax at 80% 85%, var(--tint4), transparent 60%),
+      conic-gradient(from 0deg at 50% 50%, var(--bg1), var(--bg2), var(--bg3), var(--bg4), var(--bg1));
+    background-attachment: fixed;
+    animation: hue 24s linear infinite alternate;
+    overflow:hidden;
+    touch-action:none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
+  }
+  @keyframes hue { to { filter: hue-rotate(12deg) saturate(1.05); } }
+
+  .stage{
+    position:fixed; inset:0; display:grid; place-items:center;
+  }
+
+  /* Central circle (cauldron) */
+  .cauldron-wrap{
+    position:relative;
+    width:min(64vmin, 520px); aspect-ratio:1/1;
+    display:grid; place-items:center;
+    perspective: 900px;
+  }
+  .cauldron{
+    position:relative;
+    width:100%; height:100%; border-radius:50%;
+    background: radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff10 75%, #ffffff06 100%);
+    box-shadow: var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
+    outline: 1px solid var(--ring2);
+    transition: transform .6s var(--ease), filter .6s var(--ease);
+    overflow:hidden;
+  }
+  /* Subtle rolling highlight */
+  .cauldron::before{
+    content:""; position:absolute; inset:-20%;
+    background: conic-gradient(from 0deg at 50% 50%, #ffffff22 0 10%, transparent 10% 40%, #ffffff18 40% 45%, transparent 45% 80%, #ffffff12 80% 85%, transparent 85% 100%);
+    animation: sweep 7.5s var(--ease) infinite;
+    mix-blend-mode: screen; pointer-events:none;
+  }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+
+  /* Inner ring hint */
+  .ring{
+    position:absolute; inset:6%; border-radius:50%;
+    border:1px dashed #00000018;
+    outline:1px solid #ffffff80; outline-offset:-1px;
+    box-shadow: inset 0 0 0 6px #ffffff10;
+    pointer-events:none;
+  }
+
+  /* Positioned emojis inside the cauldron */
+  .placed{
+    position:absolute; width:12vmin; max-width:72px; aspect-ratio:1/1; border-radius:50%;
+    display:grid; place-items:center; user-select:none;
+    background: radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
+    box-shadow: var(--shadow), inset 0 1px 0 #ffffffa8;
+    transform: translate(-50%, -50%) scale(1);
+    transition: transform .25s var(--ease), box-shadow .25s var(--ease), opacity .25s var(--ease), filter .25s var(--ease);
+    cursor: grab;
+  }
+  .placed:active{ cursor:grabbing; }
+  .placed .e{ font-size:clamp(24px, 8vmin, 44px); filter: drop-shadow(0 1px 0 #ffffffcc); }
+
+  /* Draggable seed emoji buttons around */
+  .seeds{ position:absolute; inset:0; pointer-events:none; }
+  .seed{
+    position:absolute; width:56px; height:56px; border-radius:50%;
+    display:grid; place-items:center; pointer-events:auto; user-select:none;
+    background: radial-gradient(120% 120% at 30% 30%, var(--seed), #ffffff80 60%, #ffffff60 100%);
+    box-shadow: var(--shadow), inset 0 1px 0 #ffffffb0, 0 0 0 1px var(--seedEdge);
+    transform: translate(-50%, -50%) scale(1);
+    transition: transform .25s var(--ease), box-shadow .25s var(--ease), filter .25s var(--ease);
+    will-change: transform;
+  }
+  .seed:hover{ transform: translate(-50%, -50%) scale(1.06); }
+  .seed:active{ transform: translate(-50%, -50%) scale(1.1) rotate(-2deg); box-shadow: var(--shadow-strong); }
+  .seed .e{ font-size:28px; }
+
+  /* Drag “ghost” */
+  .ghost{
+    position:fixed; width:64px; height:64px; border-radius:50%;
+    display:grid; place-items:center; pointer-events:none; z-index:20;
+    background: radial-gradient(120% 120% at 30% 30%, #ffffff, #ffffffcc 60%, #ffffffaa 100%);
+    box-shadow: var(--shadow-strong), inset 0 1px 0 #ffffff;
+    transform: translate(-50%, -50%) scale(1);
+    transition: transform .12s var(--ease);
+  }
+  .ghost .e{ font-size:30px; }
+
+  /* CTA check button */
+  .cta{
+    position:absolute; right:6%; bottom:6%;
+    width:64px; height:64px; border-radius:50%; display:grid; place-items:center;
+    background: radial-gradient(120% 120% at 30% 30%, #ffffffd0, #ffffffa0 60%, #ffffff80 100%);
+    box-shadow: var(--shadow-strong), inset 0 1px 0 #ffffff;
+    transition: transform .2s var(--ease), filter .2s var(--ease), box-shadow .2s var(--ease);
+    cursor:pointer; user-select:none;
+  }
+  .cta:hover{ transform: scale(1.05); }
+  .cta:active{ transform: scale(0.97); box-shadow: var(--shadow); }
+  .cta .e{ font-size:30px; }
+  .cta.ok { background: radial-gradient(120% 120% at 30% 30%, #eafff5, #d6ffef 60%, #c7ffe8 100%); }
+  .cta.ok .e{ filter: drop-shadow(0 1px 0 #fff); }
+
+  /* Mixing state */
+  .cauldron.mixing{ filter: saturate(1.2) contrast(1.02); }
+  .cauldron.mixing .placed{
+    animation: swirl 2.2s var(--ease) infinite, popZ 1.8s ease-in-out infinite;
+    transform-origin: 50% 50% -120px;
+  }
+  @keyframes swirl {
+    0%{ transform: translate(var(--tx), var(--ty)) translate(-50%, -50%) rotate(0deg) scale(1); }
+    50%{ transform: translate(calc(var(--tx)*.6), calc(var(--ty)*.6)) translate(-50%, -50%) rotate(180deg) scale(1.06); }
+    100%{ transform: translate(var(--tx), var(--ty)) translate(-50%, -50%) rotate(360deg) scale(1); }
+  }
+  @keyframes popZ {
+    0%{ filter: drop-shadow(0 3px 10px #00000010); }
+    50%{ filter: drop-shadow(0 10px 24px #00000020); }
+    100%{ filter: drop-shadow(0 3px 10px #00000010); }
+  }
+
+  /* Image reveal: circle stays a circle, grows, then settles */
+  .image{
+    position:absolute; inset:0; border-radius:50%; overflow:hidden;
+    opacity:0; transform: scale(0.92);
+    transition: opacity .6s var(--ease), transform .8s var(--ease) .1s;
+    background-position:center; background-size: cover; background-repeat:no-repeat;
+  }
+  .image.revealed{ opacity:1; transform: scale(1); }
+  .cauldron.reveal{ animation: boom .9s var(--ease); }
+  @keyframes boom{
+    0%{ transform: scale(1); }
+    55%{ transform: scale(1.22); }
+    100%{ transform: scale(1.08); }
+  }
+
+  /* Ambient bob on seeds */
+  .seed{ animation: bob 6s ease-in-out infinite; }
+  .seed:nth-child(odd){ animation-delay: -3s; }
+  @keyframes bob { 50% { transform: translate(-50%, -50%) translateY(-4px) scale(1.02);} }
+
+  /* Hide any accidental text selection caret */
+  ::selection{ background: transparent; }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="cauldron-wrap" id="wrap">
+      <div class="cauldron" id="cauldron" aria-label="drop area">
+        <div class="ring"></div>
+        <div class="image" id="image"></div>
+        <button class="cta" id="cta" aria-label="generate"><span class="e">✅</span></button>
+        <div class="seeds" id="seeds"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ====== CONFIG ====== */
+
+// Pool: start with “most used” + a wider tail to keep variety.
+const EMOJI_POOL = [
+  "😂","❤️","🤣","👍","😭","🙏","🥰","😍","😊","😊","😅","🔥","👏","😁","💀","😉","💕","🙄","😢","👌",
+  "🫶","🙂","😆","🤦","✨","🤔","😎","🎉","😮","😳","🥳","🤯","😴","🤤","🤩","🤗","👀","😐","😇",
+  "🐶","🐱","🦊","🐼","🦄","🐧","🐸","🐢","🐙","🦋","🐝","🌸","🌼","🌻","🌿","🍃","🌊","🌈","⛰️","🏙️",
+  "☀️","🌙","⭐","⚡","🔥","💧","🌪️","🌫️","🧊","🍎","🍊","🍉","🍓","🍩","🍔","🍣","🍕","🍪",
+  "🎨","🎵","🎧","🎹","🎷","🎸","🥁","📷","🎥","🕹️","🧸","🪩","💎","🧠","🫀","🫁","⚙️","🧪","🔮","🧿"
+];
+const INITIAL_SEEDS = 16; // around the circle
+const USE_STUB = true;    // set false if you wire a real endpoint
+
+// Minimal mapping from emoji → words (only emoji-driven specifics)
+const EMOJI_WORDS = new Map(Object.entries({
+  "😂":"laughing / joy","❤️":"a red heart","🤣":"hysterical laughter","👍":"approval / thumbs up","😭":"tears / crying",
+  "🙏":"prayer / gratitude","🥰":"love / affection","😍":"love / adoration","😊":"smile","😅":"relief",
+  "🔥":"fire / flames","✨":"sparkles / glitter","🎉":"confetti / celebration","💀":"skull","😉":"wink",
+  "🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🐧":"a penguin","🐸":"a frog","🐢":"a turtle","🐙":"an octopus",
+  "🦋":"a butterfly","🐝":"a bee","🌸":"a cherry blossom","🌼":"a daisy","🌻":"a sunflower","🌿":"green leaves","🍃":"leaf flutter",
+  "🌊":"ocean waves","🌈":"a rainbow","⛰️":"mountains","🏙️":"a city skyline",
+  "☀️":"sun","🌙":"moon","⭐":"stars","⚡":"lightning","💧":"a drop of water","🌪️":"a tornado","🌫️":"fog","🧊":"ice",
+  "🍎":"an apple","🍊":"an orange","🍉":"a watermelon","🍓":"strawberries","🍩":"a donut","🍔":"a burger","🍣":"sushi","🍕":"pizza","🍪":"a cookie",
+  "🎨":"paint / palette","🎵":"music note","🎧":"headphones","🎹":"piano","🎷":"saxophone","🎸":"guitar","🥁":"drums",
+  "📷":"a camera","🎥":"a film camera","🕹️":"a game controller","🧸":"a teddy bear","🪩":"a disco ball","💎":"a diamond",
+  "🧠":"a brain","🫀":"a heart (anatomical)","🫁":"lungs","⚙️":"gears","🧪":"a beaker","🔮":"a crystal ball","🧿":"an eye charm"
+}));
+
+/* ====== DOM ====== */
+const wrap = document.getElementById('wrap');
+const cauldron = document.getElementById('cauldron');
+const seedsEl = document.getElementById('seeds');
+const cta = document.getElementById('cta');
+const imageEl = document.getElementById('image');
+
+/* ====== STATE ====== */
+let seeds = [];           // {id, emoji}
+let placed = [];          // {id, emoji, x, y} where x,y are % inside cauldron (0..100)
+let dragging = null;      // current drag {type:'seed'|'placed', idx, emoji, ghostEl}
+let raf = null;
+
+/* ====== INIT ====== */
+initSeeds();
+layoutSeeds();
+
+window.addEventListener('resize', layoutSeeds, {passive:true});
+
+/* ====== SEEDS ====== */
+function initSeeds(){
+  seeds = [];
+  seedsEl.innerHTML = '';
+  for (let i=0;i<INITIAL_SEEDS;i++){
+    const e = nextEmoji();
+    const id = crypto.randomUUID();
+    seeds.push({id, emoji:e});
+    const node = document.createElement('button');
+    node.className = 'seed';
+    node.dataset.id = id;
+    node.innerHTML = `<span class="e">${e}</span>`;
+    seedsEl.appendChild(node);
+    node.addEventListener('pointerdown', e => startDragSeed(e, id));
+  }
+}
+function layoutSeeds(){
+  const rect = wrap.getBoundingClientRect();
+  const cx = rect.width/2, cy = rect.height/2;
+  const radius = Math.min(rect.width, rect.height) * 0.42; // ring radius
+  const nodes = Array.from(seedsEl.children);
+  nodes.forEach((node, i)=>{
+    const angle = (i / nodes.length) * Math.PI*2 - Math.PI/2;
+    const x = cx + radius * Math.cos(angle);
+    const y = cy + radius * Math.sin(angle);
+    node.style.left = `${x}px`;
+    node.style.top  = `${y}px`;
+  });
+}
+
+/* ====== DRAGGING (seed → cauldron) ====== */
+function startDragSeed(ev, id){
+  ev.preventDefault();
+  const seedIdx = seeds.findIndex(s=>s.id===id);
+  if (seedIdx<0) return;
+  const emoji = seeds[seedIdx].emoji;
+  const ghost = makeGhost(emoji);
+  dragging = {type:'seed', idx: seedIdx, emoji, ghostEl: ghost};
+  pointerMove(ev);
+  window.addEventListener('pointermove', pointerMove);
+  window.addEventListener('pointerup', pointerUp);
+}
+function startDragPlaced(ev, id){
+  ev.preventDefault();
+  const idx = placed.findIndex(p=>p.id===id);
+  if (idx<0) return;
+  const emoji = placed[idx].emoji;
+  const ghost = makeGhost(emoji);
+  dragging = {type:'placed', idx, emoji, ghostEl: ghost};
+  pointerMove(ev);
+  window.addEventListener('pointermove', pointerMove);
+  window.addEventListener('pointerup', pointerUp);
+}
+function makeGhost(emoji){
+  const g = document.createElement('div');
+  g.className = 'ghost';
+  g.innerHTML = `<span class="e">${emoji}</span>`;
+  document.body.appendChild(g);
+  return g;
+}
+function pointerMove(ev){
+  if (!dragging) return;
+  dragging.ghostEl.style.left = ev.clientX+'px';
+  dragging.ghostEl.style.top  = ev.clientY+'px';
+  // gentle scale-in while over cauldron
+  const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
+  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.08:1})`;
+}
+function pointerUp(ev){
+  if (!dragging) return cleanupDrag();
+  const x = ev.clientX, y=ev.clientY;
+  const {inside, px, py} = coordsInCauldron(x,y);
+  if (inside){
+    if (dragging.type==='seed'){
+      // place new
+      const id = crypto.randomUUID();
+      placed.push({id, emoji: dragging.emoji, x:px, y:py});
+      renderPlaced();
+      // replace seed with new random emoji
+      seeds[dragging.idx].emoji = nextEmoji();
+      seedsEl.children[dragging.idx].innerHTML = `<span class="e">${seeds[dragging.idx].emoji}</span>`;
+    } else {
+      // move existing
+      placed[dragging.idx].x = px; placed[dragging.idx].y = py;
+      renderPlaced();
+    }
+    gentlePop();
+  }
+  cleanupDrag();
+}
+function cleanupDrag(){
+  window.removeEventListener('pointermove', pointerMove);
+  window.removeEventListener('pointerup', pointerUp);
+  if (dragging && dragging.ghostEl) dragging.ghostEl.remove();
+  dragging = null;
+}
+function coordsInCauldron(cx, cy){
+  const r = cauldron.getBoundingClientRect();
+  const mx = cx - (r.left + r.width/2);
+  const my = cy - (r.top  + r.height/2);
+  const dist = Math.hypot(mx,my);
+  const inside = dist <= r.width/2;
+  // return % coords relative to cauldron box (0..100)
+  const px = ((mx + r.width/2) / r.width) * 100;
+  const py = ((my + r.height/2) / r.height) * 100;
+  return {inside, px: clamp(px,5,95), py: clamp(py,5,95)};
+}
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+/* ====== RENDER PLACED ====== */
+function renderPlaced(){
+  // remove old nodes first (except ring, image, cta, seeds)
+  Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
+  for (const p of placed){
+    const n = document.createElement('div');
+    n.className = 'placed'; n.dataset.id = p.id;
+    n.style.left = p.x+'%'; n.style.top = p.y+'%';
+    n.style.setProperty('--tx', `${(p.x-50)*1.0}%`);
+    n.style.setProperty('--ty', `${(p.y-50)*1.0}%`);
+    n.innerHTML = `<span class="e">${p.emoji}</span>`;
+    n.addEventListener('pointerdown', e => startDragPlaced(e, p.id));
+    cauldron.appendChild(n);
+  }
+}
+
+/* ====== CTA FLOW ====== */
+cta.addEventListener('click', async ()=>{
+  if (placed.length===0){
+    // tiny shake to hint action
+    cauldron.animate([
+      {transform:'translateX(0)'},
+      {transform:'translateX(-6px)'},
+      {transform:'translateX(6px)'},
+      {transform:'translateX(0)'}
+    ], {duration:260, easing:'cubic-bezier(.3,.8,.2,1)'});
+    return;
+  }
+  const prompt = buildPrompt(placed);
+  console.log('Prompt → demo.ai:\n', prompt);
+
+  // mixing animation on
+  cauldron.classList.add('mixing');
+  cta.classList.add('ok');
+
+  try{
+    const imgURL = await callDemoAI(prompt, placed);
+    // reveal
+    imageEl.style.backgroundImage = `url(${imgURL})`;
+    imageEl.classList.add('revealed');
+    cauldron.classList.remove('mixing');
+    cauldron.classList.add('reveal');
+    // particle pop
+    confettiPop();
+    setTimeout(()=> cauldron.classList.remove('reveal'), 980);
+  }catch(err){
+    console.warn('demo.ai failed, showing stub.', err);
+    cauldron.classList.remove('mixing'); cta.classList.remove('ok');
+  }
+});
+
+/* ====== PROMPT ====== */
+function buildPrompt(items){
+  // center (50,50) → angle & ring for each emoji
+  const parts = items.map(p=>{
+    const dx = p.x-50, dy = p.y-50;
+    const angle = (Math.atan2(dy, dx) * 180/Math.PI + 360) % 360; // 0° to the right
+    const where = clockFromAngle(angle);
+    const what = EMOJI_WORDS.get(p.emoji) || `the ${p.emoji} emoji`;
+    return `${what} at the ${where}`;
+  });
+  return [
+    // Prepared scaffolding; specifics only from emoji + their positions:
+    `Combine: ${parts.join(', ')}.`,
+    `Harmonize styles naturally.`,
+    `Soft lighting, balanced composition.`,
+    `No words, no borders.`
+  ].join(' ');
+}
+function clockFromAngle(a){
+  // Map to 8-way compass with “o’clock”
+  const sectors = [
+    {t:"3 o’clock (right)", v:  0},
+    {t:"2 o’clock (upper-right)", v: 45},
+    {t:"12 o’clock (top)", v: 90},
+    {t:"10 o’clock (upper-left)", v:135},
+    {t:"9 o’clock (left)", v:180},
+    {t:"8 o’clock (lower-left)", v:225},
+    {t:"6 o’clock (bottom)", v:270},
+    {t:"4 o’clock (lower-right)", v:315},
+    {t:"3 o’clock (right)", v:360}
+  ];
+  let best = sectors[0].t, min=999;
+  for (const s of sectors){
+    const d = Math.abs(a - s.v);
+    if (d<min){ min=d; best=s.t; }
+  }
+  return best;
+}
+
+/* ====== DEMO.AI STUB ====== */
+async function callDemoAI(prompt, items){
+  // If you have a real endpoint, wire it here:
+  // if (!USE_STUB) {
+  //   const res = await fetch('https://demo.ai/generate', {
+  //     method:'POST', headers:{'Content-Type':'application/json'},
+  //     body: JSON.stringify({prompt, aspect:'1:1'})
+  //   });
+  //   if (!res.ok) throw new Error('Server error');
+  //   const {imageUrl} = await res.json();
+  //   return imageUrl;
+  // }
+
+  // Stub: synthesize a “generated” image using a canvas based on the emoji & their positions.
+  await wait(1400 + Math.random()*900); // simulate inference delay
+  const size = 1024;
+  const c = document.createElement('canvas'); c.width=c.height=size;
+  const ctx = c.getContext('2d');
+
+  // pastel backdrop
+  const g = ctx.createRadialGradient(size*0.3, size*0.3, size*0.1, size*0.6, size*0.7, size*0.9);
+  g.addColorStop(0, '#fffdfb');
+  g.addColorStop(1, '#f4fbff');
+  ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
+
+  // soft blobs from items
+  items.forEach((p,i)=>{
+    const col = colorFromEmoji(p.emoji);
+    const x = p.x/100*size, y = p.y/100*size;
+    const r = size*(0.08 + 0.05*Math.sin(i*1.2+0.7));
+    const grd = ctx.createRadialGradient(x, y, r*0.2, x, y, r);
+    grd.addColorStop(0, hexWithAlpha(col, .28));
+    grd.addColorStop(1, hexWithAlpha(col, 0.02));
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  });
+
+  // faint emoji watermarks
+  ctx.font = `${Math.floor(size*0.12)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  items.forEach((p,i)=>{
+    ctx.save();
+    ctx.translate(p.x/100*size, p.y/100*size);
+    ctx.rotate((i*37)%360 * Math.PI/180);
+    ctx.globalAlpha = 0.18;
+    ctx.fillText(p.emoji, 0, 0);
+    ctx.restore();
+  });
+
+  return c.toDataURL('image/png');
+}
+function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* ====== UTILS ====== */
+function nextEmoji(){
+  // pick one not currently shown in seeds to reduce duplicates
+  let tries = 0;
+  while (tries++<20){
+    const e = EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)];
+    const inSeeds = seeds.some(s=>s?.emoji===e);
+    if (!inSeeds) return e;
+  }
+  return EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)];
+}
+function gentlePop(){
+  cauldron.animate([
+    {transform:'scale(1)'},
+    {transform:'scale(1.03)'},
+    {transform:'scale(1)'}
+  ], {duration:220, easing:'cubic-bezier(.3,.8,.2,1)'});
+}
+function hexWithAlpha(hex, a){
+  // Simple palette
+  const table = {
+    red:"#ff6b6b", orange:"#ff9f43", yellow:"#ffd93d",
+    green:"#6bffb0", aqua:"#54e3ff", blue:"#6d9fff",
+    purple:"#c69bff", pink:"#ff9bd4"
+  };
+  const keys = Object.keys(table);
+  const h = table[keys[Math.floor(Math.random()*keys.length)]];
+  const c = h.replace('#','');
+  const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function colorFromEmoji(e){
+  // lightweight deterministic color channel per emoji
+  const code = Array.from(e).reduce((a,ch)=>a+ch.codePointAt(0),0);
+  const r = 150 + (code*29)%105;
+  const g = 150 + (code*47)%105;
+  const b = 150 + (code*61)%105;
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+function toHex(n){ return n.toString(16).padStart(2,'0'); }
+
+/* ====== CONFETTI POP (arrival) ====== */
+function confettiPop(){
+  const N = 24, rect = cauldron.getBoundingClientRect();
+  for (let i=0;i<N;i++){
+    const dot = document.createElement('div');
+    const x = rect.left + rect.width/2;
+    const y = rect.top  + rect.height/2;
+    dot.style.position='fixed';
+    dot.style.left = x+'px'; dot.style.top = y+'px';
+    dot.style.width='10px'; dot.style.height='10px';
+    dot.style.borderRadius='50%';
+    dot.style.background = `hsl(${Math.random()*360},90%,70%)`;
+    dot.style.boxShadow = '0 4px 12px #0002';
+    dot.style.pointerEvents='none';
+    dot.style.transform='translate(-50%,-50%)';
+    document.body.appendChild(dot);
+    const ang = Math.random()*Math.PI*2;
+    const dist = 80 + Math.random()*140;
+    const tx = Math.cos(ang)*dist;
+    const ty = Math.sin(ang)*dist;
+    dot.animate([
+      {transform:'translate(-50%,-50%) scale(1)', opacity:1},
+      {transform:`translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(.6)`, opacity:0}
+    ], {duration: 700+Math.random()*300, easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish=()=>dot.remove();
+  }
+}
+
+/* ====== START EMPTY IMAGE (hidden) ====== */
+imageEl.addEventListener('transitionend', (ev)=>{
+  // If we later wanted a reset, we'd handle it here.
+});
+
+/* ====== TOUCH-SCROLL GUARD ====== */
+document.addEventListener('gesturestart', e=>e.preventDefault());
+</script>
+</body>
+</html>
