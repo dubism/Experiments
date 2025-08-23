@@ -61,7 +61,7 @@ function alloc(){
   field=new Float32Array(N); hueX=new Float32Array(N); hueY=new Float32Array(N);
   forming=new Uint8Array(N); stoneProg=new Float32Array(N); stoneJit=new Float32Array(N);
   stoneFlag=new Uint8Array(N); stoneHP=new Float32Array(N); wallType=new Uint8Array(N);
-  nutrient=new Float32Array(N); nutBoost=new Uint8Array(N); nutFlash=new Float32Array(N);
+  nutrient=new Float32Array(N); nutBoost=new Uint8Array(N); nutFlash=new Uint8Array(N);
   poisonWave=new Uint8Array(N); nextPoisonWave=new Uint8Array(N);
   nutWave=new Uint8Array(N); nextNutWave=new Uint8Array(N);
   boostFlash=new Float32Array(N); eraseGlow=new Float32Array(N);
@@ -90,10 +90,18 @@ function applyGrid(){
 
 // ===== UI layout (density dropdown + picker) =====
 // physical sizes (CSS px → device px)
-const PICKER_PX = 120;     // keep approx same physical height across densities
+const PICKER_PX = 120;     // desired picker height (capped below)
 const UI_SPACER_PX = 12;   // gap between dropdown and picker
-const DENS_HEADER_PX = 36; // header row height
-const DENS_PANEL_PX  = 160;// panel height when opened
+const DENS_HEADER_PX = 36; // header row height (min 48 enforced)
+const DENS_PANEL_PX  = 160;// density items area height when opened
+
+// --- Hard cap for the bottom controller stripe (CSS px) ---
+const BOTTOM_STRIPE_MAX_PX = 200; // total vertical size cap for the picker area
+let STRIPE_MAX_DPX = 0;           // computed per-DPR device-px cap
+
+// --- Touch ergonomics ---
+const TOUCH_MIN_PX = 48; // standard touch target (CSS px)
+let CHEVRON_CX_DPX = 0, CHEVRON_CY_DPX = 0, CHEVRON_HIT = null;
 
 let reservedBottomRows=0;
 
@@ -106,6 +114,17 @@ let pickLifeEnd=0,pickWallEnd=0,pickNutrEnd=0,pickEraseEnd=0;
 // strict no-draw: from densHeaderY0 downward
 let noDrawBorderPxTop=0;
 
+// --- Step-rate selector (inside expanded density panel) ---
+const RATE_PANEL_PX = 56; // CSS px height for control bar
+const RATE_OPTIONS = [
+  {label:'ASAP', ms:0},
+  {label:'20ms', ms:20},
+  {label:'50ms', ms:50},
+  {label:'200ms',ms:200}
+];
+let stepMs = 50; // default selection
+let rateY0=0, rateY1=0; // rows for the selector
+
 function safeBottomCssPx(){ return sabProbe.getBoundingClientRect().height||0; }
 
 function rowsFromPx(px){ return Math.max(2, Math.ceil((px*DPR)/CELL)); }
@@ -114,9 +133,13 @@ function computeUI(){
   const inset=safeBottomCssPx();
   reservedBottomRows = Math.ceil(((inset+24)*DPR)/Math.max(1,CELL));
 
-  // Compute picker rows by physical height
-  const PICK_ROWS = rowsFromPx(PICKER_PX);
-  const HEADER_ROWS= rowsFromPx(DENS_HEADER_PX);
+  // Compute picker rows by physical height, capped to 200px
+  const PICK_ROWS = rowsFromPx(Math.min(PICKER_PX, BOTTOM_STRIPE_MAX_PX));
+
+  // Header must be at least 48px tall
+  const HEADER_ROWS= rowsFromPx(Math.max(DENS_HEADER_PX, TOUCH_MIN_PX));
+
+  // If open, panel items area + rate bar; else 0
   const PANEL_ROWS = densOpen ? rowsFromPx(DENS_PANEL_PX) : 0;
   const SPACER_ROWS= rowsFromPx(UI_SPACER_PX);
 
@@ -127,8 +150,22 @@ function computeUI(){
   const spacerY1=Math.max(0, pickY0 - 1);
   const spacerY0=Math.max(0, spacerY1 - SPACER_ROWS + 1);
 
-  densPanelY1=Math.max(0, spacerY0 - 1);
-  densPanelY0= densOpen ? Math.max(0, densPanelY1 - PANEL_ROWS + 1) : densPanelY1+1;
+  // Entire expandable area top is densHeader; below it live panel+rate then spacer then picker.
+  densPanelY1 = Math.max(0, spacerY0 - 1);
+
+  if (densOpen){
+    const RATE_ROWS = rowsFromPx(RATE_PANEL_PX);
+    rateY1 = densPanelY1;
+    rateY0 = Math.max(0, rateY1 - RATE_ROWS + 1);
+
+    // density items occupy everything above the rate bar; height ~ DENS_PANEL_PX
+    densPanelY0 = Math.max(0, rateY0 - 1 - rowsFromPx(DENS_PANEL_PX) + 1);
+    if (densPanelY0 > rateY0 - 1) densPanelY0 = Math.max(0, rateY0 - 1);
+  } else {
+    // closed: no panel nor rate bar
+    densPanelY0 = densPanelY1 + 1;
+    rateY0 = rateY1 = densPanelY1 + 1;
+  }
 
   densHeaderY1 = densOpen ? Math.max(0, densPanelY0 - 1) : Math.max(0, spacerY0 - 1);
   densHeaderY0 = Math.max(0, densHeaderY1 - HEADER_ROWS + 1);
@@ -136,7 +173,6 @@ function computeUI(){
   noDrawBorderPxTop = densHeaderY0*CELL;
 
   // Picker horizontal partitions (Life big, Wall big, Nutr small, Erase small; small = 1/3 big)
-  // Use units: big=3, small=1 → total 8 units
   const totalUnits=8;
   const lifeUnits=3, wallUnits=3, nutrUnits=1, eraseUnits=1;
   const unitCols = Math.max(1, Math.floor(COLS/totalUnits));
@@ -144,6 +180,9 @@ function computeUI(){
   pickWallEnd  = pickLifeEnd + wallUnits*unitCols;
   pickNutrEnd  = pickWallEnd + nutrUnits*unitCols;
   pickEraseEnd = COLS; // fill remainder
+
+  // cache device-px cap for icon sizing
+  STRIPE_MAX_DPX = Math.round(BOTTOM_STRIPE_MAX_PX * DPR);
 }
 
 // ===== Picker mapping =====
@@ -204,8 +243,17 @@ function onStart(e){
     const row=(t.y/CELL)|0;
     const c={id:t.id,lastX:t.x,lastY:t.y,ui:null};
     if (isInNoDrawZonePx(t.y)){
-      if (inHeader(row)){ c.ui='header'; toggleDensityOpen(); }
-      else if (inPanel(row)){ c.ui='panel'; chooseDensityAt(t.x,t.y); }
+      if (inHeader(row)){
+        c.ui='header';
+        // Only toggle if finger is inside the chevron's 48x48 px hitbox
+        if (CHEVRON_HIT && pointInRect(t.x, t.y, CHEVRON_HIT)) toggleDensityOpen();
+      }
+      else if (inPanel(row)){
+        c.ui='panel';
+        const isRateRow = row>=rateY0 && row<=rateY1;
+        if (isRateRow) chooseRateAt(t.x,t.y);
+        else chooseDensityAt(t.x,t.y);
+      }
       else if (inPicker(row)){ c.ui='picker'; applyPick(t.x,t.y); }
       else c.ui='blocked';
     } else {
@@ -220,7 +268,13 @@ function onMove(e){
     const prev=touches.get(t.id); if(!prev) continue;
     const row=(t.y/CELL)|0;
     if (isInNoDrawZonePx(t.y)){
-      if (inPanel(row)){ prev.ui='panel'; chooseDensityAt(t.x,t.y); continue; }
+      if (inPanel(row)){
+        prev.ui='panel';
+        const isRateRow = row>=rateY0 && row<=rateY1;
+        if (isRateRow) chooseRateAt(t.x,t.y);
+        else chooseDensityAt(t.x,t.y);
+        continue;
+      }
       if (inPicker(row)){ prev.ui='picker'; applyPick(t.x,t.y); continue; }
       prev.ui='blocked'; continue;
     }
@@ -344,9 +398,8 @@ function deposit(px,py,vx,vy,initial){
 }
 
 // ===== sim =====
-let acc=0,lastT=performance.now();
 function step(dt){
-  acc+=dt; if(acc<80) return; const tick=acc; acc=0;
+  const tick=dt;
 
   const seedFade=Math.exp(-tick/180);
   for(let i=0;i<N;i++){
@@ -478,6 +531,17 @@ function step(dt){
   }
 }
 
+// ===== helpers for UI sizing / hit tests =====
+function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
+function pointInRect(px, py, r){ return px>=r.x0 && px<=r.x1 && py>=r.y0 && py<=r.y1; }
+function pickStripeHeightDPX(){ return (pickY1 - pickY0 + 1) * CELL; }
+function pickIconCapDPX(){ return Math.min(STRIPE_MAX_DPX, pickStripeHeightDPX()) * 0.6; }
+function iconSizePx(mult, minPx){
+  const target = Math.max(minPx, Math.floor(CELL * mult));
+  return Math.min(target, Math.floor(pickIconCapDPX()));
+}
+function lineWidthFromSize(sz, k){ return Math.max(1, Math.floor(sz * k)); }
+
 // ===== render =====
 function fillCell(ix,iy){ ctx.fillRect(ix*CELL+1, iy*CELL+1, CELL-2, CELL-2); }
 
@@ -542,7 +606,7 @@ function drawDensityHeader(){
   const cx = Math.max(2, Math.floor(COLS*0.02));
   drawMiniGridIcon((cx*CELL)|0, (Math.floor((densHeaderY0+densHeaderY1)/2)*CELL)|0, Math.max(8,Math.floor(CELL*3)), true);
 
-  // chevron on right
+  // chevron on right (visual)
   const rx = Math.floor(COLS*0.95); const cy = Math.floor((densHeaderY0+densHeaderY1)/2);
   ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
   ctx.beginPath();
@@ -557,6 +621,12 @@ function drawDensityHeader(){
   }
   ctx.stroke();
 
+  // 48x48 CSS px (DPR-scaled) hitbox centered on chevron
+  CHEVRON_CX_DPX = rx*CELL;
+  CHEVRON_CY_DPX = cy*CELL;
+  const half = Math.round((TOUCH_MIN_PX * DPR) / 2);
+  CHEVRON_HIT = { x0: CHEVRON_CX_DPX - half, x1: CHEVRON_CX_DPX + half, y0: CHEVRON_CY_DPX - half, y1: CHEVRON_CY_DPX + half };
+
   // current density label bar
   const labelW = Math.min(W*0.35, 160*DPR), labelH = Math.max(CELL*1.6, 16);
   const lx = Math.min(W - labelW - 6, Math.max(6, W*0.5 - labelW*0.5));
@@ -566,7 +636,7 @@ function drawDensityHeader(){
 }
 
 function drawDensityPanel(){
-  // background
+  // density items background
   for(let y=densPanelY0;y<=densPanelY1;y++){
     for(let x=0;x<COLS;x++){ ctx.fillStyle='hsl(220,12%,20%)'; fillCell(x,y); }
   }
@@ -594,6 +664,78 @@ function drawDensityPanel(){
       ctx.strokeStyle='rgba(255,255,255,0.9)';
       ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
       ctx.strokeRect(1*CELL, it.y0*CELL, (COLS-2)*CELL, (it.y1-it.y0+1)*CELL);
+    }
+  }
+
+  // rate control bar
+  drawRatePanel();
+}
+
+function drawRatePanel(){
+  // background band
+  for(let y=rateY0; y<=rateY1; y++){
+    for(let x=0; x<COLS; x++){
+      ctx.fillStyle='hsl(220,12%,22%)';
+      fillCell(x,y);
+    }
+  }
+
+  // compute a centered segmented row in device px
+  const bandX0 = 1*CELL, bandX1 = (COLS-1)*CELL;
+  const bandY0 = rateY0*CELL, bandY1 = (rateY1+1)*CELL;
+  const bandW  = bandX1 - bandX0, bandH = bandY1 - bandY0;
+
+  // segment geometry
+  const gaps = Math.max(3, Math.floor(6*DPR));
+  const segW = Math.floor((bandW - gaps*(RATE_OPTIONS.length+1)) / RATE_OPTIONS.length);
+  const segH = Math.max(Math.floor(bandH*0.7), Math.floor(28*DPR));
+  const segY = Math.floor(bandY0 + (bandH - segH)/2);
+
+  // draw segments
+  for(let i=0;i<RATE_OPTIONS.length;i++){
+    const x = Math.floor(bandX0 + gaps + i*(segW+gaps));
+    const y = segY;
+    const w = segW, h = segH;
+
+    const selected = (stepMs === RATE_OPTIONS[i].ms);
+    ctx.fillStyle = selected ? 'hsl(220,18%,30%)' : 'hsl(220,12%,26%)';
+    ctx.fillRect(x,y,w,h);
+
+    ctx.strokeStyle='rgba(255,255,255,0.65)';
+    ctx.lineWidth=Math.max(1, Math.floor(1.2*DPR));
+    ctx.strokeRect(x,y,w,h);
+
+    // label chip (visual weight only, no text)
+    const chipW = Math.max(Math.floor(w*0.42), Math.floor(64*DPR));
+    ctx.fillStyle='rgba(200,210,255,0.9)';
+    ctx.fillRect(x,y, chipW, h);
+  }
+}
+
+function rateSegmentsLayout(){
+  if (!densOpen) return [];
+  const bandX0 = 1*CELL, bandX1 = (COLS-1)*CELL;
+  const bandY0 = rateY0*CELL, bandY1 = (rateY1+1)*CELL;
+  const bandW  = bandX1 - bandX0, bandH = bandY1 - bandY0;
+
+  const gaps = Math.max(3, Math.floor(6*DPR));
+  const segW = Math.floor((bandW - gaps*(RATE_OPTIONS.length+1)) / RATE_OPTIONS.length);
+  const segH = Math.max(Math.floor(bandH*0.7), Math.floor(28*DPR));
+  const segY = Math.floor(bandY0 + (bandH - segH)/2);
+
+  const out=[];
+  for(let i=0;i<RATE_OPTIONS.length;i++){
+    const x = Math.floor(bandX0 + gaps + i*(segW+gaps));
+    out.push({x0:x, y0:segY, x1:x+segW, y1:segY+segH, ms: RATE_OPTIONS[i].ms});
+  }
+  return out;
+}
+function chooseRateAt(px,py){
+  const segs = rateSegmentsLayout();
+  for(const s of segs){
+    if (px>=s.x0 && px<=s.x1 && py>=s.y0 && py<=s.y1){
+      stepMs = s.ms;
+      return;
     }
   }
 }
@@ -638,7 +780,7 @@ function drawPicker(){
   ctx.globalAlpha=0.28; ctx.fillStyle='hsl(220,10%,35%)';
   ctx.fillRect(0,(pickY0*CELL)|0, W, 1); ctx.globalAlpha=1;
 
-  // White grid icons over areas (centered)
+  // White grid icons over areas (centered), with clamped sizes
   drawBrushIcons();
 }
 
@@ -647,17 +789,23 @@ function mixHSL(a,b,k){ return [(a[0]*(1-k)+b[0]*k+360)%360, a[1]*(1-k)+b[1]*k, 
 // Simple glyphs
 function drawBrushIcons(){
   const cy = Math.floor((pickY0+pickY1)/2)*CELL + CELL*0.5;
+
+  const lifeSz  = iconSizePx(3.0, 8);
+  const wallSz  = iconSizePx(3.5, 10);
+  const dotSz   = iconSizePx(3.0, 8);
+  const eraseSz = iconSizePx(3.0, 8);
+
   // Life icon: small plus/grid spark
-  drawMiniGridIcon(Math.floor((pickLifeEnd*CELL)*0.5), cy, Math.max(8,Math.floor(CELL*3)), false);
+  drawMiniGridIcon(Math.floor((pickLifeEnd*CELL)*0.5),                       cy, lifeSz,  false);
 
   // Wall icon: small white rounded rectangle / brick
-  drawBrickIcon(Math.floor(( (pickLifeEnd+pickWallEnd)*CELL )*0.5), cy, Math.max(10,Math.floor(CELL*3.5)));
+  drawBrickIcon   (Math.floor(((pickLifeEnd+pickWallEnd)*CELL)*0.5),          cy, wallSz);
 
   // Nutrient icon: three dots
-  drawDotsIcon(Math.floor(( (pickWallEnd+pickNutrEnd)*CELL )*0.5), cy, Math.max(8,Math.floor(CELL*3)));
+  drawDotsIcon    (Math.floor(((pickWallEnd+pickNutrEnd)*CELL)*0.5),          cy, dotSz);
 
   // Erase icon: red tiny grid cross
-  drawRedXIcon(Math.floor(( (pickNutrEnd+pickEraseEnd)*CELL )*0.5), cy, Math.max(8,Math.floor(CELL*3)));
+  drawRedXIcon    (Math.floor(((pickNutrEnd+pickEraseEnd)*CELL)*0.5),         cy, eraseSz);
 }
 
 function drawMiniGridIcon(cx,cy,sz,withBorder){
@@ -673,7 +821,7 @@ function drawMiniGridIcon(cx,cy,sz,withBorder){
   }
   if (withBorder){
     ctx.strokeStyle='rgba(255,255,255,0.9)';
-    ctx.lineWidth=Math.max(1,Math.floor(CELL*0.5));
+    ctx.lineWidth = lineWidthFromSize(sz, 0.16);
     ctx.strokeRect(x, y, w, h);
   }
 }
@@ -681,7 +829,7 @@ function drawBrickIcon(cx,cy,sz){
   const w=sz*1.6, h=sz;
   const x=cx-w/2, y=cy-h/2;
   ctx.strokeStyle='rgba(255,255,255,0.9)';
-  ctx.lineWidth=Math.max(1,Math.floor(CELL*0.6));
+  ctx.lineWidth = lineWidthFromSize(sz, 0.18);
   ctx.strokeRect(x,y,w,h);
   // inner mortar lines
   ctx.beginPath();
@@ -699,7 +847,7 @@ function drawDotsIcon(cx,cy,sz){
 }
 function drawRedXIcon(cx,cy,sz){
   ctx.strokeStyle='rgba(220,60,60,0.95)';
-  ctx.lineWidth=Math.max(1,Math.floor(sz*0.18));
+  ctx.lineWidth = lineWidthFromSize(sz, 0.18);
   const d=sz*0.6;
   ctx.beginPath(); ctx.moveTo(cx-d,cy-d); ctx.lineTo(cx+d,cy+d); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx+d,cy-d); ctx.lineTo(cx-d,cy+d); ctx.stroke();
@@ -734,10 +882,35 @@ function drawPickIndicator(px, readout){
 }
 
 // ===== loop =====
+let lastT = performance.now();
+let acc = 0;
+
 function tick(now){
-  const dt=Math.min(50, now-lastT); lastT=now; nowTS=now;
-  step(dt); render(); requestAnimationFrame(tick);
+  const dt = Math.min(50, now - lastT);
+  lastT = now; nowTS = now;
+  acc += dt;
+
+  const MAX_STEPS = 4;
+
+  if (stepMs === 0){
+    // ASAP: one step with all accumulated time
+    const chunk = acc; acc = 0;
+    step(chunk);
+  } else {
+    let steps = 0;
+    while (acc >= stepMs && steps < MAX_STEPS){
+      step(stepMs);
+      acc -= stepMs;
+      steps++;
+    }
+  }
+
+  render();
+  requestAnimationFrame(tick);
 }
+
+// ===== utils for chevron hitbox =====
+// (pointInRect defined above)
 
 // ===== init =====
 applyGrid();
