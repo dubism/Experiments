@@ -1,3 +1,5 @@
+Adding a bottom glass footer with: 1) the reactive ✅➔ CTA and 2) a label-less input (emoji or text). Emojis you type become floating seeds; any text becomes a style hint merged into the prompt. Unplaced input-emojis are included as non-positioned elements.
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,6 +13,7 @@
     --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
     --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
     --ease:cubic-bezier(.2,.8,.2,1);
+    --glass:#ffffff6a; --glassEdge:#ffffff80; --glassStroke:#0000000f;
   }
 
   html,body{height:100%;margin:0}
@@ -30,7 +33,7 @@
 
   .stage{position:fixed; inset:0; display:grid; place-items:center}
 
-  /* floating seeds layer (FULL SCREEN) */
+  /* floating seeds layer */
   .seeds{position:fixed; inset:0; pointer-events:none; z-index:5}
   .seed{
     position:absolute; width:56px; height:56px; border-radius:50%;
@@ -38,7 +41,7 @@
     background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
     transform:translate(-50%,-50%) scale(1);
-    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease);
+    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease), opacity .18s var(--ease);
     animation:float var(--dur,8s) ease-in-out infinite var(--delay,0s);
     will-change:transform;
   }
@@ -51,11 +54,7 @@
   .seed:hover{ transform:translate(-50%,-50%) scale(1.12) rotate(-2deg); box-shadow:var(--shadow-strong); }
 
   /* central circle */
-  .cauldron-wrap{
-    position:relative; width:min(64vmin,520px); aspect-ratio:1/1;
-    perspective:900px; z-index:20; /* above seeds */
-    display:grid; place-items:center;
-  }
+  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1/1; perspective:900px; z-index:20; display:grid; place-items:center }
   .cauldron{
     position:relative; width:100%; height:100%; border-radius:50%;
     background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
@@ -91,27 +90,6 @@
   .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
   @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
 
-  /* CTA: now SIBLING of the bowl, so not clipped */
-  .cta{
-    position:absolute;
-    right:-6px; bottom:-6px; /* slightly outside */
-    width:72px; height:72px; border-radius:50%;
-    display:grid; place-items:center; cursor:pointer; user-select:none;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffb8 60%, #ffffff90 100%);
-    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffff;
-    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease);
-    overflow:hidden; z-index:30;
-  }
-  .cta:hover{ transform:scale(1.08) }
-  .cta:active{ transform:scale(.96) }
-  .cta .stack{ position:relative }
-  .cta .check{ font-size:30px; filter:drop-shadow(0 1px 0 #fff) }
-  .cta .arrow{ position:absolute; inset:0; display:grid; place-items:center }
-  .cta .arrow span{ display:block; transform:translateX(-10px); opacity:0; transition:transform .25s var(--ease), opacity .25s var(--ease) }
-  .cta:hover .arrow span{ transform:translateX(8px); opacity:.9 }
-  .cta.launch .arrow span{ animation:shoot .5s var(--ease) }
-  @keyframes shoot{ 0%{transform:translateX(0); opacity:1} 80%{transform:translateX(36px); opacity:0} 100%{transform:translateX(36px); opacity:0} }
-
   /* mixing + reveal */
   .cauldron.mixing{ filter:saturate(1.2) contrast(1.02) }
   .cauldron.mixing .placed{ animation:swirl 2.2s var(--ease) infinite, popZ 1.8s ease-in-out infinite; transform-origin:50% 50% -120px }
@@ -123,29 +101,80 @@
   .cauldron.reveal{ animation:boom .9s var(--ease) }
   @keyframes boom{ 0%{transform:scale(1)} 55%{transform:scale(1.22)} 100%{transform:scale(1.08)} }
 
+  /* bottom footer (glass) */
+  .footer{
+    position:fixed; left:16px; right:16px; bottom:16px; z-index:40;
+    display:flex; gap:12px; align-items:center; justify-content:center;
+    padding:12px; border-radius:20px;
+    background:linear-gradient(180deg, var(--glass), #ffffff3c);
+    backdrop-filter: blur(10px) saturate(1.1);
+    box-shadow:var(--shadow), inset 0 0 0 1px var(--glassStroke), inset 0 1px 0 var(--glassEdge);
+  }
+  .pill{
+    flex:1; min-width:120px; height:52px; border-radius:14px;
+    display:flex; align-items:center; gap:8px; padding:0 12px;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffdd, #ffffffb0 60%, #ffffff90 100%);
+    box-shadow: inset 0 1px 0 #ffffff, 0 1px 0 #00000005;
+  }
+  .input{
+    flex:1; height:36px; border-radius:10px; padding:6px 10px;
+    outline:none; border:none; background:#ffffffc0;
+    box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000010;
+    overflow:hidden; white-space:nowrap;
+  }
+  .input[contenteditable="true"]{ -webkit-user-select:text; user-select:text }
+  .add{
+    width:44px; height:44px; border-radius:12px; display:grid; place-items:center; cursor:pointer;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffff, #ffffffc8 60%, #ffffffa8 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
+    transition:transform .16s var(--ease);
+  }
+  .add:active{ transform:scale(.95) }
+
+  .cta{
+    width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffb8 60%, #ffffff90 100%);
+    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffff;
+    transition:transform .18s var(--ease), box-shadow .18s var(--ease);
+    overflow:hidden;
+  }
+  .cta:hover{ transform:scale(1.08) }
+  .cta:active{ transform:scale(.96) }
+  .cta .stack{ position:relative }
+  .cta .check{ font-size:30px; filter:drop-shadow(0 1px 0 #fff) }
+  .cta .arrow{ position:absolute; inset:0; display:grid; place-items:center }
+  .cta .arrow span{ display:block; transform:translateX(-10px); opacity:0; transition:transform .25s var(--ease), opacity .25s var(--ease) }
+  .cta:hover .arrow span{ transform:translateX(8px); opacity:.9 }
+  .cta.launch .arrow span{ animation:shoot .5s var(--ease) }
+  @keyframes shoot{ 0%{transform:translateX(0); opacity:1} 80%{transform:translateX(36px); opacity:0} 100%{transform:translateX(36px); opacity:0} }
+
   ::selection{background:transparent}
 </style>
 </head>
 <body>
   <div class="stage">
-    <!-- floating seeds around -->
     <div class="seeds" id="seeds"></div>
 
-    <!-- central circle + CTA (CTA is sibling, not clipped) -->
     <div class="cauldron-wrap" id="wrap">
       <div class="cauldron" id="cauldron" aria-label="drop area">
         <div class="ring"></div>
         <div class="image" id="image"></div>
       </div>
-
-      <!-- CTA outside the circle -->
-      <button class="cta" id="cta" aria-label="generate">
-        <div class="stack">
-          <span class="check">✅</span>
-          <div class="arrow"><span>➡️</span></div>
-        </div>
-      </button>
     </div>
+  </div>
+
+  <!-- Bottom footer: input + CTA -->
+  <div class="footer">
+    <div class="pill">
+      <div class="input" id="freeInput" contenteditable="true" aria-label="input"></div>
+      <button class="add" id="addBtn" aria-label="add"><span style="font-size:22px">➕</span></button>
+    </div>
+    <button class="cta" id="cta" aria-label="generate">
+      <div class="stack">
+        <span class="check">✅</span>
+        <div class="arrow"><span>➡️</span></div>
+      </div>
+    </button>
   </div>
 
 <script>
@@ -154,7 +183,7 @@ const EMOJI_POOL = ["😂","❤️","🤣","👍","😭","🙏","🥰","😍","�
 const INITIAL_SEEDS = 20;
 const USE_STUB = true;
 
-/* minimal emoji → words (prompt specifics) */
+/* emoji → words */
 const EMOJI_WORDS = new Map(Object.entries({
   "😂":"laughing / joy","❤️":"a red heart","🤣":"hysterical laughter","👍":"approval / thumbs up","😭":"tears / crying",
   "🙏":"gratitude","🥰":"love / affection","😍":"adoration","😊":"smile","😅":"relief",
@@ -172,17 +201,73 @@ const wrap = document.getElementById('wrap');
 const cauldron = document.getElementById('cauldron');
 const imageEl = document.getElementById('image');
 const seedsEl = document.getElementById('seeds');
+const freeInput = document.getElementById('freeInput');
+const addBtn = document.getElementById('addBtn');
 const cta = document.getElementById('cta');
 
 /* ==== STATE ==== */
-let seeds = [];    // {id, emoji, x, y}
-let placed = [];   // {id, emoji, x%, y%}
+let seeds = [];     // {id, emoji, x, y, fromInput}
+let placed = [];    // {id, emoji, x%, y%}
 let dragging = null;
+let styleHint = ""; // free text (non-emoji) gathered from input
+let inputEmojiInbox = new Set(); // emojis entered but not placed
 
 /* ==== INIT ==== */
 initSeeds();
 renderSeeds();
 window.addEventListener('resize', () => { initSeeds(true); renderSeeds(); }, {passive:true});
+
+/* ==== Footer input handlers ==== */
+addBtn.addEventListener('click', consumeInput);
+freeInput.addEventListener('keydown', e=>{
+  if (e.key==='Enter'){
+    e.preventDefault();
+    consumeInput();
+  }
+});
+
+function consumeInput(){
+  const raw = freeInput.innerText || "";
+  const {emojis, text} = splitTextAndEmojis(raw);
+  styleHint = text.trim();
+  if (emojis.length){
+    spawnInputEmojis(emojis);
+  }
+  freeInput.innerText = "";
+  pulse(addBtn);
+}
+
+function splitTextAndEmojis(str){
+  // extract emojis
+  const chars = Array.from(str);
+  const emojis = [];
+  const plain = [];
+  for (const ch of chars){
+    if (isEmoji(ch)) emojis.push(ch); else plain.push(ch);
+  }
+  return {emojis, text: plain.join('').replace(/\s+/g,' ').trim()};
+}
+function isEmoji(ch){
+  // loose detection: treat pictographic range & emoji presentation as emoji
+  const cp = ch.codePointAt(0);
+  return /\p{Extended_Pictographic}/u.test(ch) || (cp>=0x1F300 && cp<=0x1FAFF);
+}
+
+function spawnInputEmojis(list){
+  // drop near the bottom bar, non-overlapping, outside bowl
+  const rect = document.body.getBoundingClientRect();
+  const bowl = cauldron.getBoundingClientRect();
+  const seedR = 28, margin=10;
+  const minY = rect.height - 180, maxY = rect.height - 90;
+
+  for (const e of list){
+    inputEmojiInbox.add(e);
+    const x = rand(seedR+margin, rect.width - seedR - margin);
+    const y = rand(minY, maxY);
+    seeds.push({id:crypto.randomUUID(), emoji:e, x, y, fromInput:true});
+  }
+  renderSeeds();
+}
 
 /* ==== SEEDS LAYOUT (random, non-overlap, NOT inside cauldron) ==== */
 function initSeeds(keepEmojis=false){
@@ -206,18 +291,13 @@ function initSeeds(keepEmojis=false){
     tries++;
     const x = rand(seedR+margin, rect.width - seedR - margin);
     const y = rand(seedR+margin, rect.height - seedR - margin);
-
-    // keep outside cauldron + halo
     const d = Math.hypot(x - cx, y - cy);
-    if (d < R + seedR + 26) continue;
-
-    // non-overlap with other seeds
+    if (d < R + seedR + 26) continue; // keep outside bowl
     let ok = true;
     for(const s of spots){ if (Math.hypot(x - s.x, y - s.y) < seedR*2 + 16){ ok = false; break; } }
     if (!ok) continue;
-
     spots.push({x,y});
-    seeds.push({id:crypto.randomUUID(), emoji:emojis[idx], x, y});
+    seeds.push({id:crypto.randomUUID(), emoji:emojis[idx], x, y, fromInput:false});
     idx++;
   }
 }
@@ -251,7 +331,7 @@ function startDragSeed(ev, id){
   tryVibrate(10);
 
   const ghost = makeGhost(seeds[idx].emoji);
-  dragging = {type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
+  dragging = {type:'seed', idx, emoji:seeds[idx].emoji, fromInput: seeds[idx].fromInput, ghostEl:ghost};
   pointerMove(ev);
   window.addEventListener('pointermove', pointerMove);
   window.addEventListener('pointerup', pointerUp);
@@ -298,30 +378,28 @@ function pointerUp(ev){
       const id = crypto.randomUUID();
       placed.push({id, emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
-      // replace seed emoji (seed stays floating)
-      seeds[dragging.idx].emoji = nextEmoji();
-      const node = [...seedsEl.children][dragging.idx];
-      node.innerHTML = `<span class="e">${seeds[dragging.idx].emoji}</span>`;
+      // if this emoji came from input inbox, mark as used
+      if (dragging.fromInput) inputEmojiInbox.delete(dragging.emoji);
+      // replace that seed's emoji (seed stays floating)
+      const idx = dragging.idx;
+      seeds[idx].emoji = nextEmoji();
+      seeds[idx].fromInput = false;
+      const node = [...seedsEl.children][idx];
+      node.innerHTML = `<span class="e">${seeds[idx].emoji}</span>`;
       gentlePop(); tryVibrate(20);
     } else {
       placed[dragging.idx].x = px; placed[dragging.idx].y = py;
-      renderPlaced(false);
-      gentlePop();
+      renderPlaced(false); gentlePop();
     }
   } else {
-    // CANCEL GESTURE: if dragging a placed one and dropped outside → remove
+    // cancel: if dragging placed → remove
     if (dragging.type==='placed'){
       const id = placed[dragging.idx].id;
-      // little puff + fade
       const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
-      if (node){
-        node.classList.add('fadeout');
-        setTimeout(()=> node.remove(), 260);
-      }
+      if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); }
       placed.splice(dragging.idx,1);
       tryVibrate(15);
     }
-    // if it was a seed, just snap back (no change)
   }
 
   cleanupDrag();
@@ -365,13 +443,13 @@ function renderPlaced(playDrop=false){
 
 /* ==== CTA ==== */
 cta.addEventListener('click', async ()=>{
-  if (placed.length===0){
+  if (placed.length===0 && !styleHint && inputEmojiInbox.size===0){
     cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}], {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'});
     return;
   }
   cta.classList.add('launch');
 
-  const prompt = buildPrompt(placed);
+  const prompt = buildPrompt(placed, styleHint, [...inputEmojiInbox]);
   console.log('Prompt → demo.ai:\n', prompt);
 
   cauldron.classList.add('mixing');
@@ -392,7 +470,7 @@ cta.addEventListener('click', async ()=>{
 });
 
 /* ==== prompt ==== */
-function buildPrompt(items){
+function buildPrompt(items, hintText, looseEmojis){
   const parts = items.map(p=>{
     const dx=p.x-50, dy=p.y-50;
     const angle=(Math.atan2(dy,dx)*180/Math.PI+360)%360;
@@ -400,7 +478,17 @@ function buildPrompt(items){
     const what=EMOJI_WORDS.get(p.emoji)||`the ${p.emoji} emoji`;
     return `${what} at the ${where}`;
   });
-  return `Combine: ${parts.join(', ')}. Harmonize styles naturally. Soft lighting, balanced composition. No words, no borders.`;
+
+  const extras = [];
+  if (looseEmojis && looseEmojis.length){
+    for (const e of looseEmojis){
+      const w = EMOJI_WORDS.get(e) || `the ${e} emoji`;
+      extras.push(`${w} (unplaced element)`);
+    }
+  }
+  const textHint = hintText ? `Also reflect: “${hintText}”.` : '';
+
+  return `Combine: ${parts.join(', ')}${parts.length&&extras.length?', ':''}${extras.join(', ')}. ${textHint} Harmonize styles naturally. Soft lighting, balanced composition. No words, no borders.`;
 }
 function clockFromAngle(a){
   const sectors=[{t:"3 o’clock (right)",v:0},{t:"2 o’clock (upper-right)",v:45},{t:"12 o’clock (top)",v:90},{t:"10 o’clock (upper-left)",v:135},{t:"9 o’clock (left)",v:180},{t:"8 o’clock (lower-left)",v:225},{t:"6 o’clock (bottom)",v:270},{t:"4 o’clock (lower-right)",v:315},{t:"3 o’clock (right)",v:360}];
@@ -410,7 +498,7 @@ function clockFromAngle(a){
 
 /* ==== demo.ai stub ==== */
 async function callDemoAI(prompt, items){
-  if(!USE_STUB){ /* wire your endpoint */ }
+  if(!USE_STUB){ /* wire your endpoint here */ }
   await wait(1200+Math.random()*900);
   const size=1024, c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d');
   const g=ctx.createRadialGradient(size*.3,size*.3,size*.1,size*.6,size*.7,size*.9);
@@ -438,6 +526,9 @@ function gentlePop(){
   cauldron.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'});
 }
 function tryVibrate(ms){ if (navigator.vibrate) try{ navigator.vibrate(ms) }catch{} }
+function pulse(el){
+  el.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'});
+}
 
 function confettiPop(){
   const N=24, rect=cauldron.getBoundingClientRect();
@@ -451,7 +542,7 @@ function confettiPop(){
   }
 }
 
-/* prevent pinch-zoom gesture issues on iOS */
+/* iOS pinch-zoom guard */
 document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
 </body>
