@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Emoji Story Mixer — Pulse & Rim Reveal</title>
+<title>Emoji Story Mixer — Pulse & Rim Reveal + Kind Carousel</title>
 <style>
   :root{
     --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
@@ -27,41 +27,70 @@
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
-  .stage{position:fixed; inset:0; display:grid; place-items:center; z-index:2}
+  .stage{position:fixed; inset:0; display:grid; grid-template-rows:auto 1fr auto; z-index:2}
 
+  /* ---------- KIND CAROUSEL ---------- */
+  .kindWrap{
+    position:relative; z-index:60; padding:12px 0 4px;
+    display:grid; place-items:center;
+  }
+  .kindRail{
+    display:flex; gap:16px; padding:12px 24px; margin:0 auto;
+    overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
+    max-width:min(90vw, 720px);
+    scrollbar-width:none;
+  }
+  .kindRail::-webkit-scrollbar{display:none}
+  .kchip{
+    flex:0 0 auto; width:64px; height:64px; border-radius:50%;
+    display:grid; place-items:center; scroll-snap-align:center;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
+    transform:scale(.86); transition:transform .18s var(--ease), filter .18s var(--ease), box-shadow .18s var(--ease);
+    position:relative;
+  }
+  .kchip .e{font-size:30px}
+  .kchip.active{
+    transform:scale(1.15);
+    box-shadow:0 18px 40px rgba(100,150,255,.25), inset 0 1px 0 #ffffff;
+    filter:saturate(1.2);
+  }
+  .snapHint{
+    position:absolute; bottom:-2px; left:50%; transform:translateX(-50%); width:24px; height:4px; border-radius:999px;
+    background:linear-gradient(90deg,#b8f0ff,#e9d0ff,#b8f0ff); opacity:.0; transition:opacity .18s var(--ease);
+  }
+  .kchip.active .snapHint{ opacity:.9 }
+
+  /* ---------- BOWL ---------- */
+  .centerWrap{ display:grid; place-items:center; }
   .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1; z-index:20; display:grid; place-items:center; }
-  /* Bowl (clipping only the image) */
   .cauldron{
     position:relative; width:100%; height:100%; border-radius:50%;
     background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
     box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
     outline:1px solid var(--ring2);
-    overflow:hidden; /* only the image is inside here */
-    display:grid; place-items:center;
+    overflow:hidden; display:grid; place-items:center;
   }
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .waiting .cauldron{ animation:bowlPulse 2.2s ease-in-out infinite; }
   @keyframes bowlPulse{0%{filter:saturate(1) brightness(1)}50%{filter:saturate(1.08) brightness(1.06)}100%{filter:saturate(1) brightness(1)}}
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
-  /* Image layer (clipped by bowl) */
+  /* Image */
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
   .result-img{
     width:100%; height:100%; object-fit:cover; display:block;
-    opacity:0; transform:scale(.2); /* reveal from 20% */
+    opacity:0; transform:scale(.2);
     transition:opacity .6s var(--ease), transform .9s cubic-bezier(.22,1.2,.22,1);
     pointer-events:auto; -webkit-touch-callout:default; user-select:none;
   }
   .result-img.revealed{ opacity:1; transform:scale(1) }
 
-  /* Non-clipped overlay on top of bowl: chips + cancel live here */
-  .overlay{
-    position:absolute; inset:0; pointer-events:none; /* children opt-in */
-    z-index:30; /* above image, not clipped */
-  }
+  /* Non-clipped overlay */
+  .overlay{ position:absolute; inset:0; pointer-events:none; z-index:30; }
 
-  /* Chips (seeds scattered + placed inside bowl) */
-  .seed,.chip, .plus{
+  /* Chips */
+  .seed,.chip,.plus{
     width:56px; height:56px; border-radius:50%;
     display:grid; place-items:center; user-select:none;
     background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
@@ -88,19 +117,17 @@
   @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
   .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
   @keyframes fadeout{to{ transform:translate(-50%,-50%) scale(.82); opacity:0 }}
-  .on-rim{ pointer-events:none; } /* allow image to receive long-press */
+  .on-rim{ pointer-events:none; }
 
-  /* WAITING pulse for each chip (inwards wiggle + scale + opacity), vector via CSS vars --ix/--iy (px) */
-  .waitPulse{
-    animation:chipPulse 1.8s ease-in-out infinite;
-  }
+  /* Waiting pulse per chip */
+  .waitPulse{ animation:chipPulse 1.8s ease-in-out infinite; }
   @keyframes chipPulse{
     0%  { transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
     50% { transform:translate(calc(-50% + var(--ix,0px)), calc(-50% + var(--iy,0px))) scale(.94); opacity:.85 }
     100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
   }
 
-  /* Cancel button (not clipped) */
+  /* Cancel */
   .cancel{
     position:absolute; width:56px; height:56px; border-radius:50%;
     display:grid; place-items:center; cursor:pointer; pointer-events:auto;
@@ -111,7 +138,7 @@
   }
   .cancel.show{ opacity:1 }
 
-  /* Footer (➕ picker + iridescent ✨ CTA) */
+  /* Footer */
   .footer{ position:fixed; left:16px; right:16px; bottom:16px; z-index:50; display:flex; gap:14px; align-items:center; justify-content:center; }
   .circle-btn{ width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; }
   .plus{
@@ -133,32 +160,38 @@
   .cta:active{ transform:translateY(0) scale(.98) }
   .cta .e{ font-size:36px; filter: drop-shadow(0 1px 0 #fff6) }
 
+  /* Keep carousel interactive even when locked */
+  .locked .kindRail, .locked .kchip { pointer-events:auto; filter:none }
   .locked .seed, .locked .cta, .locked .plus { pointer-events:none; filter:saturate(.4) opacity(.7) }
 </style>
 </head>
 <body>
   <div class="stage">
-    <div class="seeds" id="seeds"></div>
-
-    <div class="cauldron-wrap" id="wrap">
-      <!-- Bowl (clipping only the image) -->
-      <div class="cauldron" id="cauldron">
-        <div class="ring"></div>
-        <div class="image-wrap"><img id="image" class="result-img" alt="AI result" draggable="false"/></div>
-      </div>
-
-      <!-- Non-clipped overlay aligned to bowl -->
-      <div class="overlay" id="overlay">
-        <!-- Placed chips go here (not clipped) -->
-        <!-- Cancel lives here too (not clipped) -->
-        <button class="cancel" id="cancel" aria-label="reset">❌</button>
+    <!-- KIND CAROUSEL -->
+    <div class="kindWrap">
+      <div class="kindRail" id="kindRail" aria-label="Prompt kinds">
+        <!-- chips injected by JS -->
       </div>
     </div>
-  </div>
 
-  <div class="footer">
-    <button class="circle-btn plus" id="openPicker" aria-label="add"><span class="e">➕</span></button>
-    <button class="circle-btn cta" id="cta" aria-label="generate"><span class="e">✨</span></button>
+    <div class="centerWrap">
+      <div class="seeds" id="seeds"></div>
+
+      <div class="cauldron-wrap" id="wrap">
+        <div class="cauldron" id="cauldron">
+          <div class="ring"></div>
+          <div class="image-wrap"><img id="image" class="result-img" alt="AI result" draggable="false"/></div>
+        </div>
+        <div class="overlay" id="overlay">
+          <button class="cancel" id="cancel" aria-label="reset">❌</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <button class="circle-btn plus" id="openPicker" aria-label="add"><span class="e">➕</span></button>
+      <button class="circle-btn cta" id="cta" aria-label="generate"><span class="e">✨</span></button>
+    </div>
   </div>
 
   <!-- Emoji Picker (light glass + rounded tabs) -->
@@ -224,19 +257,52 @@
   </script>
 
 <script>
-/* ---------- Core interaction with new waiting pulse + rim reveal ---------- */
+/* -------------------- Data -------------------- */
 
-/* fixed startup set (includes 🐛) */
 const START_EMOJIS = ["🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙","🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧","❤️","😊","😁","😉","🎵","🎨","📷","🧸"];
 
-/* nouns for emojis */
 const WORDS = new Map(Object.entries({
   "🐛":"a caterpillar","🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🦋":"a butterfly","🐝":"a bee","🐢":"a turtle","🐙":"an octopus",
   "🌸":"a cherry blossom","🌿":"green leaves","🌈":"a rainbow","🌊":"ocean waves","⭐":"a starry sky","☀️":"sunlight","🌙":"moonlight","⚡":"lightning","🔥":"flames","💧":"a water droplet",
   "❤️":"a red heart","😊":"a smile","😁":"joy","😉":"a playful wink","🎵":"a music note","🎨":"paint","📷":"a camera","🧸":"a teddy bear","✨":"sparkles"
 }));
 
-/* DOM */
+/* Prompt “kinds” — wild but safe variants */
+const KIND_EMOJIS = ["🥺","🤯","🤬","😳","🫣","😬","🤮","😈","🤑","💩","🧓","🥷","🧚‍♀️","👾"];
+let activeKind = null; // one of KIND_EMOJIS or null
+
+function kindPrompt(kind, elements){
+  // Ensure we have content even with empty bowl
+  if (!elements.length){
+    const pick = ["🐛","🦄","🌈","⚡","🔥","🌊","🧸"].map(e=>WORDS.get(e));
+    elements = pick.slice(0,3);
+  }
+  const join = elements.join(', ');
+
+  switch(kind){
+    case "🥺": return `Render ${join} as soft, oversized plush characters in a toy-box world. Hyper-cute proportions, glossy eyes, pastel lighting, gentle vignetting, cinematic depth of field. No text.`;
+    case "🤯": return `Explode ${join} into a mind-bending collage of fractured geometry and neon afterimages. Motion trails, prismatic aberrations, impossible perspective, energy bursting outward. Single coherent frame. No text.`;
+    case "🤬": return `Depict ${join} as a rebellious street mural mid-creation: spray-paint strokes, ripped posters, bold stencils, chaotic drips. Gritty textures, strong contrast, wide-angle drama. No text.`;
+    case "😳": return `Stage ${join} under a harsh spotlight on an empty stage, caught mid-awkward moment. Blush tones, nervous motion blur, exaggerated expressions; deep shadows and theatrical haze. No text.`;
+    case "🫣": return `Show ${join} peeking from behind objects in a suspenseful scene. Partial reveals, occlusion, layered depth, film-grain, rim lighting, and reflective surfaces. Single frame; no text.`;
+    case "😬": return `Create a cringe-comedy claymation still of ${join}. Hand-made textures, fingerprints, slightly off symmetry, stop-motion lighting and comedic timing. No text.`;
+    case "🤮": return `Fuse ${join} into a gooey monster made of slime and confetti. Viscous translucency, specular highlights, playful gross-out humor—colorful and cartoonish, not realistic gore. No text.`;
+    case "😈": return `Portray ${join} as mischievous heist crew mid-escape: dynamic angles, neon city at night, reflections, cheeky grins, motion blur. Stylish, comic-noir energy. No text.`;
+    case "🤑": return `Transform ${join} into a baroque treasure spectacle: gold leaf, jeweled inlays, reflective metals, extravagant composition, luxurious bokeh. No text.`;
+    case "💩": return `Turn ${join} into slapstick puppets in a messy comedy scene. Over-the-top expressions, splat effects, vibrant props, freeze-frame humor. No text.`;
+    case "🧓": return `Illustrate ${join} as folklore icons woven into an embroidered tapestry. Natural dyes, textile grain, ornamental borders, warm candlelight. No text.`;
+    case "🥷": return `Depict ${join} as panels of a high-speed ninja chase, compressed into one dramatic poster. Sharp silhouettes, moonlit rooftops, ink brush strokes, motion slashes. No text.`;
+    case "🧚‍♀️": return `Reimagine ${join} in a bioluminescent woodland: tiny fairies, floating spores, soft godrays, iridescent wings, dreamy lens bloom. No text.`;
+    case "👾": return `Glitch-meld ${join} into a retro arcade boss: pixel surfaces, CRT bloom, scanlines, chroma bleed, synthwave palette, vapor haze. No text.`;
+    default:
+      // default cinematic story-rich (variant #9)
+      const cues=["tension","harmony","transformation","pursuit","reunion","contrast","metamorphosis"];
+      const cue=cues[Math.floor(Math.random()*cues.length)];
+      return `Combine ${join} into a story-rich, cinematic composition. Show ${cue} between them, as if captured in a single dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Use coherent lighting, depth and motion in one consistent style. No text.`;
+  }
+}
+
+/* -------------------- DOM & State -------------------- */
 const cauldron = document.getElementById('cauldron');
 const overlay  = document.getElementById('overlay');
 const imageEl  = document.getElementById('image');
@@ -245,15 +311,78 @@ const cta      = document.getElementById('cta');
 const plusBtn  = document.getElementById('openPicker');
 const cancelBtn= document.getElementById('cancel');
 const picker   = document.getElementById('picker');
+const kindRail = document.getElementById('kindRail');
 
-/* STATE */
-let seeds = [];     // {id, emoji, x(px), y(px)} scattered around screen
-let placed = [];    // {id, emoji, x%(0-100), y%(0-100)} inside bowl
+let seeds = [];     // scattered around screen
+let placed = [];    // inside bowl
 let dragging = null;
+let snapTimer = null;
+let lastActiveKind = null;
 
-/* INIT */
-window.addEventListener('load', resetApp);
+window.addEventListener('load', () => { buildKindRail(); resetApp(); });
 
+/* -------------------- Kind Carousel -------------------- */
+function buildKindRail(){
+  kindRail.innerHTML = '';
+  KIND_EMOJIS.forEach(k=>{
+    const b=document.createElement('button');
+    b.className='kchip';
+    b.setAttribute('type','button');
+    b.dataset.kind=k;
+    b.innerHTML=`<span class="e">${k}</span><span class="snapHint"></span>`;
+    kindRail.appendChild(b);
+  });
+  // center first by default
+  setTimeout(()=> centerChip(kindRail.children[0]),0);
+
+  kindRail.addEventListener('scroll', onRailScroll, {passive:true});
+  kindRail.addEventListener('click', e=>{
+    const chip = e.target.closest('.kchip'); if (!chip) return;
+    centerChip(chip);
+  });
+  // observe active
+  requestAnimationFrame(updateActiveChipVisual);
+}
+function centerChip(chip){
+  const railRect = kindRail.getBoundingClientRect();
+  const cRect = chip.getBoundingClientRect();
+  const offset = (cRect.left + cRect.width/2) - (railRect.left + railRect.width/2);
+  kindRail.scrollBy({left: offset, behavior:'smooth'});
+}
+function onRailScroll(){
+  updateActiveChipVisual();
+  // debounce + 300ms hold
+  if (snapTimer) clearTimeout(snapTimer);
+  snapTimer = setTimeout(()=>{
+    const active = getActiveChip();
+    if (!active) return;
+    const k = active.dataset.kind;
+    activeKind = k;
+    if (lastActiveKind !== k){
+      lastActiveKind = k;
+      // Auto-generate with current bowl contents
+      generateFromState();
+    }
+  }, 300);
+}
+function getActiveChip(){
+  const railRect = kindRail.getBoundingClientRect();
+  const centerX = railRect.left + railRect.width/2;
+  let best=null, bestDist=1e9;
+  for (const chip of kindRail.children){
+    const r = chip.getBoundingClientRect();
+    const cx = r.left + r.width/2;
+    const d = Math.abs(cx - centerX);
+    if (d < bestDist){ best=chip; bestDist=d; }
+  }
+  return best;
+}
+function updateActiveChipVisual(){
+  const active = getActiveChip();
+  for (const chip of kindRail.children){ chip.classList.toggle('active', chip===active); }
+}
+
+/* -------------------- Core interaction -------------------- */
 function resetApp(){
   placed = [];
   imageEl.src = ""; imageEl.classList.remove('revealed');
@@ -263,16 +392,17 @@ function resetApp(){
   initSeeds(); renderSeeds(); renderPlaced(false);
 }
 
-/* scatter seeds (avoid bowl and footer) */
 function initSeeds(){
   const vw = innerWidth, vh = innerHeight;
   const bowl = cauldron.getBoundingClientRect();
   const R = bowl.width/2, cx = bowl.left + R, cy = bowl.top + R;
   const seedR = 28, minDist = seedR*2 + 16;
   const footer = document.querySelector('.footer').getBoundingClientRect();
+  const rail = kindRail.getBoundingClientRect();
   const avoid = [
     {left: cx-R-24, top: cy-R-24, right: cx+R+24, bottom: cy+R+24},
-    {left: footer.left-24, top: footer.top-24, right: footer.right+24, bottom: footer.bottom+24}
+    {left: footer.left-24, top: footer.top-24, right: footer.right+24, bottom: footer.bottom+24},
+    {left: rail.left-24, top: rail.top-24, right: rail.right+24, bottom: rail.bottom+24}
   ];
   let s=12345; const rnd=()=> (s=(1103515245*s+12345)%2**31)/2**31;
 
@@ -304,7 +434,7 @@ function renderSeeds(){
 }
 
 /* picker */
-plusBtn.addEventListener('click', ()=> picker.open());
+document.getElementById('openPicker').addEventListener('click', ()=> picker.open());
 picker.addEventListener('emoji-pick', e=>{
   const emo = e.detail.emoji;
   const pos = spotInsideBowl();
@@ -350,9 +480,7 @@ function pointerUp(ev){
     if (dragging.type==='seed'){
       placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py}); renderPlaced(true);
       const node = [...seedsEl.children][dragging.idx]; if (node) node.remove(); seeds.splice(dragging.idx,1);
-    } else {
-      placed[dragging.idx].x = px; placed[dragging.idx].y = py; renderPlaced(false);
-    }
+    } else { placed[dragging.idx].x = px; placed[dragging.idx].y = py; renderPlaced(false); }
   } else if (dragging.type==='placed'){
     const id = placed[dragging.idx].id; const node = overlay.querySelector(`.placed[data-id="${id}"]`);
     if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); } placed.splice(dragging.idx,1);
@@ -361,7 +489,6 @@ function pointerUp(ev){
 }
 function cleanupDrag(){ window.removeEventListener('pointermove', pointerMove); window.removeEventListener('pointerup', pointerUp); dragging?.ghostEl?.remove(); dragging=null; }
 
-/* render placed chips into non-clipped overlay (aligned in %) */
 function renderPlaced(playDrop=false){
   Array.from(overlay.querySelectorAll('.placed')).forEach(n=>n.remove());
   for (const p of placed){
@@ -395,7 +522,7 @@ function moveToRimPercent(x,y){
   return { x: cx + Math.cos(ang)*r, y: cy + Math.sin(ang)*r };
 }
 
-/* ---------- NEW WAITING: pulse in place (toward center) ---------- */
+/* waiting pulse */
 function startWaitingPulse(){
   document.body.classList.add('waiting');
   const bowl = cauldron.getBoundingClientRect();
@@ -403,7 +530,6 @@ function startWaitingPulse(){
   for (const p of placed){
     const node = overlay.querySelector(`.placed[data-id="${p.id}"]`);
     if (!node) continue;
-    // inward vector (px) ~ 12% of distance to center
     const dxPct = (cx - p.x) * 0.12;
     const dyPct = (cy - p.y) * 0.12;
     const ix = dxPct/100 * bowl.width;
@@ -413,15 +539,12 @@ function startWaitingPulse(){
     node.classList.add('waitPulse');
   }
 }
-
-/* ---------- REVEAL: send chips to their own rim spots & show image ---------- */
 function sendToRimAndReveal(){
   document.body.classList.remove('waiting');
   for (const p of placed){
     const node = overlay.querySelector(`.placed[data-id="${p.id}"]`); if (!node) continue;
     node.classList.remove('waitPulse');
     const target = moveToRimPercent(p.x,p.y);
-    // animate outward to rim
     node.animate([
       { left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1 },
       { left: target.x+'%', top: target.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1 }
@@ -430,34 +553,33 @@ function sendToRimAndReveal(){
     node.style.left = p.x+'%'; node.style.top = p.y+'%';
     node.classList.add('on-rim');
   }
-  // ❌ on top-right rim (non-clipped)
   const rim = moveToRimPercent(90,10);
   cancelBtn.style.left = rim.x+'%'; cancelBtn.style.top = rim.y+'%'; cancelBtn.classList.add('show');
-  // image bounce reveal
   requestAnimationFrame(()=> imageEl.classList.add('revealed'));
 }
 
-/* ---------- PROMPT CORE (Variant #9) ---------- */
+/* ---------- Prompt builders ---------- */
+function buildElementsList(){
+  return placed.map(p => WORDS.get(p.emoji) || `the ${p.emoji} symbol`);
+}
 function buildPrompt(){
-  if (!placed.length) return "";
-  const elements = placed.map(p => WORDS.get(p.emoji) || `the ${p.emoji} symbol`);
-  const cues2 = ["tension","harmony","transformation","pursuit","reunion"];
-  const cues3 = ["tension","harmony","transformation","pursuit","reunion","contrast","metamorphosis"];
-  const r = (arr)=> arr[Math.floor(Math.random()*arr.length)];
-  const cue = elements.length<=2 ? r(cues2) : r(cues3);
+  const elements = buildElementsList();
+  if (activeKind) return kindPrompt(activeKind, elements);
+  // default variant #9
+  const cues=["tension","harmony","transformation","pursuit","reunion","contrast","metamorphosis"];
+  const cue=cues[Math.floor(Math.random()*cues.length)];
   return `Combine ${elements.join(', ')} into a story-rich, cinematic composition. Show ${cue} between them, as if captured in a single dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Use coherent lighting, depth and motion in one consistent style. No text.`;
 }
 
-/* Pollinations */
+/* ---------- Pollinations ---------- */
 async function callPollinations(prompt){
   const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) + "?width=768&height=768";
   const res = await fetch(url,{mode:"cors"}); if(!res.ok) throw new Error('Pollinations error');
   const blob = await res.blob(); return URL.createObjectURL(blob);
 }
 
-/* CTA + Cancel */
-cta.addEventListener('click', async ()=>{
-  if (document.body.classList.contains('locked')) return;
+/* ---------- Generate (CTA and carousel both use this) ---------- */
+async function generateFromState(){
   const prompt = buildPrompt();
   if(!prompt){
     cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
@@ -469,10 +591,13 @@ cta.addEventListener('click', async ()=>{
     imageEl.src = imgURL;
     imageEl.onload = () => {
       sendToRimAndReveal();
-      document.body.classList.add('locked');
+      document.body.classList.add('locked'); // but carousel remains active
     };
   }catch(e){ console.warn(e); document.body.classList.remove('waiting'); }
-});
+}
+
+/* CTA click */
+cta.addEventListener('click', generateFromState);
 cancelBtn.addEventListener('click', resetApp);
 
 /* helpers */
