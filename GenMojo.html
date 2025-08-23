@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Emoji Story Mixer — Orbit Reveal</title>
+<title>Emoji Story Mixer — Pulse & Rim Reveal</title>
 <style>
   :root{
     --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
@@ -30,44 +30,22 @@
   .stage{position:fixed; inset:0; display:grid; place-items:center; z-index:2}
 
   .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1; z-index:20; display:grid; place-items:center; }
+  /* Bowl (clipping only the image) */
   .cauldron{
     position:relative; width:100%; height:100%; border-radius:50%;
     background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
     box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
     outline:1px solid var(--ring2);
-    overflow:hidden; display:grid; place-items:center;
+    overflow:hidden; /* only the image is inside here */
+    display:grid; place-items:center;
   }
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
+  .waiting .cauldron{ animation:bowlPulse 2.2s ease-in-out infinite; }
+  @keyframes bowlPulse{0%{filter:saturate(1) brightness(1)}50%{filter:saturate(1.08) brightness(1.06)}100%{filter:saturate(1) brightness(1)}}
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
-  /* chips */
-  .seed,.chip{
-    width:56px; height:56px; border-radius:50%;
-    display:grid; place-items:center; user-select:none;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
-  }
-  .seed{ position:absolute; transform:translate(-50%,-50%); pointer-events:auto; animation:float var(--dur,9s) ease-in-out infinite var(--delay,0s); }
-  @keyframes float{0%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))}50%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px))}100%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))}}
-  .seed .e, .placed .e, .plus .e, .cta .e{font-size:28px}
-
-  .placed{
-    position:absolute; width:12vmin; max-width:72px; aspect-ratio:1; border-radius:50%;
-    display:grid; place-items:center; cursor:grab;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
-    transform:translate(-50%,-50%) scale(1);
-    transition:transform .25s var(--ease), opacity .25s var(--ease), left .25s var(--ease), top .25s var(--ease);
-    z-index:40; /* above image */
-  }
-  .placed.dropin{ animation:drop .38s var(--ease) }
-  @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
-  .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
-  @keyframes fadeout{to{ transform:translate(-50%,-50%) scale(.82); opacity:0 }}
-  .on-rim{ pointer-events:none; }
-
-  /* image */
-  .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:30; }
+  /* Image layer (clipped by bowl) */
+  .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
   .result-img{
     width:100%; height:100%; object-fit:cover; display:block;
     opacity:0; transform:scale(.2); /* reveal from 20% */
@@ -76,23 +54,64 @@
   }
   .result-img.revealed{ opacity:1; transform:scale(1) }
 
-  /* cancel ON rim */
-  .cancel{
-    position:absolute; width:56px; height:56px; border-radius:50%; display:grid; place-items:center;
-    background:radial-gradient(120% 120% at 30% 30%, #fff, #f6f7fb 60%, #e9eef9 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffff; font-size:26px; cursor:pointer;
-    transform:translate(-50%,-50%); z-index:9999; opacity:0; transition:opacity .2s var(--ease);
+  /* Non-clipped overlay on top of bowl: chips + cancel live here */
+  .overlay{
+    position:absolute; inset:0; pointer-events:none; /* children opt-in */
+    z-index:30; /* above image, not clipped */
   }
-  .cancel.show{opacity:1}
 
-  /* orbit */
-  .orbit{ position:absolute; inset:0; border-radius:50%; pointer-events:none; z-index:39; }
-  .orbit.spin{ animation:orbitRot 8s linear infinite; }
-  @keyframes orbitRot{ to{ transform:rotate(360deg) } }
-  .pulsing{ animation:pulseDots 1.8s ease-in-out infinite }
-  @keyframes pulseDots{ 0%{ transform:translate(-50%,-50%) scale(1); opacity:1 } 50%{ transform:translate(-50%,-50%) scale(.94); opacity:.82 } 100%{ transform:translate(-50%,-50%) scale(1); opacity:1 } }
+  /* Chips (seeds scattered + placed inside bowl) */
+  .seed,.chip, .plus{
+    width:56px; height:56px; border-radius:50%;
+    display:grid; place-items:center; user-select:none;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
+  }
+  .seed{
+    position:absolute; transform:translate(-50%,-50%); pointer-events:auto;
+    animation:float var(--dur,9s) ease-in-out infinite var(--delay,0s);
+  }
+  @keyframes float{
+    0%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))} 
+    50%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px))}
+    100%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))}
+  }
+  .placed{
+    position:absolute; width:12vmin; max-width:72px; aspect-ratio:1; border-radius:50%;
+    display:grid; place-items:center; cursor:grab; pointer-events:auto;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
+    transform:translate(-50%,-50%) scale(1);
+    transition:transform .25s var(--ease), opacity .25s var(--ease);
+  }
+  .placed.dropin{ animation:drop .38s var(--ease) }
+  @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
+  .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
+  @keyframes fadeout{to{ transform:translate(-50%,-50%) scale(.82); opacity:0 }}
+  .on-rim{ pointer-events:none; } /* allow image to receive long-press */
 
-  /* footer */
+  /* WAITING pulse for each chip (inwards wiggle + scale + opacity), vector via CSS vars --ix/--iy (px) */
+  .waitPulse{
+    animation:chipPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes chipPulse{
+    0%  { transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
+    50% { transform:translate(calc(-50% + var(--ix,0px)), calc(-50% + var(--iy,0px))) scale(.94); opacity:.85 }
+    100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
+  }
+
+  /* Cancel button (not clipped) */
+  .cancel{
+    position:absolute; width:56px; height:56px; border-radius:50%;
+    display:grid; place-items:center; cursor:pointer; pointer-events:auto;
+    background:radial-gradient(120% 120% at 30% 30%, #fff, #f6f7fb 60%, #e9eef9 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
+    font-size:26px; transform:translate(-50%,-50%); opacity:0; transition:opacity .2s var(--ease);
+    z-index:9999;
+  }
+  .cancel.show{ opacity:1 }
+
+  /* Footer (➕ picker + iridescent ✨ CTA) */
   .footer{ position:fixed; left:16px; right:16px; bottom:16px; z-index:50; display:flex; gap:14px; align-items:center; justify-content:center; }
   .circle-btn{ width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; }
   .plus{
@@ -122,15 +141,16 @@
     <div class="seeds" id="seeds"></div>
 
     <div class="cauldron-wrap" id="wrap">
+      <!-- Bowl (clipping only the image) -->
       <div class="cauldron" id="cauldron">
         <div class="ring"></div>
+        <div class="image-wrap"><img id="image" class="result-img" alt="AI result" draggable="false"/></div>
+      </div>
 
-        <div class="image-wrap">
-          <img id="image" class="result-img" alt="AI result" draggable="false"/>
-        </div>
-
-        <div class="orbit" id="orbit"></div>
-
+      <!-- Non-clipped overlay aligned to bowl -->
+      <div class="overlay" id="overlay">
+        <!-- Placed chips go here (not clipped) -->
+        <!-- Cancel lives here too (not clipped) -->
         <button class="cancel" id="cancel" aria-label="reset">❌</button>
       </div>
     </div>
@@ -141,7 +161,7 @@
     <button class="circle-btn cta" id="cta" aria-label="generate"><span class="e">✨</span></button>
   </div>
 
-  <!-- Emoji Picker (light theme + rounded tabs) -->
+  <!-- Emoji Picker (light glass + rounded tabs) -->
   <emoji-picker id="picker"></emoji-picker>
   <script>
   customElements.define('emoji-picker', class extends HTMLElement {
@@ -151,7 +171,7 @@
         :host{all:initial}
         .p{
           position:fixed; inset:auto 0 0 0; margin:auto; width:min(760px,96vw); height:min(70vh,720px);
-          background:linear-gradient(180deg, #ffffffb8, #f6fbffb8);
+          background:linear-gradient(180deg, #ffffffc8, #f6fbffc8);
           border:1px solid #ffffffa0; border-radius:18px;
           box-shadow:0 12px 40px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.6) inset;
           backdrop-filter: blur(10px) saturate(1.05);
@@ -163,12 +183,12 @@
           display:flex; gap:8px; overflow:auto; padding:10px 12px;
           background:linear-gradient(180deg,#ffffffee,#f7fbffee);
           border-bottom:1px solid #ffffffaa;
-          border-top-left-radius:18px; border-top-right-radius:18px; /* rounded bar ends */
+          border-top-left-radius:18px; border-top-right-radius:18px;
         }
         .t{
           width:42px; height:42px; border-radius:999px;
           border:1px solid #ffffffc4; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%);
-          box-shadow:var(--shadow, 0 6px 16px rgba(0,0,0,.08)), inset 0 1px 0 #ffffff;
+          box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 #ffffff;
           cursor:pointer;
         }
         .s{ position:relative; overflow:auto; padding:12px; border-bottom-left-radius:18px; border-bottom-right-radius:18px; }
@@ -204,9 +224,9 @@
   </script>
 
 <script>
-/* ---------- Core interaction + orbit/reveal choreography ---------- */
+/* ---------- Core interaction with new waiting pulse + rim reveal ---------- */
 
-/* fixed startup set */
+/* fixed startup set (includes 🐛) */
 const START_EMOJIS = ["🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙","🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧","❤️","😊","😁","😉","🎵","🎨","📷","🧸"];
 
 /* nouns for emojis */
@@ -218,17 +238,17 @@ const WORDS = new Map(Object.entries({
 
 /* DOM */
 const cauldron = document.getElementById('cauldron');
+const overlay  = document.getElementById('overlay');
 const imageEl  = document.getElementById('image');
 const seedsEl  = document.getElementById('seeds');
 const cta      = document.getElementById('cta');
 const plusBtn  = document.getElementById('openPicker');
 const cancelBtn= document.getElementById('cancel');
 const picker   = document.getElementById('picker');
-const orbit    = document.getElementById('orbit');
 
 /* STATE */
-let seeds = [];     // {id, emoji, x, y}
-let placed = [];    // {id, emoji, x%, y%}
+let seeds = [];     // {id, emoji, x(px), y(px)} scattered around screen
+let placed = [];    // {id, emoji, x%(0-100), y%(0-100)} inside bowl
 let dragging = null;
 
 /* INIT */
@@ -237,13 +257,13 @@ window.addEventListener('load', resetApp);
 function resetApp(){
   placed = [];
   imageEl.src = ""; imageEl.classList.remove('revealed');
-  document.body.classList.remove('locked');
+  document.body.classList.remove('locked','waiting');
   cancelBtn.classList.remove('show');
-  orbit.classList.remove('spin'); orbit.innerHTML='';
+  Array.from(overlay.querySelectorAll('.placed')).forEach(n=>n.remove());
   initSeeds(); renderSeeds(); renderPlaced(false);
 }
 
-/* scatter seeds (avoid bowl/footer) */
+/* scatter seeds (avoid bowl and footer) */
 function initSeeds(){
   const vw = innerWidth, vh = innerHeight;
   const bowl = cauldron.getBoundingClientRect();
@@ -292,7 +312,7 @@ picker.addEventListener('emoji-pick', e=>{
   renderPlaced(true);
 });
 
-/* drag */
+/* drag seeds into bowl */
 function startDragSeed(ev, id){
   if (document.body.classList.contains('locked')) return;
   ev.preventDefault();
@@ -301,6 +321,7 @@ function startDragSeed(ev, id){
   dragging = {type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
   pointerMove(ev); window.addEventListener('pointermove', pointerMove); window.addEventListener('pointerup', pointerUp);
 }
+/* drag placed inside bowl (overlay) */
 function startDragPlaced(ev, id){
   if (document.body.classList.contains('locked')) return;
   ev.preventDefault();
@@ -319,7 +340,8 @@ function pointerMove(ev){
   if (!dragging) return;
   dragging.ghostEl.style.left = ev.clientX+'px'; dragging.ghostEl.style.top  = ev.clientY+'px';
   const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
-  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`; cauldron.classList.toggle('over', inside);
+  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
+  cauldron.classList.toggle('over', inside);
 }
 function pointerUp(ev){
   if (!dragging) return cleanupDrag();
@@ -328,25 +350,30 @@ function pointerUp(ev){
     if (dragging.type==='seed'){
       placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py}); renderPlaced(true);
       const node = [...seedsEl.children][dragging.idx]; if (node) node.remove(); seeds.splice(dragging.idx,1);
-    } else { placed[dragging.idx].x = px; placed[dragging.idx].y = py; renderPlaced(false); }
+    } else {
+      placed[dragging.idx].x = px; placed[dragging.idx].y = py; renderPlaced(false);
+    }
   } else if (dragging.type==='placed'){
-    const id = placed[dragging.idx].id; const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
+    const id = placed[dragging.idx].id; const node = overlay.querySelector(`.placed[data-id="${id}"]`);
     if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); } placed.splice(dragging.idx,1);
   }
   cleanupDrag();
 }
 function cleanupDrag(){ window.removeEventListener('pointermove', pointerMove); window.removeEventListener('pointerup', pointerUp); dragging?.ghostEl?.remove(); dragging=null; }
 
+/* render placed chips into non-clipped overlay (aligned in %) */
 function renderPlaced(playDrop=false){
-  Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
+  Array.from(overlay.querySelectorAll('.placed')).forEach(n=>n.remove());
   for (const p of placed){
     const n = document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
     n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
-    if (playDrop) n.classList.add('dropin'); n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id)); cauldron.appendChild(n);
+    if (playDrop) n.classList.add('dropin');
+    n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id));
+    overlay.appendChild(n);
   }
 }
 
-/* geometry */
+/* geometry helpers */
 function coordsInCauldron(cx, cy){
   const r = cauldron.getBoundingClientRect(); const mx = cx - (r.left + r.width/2); const my = cy - (r.top  + r.height/2);
   const dist = Math.hypot(mx,my); const inside = dist <= r.width/2;
@@ -363,56 +390,61 @@ function spotInsideBowl(){
     if (ok) return {x:px,y:py};
   } return {x:50,y:50};
 }
-
-/* rim placement */
 function moveToRimPercent(x,y){
-  const cx=50, cy=50, r=44;
-  const ang = Math.atan2(y-cy, x-cx);
+  const cx=50, cy=50, r=44; const ang = Math.atan2(y-cy, x-cx);
   return { x: cx + Math.cos(ang)*r, y: cy + Math.sin(ang)*r };
 }
 
-/* orbit choreography */
-function startOrbit(){
-  if (!placed.length){ placed.push({id:crypto.randomUUID(), emoji:"✨", x:50, y:60}); renderPlaced(true); }
-  const N = placed.length, innerR = 24;
-  for (let i=0;i<N;i++){
-    const ang = (i/N) * Math.PI*2;
-    const tx = 50 + Math.cos(ang)*innerR;
-    const ty = 50 + Math.sin(ang)*innerR;
-    const node = cauldron.querySelector(`.placed[data-id="${placed[i].id}"]`);
+/* ---------- NEW WAITING: pulse in place (toward center) ---------- */
+function startWaitingPulse(){
+  document.body.classList.add('waiting');
+  const bowl = cauldron.getBoundingClientRect();
+  const cx = 50, cy = 50;
+  for (const p of placed){
+    const node = overlay.querySelector(`.placed[data-id="${p.id}"]`);
     if (!node) continue;
-    node.animate([{ left: placed[i].x+'%', top: placed[i].y+'%', transform:'translate(-50%,-50%) scale(1)' },{ left: tx+'%', top: ty+'%', transform:'translate(-50%,-50%) scale(.96)'}], {duration:420, easing:'cubic-bezier(.2,.8,.2,1)'});
-    placed[i].x = tx; placed[i].y = ty; node.style.left = tx+'%'; node.style.top = ty+'%'; node.classList.add('pulsing');
+    // inward vector (px) ~ 12% of distance to center
+    const dxPct = (cx - p.x) * 0.12;
+    const dyPct = (cy - p.y) * 0.12;
+    const ix = dxPct/100 * bowl.width;
+    const iy = dyPct/100 * bowl.height;
+    node.style.setProperty('--ix', ix.toFixed(2)+'px');
+    node.style.setProperty('--iy', iy.toFixed(2)+'px');
+    node.classList.add('waitPulse');
   }
-  orbit.classList.add('spin');
 }
-function endOrbitToRim(){
-  orbit.classList.remove('spin');
-  placed.forEach(p=>{
-    const node = cauldron.querySelector(`.placed[data-id="${p.id}"]`); if (!node) return;
+
+/* ---------- REVEAL: send chips to their own rim spots & show image ---------- */
+function sendToRimAndReveal(){
+  document.body.classList.remove('waiting');
+  for (const p of placed){
+    const node = overlay.querySelector(`.placed[data-id="${p.id}"]`); if (!node) continue;
+    node.classList.remove('waitPulse');
     const target = moveToRimPercent(p.x,p.y);
-    node.animate([{ left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(.96)' },{ left: target.x+'%', top: target.y+'%', transform:'translate(-50%,-50%) scale(.96)'}], {duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
-    p.x = target.x; p.y = target.y; node.style.left=p.x+'%'; node.style.top=p.y+'%'; node.classList.add('on-rim'); node.classList.remove('pulsing');
-  });
+    // animate outward to rim
+    node.animate([
+      { left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1 },
+      { left: target.x+'%', top: target.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1 }
+    ], {duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
+    p.x = target.x; p.y = target.y;
+    node.style.left = p.x+'%'; node.style.top = p.y+'%';
+    node.classList.add('on-rim');
+  }
+  // ❌ on top-right rim (non-clipped)
   const rim = moveToRimPercent(90,10);
   cancelBtn.style.left = rim.x+'%'; cancelBtn.style.top = rim.y+'%'; cancelBtn.classList.add('show');
+  // image bounce reveal
   requestAnimationFrame(()=> imageEl.classList.add('revealed'));
 }
 
 /* ---------- PROMPT CORE (Variant #9) ---------- */
 function buildPrompt(){
   if (!placed.length) return "";
-
-  // 1) elements text (no positions)
   const elements = placed.map(p => WORDS.get(p.emoji) || `the ${p.emoji} symbol`);
-
-  // 2) relationship cue to enforce narrative (picked by count)
   const cues2 = ["tension","harmony","transformation","pursuit","reunion"];
   const cues3 = ["tension","harmony","transformation","pursuit","reunion","contrast","metamorphosis"];
   const r = (arr)=> arr[Math.floor(Math.random()*arr.length)];
   const cue = elements.length<=2 ? r(cues2) : r(cues3);
-
-  // Final template (no positional language)
   return `Combine ${elements.join(', ')} into a story-rich, cinematic composition. Show ${cue} between them, as if captured in a single dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Use coherent lighting, depth and motion in one consistent style. No text.`;
 }
 
@@ -431,15 +463,15 @@ cta.addEventListener('click', async ()=>{
     cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
       {duration:280,easing:'cubic-bezier(.3,.8,.2,1)'}); return;
   }
-  startOrbit();
+  startWaitingPulse();
   try{
     const imgURL = await callPollinations(prompt);
     imageEl.src = imgURL;
     imageEl.onload = () => {
-      endOrbitToRim();
+      sendToRimAndReveal();
       document.body.classList.add('locked');
     };
-  }catch(e){ console.warn(e); }
+  }catch(e){ console.warn(e); document.body.classList.remove('waiting'); }
 });
 cancelBtn.addEventListener('click', resetApp);
 
