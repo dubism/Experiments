@@ -27,37 +27,56 @@
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
-  .stage{position:fixed; inset:0; display:grid; place-items:center}
-  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1; z-index:20; display:grid; place-items:center; perspective:900px; }
+  /* ambient pulse overlay (enabled only when waiting) */
+  .waitFX{
+    position:fixed; inset:0; pointer-events:none; z-index:1;
+    background:
+      radial-gradient(120vmax 120vmax at 20% 15%, #7ff0cf33, transparent 60%),
+      radial-gradient(120vmax 120vmax at 80% 25%, #b39bff33, transparent 60%),
+      radial-gradient(120vmax 120vmax at 30% 80%, #ff9bd433, transparent 60%);
+    opacity:0; mix-blend-mode:overlay;
+  }
+  .waiting .waitFX{ opacity:.35; animation:breath 2.6s ease-in-out infinite, hueShift 8s linear infinite; }
+  @keyframes breath{ 0%{opacity:.15} 50%{opacity:.4} 100%{opacity:.15} }
+  @keyframes hueShift{ to{ filter:hue-rotate(45deg) } }
+
+  .stage{position:fixed; inset:0; display:grid; place-items:center; z-index:2}
+
+  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1; z-index:20; display:grid; place-items:center; }
   .cauldron{
     position:relative; width:100%; height:100%; border-radius:50%;
     background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
     box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
     outline:1px solid var(--ring2);
     overflow:hidden; display:grid; place-items:center;
+    transform:translateZ(0);
   }
+  .waiting .cauldron{ animation:rot 8s linear infinite, pulse 2.2s ease-in-out infinite; }
+  @keyframes rot{ to{ transform:rotate(360deg) } }
+  @keyframes pulse{ 0%{ filter:saturate(1) brightness(1)} 50%{ filter:saturate(1.08) brightness(1.06)} 100%{ filter:saturate(1) brightness(1)} }
+
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
   /* placed chips */
   .placed{
     position:absolute; width:12vmin; max-width:72px; aspect-ratio:1; border-radius:50%;
-    display:grid; place-items:center; user-select:none; cursor:grab;
+    display:grid; place-items:center; cursor:grab;
     background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
     transform:translate(-50%,-50%) scale(1);
     transition:transform .25s var(--ease), opacity .25s var(--ease);
-    z-index:3;
+    z-index:40; /* above image */
   }
   .placed .e{font-size:clamp(24px, 8vmin, 44px); filter:drop-shadow(0 1px 0 #ffffffcc)}
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{ 0%{transform:translate(-50%,-50%) scale(.72)} 70%{transform:translate(-50%,-50%) scale(1.14)} 100%{transform:translate(-50%,-50%) scale(1)} }
   .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
   @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
-  .on-rim{ pointer-events:none; } /* when tucked to rim after render */
+  .on-rim{ pointer-events:none; } /* lets image receive long-press */
 
-  /* result image + vortex */
-  .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:4; }
+  /* result image layer */
+  .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:30; }
   .result-img{
     width:100%; height:100%; object-fit:cover; display:block;
     opacity:0; transform:scale(.92);
@@ -66,33 +85,18 @@
   }
   .result-img.revealed{ opacity:1; transform:scale(1) }
 
-  .vortex{ position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; opacity:0; transform:translateZ(0); z-index:5; }
-  .vortex.on{ opacity:1; }
-  .swirl{ position:absolute; width:68%; aspect-ratio:1; transform-style:preserve-3d; animation:swirl 2.8s linear infinite; filter:drop-shadow(0 6px 10px #0002); }
-  @keyframes swirl{ to{ transform:rotateZ(360deg) } }
-  .swirl .orb{
-    position:absolute; left:50%; top:50%; width:58px; height:58px; border-radius:50%; display:grid; place-items:center;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8;
-    transform:rotateZ(var(--a)) translateY(calc(-35% - var(--r))) rotateX(65deg) translateZ(var(--z));
-    animation:pop .9s ease-in-out infinite alternate var(--d);
-  }
-  .swirl .orb .e{font-size:28px}
-  @keyframes pop{ from{ filter:blur(.4px); opacity:.9 } to{ filter:blur(1.2px); opacity:.7 } }
-
-  /* cancel inside bowl, top-right edge */
+  /* cancel puck ON THE RIM, above all */
   .cancel{
-    position:absolute; right:6%; top:6%; width:56px; height:56px; border-radius:50%;
+    position:absolute; width:56px; height:56px; border-radius:50%;
     display:grid; place-items:center; background:radial-gradient(120% 120% at 30% 30%, #fff, #f6f7fb 60%, #e9eef9 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffff; font-size:26px; cursor:pointer;
-    opacity:0; transform:scale(.9);
-    transition:opacity .2s var(--ease), transform .25s var(--ease);
-    z-index:9999;
+    transform:translate(-50%,-50%); z-index:9999; opacity:0; transition:opacity .2s var(--ease);
+    /* will be positioned by JS to exact rim coords */
   }
-  .cancel.show{ opacity:1; transform:scale(1) }
+  .cancel.show{ opacity:1 }
 
-  /* floating seeds */
-  .seeds{position:fixed; inset:0; pointer-events:none; z-index:2}
+  /* floating seeds (unchanged) */
+  .seeds{position:fixed; inset:0; pointer-events:none; z-index:10}
   .seed{
     position:absolute; width:56px; height:56px; border-radius:50%;
     display:grid; place-items:center; user-select:none; pointer-events:auto;
@@ -109,14 +113,13 @@
     100%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) }
   }
 
-  /* footer */
-  .footer{ position:fixed; left:16px; right:16px; bottom:16px; z-index:40; display:flex; gap:12px; align-items:center; }
+  /* footer (input + CTA) */
+  .footer{ position:fixed; left:16px; right:16px; bottom:16px; z-index:50; display:flex; gap:12px; align-items:center; }
   .cluster{ flex:1; display:flex; align-items:center; height:56px; padding:8px; gap:8px; border-radius:20px; background:linear-gradient(180deg, #ffffff70, #ffffff40); backdrop-filter: blur(10px) saturate(1.05); box-shadow:var(--shadow), inset 0 0 0 1px #00000012, inset 0 1px 0 #ffffff90; }
   .input{ flex:1; height:40px; border-radius:12px; padding:8px 12px; outline:none; border:none; background:#ffffffea; box-shadow: inset 0 1px 0 #fff, 0 0 0 1px #00000014; font-size:17px; }
   .add{ width:48px; height:48px; border-radius:14px; display:grid; place-items:center; cursor:pointer; flex:0 0 48px; background:radial-gradient(140% 140% at 30% 30%, #ffffff, #f5f7ff 60%, #e9f0ff 100%); box-shadow:var(--shadow), inset 0 1px 0 #ffffff; }
   .add .e{ font-size:22px }
 
-  /* CTA (emerald) */
   .cta{
     flex:0 0 88px; width:88px; height:88px; border-radius:26px; display:grid; place-items:center; cursor:pointer; user-select:none;
     background:
@@ -133,11 +136,12 @@
   .cta:active{ transform:translateY(0) scale(.98) }
   .cta .e{ font-size:44px; filter: drop-shadow(0 1px 0 #fff6) }
 
-  /* lock */
   .locked .seed, .locked .cluster, .locked .cta { pointer-events:none; filter:saturate(.4) opacity(.7) }
 </style>
 </head>
 <body>
+  <div class="waitFX" id="waitFX"></div>
+
   <div class="stage">
     <div class="seeds" id="seeds"></div>
 
@@ -147,9 +151,9 @@
 
         <div class="image-wrap">
           <img id="image" class="result-img" alt="AI result" draggable="false"/>
-          <div class="vortex" id="vortex"><div class="swirl" id="swirl"></div></div>
         </div>
 
+        <!-- ❌ sits ON the rim; JS positions it exactly -->
         <button class="cancel" id="cancel" aria-label="reset">❌</button>
       </div>
     </div>
@@ -164,12 +168,8 @@
   </div>
 
 <script>
-/* ----- fixed startup emojis (always the same; contains 🐛) ----- */
-const START_EMOJIS = [
-  "🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙",
-  "🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧",
-  "❤️","😊","😁","😉","🎵","🎨","📷","🧸"
-];
+/* ---- fixed startup emojis ---- */
+const START_EMOJIS = ["🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙","🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧","❤️","😊","😁","😉","🎵","🎨","📷","🧸"];
 
 /* words for prompt */
 const WORDS = new Map(Object.entries({
@@ -178,7 +178,7 @@ const WORDS = new Map(Object.entries({
   "❤️":"a red heart","😊":"a smile","😁":"joy","😉":"a playful wink","🎵":"a music note","🎨":"paint","📷":"a camera","🧸":"a teddy bear"
 }));
 
-/* DOM */
+/* DOM refs */
 const cauldron = document.getElementById('cauldron');
 const wrap     = document.getElementById('wrap');
 const imageEl  = document.getElementById('image');
@@ -187,57 +187,44 @@ const addBtn   = document.getElementById('addBtn');
 const cta      = document.getElementById('cta');
 const cancelBtn= document.getElementById('cancel');
 const emojiInput = document.getElementById('emojiInput');
-const vortex   = document.getElementById('vortex');
-const swirl    = document.getElementById('swirl');
 
-/* STATE */
+/* state */
 let seeds = [];     // {id, emoji, x, y}
 let placed = [];    // {id, emoji, x%, y%}
 let dragging = null;
 
-/* init */
+/* init/reset */
 window.addEventListener('load', resetApp);
-
 function resetApp(){
   placed = [];
   imageEl.src = ""; imageEl.classList.remove('revealed');
-  cauldron.classList.remove('show-image');
-  stopVortex();
+  document.body.classList.remove('locked','waiting');
   cancelBtn.classList.remove('show');
-  document.body.classList.remove('locked');
   initSeeds(); renderSeeds(); renderPlaced(false);
 }
 
-/* deterministic scatter around screen, avoiding bowl+footer */
+/* deterministic scatter around viewport avoiding bowl/footer */
 function initSeeds(){
   const vw = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
   const vh = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
   const bowl = cauldron.getBoundingClientRect();
   const R = bowl.width/2, cx = bowl.left + R, cy = bowl.top + R;
-  const seedR = 28;
+  const seedR = 28, minDist = seedR*2 + 16;
   const avoid = [
     {left: cx-R-24, top: cy-R-24, right: cx+R+24, bottom: cy+R+24},
     (()=>{const f=document.querySelector('.footer').getBoundingClientRect(); return {left:f.left-16, top:f.top-16, right:f.right+16, bottom:f.bottom+16}})()
   ];
-  const minDist = seedR*2 + 16;
-
-  // simple deterministic PRNG
   let s=12345; const rnd=()=> (s=(1103515245*s+12345)%2**31)/2**31;
-
-  seeds = [];
-  let i = 0, tries = 0;
-  while (i < START_EMOJIS.length && tries++ < 6000){
-    const x = 20 + rnd()*(vw-40);
-    const y = 20 + rnd()*(vh-40);
+  seeds = []; let i=0, tries=0;
+  while (i<START_EMOJIS.length && tries++<6000){
+    const x = 20 + rnd()*(vw-40), y = 20 + rnd()*(vh-40);
     const blocked = avoid.some(ar => x>ar.left-seedR && x<ar.right+seedR && y>ar.top-seedR && y<ar.bottom+seedR);
     if (blocked) continue;
-    let ok=true; for(const s of seeds){ if (Math.hypot(x - s.x, y - s.y) < minDist){ ok=false; break; } }
+    let ok=true; for(const s of seeds){ if (Math.hypot(x-s.x,y-s.y)<minDist){ok=false;break;} }
     if (!ok) continue;
-    seeds.push({id:crypto.randomUUID(), emoji:START_EMOJIS[i], x, y});
-    i++;
+    seeds.push({id:crypto.randomUUID(), emoji:START_EMOJIS[i++], x, y});
   }
 }
-
 function renderSeeds(){
   seedsEl.innerHTML = '';
   for(const s of seeds){
@@ -261,28 +248,21 @@ emojiInput.addEventListener('input', ()=> {
 });
 addBtn.addEventListener('click', addFromInput);
 emojiInput.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); addFromInput(); emojiInput.blur(); } });
-
 function addFromInput(){
   const chars = Array.from(emojiInput.value || '').filter(ch => /\p{Extended_Pictographic}/u.test(ch));
   if (!chars.length) return pulse(addBtn);
-  for (const e of chars){
-    const pos = spotInsideBowl();
-    placed.push({id:crypto.randomUUID(), emoji:e, x:pos.x, y:pos.y});
-  }
-  emojiInput.value = '';
-  renderPlaced(true);
+  for (const e of chars){ const pos = spotInsideBowl(); placed.push({id:crypto.randomUUID(), emoji:e, x:pos.x, y:pos.y}); }
+  emojiInput.value = ''; renderPlaced(true);
 }
 
-/* dragging */
+/* drag */
 function startDragSeed(ev, id){
   if (document.body.classList.contains('locked')) return;
   ev.preventDefault();
   const idx = seeds.findIndex(s=>s.id===id); if (idx<0) return;
   const ghost = makeGhost(seeds[idx].emoji);
   dragging = {type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
-  pointerMove(ev);
-  window.addEventListener('pointermove', pointerMove);
-  window.addEventListener('pointerup', pointerUp);
+  pointerMove(ev); window.addEventListener('pointermove', pointerMove); window.addEventListener('pointerup', pointerUp);
 }
 function startDragPlaced(ev, id){
   if (document.body.classList.contains('locked')) return;
@@ -290,140 +270,82 @@ function startDragPlaced(ev, id){
   const idx = placed.findIndex(p=>p.id===id); if (idx<0) return;
   const ghost = makeGhost(placed[idx].emoji);
   dragging = {type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
-  pointerMove(ev);
-  window.addEventListener('pointermove', pointerMove);
-  window.addEventListener('pointerup', pointerUp);
+  pointerMove(ev); window.addEventListener('pointermove', pointerMove); window.addEventListener('pointerup', pointerUp);
 }
 function makeGhost(emoji){
   const g = document.createElement('div');
-  g.className='seed';
-  g.style.width='64px'; g.style.height='64px'; g.style.position='fixed'; g.style.zIndex=9999;
-  g.style.transform='translate(-50%,-50%) scale(1.0)';
-  g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
-  g.innerHTML = `<span class="e">${emoji}</span>`;
-  document.body.appendChild(g); return g;
+  g.className='seed'; g.style.width='64px'; g.style.height='64px'; g.style.position='fixed'; g.style.zIndex=9999;
+  g.style.transform='translate(-50%,-50%) scale(1.0)'; g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
+  g.innerHTML = `<span class="e">${emoji}</span>`; document.body.appendChild(g); return g;
 }
 function pointerMove(ev){
   if (!dragging) return;
-  dragging.ghostEl.style.left = ev.clientX+'px';
-  dragging.ghostEl.style.top  = ev.clientY+'px';
+  dragging.ghostEl.style.left = ev.clientX+'px'; dragging.ghostEl.style.top  = ev.clientY+'px';
   const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
-  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
-  cauldron.classList.toggle('over', inside);
+  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`; cauldron.classList.toggle('over', inside);
 }
 function pointerUp(ev){
   if (!dragging) return cleanupDrag();
-  const {inside, px, py} = coordsInCauldron(ev.clientX, ev.clientY);
-  cauldron.classList.remove('over');
-
+  const {inside, px, py} = coordsInCauldron(ev.clientX, ev.clientY); cauldron.classList.remove('over');
   if (inside){
     if (dragging.type==='seed'){
-      placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py});
-      renderPlaced(true);
-      const node = [...seedsEl.children][dragging.idx]; if (node) node.remove();
-      seeds.splice(dragging.idx,1);
-    } else {
-      placed[dragging.idx].x = px; placed[dragging.idx].y = py;
-      renderPlaced(false);
-    }
-  } else {
-    if (dragging.type==='placed'){
-      const id = placed[dragging.idx].id;
-      const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
-      if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); }
-      placed.splice(dragging.idx,1);
-    }
+      placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py}); renderPlaced(true);
+      const node = [...seedsEl.children][dragging.idx]; if (node) node.remove(); seeds.splice(dragging.idx,1);
+    } else { placed[dragging.idx].x = px; placed[dragging.idx].y = py; renderPlaced(false); }
+  } else if (dragging.type==='placed'){
+    const id = placed[dragging.idx].id; const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
+    if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); } placed.splice(dragging.idx,1);
   }
   cleanupDrag();
 }
-function cleanupDrag(){
-  window.removeEventListener('pointermove', pointerMove);
-  window.removeEventListener('pointerup', pointerUp);
-  if (dragging?.ghostEl) dragging.ghostEl.remove();
-  dragging = null;
-}
+function cleanupDrag(){ window.removeEventListener('pointermove', pointerMove); window.removeEventListener('pointerup', pointerUp); dragging?.ghostEl?.remove(); dragging=null; }
 
 function renderPlaced(playDrop=false){
   Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
   for (const p of placed){
-    const n = document.createElement('div');
-    n.className='placed'; n.dataset.id=p.id;
-    n.style.left=p.x+'%'; n.style.top=p.y+'%';
-    n.innerHTML=`<span class="e">${p.emoji}</span>`;
-    if (playDrop) n.classList.add('dropin');
-    n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id));
-    cauldron.appendChild(n);
+    const n = document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
+    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
+    if (playDrop) n.classList.add('dropin'); n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id)); cauldron.appendChild(n);
   }
 }
 
-/* geometry */
+/* geometry helpers */
 function coordsInCauldron(cx, cy){
-  const r = cauldron.getBoundingClientRect();
-  const mx = cx - (r.left + r.width/2);
-  const my = cy - (r.top  + r.height/2);
-  const dist = Math.hypot(mx,my);
-  const inside = dist <= r.width/2;
-  const px = ((mx + r.width/2) / r.width) * 100;
-  const py = ((my + r.height/2) / r.height) * 100;
+  const r = cauldron.getBoundingClientRect(); const mx = cx - (r.left + r.width/2); const my = cy - (r.top  + r.height/2);
+  const dist = Math.hypot(mx,my); const inside = dist <= r.width/2;
+  const px = ((mx + r.width/2) / r.width) * 100; const py = ((my + r.height/2) / r.height) * 100;
   return {inside, px: Math.max(6, Math.min(94, px)), py: Math.max(6, Math.min(94, py))};
 }
 function spotInsideBowl(){
-  const bowl = cauldron.getBoundingClientRect();
-  const maxTries=400; let tries=0;
+  const bowl = cauldron.getBoundingClientRect(); const maxTries=400; let tries=0;
   while(tries++<maxTries){
     const px = 8 + Math.random()*84, py = 8 + Math.random()*84;
     const cx = bowl.left + px/100*bowl.width, cy = bowl.top + py/100*bowl.height;
-    const d = Math.hypot(cx-(bowl.left+bowl.width/2), cy-(bowl.top+bowl.height/2));
-    if (d > bowl.width/2 - 40) continue;
+    const d = Math.hypot(cx-(bowl.left+bowl.width/2), cy-(bowl.top+bowl.height/2)); if (d > bowl.width/2 - 40) continue;
     let ok=true; for(const p of placed){ const dx=(p.x-px)/100*bowl.width, dy=(p.y-py)/100*bowl.height; if (Math.hypot(dx,dy)<66){ok=false;break;} }
     if (ok) return {x:px,y:py};
-  }
-  return {x:50,y:50};
+  } return {x:50,y:50};
 }
 
-/* vortex */
-function startVortex(){
-  swirl.innerHTML = '';
-  const clones = placed.length ? placed : [{emoji:"✨"}];
-  const N = Math.max(6, clones.length*2);
-  for(let i=0;i<N;i++){
-    const span = document.createElement('div');
-    span.className = 'orb';
-    const emoji = clones[i % clones.length].emoji;
-    span.style.setProperty('--a', `${(360/N)*i}deg`);
-    span.style.setProperty('--r', `${(i%2?10:0)}%`);
-    span.style.setProperty('--z', `${(i%2?15:-5)}px`);
-    span.style.setProperty('--d', `${(i*0.07).toFixed(2)}s`);
-    span.innerHTML = `<span class="e">${emoji}</span>`;
-    swirl.appendChild(span);
-  }
-  vortex.classList.add('on');
+/* rim placement (exact edge) */
+function moveToRimPercent(x,y){
+  const cx=50, cy=50, r=44; // radius in % of width/height (44% ~= inside edge)
+  const ang = Math.atan2(y-cy, x-cx);
+  return { x: cx + Math.cos(ang)*r, y: cy + Math.sin(ang)*r };
 }
-function stopVortex(){ vortex.classList.remove('on'); swirl.innerHTML=''; }
-
-/* move placed emojis to the rim (edge) with tween */
 function tuckPlacedToRim(){
-  const rect = cauldron.getBoundingClientRect();
-  const cx = 50, cy = 50;
-  const radiusPct = 94; // near edge
-
   placed.forEach(p=>{
-    const angle = Math.atan2(p.y - cy, p.x - cx);
-    const tx = cx + Math.cos(angle) * radiusPct * 0.5 * 2; // convert to %
-    const ty = cy + Math.sin(angle) * radiusPct * 0.5 * 2;
-    const node = cauldron.querySelector(`.placed[data-id="${p.id}"]`);
-    if (!node) return;
-    const from = {left: p.x+'%', top: p.y+'%'};
-    p.x = Math.max(6, Math.min(94, tx));
-    p.y = Math.max(6, Math.min(94, ty));
+    const target = moveToRimPercent(p.x,p.y);
+    const node = cauldron.querySelector(`.placed[data-id="${p.id}"]`); if (!node) return;
     node.animate([
-      { left: from.left, top: from.top, transform:'translate(-50%,-50%) scale(1)' },
-      { left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(.92)' }
+      { left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(1)' },
+      { left: target.x+'%', top: target.y+'%', transform:'translate(-50%,-50%) scale(.96)' }
     ], {duration:520, easing:'cubic-bezier(.2,.8,.2,1)'});
-    node.style.left = p.x+'%';
-    node.style.top  = p.y+'%';
-    node.classList.add('on-rim');
+    p.x = target.x; p.y = target.y; node.style.left=p.x+'%'; node.style.top=p.y+'%'; node.classList.add('on-rim');
   });
+  // place ❌ at 45° on rim
+  const rim = moveToRimPercent(90,10); // vector towards top-right
+  cancelBtn.style.left = rim.x+'%'; cancelBtn.style.top = rim.y+'%'; cancelBtn.classList.add('show');
 }
 
 /* prompt — engaging story */
@@ -436,56 +358,39 @@ function buildPrompt(){
     return dirs[Math.round((360-ang)/45)%8];
   };
   const parts = placed.map(p => `${nameOf(p.emoji)} at the ${dirOf(p.x,p.y)}`);
-  return `Create a dynamic, cinematic single image that tells an engaging story combining all elements: ${parts.join(', ')}. Treat emojis as real objects, places, colors, or emotions (not glyphs). Use coherent lighting, depth, and motion; one consistent style; no text.`;
+  return `Create a cinematic, single-image story that blends all elements into one action: ${parts.join(', ')}. Treat emojis as real objects, scenes, colors, or emotions (not glyphs). Use coherent lighting, depth, motion; one consistent style; no text.`;
 }
 
 /* Pollinations */
 async function callPollinations(prompt){
   const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) + "?width=768&height=768";
-  const res = await fetch(url,{mode:"cors"});
-  if(!res.ok) throw new Error('Pollinations error');
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
+  const res = await fetch(url,{mode:"cors"}); if(!res.ok) throw new Error('Pollinations error');
+  const blob = await res.blob(); return URL.createObjectURL(blob);
 }
 
 /* CTA / Cancel */
-cta.addEventListener('click', async ()=>{
+document.getElementById('cta').addEventListener('click', async ()=>{
   if (document.body.classList.contains('locked')) return;
   const prompt = buildPrompt();
   if(!prompt){
     cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
       {duration:280,easing:'cubic-bezier(.3,.8,.2,1)'}); return;
   }
-  startVortex();
-  cancelBtn.classList.add('show'); // allow reset while waiting
+  document.body.classList.add('waiting');
   try{
     const imgURL = await callPollinations(prompt);
-    stopVortex();
     imageEl.src = imgURL;
     imageEl.onload = () => {
       imageEl.classList.add('revealed');
-      tuckPlacedToRim();                 // move chips to edge
+      tuckPlacedToRim();                // rim + above image
+      document.body.classList.remove('waiting');
       document.body.classList.add('locked');
-      cancelBtn.classList.add('show');
     };
-  }catch(e){ stopVortex(); console.warn(e); }
+  }catch(e){ console.warn(e); document.body.classList.remove('waiting'); }
 });
-
 cancelBtn.addEventListener('click', resetApp);
 
-/* helpers */
-function renderPlaced(playDrop=false){
-  Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
-  for (const p of placed){
-    const n = document.createElement('div');
-    n.className='placed'; n.dataset.id=p.id;
-    n.style.left=p.x+'%'; n.style.top=p.y+'%';
-    n.innerHTML=`<span class="e">${p.emoji}</span>`;
-    if (playDrop) n.classList.add('dropin');
-    n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id));
-    cauldron.appendChild(n);
-  }
-}
+/* tiny helpers */
 function pulse(el){ el.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'}); }
 document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
