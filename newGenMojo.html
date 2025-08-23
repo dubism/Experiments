@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Keyless Text-to-Image — Emoji UI</title>
+<style>
+  :root{
+    --bg1:#fde7f3; --bg2:#e8f4ff; --bg3:#f7fff1;
+    --ink:#0e1116; --muted:#7c8aa0;
+    --card:#ffffffaa; --line:#e6e9f0;
+    --cta:#0ad47a; --cta-ink:#032616;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:ui-rounded, ui-sans-serif, system-ui, Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 800px at 50% -10%, var(--bg2), #fff0 60%),
+      radial-gradient(1000px 700px at 50% 100%, var(--bg3), #fff0 55%),
+      radial-gradient(1000px 700px at -10% 40%, var(--bg1), #fff0 60%),
+      #fff;
+  }
+  .wrap{
+    min-height:100%;
+    display:flex; flex-direction:column; align-items:center;
+    padding:16px env(safe-area-inset-right) calc(24px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+    gap:22px;
+  }
+
+  /* Canvas area */
+  .stage{
+    position:relative;
+    width:min(92vw, 440px);
+    aspect-ratio:1/1;
+    margin-top:8px;
+  }
+  .preview{
+    position:absolute; inset:0;
+    border-radius:50%;
+    overflow:hidden;
+    box-shadow:
+      0 12px 40px rgba(27, 35, 48, .18),
+      0 2px 0 rgba(255,255,255,.8) inset;
+    background:#fff;
+  }
+  .preview img{
+    width:100%; height:100%; object-fit:cover; display:block;
+  }
+
+  /* Draggable emoji circles (real ones; no placeholders) */
+  .bubble{
+    position:absolute;
+    width:84px; height:84px; border-radius:50%;
+    display:grid; place-items:center;
+    background:radial-gradient(120% 120% at 30% 30%, #fff, #f3f5f9);
+    border:1px solid var(--line);
+    box-shadow:
+      0 10px 22px rgba(20,28,40,.18),
+      0 1px 0 rgba(255,255,255,.9) inset;
+    user-select:none; touch-action:none; cursor:grab;
+    transition:transform .15s ease;
+  }
+  .bubble:active{ cursor:grabbing; transform:scale(.96) }
+  .emoji{ font-size:36px; line-height:1 }
+
+  /* Input + CTA */
+  .controls{
+    width:min(92vw, 520px);
+    display:flex; align-items:center; gap:10px;
+    padding:6px;
+  }
+  .prompt{
+    flex:1;
+    background:#fff; border:1px solid var(--line);
+    border-radius:16px; padding:14px 16px; font-size:16px;
+    box-shadow:0 6px 20px rgba(20,28,40,.08);
+  }
+  .cta{
+    width:56px; height:56px; border-radius:50%;
+    border:none; display:grid; place-items:center;
+    background:var(--cta); color:var(--cta-ink);
+    font-size:24px;
+    box-shadow:0 10px 24px rgba(10,212,122,.35), 0 1px 0 rgba(255,255,255,.6) inset;
+  }
+  .cta:active{ transform:translateY(1px) }
+
+  .hint{ color:var(--muted); font-size:13px }
+  .sr-only{ position:absolute; left:-9999px; }
+
+  /* Reserve a “no-drag” buffer for the controls so bubbles don’t overlap */
+  .no-overlap-guard{
+    position:relative; width:100%; height:120px; pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage" id="stage">
+    <div class="preview" id="preview">
+      <img id="img" alt="result" src="https://image.pollinations.ai/prompt/happy%20corgi%20in%20meadow%2C%20soft%20bokeh?width=768&height=768">
+    </div>
+
+    <!-- Real emoji bubbles, back as before; they persist (no auto-replacement) -->
+    <div class="bubble" data-emoji="❤️" style="left:-26px; top:62%"><span class="emoji">❤️</span></div>
+    <div class="bubble" data-emoji="🌈" style="right:-26px; top:14%"><span class="emoji">🌈</span></div>
+    <div class="bubble" data-emoji="🐶" style="right:22%; bottom:-26px"><span class="emoji">🐶</span></div>
+  </div>
+
+  <!-- Guard area to keep bubbles away from the controls -->
+  <div class="no-overlap-guard" id="guard"></div>
+
+  <div class="controls">
+    <label class="sr-only" for="prompt">Prompt</label>
+    <input id="prompt" class="prompt" placeholder="type text or emoji…" />
+    <!-- Single playful CTA icon -->
+    <button class="cta" id="go" title="Generate">✨</button>
+  </div>
+  <div class="hint">Tip: drag an emoji onto the image to append it to the prompt. Tap an emoji to toggle-add it.</div>
+</div>
+
+<script>
+/* --- Simple keyless text->image via Pollinations --- */
+const imgEl = document.getElementById('img');
+const promptEl = document.getElementById('prompt');
+const goBtn = document.getElementById('go');
+const stage = document.getElementById('stage');
+const guard = document.getElementById('guard');
+const bubbles = [...document.querySelectorAll('.bubble')];
+
+function makeUrl(p, w=768, h=768){
+  const q = encodeURIComponent(p.trim().replace(/\s+/g,' '));
+  return `https://image.pollinations.ai/prompt/${q}?width=${w}&height=${h}`;
+}
+async function generate(){
+  const p = promptEl.value || 'cute dog portrait, soft studio light';
+  const url = makeUrl(p);
+  // Optimistic preview swap
+  imgEl.src = url;
+}
+goBtn.addEventListener('click', generate);
+
+/* --- Drag logic with bounds + “drop to add” --- */
+const rectOf = el => el.getBoundingClientRect();
+let active = null, offX=0, offY=0;
+
+function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+// compute dynamic bounds: within stage, and not overlapping controls area
+function bounds(){
+  const s = rectOf(stage);
+  const g = rectOf(guard);
+  // allow drag anywhere inside stage’s box, but keep 12px padding
+  const pad = 12;
+  // keep bubbles above the guard (no overlap with input/CTA)
+  const maxY = Math.min(s.bottom - pad, g.top - 8);
+  return {
+    minX: s.left + pad, maxX: s.right - pad,
+    minY: s.top + pad,  maxY: maxY
+  };
+}
+
+function pointInsideCircle(px, py, circleEl){
+  const p = rectOf(circleEl);
+  const cx = p.left + p.width/2, cy = p.top + p.height/2;
+  const r  = Math.min(p.width, p.height)/2;
+  const dx = px - cx, dy = py - cy;
+  return (dx*dx + dy*dy) <= r*r;
+}
+
+function onPointerDown(e){
+  const b = e.currentTarget;
+  active = b;
+  const r = rectOf(b);
+  offX = e.clientX - r.left;
+  offY = e.clientY - r.top;
+  b.setPointerCapture(e.pointerId);
+}
+function onPointerMove(e){
+  if(!active) return;
+  const {minX,maxX,minY,maxY} = bounds();
+  let x = clamp(e.clientX - offX, minX, maxX - active.offsetWidth);
+  let y = clamp(e.clientY - offY, minY, maxY - active.offsetHeight);
+  // apply translate via left/top for simplicity
+  active.style.left = (x - rectOf(stage).left) + 'px';
+  active.style.top  = (y - rectOf(stage).top)  + 'px';
+}
+function onPointerUp(e){
+  if(!active) return;
+  active.releasePointerCapture(e.pointerId);
+
+  // If released over preview circle, append emoji to prompt
+  const preview = document.getElementById('preview');
+  const centerX = e.clientX, centerY = e.clientY;
+  if(pointInsideCircle(centerX, centerY, preview)){
+    const emo = active.dataset.emoji;
+    promptEl.value = (promptEl.value + ' ' + emo).trim();
+    // little bounce
+    active.animate([{transform:'scale(.94)'},{transform:'scale(1)'}], {duration:160, easing:'ease-out'});
+  }
+  active = null;
+}
+
+bubbles.forEach(b=>{
+  b.addEventListener('pointerdown', onPointerDown);
+  b.addEventListener('pointermove', onPointerMove);
+  b.addEventListener('pointerup', onPointerUp);
+  // Tap to toggle-add (without dragging)
+  b.addEventListener('click', (e)=>{
+    // ignore if it was a drag (pointerup already handled)
+    if(active) return;
+    const emo = b.dataset.emoji;
+    const has = promptEl.value.includes(emo);
+    promptEl.value = has
+      ? promptEl.value.replace(new RegExp(emo,'g'),'').replace(/\s+/g,' ').trim()
+      : (promptEl.value + ' ' + emo).trim();
+  });
+});
+
+/* Enter to submit */
+promptEl.addEventListener('keydown', e=>{
+  if(e.key === 'Enter'){ e.preventDefault(); generate(); }
+});
+</script>
+</body>
+</html>
