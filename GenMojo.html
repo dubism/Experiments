@@ -1,273 +1,253 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <title>Emoji → Image · Demo</title>
 <style>
   :root{
     --bg1:#e9f3ff; --bg2:#ffe9f7; --bg3:#e9fff6; --bg4:#f7f3ff;
-    --tint1:#7fd1ff40; --tint2:#ff86d640; --tint3:#7dffcc40; --tint4:#b59bff40;
-    --ink:#0c1016;
-    --glass:#ffffff55; --glass2:#ffffff2a;
-    --ring:#ffffff88; --ring2:#00000012;
-    --seed:#ffffffaa; --seedEdge:#00000010;
-    --ok:#00ce72;
-    --shadow: 0 8px 24px #0000001e, 0 2px 8px #00000012;
-    --shadow-strong: 0 14px 40px #00000026, 0 4px 16px #0000001f;
-    --ease: cubic-bezier(.2,.8,.2,1);
+    --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
+    --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
+    --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
+    --ease:cubic-bezier(.2,.8,.2,1);
   }
 
-  /* Iridescent, multi-point, very light background with subtle motion */
   html,body{height:100%;margin:0}
   body{
-    color:var(--ink);
     background:
-      radial-gradient(60vmax 60vmax at 15% 10%, var(--tint1), transparent 60%),
-      radial-gradient(70vmax 60vmax at 85% 20%, var(--tint2), transparent 60%),
-      radial-gradient(60vmax 70vmax at 20% 85%, var(--tint3), transparent 60%),
-      radial-gradient(70vmax 70vmax at 80% 85%, var(--tint4), transparent 60%),
+      radial-gradient(60vmax 60vmax at 15% 10%, var(--t1), transparent 60%),
+      radial-gradient(70vmax 60vmax at 85% 20%, var(--t2), transparent 60%),
+      radial-gradient(60vmax 70vmax at 20% 85%, var(--t3), transparent 60%),
+      radial-gradient(70vmax 70vmax at 80% 85%, var(--t4), transparent 60%),
       conic-gradient(from 0deg at 50% 50%, var(--bg1), var(--bg2), var(--bg3), var(--bg4), var(--bg1));
-    background-attachment: fixed;
-    animation: hue 24s linear infinite alternate;
-    overflow:hidden;
-    touch-action:none;
-    -webkit-tap-highlight-color: transparent;
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
+    background-attachment:fixed;
+    animation:hue 24s linear infinite alternate;
+    overflow:hidden; touch-action:none; -webkit-tap-highlight-color:transparent;
+    font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
   }
-  @keyframes hue { to { filter: hue-rotate(12deg) saturate(1.05); } }
+  @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
-  .stage{
-    position:fixed; inset:0; display:grid; place-items:center;
-  }
+  .stage{position:fixed; inset:0; display:grid; place-items:center}
 
-  /* Central circle (cauldron) */
-  .cauldron-wrap{
-    position:relative;
-    width:min(64vmin, 520px); aspect-ratio:1/1;
-    display:grid; place-items:center;
-    perspective: 900px;
-  }
-  .cauldron{
-    position:relative;
-    width:100%; height:100%; border-radius:50%;
-    background: radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff10 75%, #ffffff06 100%);
-    box-shadow: var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
-    outline: 1px solid var(--ring2);
-    transition: transform .6s var(--ease), filter .6s var(--ease);
-    overflow:hidden;
-  }
-  /* Subtle rolling highlight */
-  .cauldron::before{
-    content:""; position:absolute; inset:-20%;
-    background: conic-gradient(from 0deg at 50% 50%, #ffffff22 0 10%, transparent 10% 40%, #ffffff18 40% 45%, transparent 45% 80%, #ffffff12 80% 85%, transparent 85% 100%);
-    animation: sweep 7.5s var(--ease) infinite;
-    mix-blend-mode: screen; pointer-events:none;
-  }
-  @keyframes sweep { to { transform: rotate(360deg); } }
-
-  /* Inner ring hint */
-  .ring{
-    position:absolute; inset:6%; border-radius:50%;
-    border:1px dashed #00000018;
-    outline:1px solid #ffffff80; outline-offset:-1px;
-    box-shadow: inset 0 0 0 6px #ffffff10;
-    pointer-events:none;
-  }
-
-  /* Positioned emojis inside the cauldron */
-  .placed{
-    position:absolute; width:12vmin; max-width:72px; aspect-ratio:1/1; border-radius:50%;
-    display:grid; place-items:center; user-select:none;
-    background: radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
-    box-shadow: var(--shadow), inset 0 1px 0 #ffffffa8;
-    transform: translate(-50%, -50%) scale(1);
-    transition: transform .25s var(--ease), box-shadow .25s var(--ease), opacity .25s var(--ease), filter .25s var(--ease);
-    cursor: grab;
-  }
-  .placed:active{ cursor:grabbing; }
-  .placed .e{ font-size:clamp(24px, 8vmin, 44px); filter: drop-shadow(0 1px 0 #ffffffcc); }
-
-  /* Draggable seed emoji buttons around */
-  .seeds{ position:absolute; inset:0; pointer-events:none; }
+  /* floating seeds layer (FULL SCREEN) */
+  .seeds{position:fixed; inset:0; pointer-events:none; z-index:5}
   .seed{
     position:absolute; width:56px; height:56px; border-radius:50%;
-    display:grid; place-items:center; pointer-events:auto; user-select:none;
-    background: radial-gradient(120% 120% at 30% 30%, var(--seed), #ffffff80 60%, #ffffff60 100%);
-    box-shadow: var(--shadow), inset 0 1px 0 #ffffffb0, 0 0 0 1px var(--seedEdge);
-    transform: translate(-50%, -50%) scale(1);
-    transition: transform .25s var(--ease), box-shadow .25s var(--ease), filter .25s var(--ease);
-    will-change: transform;
+    display:grid; place-items:center; user-select:none; pointer-events:auto;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
+    transform:translate(-50%,-50%) scale(1);
+    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease);
+    animation:float var(--dur,8s) ease-in-out infinite var(--delay,0s);
+    will-change:transform;
   }
-  .seed:hover{ transform: translate(-50%, -50%) scale(1.06); }
-  .seed:active{ transform: translate(-50%, -50%) scale(1.1) rotate(-2deg); box-shadow: var(--shadow-strong); }
-  .seed .e{ font-size:28px; }
-
-  /* Drag “ghost” */
-  .ghost{
-    position:fixed; width:64px; height:64px; border-radius:50%;
-    display:grid; place-items:center; pointer-events:none; z-index:20;
-    background: radial-gradient(120% 120% at 30% 30%, #ffffff, #ffffffcc 60%, #ffffffaa 100%);
-    box-shadow: var(--shadow-strong), inset 0 1px 0 #ffffff;
-    transform: translate(-50%, -50%) scale(1);
-    transition: transform .12s var(--ease);
+  .seed .e{font-size:28px}
+  @keyframes float{
+    0%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) scale(1); }
+    50%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px)) scale(1.02); }
+    100%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) scale(1); }
   }
-  .ghost .e{ font-size:30px; }
+  .seed:hover{ transform:translate(-50%,-50%) scale(1.12) rotate(-2deg); box-shadow:var(--shadow-strong); }
 
-  /* CTA check button */
+  /* central circle */
+  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1/1; perspective:900px; z-index:10 }
+  .cauldron{
+    position:relative; width:100%; height:100%; border-radius:50%; overflow:hidden;
+    background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
+    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
+    outline:1px solid var(--ring2);
+    transition:transform .45s var(--ease), filter .45s var(--ease), box-shadow .3s var(--ease);
+  }
+  .cauldron::before{
+    content:""; position:absolute; inset:-20%;
+    background:conic-gradient(from 0deg at 50% 50%, #ffffff22 0 10%, transparent 10% 40%, #ffffff18 40% 45%, transparent 45% 80%, #ffffff12 80% 85%, transparent 85% 100%);
+    animation:sweep 7.5s var(--ease) infinite; mix-blend-mode:screen; pointer-events:none;
+  }
+  @keyframes sweep{to{transform:rotate(360deg)}}
+
+  .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
+  .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
+  .cauldron.over .ring{ box-shadow:inset 0 0 0 9px #00c8ff15 }
+
+  /* placed inside */
+  .placed{
+    position:absolute; width:12vmin; max-width:72px; aspect-ratio:1/1; border-radius:50%;
+    display:grid; place-items:center; user-select:none; cursor:grab;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
+    transform:translate(-50%,-50%) scale(1);
+    transition:transform .25s var(--ease), filter .25s var(--ease), opacity .25s var(--ease);
+  }
+  .placed:active{cursor:grabbing}
+  .placed .e{font-size:clamp(24px, 8vmin, 44px); filter:drop-shadow(0 1px 0 #ffffffcc)}
+  .placed.dropin{ animation:drop .38s var(--ease) }
+  @keyframes drop{ 0%{transform:translate(-50%,-50%) scale(.72)} 70%{transform:translate(-50%,-50%) scale(1.14)} 100%{transform:translate(-50%,-50%) scale(1)} }
+
+  /* CTA outside the circle */
   .cta{
-    position:absolute; right:6%; bottom:6%;
-    width:64px; height:64px; border-radius:50%; display:grid; place-items:center;
-    background: radial-gradient(120% 120% at 30% 30%, #ffffffd0, #ffffffa0 60%, #ffffff80 100%);
-    box-shadow: var(--shadow-strong), inset 0 1px 0 #ffffff;
-    transition: transform .2s var(--ease), filter .2s var(--ease), box-shadow .2s var(--ease);
-    cursor:pointer; user-select:none;
+    position:absolute; top:50%; left:100%; transform:translate(22px,-50%) scale(1);
+    width:68px; height:68px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffb8 60%, #ffffff90 100%);
+    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffff;
+    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease);
+    overflow:hidden;
   }
-  .cta:hover{ transform: scale(1.05); }
-  .cta:active{ transform: scale(0.97); box-shadow: var(--shadow); }
-  .cta .e{ font-size:30px; }
-  .cta.ok { background: radial-gradient(120% 120% at 30% 30%, #eafff5, #d6ffef 60%, #c7ffe8 100%); }
-  .cta.ok .e{ filter: drop-shadow(0 1px 0 #fff); }
+  .cta:hover{ transform:translate(22px,-50%) scale(1.08) }
+  .cta:active{ transform:translate(22px,-50%) scale(.96) }
+  .cta .stack{ position:relative; }
+  .cta .check{ font-size:30px; filter:drop-shadow(0 1px 0 #fff) }
+  .cta .arrow{ position:absolute; left:0; top:0; right:0; bottom:0; display:grid; place-items:center; }
+  .cta .arrow span{ display:block; transform:translateX(-10px); opacity:.0; transition:transform .25s var(--ease), opacity .25s var(--ease) }
+  .cta:hover .arrow span{ transform:translateX(8px); opacity:.9 }
+  .cta.launch .arrow span{ animation:shoot .5s var(--ease) }
+  @keyframes shoot{ 0%{transform:translateX(0); opacity:1} 80%{transform:translateX(36px); opacity:0} 100%{transform:translateX(36px); opacity:0} }
 
-  /* Mixing state */
-  .cauldron.mixing{ filter: saturate(1.2) contrast(1.02); }
-  .cauldron.mixing .placed{
-    animation: swirl 2.2s var(--ease) infinite, popZ 1.8s ease-in-out infinite;
-    transform-origin: 50% 50% -120px;
-  }
-  @keyframes swirl {
-    0%{ transform: translate(var(--tx), var(--ty)) translate(-50%, -50%) rotate(0deg) scale(1); }
-    50%{ transform: translate(calc(var(--tx)*.6), calc(var(--ty)*.6)) translate(-50%, -50%) rotate(180deg) scale(1.06); }
-    100%{ transform: translate(var(--tx), var(--ty)) translate(-50%, -50%) rotate(360deg) scale(1); }
-  }
-  @keyframes popZ {
-    0%{ filter: drop-shadow(0 3px 10px #00000010); }
-    50%{ filter: drop-shadow(0 10px 24px #00000020); }
-    100%{ filter: drop-shadow(0 3px 10px #00000010); }
-  }
+  /* mixing + reveal */
+  .cauldron.mixing{ filter:saturate(1.2) contrast(1.02) }
+  .cauldron.mixing .placed{ animation:swirl 2.2s var(--ease) infinite, popZ 1.8s ease-in-out infinite; transform-origin:50% 50% -120px }
+  @keyframes swirl{ 0%{transform:translate(var(--tx),var(--ty)) translate(-50%,-50%) rotate(0deg) scale(1)} 50%{transform:translate(calc(var(--tx)*.6),calc(var(--ty)*.6)) translate(-50%,-50%) rotate(180deg) scale(1.06)} 100%{transform:translate(var(--tx),var(--ty)) translate(-50%,-50%) rotate(360deg) scale(1)} }
+  @keyframes popZ{ 0%{filter:drop-shadow(0 3px 10px #0001)} 50%{filter:drop-shadow(0 10px 24px #0002)} 100%{filter:drop-shadow(0 3px 10px #0001)} }
 
-  /* Image reveal: circle stays a circle, grows, then settles */
-  .image{
-    position:absolute; inset:0; border-radius:50%; overflow:hidden;
-    opacity:0; transform: scale(0.92);
-    transition: opacity .6s var(--ease), transform .8s var(--ease) .1s;
-    background-position:center; background-size: cover; background-repeat:no-repeat;
-  }
-  .image.revealed{ opacity:1; transform: scale(1); }
-  .cauldron.reveal{ animation: boom .9s var(--ease); }
-  @keyframes boom{
-    0%{ transform: scale(1); }
-    55%{ transform: scale(1.22); }
-    100%{ transform: scale(1.08); }
-  }
+  .image{ position:absolute; inset:0; border-radius:50%; overflow:hidden; opacity:0; transform:scale(.92); transition:opacity .6s var(--ease), transform .8s var(--ease) .1s; background-position:center; background-size:cover; background-repeat:no-repeat }
+  .image.revealed{ opacity:1; transform:scale(1) }
+  .cauldron.reveal{ animation:boom .9s var(--ease) }
+  @keyframes boom{ 0%{transform:scale(1)} 55%{transform:scale(1.22)} 100%{transform:scale(1.08)} }
 
-  /* Ambient bob on seeds */
-  .seed{ animation: bob 6s ease-in-out infinite; }
-  .seed:nth-child(odd){ animation-delay: -3s; }
-  @keyframes bob { 50% { transform: translate(-50%, -50%) translateY(-4px) scale(1.02);} }
-
-  /* Hide any accidental text selection caret */
-  ::selection{ background: transparent; }
+  ::selection{background:transparent}
 </style>
 </head>
 <body>
   <div class="stage">
+    <!-- floating seeds around -->
+    <div class="seeds" id="seeds"></div>
+
+    <!-- central circle -->
     <div class="cauldron-wrap" id="wrap">
       <div class="cauldron" id="cauldron" aria-label="drop area">
         <div class="ring"></div>
         <div class="image" id="image"></div>
-        <button class="cta" id="cta" aria-label="generate"><span class="e">✅</span></button>
-        <div class="seeds" id="seeds"></div>
+
+        <!-- CTA outside the circle -->
+        <button class="cta" id="cta" aria-label="generate">
+          <div class="stack">
+            <span class="check">✅</span>
+            <div class="arrow"><span>➡️</span></div>
+          </div>
+        </button>
       </div>
     </div>
   </div>
 
 <script>
-/* ====== CONFIG ====== */
+/* ==== CONFIG ==== */
+const EMOJI_POOL = ["😂","❤️","🤣","👍","😭","🙏","🥰","😍","😊","😅","🔥","👏","😁","💀","😉","✨","🎉","🤔","😎","🎨","🎵","🎧","📷","🎥","🧸","💎","🧠","🐶","🐱","🦊","🐼","🦄","🐧","🐸","🐢","🐙","🦋","🐝","🌸","🌼","🌻","🌿","🍃","🌊","🌈","⛰️","🏙️","☀️","🌙","⭐","⚡","💧","🍎","🍊","🍓","🍩","🍕","🍪"];
+const INITIAL_SEEDS = 20;
+const USE_STUB = true;
 
-// Pool: start with “most used” + a wider tail to keep variety.
-const EMOJI_POOL = [
-  "😂","❤️","🤣","👍","😭","🙏","🥰","😍","😊","😊","😅","🔥","👏","😁","💀","😉","💕","🙄","😢","👌",
-  "🫶","🙂","😆","🤦","✨","🤔","😎","🎉","😮","😳","🥳","🤯","😴","🤤","🤩","🤗","👀","😐","😇",
-  "🐶","🐱","🦊","🐼","🦄","🐧","🐸","🐢","🐙","🦋","🐝","🌸","🌼","🌻","🌿","🍃","🌊","🌈","⛰️","🏙️",
-  "☀️","🌙","⭐","⚡","🔥","💧","🌪️","🌫️","🧊","🍎","🍊","🍉","🍓","🍩","🍔","🍣","🍕","🍪",
-  "🎨","🎵","🎧","🎹","🎷","🎸","🥁","📷","🎥","🕹️","🧸","🪩","💎","🧠","🫀","🫁","⚙️","🧪","🔮","🧿"
-];
-const INITIAL_SEEDS = 16; // around the circle
-const USE_STUB = true;    // set false if you wire a real endpoint
-
-// Minimal mapping from emoji → words (only emoji-driven specifics)
+/* minimal emoji → words */
 const EMOJI_WORDS = new Map(Object.entries({
   "😂":"laughing / joy","❤️":"a red heart","🤣":"hysterical laughter","👍":"approval / thumbs up","😭":"tears / crying",
-  "🙏":"prayer / gratitude","🥰":"love / affection","😍":"love / adoration","😊":"smile","😅":"relief",
-  "🔥":"fire / flames","✨":"sparkles / glitter","🎉":"confetti / celebration","💀":"skull","😉":"wink",
+  "🙏":"prayer / gratitude","🥰":"love / affection","😍":"adoration","😊":"smile","😅":"relief",
+  "🔥":"fire / flames","✨":"sparkles","🎉":"confetti","💀":"a skull","😉":"a wink",
   "🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🐧":"a penguin","🐸":"a frog","🐢":"a turtle","🐙":"an octopus",
   "🦋":"a butterfly","🐝":"a bee","🌸":"a cherry blossom","🌼":"a daisy","🌻":"a sunflower","🌿":"green leaves","🍃":"leaf flutter",
   "🌊":"ocean waves","🌈":"a rainbow","⛰️":"mountains","🏙️":"a city skyline",
-  "☀️":"sun","🌙":"moon","⭐":"stars","⚡":"lightning","💧":"a drop of water","🌪️":"a tornado","🌫️":"fog","🧊":"ice",
-  "🍎":"an apple","🍊":"an orange","🍉":"a watermelon","🍓":"strawberries","🍩":"a donut","🍔":"a burger","🍣":"sushi","🍕":"pizza","🍪":"a cookie",
-  "🎨":"paint / palette","🎵":"music note","🎧":"headphones","🎹":"piano","🎷":"saxophone","🎸":"guitar","🥁":"drums",
-  "📷":"a camera","🎥":"a film camera","🕹️":"a game controller","🧸":"a teddy bear","🪩":"a disco ball","💎":"a diamond",
-  "🧠":"a brain","🫀":"a heart (anatomical)","🫁":"lungs","⚙️":"gears","🧪":"a beaker","🔮":"a crystal ball","🧿":"an eye charm"
+  "☀️":"sun","🌙":"moon","⭐":"stars","⚡":"lightning","💧":"a water drop",
+  "🍎":"an apple","🍊":"an orange","🍓":"strawberries","🍩":"a donut","🍕":"pizza","🍪":"a cookie",
+  "🎨":"paint","🎵":"a music note","🎧":"headphones","📷":"a camera","🎥":"a film camera","🧸":"a teddy bear","💎":"a diamond","🧠":"a brain"
 }));
 
-/* ====== DOM ====== */
+/* ==== DOM ==== */
 const wrap = document.getElementById('wrap');
 const cauldron = document.getElementById('cauldron');
+const imageEl = document.getElementById('image');
 const seedsEl = document.getElementById('seeds');
 const cta = document.getElementById('cta');
-const imageEl = document.getElementById('image');
 
-/* ====== STATE ====== */
-let seeds = [];           // {id, emoji}
-let placed = [];          // {id, emoji, x, y} where x,y are % inside cauldron (0..100)
-let dragging = null;      // current drag {type:'seed'|'placed', idx, emoji, ghostEl}
-let raf = null;
+/* ==== STATE ==== */
+let seeds = [];    // {id, emoji, x, y}
+let placed = [];   // {id, emoji, x%, y%}
+let dragging = null;
 
-/* ====== INIT ====== */
+/* ==== INIT ==== */
 initSeeds();
-layoutSeeds();
+renderSeeds();
+window.addEventListener('resize', () => { initSeeds(true); renderSeeds(); }, {passive:true});
 
-window.addEventListener('resize', layoutSeeds, {passive:true});
+/* ==== SEEDS LAYOUT (random, non-overlap, NOT inside cauldron) ==== */
+function initSeeds(keepEmojis=false){
+  const rect = document.body.getBoundingClientRect();
+  const bowl = cauldron.getBoundingClientRect();
+  const R = bowl.width/2;
+  const cx = bowl.left + R, cy = bowl.top + R;
+  const margin = 10, seedR = 28;
 
-/* ====== SEEDS ====== */
-function initSeeds(){
+  const emojis = keepEmojis ? seeds.map(s=>s.emoji) : [];
+  if (!keepEmojis){
+    for(let i=0;i<INITIAL_SEEDS;i++) emojis.push(nextEmoji());
+  }
+
   seeds = [];
-  seedsEl.innerHTML = '';
-  for (let i=0;i<INITIAL_SEEDS;i++){
-    const e = nextEmoji();
-    const id = crypto.randomUUID();
-    seeds.push({id, emoji:e});
-    const node = document.createElement('button');
-    node.className = 'seed';
-    node.dataset.id = id;
-    node.innerHTML = `<span class="e">${e}</span>`;
-    seedsEl.appendChild(node);
-    node.addEventListener('pointerdown', e => startDragSeed(e, id));
+  const spots = [];
+  const maxTries = 1200;
+  let tries = 0, idx = 0;
+
+  while (idx<emojis.length && tries<maxTries){
+    tries++;
+    // candidate anywhere with safe inset
+    const x = rand(seedR+margin, rect.width - seedR - margin);
+    const y = rand(seedR+margin, rect.height - seedR - margin);
+
+    // keep outside cauldron + halo
+    const d = Math.hypot(x - cx, y - cy);
+    if (d < R + seedR + 26) continue;
+
+    // non-overlap with other seeds
+    let ok = true;
+    for(const s of spots){ if (Math.hypot(x - s.x, y - s.y) < seedR*2 + 16){ ok = false; break; } }
+    if (!ok) continue;
+
+    spots.push({x,y});
+    seeds.push({id:crypto.randomUUID(), emoji:emojis[idx], x, y});
+    idx++;
   }
 }
-function layoutSeeds(){
-  const rect = wrap.getBoundingClientRect();
-  const cx = rect.width/2, cy = rect.height/2;
-  const radius = Math.min(rect.width, rect.height) * 0.42; // ring radius
-  const nodes = Array.from(seedsEl.children);
-  nodes.forEach((node, i)=>{
-    const angle = (i / nodes.length) * Math.PI*2 - Math.PI/2;
-    const x = cx + radius * Math.cos(angle);
-    const y = cy + radius * Math.sin(angle);
-    node.style.left = `${x}px`;
-    node.style.top  = `${y}px`;
-  });
+
+function renderSeeds(){
+  seedsEl.innerHTML = '';
+  const rect = document.body.getBoundingClientRect();
+
+  for(const s of seeds){
+    const n = document.createElement('button');
+    n.className = 'seed';
+    n.style.left = s.x+'px'; n.style.top = s.y+'px';
+    n.style.setProperty('--delay', `${(Math.random()*-6).toFixed(2)}s`);
+    n.style.setProperty('--dur', `${(6+Math.random()*4).toFixed(2)}s`);
+    n.style.setProperty('--fx', `${(Math.random()*8-4).toFixed(1)}px`);
+    n.style.setProperty('--fy', `${(Math.random()*4-2).toFixed(1)}px`);
+    n.dataset.id = s.id;
+    n.innerHTML = `<span class="e">${s.emoji}</span>`;
+    seedsEl.appendChild(n);
+    n.addEventListener('pointerdown', e => startDragSeed(e, s.id));
+  }
 }
 
-/* ====== DRAGGING (seed → cauldron) ====== */
+/* ==== DRAGGING ==== */
 function startDragSeed(ev, id){
   ev.preventDefault();
-  const seedIdx = seeds.findIndex(s=>s.id===id);
-  if (seedIdx<0) return;
-  const emoji = seeds[seedIdx].emoji;
-  const ghost = makeGhost(emoji);
-  dragging = {type:'seed', idx: seedIdx, emoji, ghostEl: ghost};
+  const idx = seeds.findIndex(s=>s.id===id);
+  if (idx<0) return;
+  const seedNode = [...seedsEl.children].find(n=>n.dataset.id===id);
+
+  // Visual lift
+  seedNode.style.transition = 'transform .12s var(--ease)';
+  seedNode.style.transform = 'translate(-50%,-50%) scale(1.28)';
+  seedNode.style.boxShadow = 'var(--shadow-strong)';
+  tryVibrate(10);
+
+  const ghost = makeGhost(seeds[idx].emoji);
+  dragging = {type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
   pointerMove(ev);
   window.addEventListener('pointermove', pointerMove);
   window.addEventListener('pointerup', pointerUp);
@@ -276,286 +256,192 @@ function startDragPlaced(ev, id){
   ev.preventDefault();
   const idx = placed.findIndex(p=>p.id===id);
   if (idx<0) return;
-  const emoji = placed[idx].emoji;
-  const ghost = makeGhost(emoji);
-  dragging = {type:'placed', idx, emoji, ghostEl: ghost};
+  const ghost = makeGhost(placed[idx].emoji);
+  dragging = {type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
   pointerMove(ev);
   window.addEventListener('pointermove', pointerMove);
   window.addEventListener('pointerup', pointerUp);
 }
+
 function makeGhost(emoji){
   const g = document.createElement('div');
-  g.className = 'ghost';
+  g.className='seed'; // reuse style for heft
+  g.style.width='64px'; g.style.height='64px'; g.style.zIndex=30;
+  g.style.position='fixed'; g.style.transform='translate(-50%,-50%) scale(1.0)';
+  g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
   g.innerHTML = `<span class="e">${emoji}</span>`;
   document.body.appendChild(g);
   return g;
 }
+
 function pointerMove(ev){
   if (!dragging) return;
   dragging.ghostEl.style.left = ev.clientX+'px';
   dragging.ghostEl.style.top  = ev.clientY+'px';
-  // gentle scale-in while over cauldron
+
   const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
-  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.08:1})`;
+  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
+  cauldron.classList.toggle('over', inside);
 }
+
 function pointerUp(ev){
   if (!dragging) return cleanupDrag();
-  const x = ev.clientX, y=ev.clientY;
-  const {inside, px, py} = coordsInCauldron(x,y);
+  const {inside, px, py} = coordsInCauldron(ev.clientX, ev.clientY);
+  cauldron.classList.remove('over');
+
   if (inside){
     if (dragging.type==='seed'){
-      // place new
+      // add new placed
       const id = crypto.randomUUID();
-      placed.push({id, emoji: dragging.emoji, x:px, y:py});
-      renderPlaced();
-      // replace seed with new random emoji
+      placed.push({id, emoji:dragging.emoji, x:px, y:py});
+      renderPlaced(true);
+      // replace seed emoji (seed stays floating)
       seeds[dragging.idx].emoji = nextEmoji();
-      seedsEl.children[dragging.idx].innerHTML = `<span class="e">${seeds[dragging.idx].emoji}</span>`;
-    } else {
-      // move existing
+      const node = [...seedsEl.children][dragging.idx];
+      node.innerHTML = `<span class="e">${seeds[dragging.idx].emoji}</span>`;
+      // seed snapback pop
+      gentlePop();
+      tryVibrate(20);
+    }else{
       placed[dragging.idx].x = px; placed[dragging.idx].y = py;
-      renderPlaced();
+      renderPlaced(false);
+      gentlePop();
     }
-    gentlePop();
+  }else{
+    // throwback bounce
+    dragging.ghostEl.animate(
+      [{transform:'translate(-50%,-50%) scale(1.1)'},{transform:'translate(-50%,-50%) scale(.96)'},{transform:'translate(-50%,-50%) scale(1)'}],
+      {duration:220, easing:'cubic-bezier(.3,.8,.2,1)'}
+    );
   }
   cleanupDrag();
 }
+
 function cleanupDrag(){
   window.removeEventListener('pointermove', pointerMove);
   window.removeEventListener('pointerup', pointerUp);
-  if (dragging && dragging.ghostEl) dragging.ghostEl.remove();
+  if (dragging?.ghostEl) dragging.ghostEl.remove();
   dragging = null;
 }
+
+/* coords inside bowl */
 function coordsInCauldron(cx, cy){
   const r = cauldron.getBoundingClientRect();
   const mx = cx - (r.left + r.width/2);
-  const my = cy - (r.top  + r.height/2);
+  const my = cy - (r.top + r.height/2);
   const dist = Math.hypot(mx,my);
   const inside = dist <= r.width/2;
-  // return % coords relative to cauldron box (0..100)
   const px = ((mx + r.width/2) / r.width) * 100;
   const py = ((my + r.height/2) / r.height) * 100;
   return {inside, px: clamp(px,5,95), py: clamp(py,5,95)};
 }
-function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
-/* ====== RENDER PLACED ====== */
-function renderPlaced(){
-  // remove old nodes first (except ring, image, cta, seeds)
+/* ==== placed render ==== */
+function renderPlaced(playDrop=false){
   Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
   for (const p of placed){
     const n = document.createElement('div');
-    n.className = 'placed'; n.dataset.id = p.id;
-    n.style.left = p.x+'%'; n.style.top = p.y+'%';
-    n.style.setProperty('--tx', `${(p.x-50)*1.0}%`);
-    n.style.setProperty('--ty', `${(p.y-50)*1.0}%`);
-    n.innerHTML = `<span class="e">${p.emoji}</span>`;
-    n.addEventListener('pointerdown', e => startDragPlaced(e, p.id));
+    n.className='placed'; n.dataset.id=p.id;
+    n.style.left=p.x+'%'; n.style.top=p.y+'%';
+    n.style.setProperty('--tx', `${(p.x-50)}%`);
+    n.style.setProperty('--ty', `${(p.y-50)}%`);
+    n.innerHTML=`<span class="e">${p.emoji}</span>`;
+    if (playDrop) n.classList.add('dropin');
+    n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id));
     cauldron.appendChild(n);
   }
 }
 
-/* ====== CTA FLOW ====== */
+/* ==== CTA ==== */
 cta.addEventListener('click', async ()=>{
   if (placed.length===0){
-    // tiny shake to hint action
-    cauldron.animate([
-      {transform:'translateX(0)'},
-      {transform:'translateX(-6px)'},
-      {transform:'translateX(6px)'},
-      {transform:'translateX(0)'}
-    ], {duration:260, easing:'cubic-bezier(.3,.8,.2,1)'});
+    cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}], {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'});
     return;
   }
+  cta.classList.add('launch');
+
   const prompt = buildPrompt(placed);
   console.log('Prompt → demo.ai:\n', prompt);
 
-  // mixing animation on
   cauldron.classList.add('mixing');
-  cta.classList.add('ok');
 
   try{
     const imgURL = await callDemoAI(prompt, placed);
-    // reveal
     imageEl.style.backgroundImage = `url(${imgURL})`;
     imageEl.classList.add('revealed');
     cauldron.classList.remove('mixing');
     cauldron.classList.add('reveal');
-    // particle pop
     confettiPop();
     setTimeout(()=> cauldron.classList.remove('reveal'), 980);
-  }catch(err){
-    console.warn('demo.ai failed, showing stub.', err);
-    cauldron.classList.remove('mixing'); cta.classList.remove('ok');
+  }catch(e){
+    cauldron.classList.remove('mixing');
+  }finally{
+    setTimeout(()=>cta.classList.remove('launch'), 600);
   }
 });
 
-/* ====== PROMPT ====== */
+/* ==== prompt ==== */
 function buildPrompt(items){
-  // center (50,50) → angle & ring for each emoji
   const parts = items.map(p=>{
-    const dx = p.x-50, dy = p.y-50;
-    const angle = (Math.atan2(dy, dx) * 180/Math.PI + 360) % 360; // 0° to the right
-    const where = clockFromAngle(angle);
-    const what = EMOJI_WORDS.get(p.emoji) || `the ${p.emoji} emoji`;
+    const dx=p.x-50, dy=p.y-50;
+    const angle=(Math.atan2(dy,dx)*180/Math.PI+360)%360;
+    const where=clockFromAngle(angle);
+    const what=EMOJI_WORDS.get(p.emoji)||`the ${p.emoji} emoji`;
     return `${what} at the ${where}`;
   });
-  return [
-    // Prepared scaffolding; specifics only from emoji + their positions:
-    `Combine: ${parts.join(', ')}.`,
-    `Harmonize styles naturally.`,
-    `Soft lighting, balanced composition.`,
-    `No words, no borders.`
-  ].join(' ');
+  return `Combine: ${parts.join(', ')}. Harmonize styles naturally. Soft lighting, balanced composition. No words, no borders.`;
 }
 function clockFromAngle(a){
-  // Map to 8-way compass with “o’clock”
-  const sectors = [
-    {t:"3 o’clock (right)", v:  0},
-    {t:"2 o’clock (upper-right)", v: 45},
-    {t:"12 o’clock (top)", v: 90},
-    {t:"10 o’clock (upper-left)", v:135},
-    {t:"9 o’clock (left)", v:180},
-    {t:"8 o’clock (lower-left)", v:225},
-    {t:"6 o’clock (bottom)", v:270},
-    {t:"4 o’clock (lower-right)", v:315},
-    {t:"3 o’clock (right)", v:360}
-  ];
-  let best = sectors[0].t, min=999;
-  for (const s of sectors){
-    const d = Math.abs(a - s.v);
-    if (d<min){ min=d; best=s.t; }
-  }
+  const sectors=[{t:"3 o’clock (right)",v:0},{t:"2 o’clock (upper-right)",v:45},{t:"12 o’clock (top)",v:90},{t:"10 o’clock (upper-left)",v:135},{t:"9 o’clock (left)",v:180},{t:"8 o’clock (lower-left)",v:225},{t:"6 o’clock (bottom)",v:270},{t:"4 o’clock (lower-right)",v:315},{t:"3 o’clock (right)",v:360}];
+  let best=sectors[0].t,min=999; for(const s of sectors){const d=Math.abs(a-s.v); if(d<min){min=d; best=s.t}}
   return best;
 }
 
-/* ====== DEMO.AI STUB ====== */
+/* ==== demo.ai stub ==== */
 async function callDemoAI(prompt, items){
-  // If you have a real endpoint, wire it here:
-  // if (!USE_STUB) {
-  //   const res = await fetch('https://demo.ai/generate', {
-  //     method:'POST', headers:{'Content-Type':'application/json'},
-  //     body: JSON.stringify({prompt, aspect:'1:1'})
-  //   });
-  //   if (!res.ok) throw new Error('Server error');
-  //   const {imageUrl} = await res.json();
-  //   return imageUrl;
-  // }
-
-  // Stub: synthesize a “generated” image using a canvas based on the emoji & their positions.
-  await wait(1400 + Math.random()*900); // simulate inference delay
-  const size = 1024;
-  const c = document.createElement('canvas'); c.width=c.height=size;
-  const ctx = c.getContext('2d');
-
-  // pastel backdrop
-  const g = ctx.createRadialGradient(size*0.3, size*0.3, size*0.1, size*0.6, size*0.7, size*0.9);
-  g.addColorStop(0, '#fffdfb');
-  g.addColorStop(1, '#f4fbff');
-  ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
-
-  // soft blobs from items
-  items.forEach((p,i)=>{
-    const col = colorFromEmoji(p.emoji);
-    const x = p.x/100*size, y = p.y/100*size;
-    const r = size*(0.08 + 0.05*Math.sin(i*1.2+0.7));
-    const grd = ctx.createRadialGradient(x, y, r*0.2, x, y, r);
-    grd.addColorStop(0, hexWithAlpha(col, .28));
-    grd.addColorStop(1, hexWithAlpha(col, 0.02));
-    ctx.fillStyle = grd;
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-  });
-
-  // faint emoji watermarks
-  ctx.font = `${Math.floor(size*0.12)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  if(!USE_STUB){ /* wire your endpoint */ }
+  await wait(1200+Math.random()*900);
+  const size=1024, c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d');
+  const g=ctx.createRadialGradient(size*.3,size*.3,size*.1,size*.6,size*.7,size*.9);
+  g.addColorStop(0,'#fffdfb'); g.addColorStop(1,'#f4fbff'); ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
+  ctx.font=`${Math.floor(size*0.12)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   items.forEach((p,i)=>{
-    ctx.save();
-    ctx.translate(p.x/100*size, p.y/100*size);
-    ctx.rotate((i*37)%360 * Math.PI/180);
-    ctx.globalAlpha = 0.18;
-    ctx.fillText(p.emoji, 0, 0);
-    ctx.restore();
+    const x=p.x/100*size, y=p.y/100*size;
+    const r=size*(0.08+0.05*Math.sin(i*1.2+0.7));
+    const grd=ctx.createRadialGradient(x,y,r*.2,x,y,r);
+    grd.addColorStop(0, rgba(180+(i*17)%60,200,(i*41)%120, .28));
+    grd.addColorStop(1, rgba(180,200,220,.02));
+    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    ctx.save(); ctx.globalAlpha=.18; ctx.translate(x,y); ctx.rotate(((i*37)%360)*Math.PI/180); ctx.fillText(p.emoji,0,0); ctx.restore();
   });
-
   return c.toDataURL('image/png');
 }
-function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
-/* ====== UTILS ====== */
-function nextEmoji(){
-  // pick one not currently shown in seeds to reduce duplicates
-  let tries = 0;
-  while (tries++<20){
-    const e = EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)];
-    const inSeeds = seeds.some(s=>s?.emoji===e);
-    if (!inSeeds) return e;
-  }
-  return EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)];
-}
+/* ==== utils ==== */
+function nextEmoji(){ return EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)] }
+function rand(a,b){ return a + Math.random()*(b-a) }
+function wait(ms){ return new Promise(r=>setTimeout(r,ms)) }
+function rgba(r,g,b,a){ return `rgba(${r|0},${g|0},${b|0},${a})` }
 function gentlePop(){
-  cauldron.animate([
-    {transform:'scale(1)'},
-    {transform:'scale(1.03)'},
-    {transform:'scale(1)'}
-  ], {duration:220, easing:'cubic-bezier(.3,.8,.2,1)'});
+  cauldron.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'});
 }
-function hexWithAlpha(hex, a){
-  // Simple palette
-  const table = {
-    red:"#ff6b6b", orange:"#ff9f43", yellow:"#ffd93d",
-    green:"#6bffb0", aqua:"#54e3ff", blue:"#6d9fff",
-    purple:"#c69bff", pink:"#ff9bd4"
-  };
-  const keys = Object.keys(table);
-  const h = table[keys[Math.floor(Math.random()*keys.length)]];
-  const c = h.replace('#','');
-  const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
-function colorFromEmoji(e){
-  // lightweight deterministic color channel per emoji
-  const code = Array.from(e).reduce((a,ch)=>a+ch.codePointAt(0),0);
-  const r = 150 + (code*29)%105;
-  const g = 150 + (code*47)%105;
-  const b = 150 + (code*61)%105;
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-function toHex(n){ return n.toString(16).padStart(2,'0'); }
+function tryVibrate(ms){ if (navigator.vibrate) try{ navigator.vibrate(ms) }catch{} }
 
-/* ====== CONFETTI POP (arrival) ====== */
 function confettiPop(){
-  const N = 24, rect = cauldron.getBoundingClientRect();
-  for (let i=0;i<N;i++){
-    const dot = document.createElement('div');
-    const x = rect.left + rect.width/2;
-    const y = rect.top  + rect.height/2;
-    dot.style.position='fixed';
-    dot.style.left = x+'px'; dot.style.top = y+'px';
-    dot.style.width='10px'; dot.style.height='10px';
-    dot.style.borderRadius='50%';
-    dot.style.background = `hsl(${Math.random()*360},90%,70%)`;
-    dot.style.boxShadow = '0 4px 12px #0002';
-    dot.style.pointerEvents='none';
-    dot.style.transform='translate(-50%,-50%)';
+  const N=24, rect=cauldron.getBoundingClientRect();
+  for(let i=0;i<N;i++){
+    const dot=document.createElement('div');
+    const x=rect.left+rect.width/2, y=rect.top+rect.height/2;
+    Object.assign(dot.style,{position:'fixed',left:x+'px',top:y+'px',width:'10px',height:'10px',borderRadius:'50%',background:`hsl(${Math.random()*360},90%,70%)`,boxShadow:'0 4px 12px #0002',pointerEvents:'none',transform:'translate(-50%,-50%)',zIndex:40});
     document.body.appendChild(dot);
-    const ang = Math.random()*Math.PI*2;
-    const dist = 80 + Math.random()*140;
-    const tx = Math.cos(ang)*dist;
-    const ty = Math.sin(ang)*dist;
-    dot.animate([
-      {transform:'translate(-50%,-50%) scale(1)', opacity:1},
-      {transform:`translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(.6)`, opacity:0}
-    ], {duration: 700+Math.random()*300, easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish=()=>dot.remove();
+    const ang=Math.random()*Math.PI*2, dist=80+Math.random()*140, tx=Math.cos(ang)*dist, ty=Math.sin(ang)*dist;
+    dot.animate([{transform:'translate(-50%,-50%) scale(1)',opacity:1},{transform:`translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(.6)`,opacity:0}],{duration:700+Math.random()*300,easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish=()=>dot.remove();
   }
 }
 
-/* ====== START EMPTY IMAGE (hidden) ====== */
-imageEl.addEventListener('transitionend', (ev)=>{
-  // If we later wanted a reset, we'd handle it here.
-});
-
-/* ====== TOUCH-SCROLL GUARD ====== */
+/* prevent pinch-zoom gesture issues on iOS */
 document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
 </body>
