@@ -22,14 +22,14 @@
       radial-gradient(70vmax 70vmax at 80% 85%, var(--t4), transparent 60%),
       conic-gradient(from 0deg at 50% 50%, #e9f3ff, #ffe9f7, #e9fff6, #f7f3ff, #e9f3ff);
     background-attachment:fixed; animation:hue 24s linear infinite alternate;
-    overflow:hidden; touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+    overflow:hidden; touch-action:none; -webkit-tap-highlight-color:transparent;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
   .stage{position:fixed; inset:0; display:grid; place-items:center}
 
-  /* floating seeds layer */
+  /* floating seeds */
   .seeds{position:fixed; inset:0; pointer-events:none; z-index:5}
   .seed{
     position:absolute; width:56px; height:56px; border-radius:50%;
@@ -37,20 +37,18 @@
     background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
     transform:translate(-50%,-50%) scale(1);
-    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease), opacity .18s var(--ease);
+    transition:transform .18s var(--ease), box-shadow .18s var(--ease);
     animation:float var(--dur,8s) ease-in-out infinite var(--delay,0s);
-    will-change:transform;
   }
   .seed .e{font-size:28px}
   @keyframes float{
-    0%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) scale(1); }
-    50%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px)) scale(1.02); }
-    100%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) scale(1); }
+    0%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) }
+    50%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px)) }
+    100%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) }
   }
-  .seed:hover{ transform:translate(-50%,-50%) scale(1.12) rotate(-2deg); box-shadow:var(--shadow-strong); }
 
   /* central circle */
-  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1/1; perspective:900px; z-index:20; display:grid; place-items:center }
+  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1/1; z-index:20; display:grid; place-items:center }
   .cauldron{
     position:relative; width:100%; height:100%; border-radius:50%;
     background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
@@ -59,44 +57,32 @@
     transition:transform .45s var(--ease), filter .45s var(--ease), box-shadow .3s var(--ease);
     overflow:hidden; display:grid; place-items:center;
   }
-  .cauldron::before{
-    content:""; position:absolute; inset:-20%;
-    background:conic-gradient(from 0deg at 50% 50%, #ffffff22 0 10%, transparent 10% 40%, #ffffff18 40% 45%, transparent 45% 80%, #ffffff12 80% 85%, transparent 85% 100%);
-    animation:sweep 7.5s var(--ease) infinite; mix-blend-mode:screen; pointer-events:none;
-  }
-  @keyframes sweep{to{transform:rotate(360deg)}}
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
-  .cauldron.over .ring{ box-shadow:inset 0 0 0 9px #00c8ff15 }
 
-  /* placed chips inside */
+  /* chips inside */
   .placed{
     position:absolute; width:12vmin; max-width:72px; aspect-ratio:1/1; border-radius:50%;
     display:grid; place-items:center; user-select:none; cursor:grab;
     background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
     transform:translate(-50%,-50%) scale(1);
-    transition:transform .25s var(--ease), filter .25s var(--ease), opacity .25s var(--ease);
+    transition:transform .25s var(--ease), opacity .25s var(--ease);
     z-index:2;
   }
-  .placed .e{font-size:clamp(24px, 8vmin, 44px); filter:drop-shadow(0 1px 0 #ffffffcc)}
+  .placed .e{font-size:clamp(24px, 8vmin, 44px)}
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{ 0%{transform:translate(-50%,-50%) scale(.72)} 70%{transform:translate(-50%,-50%) scale(1.14)} 100%{transform:translate(-50%,-50%) scale(1)} }
   .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
   @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
 
-  /* result image as real <img> (saves on long-press) */
+  /* result image (real <img>) */
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:5; }
-  .result-img{
-    width:100%; height:100%; object-fit:cover; display:block;
-    opacity:0; transform:scale(.92);
-    transition:opacity .6s var(--ease), transform .8s var(--ease) .1s;
-    -webkit-touch-callout: default; /* allow Save Image on iOS */
-  }
+  .result-img{ width:100%; height:100%; object-fit:cover; display:block; opacity:0; transform:scale(.92); transition:opacity .6s var(--ease), transform .8s var(--ease) .1s; -webkit-touch-callout: default; }
   .result-img.revealed{ opacity:1; transform:scale(1) }
   .cauldron.show-image .placed{ opacity:0; pointer-events:none; transform:translate(-50%,-50%) scale(.94) }
 
-  /* bottom footer */
+  /* footer */
   .footer{
     position:fixed; left:16px; right:16px; bottom:16px; z-index:40;
     display:flex; gap:12px; align-items:center; justify-content:center;
@@ -111,35 +97,28 @@
     background:radial-gradient(120% 120% at 30% 30%, #ffffffdd, #ffffffb0 60%, #ffffff90 100%);
     box-shadow: inset 0 1px 0 #ffffff, 0 1px 0 #00000005;
   }
-  .input{
-    flex:1; height:38px; border-radius:10px; padding:6px 12px;
-    outline:none; border:none; background:#ffffffc0;
-    box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000010;
-    font-size:17px; /* >=16 to prevent iOS zoom */
+  .input{ flex:1; height:38px; border-radius:10px; padding:6px 12px; outline:none; border:none; background:#ffffffc0; box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000010; font-size:17px; }
+  .add{
+    width:48px; height:48px; border-radius:12px; display:grid; place-items:center; cursor:pointer;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffff, #ffffffc8 60%, #ffffffa8 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
+    transition:transform .16s var(--ease);
   }
+  .add:active{ transform:scale(.95) }
+  .add .e{ font-size:22px }
 
-  /* CTA: big, dark iridescent */
+  /* CTA: ✨ */
   .cta{
     width:88px; height:88px; border-radius:24px; display:grid; place-items:center; cursor:pointer; user-select:none;
     background: linear-gradient(145deg, #0e1020, #1a1f3a);
-    box-shadow:
-      0 10px 28px #0006,
-      inset 0 0 0 1px #ffffff20,
-      inset 0 1px 0 #9fe2ff22,
-      0 0 0 6px #6ae3ff22;
-    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease);
-    position:relative; overflow:hidden;
+    box-shadow: 0 10px 28px #0006, inset 0 0 0 1px #ffffff20, inset 0 1px 0 #9fe2ff22, 0 0 0 6px #6ae3ff22;
+    position:relative; overflow:hidden; transition:transform .18s var(--ease);
   }
-  .cta::after{
-    content:""; position:absolute; inset:-50%;
-    background: conic-gradient(from 0deg, #75f3ff22, #b79bff22, #ff9bd422, #75f3ff22);
-    animation:ctaSpin 8s linear infinite; mix-blend-mode:overlay; pointer-events:none;
-  }
+  .cta::after{ content:""; position:absolute; inset:-50%; background: conic-gradient(from 0deg, #75f3ff22, #b79bff22, #ff9bd422, #75f3ff22); animation:ctaSpin 8s linear infinite; mix-blend-mode:overlay }
   @keyframes ctaSpin{ to{ transform: rotate(360deg) } }
   .cta:hover{ transform:scale(1.06) }
   .cta:active{ transform:scale(.97) }
-  .cta .e{ font-size:40px; filter: drop-shadow(0 1px 0 #fff6) }
-
+  .cta .e{ font-size:40px }
   .cta.spin .e{ animation:spin .9s linear infinite }
   @keyframes spin{ to{ transform:rotate(360deg) } }
 
@@ -153,19 +132,15 @@
     <div class="cauldron-wrap" id="wrap">
       <div class="cauldron" id="cauldron" aria-label="drop area">
         <div class="ring"></div>
-
-        <!-- real image for long-press saving -->
-        <div class="image-wrap">
-          <img id="image" class="result-img" alt="AI result" draggable="false"/>
-        </div>
+        <div class="image-wrap"><img id="image" class="result-img" alt="AI result" draggable="false"/></div>
       </div>
     </div>
   </div>
 
-  <!-- Bottom footer: input + CTA -->
   <div class="footer" id="footer">
     <div class="pill">
       <input class="input" id="freeInput" placeholder="type text or emoji…"/>
+      <button class="add" id="addBtn" aria-label="add"><span class="e">➕</span></button>
     </div>
     <button class="cta" id="cta" aria-label="generate"><span class="e">✨</span></button>
   </div>
@@ -189,69 +164,103 @@ const EMOJI_WORDS = new Map(Object.entries({
 }));
 
 /* ====== DOM ====== */
-const wrap = document.getElementById('wrap');
 const cauldron = document.getElementById('cauldron');
-const imageEl = document.getElementById('image');
-const seedsEl = document.getElementById('seeds');
-const footer = document.getElementById('footer');
-const freeInput = document.getElementById('freeInput');
-const cta = document.getElementById('cta');
+const imageEl  = document.getElementById('image');
+const seedsEl  = document.getElementById('seeds');
+const footer   = document.getElementById('footer');
+const freeInput= document.getElementById('freeInput');
+const addBtn   = document.getElementById('addBtn');
+const cta      = document.getElementById('cta');
 
 /* ====== STATE ====== */
 let seeds = [];     // {id, emoji, x, y}
-let placed = [];    // {id, emoji, x%, y%}
+let placed = [];    // {id, type:'emoji'|'hint', emoji?, hint?, x, y}
 let dragging = null;
-let styleHint = ""; // free text
-let inputEmojiInbox = new Set(); // emojis typed but not placed
 
 /* ====== INIT ====== */
-initSeeds();
-renderSeeds();
-window.addEventListener('resize', () => { initSeeds(true); renderSeeds(); }, {passive:true});
+initSeeds(); renderSeeds();
 
-/* ====== FOOTER INPUT ====== */
+/* ====== INPUT → ADD ====== */
+addBtn.addEventListener('click', addFromInput);
 freeInput.addEventListener('keydown', e=>{
-  if (e.key==='Enter'){ e.preventDefault(); consumeInput(); freeInput.blur(); }
+  if (e.key==='Enter'){ e.preventDefault(); addFromInput(); freeInput.blur(); }
 });
-freeInput.addEventListener('blur', consumeInput);
 
-function consumeInput(){
-  const raw = freeInput.value || "";
-  styleHint = raw.replace(/\p{Extended_Pictographic}/gu,'').replace(/\s+/g,' ').trim();
-  const emojis = Array.from(raw).filter(ch => /\p{Extended_Pictographic}/u.test(ch));
-  if (emojis.length) spawnInputEmojis(emojis);
-}
+function addFromInput(){
+  const raw = (freeInput.value || "").trim();
+  if(!raw) return pulse(addBtn);
 
-function spawnInputEmojis(list){
-  const rect = document.body.getBoundingClientRect();
-  const seedR = 28;
-  const footerRect = footer.getBoundingClientRect();
-  const avoid = [{left: footerRect.left-16, top: footerRect.top-16, right: footerRect.right+16, bottom: footerRect.bottom+16}];
-  for (const e of list){
-    inputEmojiInbox.add(e);
-    const {x,y} = randomSpot(rect, seedR, avoid);
-    seeds.push({id:crypto.randomUUID(), emoji:e, x, y});
+  const all = Array.from(raw);
+  const emojis = all.filter(ch => /\p{Extended_Pictographic}/u.test(ch));
+  const textOnly = raw.replace(/\p{Extended_Pictographic}/gu,'').replace(/\s+/g,' ').trim();
+
+  // 1) emoji characters → placed as emoji chips
+  if (emojis.length) {
+    emojis.forEach(e => placeChip({type:'emoji', emoji:e}));
   }
-  renderSeeds();
+
+  // 2) plain text → a hint chip (💡), stores text invisibly
+  if (textOnly) {
+    placeChip({type:'hint', hint:textOnly, emoji:'💡'});
+  }
+
+  freeInput.value = '';
+  pulse(addBtn);
 }
 
-/* ====== SEEDS LAYOUT: random, non-overlap, avoid bowl & footer ====== */
-function initSeeds(keepEmojis=false){
+function placeChip(obj){
+  // find a non-overlapping spot inside the bowl
+  const {x,y} = randomSpotInsideBowl();
+  const id = crypto.randomUUID();
+  placed.push({id, ...obj, x, y});
+  renderPlaced(true);
+}
+
+function randomSpotInsideBowl(){
+  const bowl = cauldron.getBoundingClientRect();
+  const maxTries=400; let tries=0;
+  while(tries++<maxTries){
+    const r = 42; // px radius from center range
+    // random within circle interior padding
+    const rx = (Math.random()*0.8 + 0.1) * bowl.width; // 10%..90%
+    const ry = (Math.random()*0.8 + 0.1) * bowl.height;
+    const cx = bowl.left + rx; const cy = bowl.top + ry;
+    // ensure inside circle
+    const d = Math.hypot(cx-(bowl.left+bowl.width/2), cy-(bowl.top+bowl.height/2));
+    if (d > bowl.width/2 - 36) continue;
+
+    // convert to %
+    const px = (rx / bowl.width)*100;
+    const py = (ry / bowl.height)*100;
+
+    // avoid overlap with existing placed
+    let ok=true;
+    for(const p of placed){
+      const dx = (p.x - px)/100*bowl.width;
+      const dy = (p.y - py)/100*bowl.height;
+      if (Math.hypot(dx,dy) < 64) { ok=false; break; }
+    }
+    if (ok) return {x:px, y:py};
+  }
+  // fallback center
+  return {x:50, y:50};
+}
+
+/* ====== SEEDS (floating) ====== */
+function initSeeds(){
   const rect = document.body.getBoundingClientRect();
   const bowl = cauldron.getBoundingClientRect();
   const R = bowl.width/2;
   const cx = bowl.left + R, cy = bowl.top + R;
   const seedR = 28;
   const avoid = [
-    {left: cx-R-26, top: cy-R-26, right: cx+R+26, bottom: cy+R+26}, // bowl halo
+    {left: cx-R-26, top: cy-R-26, right: cx+R+26, bottom: cy+R+26},
     (()=>{const f=footer.getBoundingClientRect(); return {left:f.left-16, top:f.top-16, right:f.right+16, bottom:f.bottom+16}})()
   ];
-
-  const emojis = keepEmojis ? seeds.map(s=>s.emoji) : [];
-  if (!keepEmojis){ for(let i=0;i<INITIAL_SEEDS;i++) emojis.push(nextEmoji()); }
   seeds = [];
-  const taken = [];
-  for (const emo of emojis){
+  const taken=[];
+  for(let i=0;i<INITIAL_SEEDS;i++){
+    const emo = EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)];
     const spot = randomSpot(rect, seedR, avoid, taken);
     if (!spot) continue;
     taken.push(spot);
@@ -272,7 +281,6 @@ function randomSpot(rect, seedR, avoidRects, taken=[]){
   }
   return null;
 }
-
 function renderSeeds(){
   seedsEl.innerHTML = '';
   for(const s of seeds){
@@ -305,8 +313,8 @@ function startDragPlaced(ev, id){
   ev.preventDefault();
   const idx = placed.findIndex(p=>p.id===id);
   if (idx<0) return;
-  const ghost = makeGhost(placed[idx].emoji);
-  dragging = {type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
+  const ghost = makeGhost(placed[idx].emoji || '💡');
+  dragging = {type:'placed', idx, emoji:placed[idx].emoji || '💡', ghostEl:ghost};
   pointerMove(ev);
   window.addEventListener('pointermove', pointerMove);
   window.addEventListener('pointerup', pointerUp);
@@ -314,8 +322,8 @@ function startDragPlaced(ev, id){
 function makeGhost(emoji){
   const g = document.createElement('div');
   g.className='seed';
-  g.style.width='64px'; g.style.height='64px'; g.style.zIndex=30;
-  g.style.position='fixed'; g.style.transform='translate(-50%,-50%) scale(1.0)';
+  g.style.width='64px'; g.style.height='64px'; g.style.position='fixed'; g.style.zIndex=10000;
+  g.style.transform='translate(-50%,-50%) scale(1.0)';
   g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
   g.innerHTML = `<span class="e">${emoji}</span>`;
   document.body.appendChild(g);
@@ -337,13 +345,11 @@ function pointerUp(ev){
   if (inside){
     if (dragging.type==='seed'){
       const id = crypto.randomUUID();
-      placed.push({id, emoji:dragging.emoji, x:px, y:py});
+      placed.push({id, type:'emoji', emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
-      // NO REPLACEMENT: remove seed permanently
-      const node = [...seedsEl.children][dragging.idx];
-      if (node) node.remove();
-      const used = seeds.splice(dragging.idx,1)[0];
-      inputEmojiInbox.delete(used.emoji);
+      // remove the seed
+      const node = [...seedsEl.children][dragging.idx]; if (node) node.remove();
+      seeds.splice(dragging.idx,1);
     } else {
       placed[dragging.idx].x = px; placed[dragging.idx].y = py;
       renderPlaced(false);
@@ -365,111 +371,18 @@ function cleanupDrag(){
   dragging = null;
 }
 
-/* bowl coords */
-function coordsInCauldron(cx, cy){
-  const r = cauldron.getBoundingClientRect();
-  const mx = cx - (r.left + r.width/2);
-  const my = cy - (r.top  + r.height/2);
-  const dist = Math.hypot(mx,my);
-  const inside = dist <= r.width/2;
-  const px = ((mx + r.width/2) / r.width) * 100;
-  const py = ((my + r.height/2) / r.height) * 100;
-  return {inside, px: clamp(px,5,95), py: clamp(py,5,95)};
-}
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-
-/* placed render */
+/* render placed */
 function renderPlaced(playDrop=false){
   Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
   for (const p of placed){
     const n = document.createElement('div');
     n.className='placed'; n.dataset.id=p.id;
     n.style.left=p.x+'%'; n.style.top=p.y+'%';
-    n.innerHTML=`<span class="e">${p.emoji}</span>`;
+    n.innerHTML=`<span class="e">${p.emoji || '💡'}</span>`;
     if (playDrop) n.classList.add('dropin');
     n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id));
     cauldron.appendChild(n);
   }
-}
-
-/* ====== PROMPT BUILDER (no clock words) ====== */
-function buildPrompt(placedArr, hintText = "", looseEmojis = []) {
-  const parts = placedArr.map(p => {
-    const angle = (Math.atan2(p.y - 50, p.x - 50) * 180 / Math.PI + 360) % 360;
-    const where = dirFromAngle(angle);
-    const what = EMOJI_WORDS.get(p.emoji) || `the ${p.emoji} emoji`;
-    return `${what} at the ${where}`;
-  });
-  const extras = looseEmojis.map(e => (EMOJI_WORDS.get(e) || `the ${e} emoji`) + " (unplaced element)");
-  const hint = hintText ? ` Also reflect: “${hintText}”.` : "";
-  return [
-    [...parts, ...extras].join(', ') + (parts.length || extras.length ? '. ' : ''),
-    hint,
-    'Harmonize styles naturally. Balanced composition.'
-  ].join(' ').trim();
-}
-function dirFromAngle(a){
-  // 8-way + center (when near middle)
-  // a: 0=right, 90=up
-  const snap = ["right","top-right","top","top-left","left","bottom-left","bottom","bottom-right"];
-  if (Math.hypot) {} // no-op just to keep linter happy
-  // We'll map by ranges of 45°
-  const idx = Math.round(((360 - (a - 0) + 360) % 360) / 45) % 8;
-  return snap[idx];
-}
-
-/* ====== POLLINATIONS CALL ====== */
-async function callPollinations(prompt){
-  const url = "https://image.pollinations.ai/prompt/" +
-              encodeURIComponent(prompt) + "?width=768&height=768";
-  const res = await fetch(url,{mode:"cors"});
-  if(!res.ok) throw new Error('Pollinations error');
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
-}
-
-/* CTA */
-cta.addEventListener('click', async ()=>{
-  const prompt = buildPrompt(placed, styleHint, [...inputEmojiInbox]);
-  if(!prompt){
-    cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
-      {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'});
-    return;
-  }
-  cta.classList.add('spin');
-  imageEl.classList.remove('revealed'); cauldron.classList.remove('show-image');
-  try{
-    const imgURL = await callPollinations(prompt);
-    imageEl.src = imgURL;           // <img> → allows iOS long-press Save Image
-    imageEl.onload = () => {
-      imageEl.classList.add('revealed');
-      cauldron.classList.add('show-image');
-    };
-  }catch(e){ console.warn(e); }
-  finally{ cta.classList.remove('spin'); }
-});
-
-/* utils */
-function nextEmoji(){ return EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)] }
-function rand(a,b){ return a + Math.random()*(b-a) }
-
-function randomInt(a,b){ return Math.floor(a + Math.random()*(b-a+1)); }
-function randomChoice(arr){ return arr[randomInt(0,arr.length-1)] }
-
-/* layout helpers */
-function randomSpot(rect, seedR, avoidRects, taken=[]){
-  const maxTries = 1200; let tries=0;
-  while (tries++<maxTries){
-    const x = seedR+10 + Math.random()*(rect.width - seedR*2 - 20);
-    const y = seedR+10 + Math.random()*(rect.height - seedR*2 - 20);
-    const a = avoidRects.some(ar => x>ar.left-seedR && x<ar.right+seedR && y>ar.top-seedR && y<ar.bottom+seedR);
-    if (a) continue;
-    let ok=true;
-    for(const s of taken){ if (Math.hypot(x - s.x, y - s.y) < seedR*2 + 16){ ok=false; break; } }
-    if (!ok) continue;
-    return {x,y};
-  }
-  return null;
 }
 
 /* bowl coords helpers */
@@ -485,79 +398,119 @@ function coordsInCauldron(cx, cy){
 }
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
-/* DRAG glue */
-function startDragPlaced(ev, id){
-  ev.preventDefault();
-  const idx = placed.findIndex(p=>p.id===id);
-  if (idx<0) return;
-  const ghost = makeGhost(placed[idx].emoji);
-  dragging = {type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
-  pointerMove(ev);
-  window.addEventListener('pointermove', pointerMove);
-  window.addEventListener('pointerup', pointerUp);
-}
-function startDragSeed(ev, id){
-  ev.preventDefault();
-  const idx = seeds.findIndex(s=>s.id===id);
-  if (idx<0) return;
-  const ghost = makeGhost(seeds[idx].emoji);
-  dragging = {type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
-  pointerMove(ev);
-  window.addEventListener('pointermove', pointerMove);
-  window.addEventListener('pointerup', pointerUp);
-}
-function pointerMove(ev){
-  if (!dragging) return;
-  dragging.ghostEl.style.left = ev.clientX+'px';
-  dragging.ghostEl.style.top  = ev.clientY+'px';
-  const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
-  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
-  cauldron.classList.toggle('over', inside);
-}
-function pointerUp(ev){
-  if (!dragging) return cleanupDrag();
-  const {inside, px, py} = coordsInCauldron(ev.clientX, ev.clientY);
-  cauldron.classList.remove('over');
+/* ====== PROMPT ====== */
+function buildPrompt() {
+  const emojiParts = [];
+  const hintTexts = [];
 
-  if (inside){
-    if (dragging.type==='seed'){
-      const id = crypto.randomUUID();
-      placed.push({id, emoji:dragging.emoji, x:px, y:py});
-      renderPlaced(true);
-      const node = [...seedsEl.children][dragging.idx];
-      if (node) node.remove();
-      const used = seeds.splice(dragging.idx,1)[0];
-      inputEmojiInbox.delete(used.emoji);
-    } else {
-      placed[dragging.idx].x = px; placed[dragging.idx].y = py;
-      renderPlaced(false);
-    }
-  } else {
-    if (dragging.type==='placed'){
-      const id = placed[dragging.idx].id;
-      const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
-      if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); }
-      placed.splice(dragging.idx,1);
+  for (const p of placed) {
+    if (p.type === 'hint' && p.hint) {
+      hintTexts.push(p.hint);
+    } else if (p.type === 'emoji') {
+      const angle = (Math.atan2(p.y - 50, p.x - 50) * 180 / Math.PI + 360) % 360;
+      const where = dirFromAngle(angle);
+      const what  = EMOJI_WORDS.get(p.emoji) || `the ${p.emoji} emoji`;
+      emojiParts.push(`${what} at the ${where}`);
     }
   }
-  cleanupDrag();
+
+  const hint = hintTexts.length ? ` Also reflect: “${hintTexts.join(', ')}”.` : '';
+  return [
+    emojiParts.join(', ') + (emojiParts.length ? '. ' : ''),
+    hint,
+    'Harmonize styles naturally. Balanced composition.'
+  ].join(' ').trim();
 }
-function cleanupDrag(){
-  window.removeEventListener('pointermove', pointerMove);
-  window.removeEventListener('pointerup', pointerUp);
-  if (dragging?.ghostEl) dragging.ghostEl.remove();
-  dragging = null;
+function dirFromAngle(a){
+  const dirs = ["right","top-right","top","top-left","left","bottom-left","bottom","bottom-right"];
+  const idx = Math.round((360 - a) / 45) % 8;
+  return dirs[idx];
 }
-function makeGhost(emoji){
-  const g = document.createElement('div');
-  g.className='seed';
-  g.style.width='64px'; g.style.height='64px'; g.style.zIndex=30;
-  g.style.position='fixed'; g.style.transform='translate(-50%,-50%) scale(1.0)';
-  g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
-  g.innerHTML = `<span class="e">${emoji}</span>`;
-  document.body.appendChild(g);
-  return g;
+
+/* ====== Pollinations ====== */
+async function callPollinations(prompt){
+  const url = "https://image.pollinations.ai/prompt/" +
+              encodeURIComponent(prompt) + "?width=768&height=768";
+  const res = await fetch(url,{mode:"cors"});
+  if(!res.ok) throw new Error('Pollinations error');
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
+
+/* ====== CTA ====== */
+cta.addEventListener('click', async ()=>{
+  const prompt = buildPrompt();
+  if(!prompt){
+    cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
+      {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'});
+    return;
+  }
+  cta.classList.add('spin');
+  imageEl.classList.remove('revealed'); cauldron.classList.remove('show-image');
+  try{
+    const imgURL = await callPollinations(prompt);
+    imageEl.src = imgURL;
+    imageEl.onload = () => { imageEl.classList.add('revealed'); cauldron.classList.add('show-image'); };
+  }catch(e){ console.warn(e); }
+  finally{ cta.classList.remove('spin'); }
+});
+
+/* ====== Seed utilities ====== */
+function randomSpot(rect, seedR, avoidRects, taken=[]){
+  const maxTries = 1200; let tries=0;
+  while (tries++<maxTries){
+    const x = seedR+10 + Math.random()*(rect.width - seedR*2 - 20);
+    const y = seedR+10 + Math.random()*(rect.height - seedR*2 - 20);
+    const a = avoidRects.some(ar => x>ar.left-seedR && x<ar.right+seedR && y>ar.top-seedR && y<ar.bottom+seedR);
+    if (a) continue;
+    let ok=true;
+    for(const s of taken){ if (Math.hypot(x - s.x, y - s.y) < seedR*2 + 16){ ok=false; break; } }
+    if (!ok) continue;
+    return {x,y};
+  }
+  return null;
+}
+
+/* ====== Seeds init (fixed, no relayout on resize) ====== */
+function initSeeds(){
+  const rect = document.body.getBoundingClientRect();
+  const bowl = cauldron.getBoundingClientRect();
+  const R = bowl.width/2;
+  const cx = bowl.left + R, cy = bowl.top + R;
+  const seedR = 28;
+  const avoid = [
+    {left: cx-R-26, top: cy-R-26, right: cx+R+26, bottom: cy+R+26},
+    (()=>{const f=footer.getBoundingClientRect(); return {left:f.left-16, top:f.top-16, right:f.right+16, bottom:f.bottom+16}})()
+  ];
+  seeds = [];
+  const taken=[];
+  for(let i=0;i<INITIAL_SEEDS;i++){
+    const emo = EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)];
+    const spot = randomSpot(rect, seedR, avoid, taken);
+    if (!spot) continue;
+    taken.push(spot);
+    seeds.push({id:crypto.randomUUID(), emoji:emo, x:spot.x, y:spot.y});
+  }
+}
+function renderSeeds(){
+  seedsEl.innerHTML = '';
+  for(const s of seeds){
+    const n = document.createElement('button');
+    n.className = 'seed';
+    n.style.left = s.x+'px'; n.style.top = s.y+'px';
+    n.style.setProperty('--delay', `${(Math.random()*-6).toFixed(2)}s`);
+    n.style.setProperty('--dur', `${(6+Math.random()*4).toFixed(2)}s`);
+    n.style.setProperty('--fx', `${(Math.random()*8-4).toFixed(1)}px`);
+    n.style.setProperty('--fy', `${(Math.random()*4-2).toFixed(1)}px`);
+    n.dataset.id = s.id;
+    n.innerHTML = `<span class="e">${s.emoji}</span>`;
+    seedsEl.appendChild(n);
+    n.addEventListener('pointerdown', e => startDragSeed(e, s.id));
+  }
+}
+
+/* helpers */
+function pulse(el){ el.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'}); }
 
 /* prevent pinch-zoom gesture issues on iOS */
 document.addEventListener('gesturestart', e=>e.preventDefault());
