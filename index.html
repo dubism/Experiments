@@ -49,7 +49,7 @@
   .grp h2{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa3b2;margin:6px 2px 10px;letter-spacing:.25px}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
   .card{
-    position:relative; overflow:hidden; color:inherit;
+    position:relative; overflow:hidden; color:inherit; cursor:pointer;
     background:linear-gradient(180deg,var(--card),var(--card2));
     border:1px solid var(--line); border-radius:var(--radius);
     padding:14px 16px; box-shadow:var(--shadow);
@@ -102,7 +102,7 @@
 </header>
 
 <main><div id="list"></div></main>
-<footer>Uses branch-SHA cache + ETag; timestamps are hydrated & cached. Copy button fetches raw HTML and copies to clipboard.</footer>
+<footer>Whole card opens the page; “Copy code” stops navigation and confirms.</footer>
 
 <script>
 /* ===== Config ===== */
@@ -168,16 +168,25 @@ function buildCard(it){
   const card = document.createElement('div');
   card.className = 'card';
   if(it.depth >= 2) card.classList.add('sub');
-  card.setAttribute('role','group');
+  card.setAttribute('role','link');
+  card.setAttribute('tabindex','0');
 
   const href = `https://${USER}.github.io/${REPO}/${it.path}`;
+
+  // Whole-card navigation (mouse + keyboard)
+  card.addEventListener('click', (e)=>{
+    if (e.target.closest('button')) return;       // do not navigate when clicking buttons
+    window.open(href, '_blank', 'noopener');      // open as before
+  });
+  card.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.open(href,'_blank','noopener'); }
+  });
 
   const top = document.createElement('div'); top.className = 'top';
   const ic = document.createElement('div'); ic.className = 'ic'; ic.innerHTML = fileIcon();
   const titleWrap = document.createElement('div'); titleWrap.className = 'titleWrap';
   titleWrap.innerHTML = `<div class="name">${prettyName(it.name)}</div><div class="path">${it.path}</div>`;
-  const open = document.createElement('a'); open.className = 'openVis'; open.innerHTML = `Open ${arrowIcon()}`;
-  open.href = href; open.target = "_blank"; open.rel = "noopener";
+  const open = document.createElement('div'); open.className = 'openVis'; open.innerHTML = `Open ${arrowIcon()}`;
   top.append(ic, titleWrap, open);
 
   const bottom = document.createElement('div'); bottom.className = 'bottom';
@@ -202,7 +211,7 @@ function buildCard(it){
   const copyBtn = document.createElement('button');
   copyBtn.textContent = 'Copy code';
   copyBtn.title = `Copy HTML of ${it.path}`;
-  copyBtn.onclick = (e)=>{ e.preventDefault(); handleCopy(it.path, copyBtn, card); };
+  copyBtn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); handleCopy(it.path, copyBtn, card); };
 
   actions.append(copyBtn);
   bottom.append(meta, actions);
@@ -390,7 +399,6 @@ async function getFileText(path){
     const ct = r.headers.get('content-type') || '';
     if(!ct.includes('json')) return await r.text();
   }
-  // Fallback to JSON (base64)
   const {json} = await getJSON(rawUrl);
   if(json && json.content){
     const bin = atob(json.content.replace(/\n/g,''));
@@ -406,7 +414,6 @@ async function copyToClipboard(text){
     await navigator.clipboard.writeText(text);
     return true;
   }
-  // Fallback
   const ta = document.createElement('textarea');
   ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
   document.body.appendChild(ta); ta.select();
