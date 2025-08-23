@@ -70,8 +70,8 @@
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:30; }
   .result-img{
     width:100%; height:100%; object-fit:cover; display:block;
-    opacity:0; transform:scale(.2); /* start at 20% as required */
-    transition:opacity .6s var(--ease), transform .9s cubic-bezier(.22,1.2,.22,1); /* bounce ease */
+    opacity:0; transform:scale(.2); /* reveal from 20% */
+    transition:opacity .6s var(--ease), transform .9s cubic-bezier(.22,1.2,.22,1);
     pointer-events:auto; -webkit-touch-callout:default; user-select:none;
   }
   .result-img.revealed{ opacity:1; transform:scale(1) }
@@ -85,7 +85,7 @@
   }
   .cancel.show{opacity:1}
 
-  /* orbit container (spins all placed together on inner ring while waiting) */
+  /* orbit */
   .orbit{ position:absolute; inset:0; border-radius:50%; pointer-events:none; z-index:39; }
   .orbit.spin{ animation:orbitRot 8s linear infinite; }
   @keyframes orbitRot{ to{ transform:rotate(360deg) } }
@@ -125,15 +125,12 @@
       <div class="cauldron" id="cauldron">
         <div class="ring"></div>
 
-        <!-- image mask grows from 20% to 100% with bounce -->
         <div class="image-wrap">
           <img id="image" class="result-img" alt="AI result" draggable="false"/>
         </div>
 
-        <!-- orbit layer (for waiting rotation) -->
         <div class="orbit" id="orbit"></div>
 
-        <!-- cancel on rim -->
         <button class="cancel" id="cancel" aria-label="reset">❌</button>
       </div>
     </div>
@@ -144,29 +141,50 @@
     <button class="circle-btn cta" id="cta" aria-label="generate"><span class="e">✨</span></button>
   </div>
 
-  <!-- Emoji Picker component (unchanged API) -->
+  <!-- Emoji Picker (light theme + rounded tabs) -->
   <emoji-picker id="picker"></emoji-picker>
   <script>
-  /* minimal picker: same as before but trimmed to essentials for brevity */
   customElements.define('emoji-picker', class extends HTMLElement {
     #s=this.attachShadow({mode:'closed'}); #data; #cat='people';
     constructor(){ super();
       this.#s.innerHTML = `<style>
         :host{all:initial}
-        .p{position:fixed;inset:auto 0 0 0;margin:auto;width:min(760px,96vw);height:min(70vh,720px);
-          background:linear-gradient(180deg,#101624,#0e1320);border:1px solid #1c2432;border-radius:16px;
-          box-shadow:0 10px 30px rgba(0,0,0,.35),0 1px 0 rgba(255,255,255,.04) inset;
-          display:grid;grid-template-rows:auto 1fr;opacity:0;transform:translateY(24px) scale(.98);pointer-events:none;
-          transition:opacity 180ms cubic-bezier(.2,.7,.2,1),transform 260ms cubic-bezier(.2,.8,.2,1);z-index:99999}
-        .show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-        .tabs{display:flex;gap:8px;overflow:auto;padding:8px 12px;border-bottom:1px solid #1c2432;background:#0f1421}
-        .t{width:42px;height:42px;border-radius:999px;border:1px solid #1c2432;background:#0f1421;cursor:pointer}
-        .s{position:relative;overflow:auto;padding:12px}
-        .g{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:10px;align-content:start}
-        .c{display:grid;place-items:center;height:48px;border-radius:10px;background:#0e1420;border:1px solid transparent}
-        .c:hover{border-color:#27334a}
+        .p{
+          position:fixed; inset:auto 0 0 0; margin:auto; width:min(760px,96vw); height:min(70vh,720px);
+          background:linear-gradient(180deg, #ffffffb8, #f6fbffb8);
+          border:1px solid #ffffffa0; border-radius:18px;
+          box-shadow:0 12px 40px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.6) inset;
+          backdrop-filter: blur(10px) saturate(1.05);
+          display:grid; grid-template-rows:auto 1fr; opacity:0; transform:translateY(24px) scale(.98); pointer-events:none;
+          transition:opacity 180ms cubic-bezier(.2,.7,.2,1), transform 260ms cubic-bezier(.2,.8,.2,1); z-index:99999;
+        }
+        .show{opacity:1; transform:translateY(0) scale(1); pointer-events:auto}
+        .tabs{
+          display:flex; gap:8px; overflow:auto; padding:10px 12px;
+          background:linear-gradient(180deg,#ffffffee,#f7fbffee);
+          border-bottom:1px solid #ffffffaa;
+          border-top-left-radius:18px; border-top-right-radius:18px; /* rounded bar ends */
+        }
+        .t{
+          width:42px; height:42px; border-radius:999px;
+          border:1px solid #ffffffc4; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%);
+          box-shadow:var(--shadow, 0 6px 16px rgba(0,0,0,.08)), inset 0 1px 0 #ffffff;
+          cursor:pointer;
+        }
+        .s{ position:relative; overflow:auto; padding:12px; border-bottom-left-radius:18px; border-bottom-right-radius:18px; }
+        .g{ display:grid; grid-template-columns:repeat(auto-fill,minmax(44px,1fr)); gap:10px; align-content:start }
+        .c{
+          display:grid; place-items:center; height:48px; border-radius:12px;
+          background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f3f7ff 70%);
+          border:1px solid #ffffffc8; box-shadow:0 1px 0 #ffffff inset;
+          transition:transform .08s ease, box-shadow .18s ease;
+        }
+        .c:hover{ box-shadow:0 0 0 2px #bfe6ff; }
       </style>
-      <div class="p"><div class="tabs"></div><div class="s"><div class="g"></div></div></div>`;
+      <div class="p">
+        <div class="tabs"></div>
+        <div class="s"><div class="g"></div></div>
+      </div>`;
       this.#data = {
         people:{icon:"🙂",items:["😀","😃","😄","😁","😆","😉","😊","😍","🤔","😎","😭","🤣","🤗","😴","🥳"]},
         animals:{icon:"🐱",items:["🐶","🐱","🦊","🐼","🦄","🐛","🦋","🐝","🐢","🐙"]},
@@ -178,9 +196,7 @@
       this.r={p:this.#s.querySelector('.p'),tabs:this.#s.querySelector('.tabs'),g:this.#s.querySelector('.g')};
       this.renderTabs(); this.renderGrid();
     }
-    renderTabs(){ this.r.tabs.innerHTML='';
-      for(const [k,v] of Object.entries(this.#data)){ const b=document.createElement('button'); b.className='t'; b.textContent=v.icon; b.onclick=()=>{this.#cat=k; this.renderGrid();}; this.r.tabs.appendChild(b);}
-    }
+    renderTabs(){ this.r.tabs.innerHTML=''; for(const [k,v] of Object.entries(this.#data)){ const b=document.createElement('button'); b.className='t'; b.textContent=v.icon; b.onclick=()=>{this.#cat=k; this.renderGrid();}; this.r.tabs.appendChild(b);} }
     renderGrid(){ this.r.g.innerHTML=''; for(const ch of this.#data[this.#cat].items){ const c=document.createElement('button'); c.className='c'; c.innerHTML=`<span style="font-size:28px">${ch}</span>`; c.onclick=()=>{ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); }; this.r.g.appendChild(c); } }
     open(){ this.r.p.classList.add('show'); }
     close(){ this.r.p.classList.remove('show'); }
@@ -188,19 +204,19 @@
   </script>
 
 <script>
-/* ---------- Core interaction + new orbit/reveal choreography ---------- */
+/* ---------- Core interaction + orbit/reveal choreography ---------- */
 
-/* fixed startup set (includes 🐛) */
+/* fixed startup set */
 const START_EMOJIS = ["🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙","🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧","❤️","😊","😁","😉","🎵","🎨","📷","🧸"];
 
-/* prompt words */
+/* nouns for emojis */
 const WORDS = new Map(Object.entries({
   "🐛":"a caterpillar","🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🦋":"a butterfly","🐝":"a bee","🐢":"a turtle","🐙":"an octopus",
   "🌸":"a cherry blossom","🌿":"green leaves","🌈":"a rainbow","🌊":"ocean waves","⭐":"a starry sky","☀️":"sunlight","🌙":"moonlight","⚡":"lightning","🔥":"flames","💧":"a water droplet",
   "❤️":"a red heart","😊":"a smile","😁":"joy","😉":"a playful wink","🎵":"a music note","🎨":"paint","📷":"a camera","🧸":"a teddy bear","✨":"sparkles"
 }));
 
-/* DOM refs */
+/* DOM */
 const cauldron = document.getElementById('cauldron');
 const imageEl  = document.getElementById('image');
 const seedsEl  = document.getElementById('seeds');
@@ -210,24 +226,24 @@ const cancelBtn= document.getElementById('cancel');
 const picker   = document.getElementById('picker');
 const orbit    = document.getElementById('orbit');
 
-/* state */
+/* STATE */
 let seeds = [];     // {id, emoji, x, y}
 let placed = [];    // {id, emoji, x%, y%}
 let dragging = null;
 
-/* init */
+/* INIT */
 window.addEventListener('load', resetApp);
 
 function resetApp(){
   placed = [];
   imageEl.src = ""; imageEl.classList.remove('revealed');
-  document.body.classList.remove('locked','waiting');
+  document.body.classList.remove('locked');
   cancelBtn.classList.remove('show');
   orbit.classList.remove('spin'); orbit.innerHTML='';
   initSeeds(); renderSeeds(); renderPlaced(false);
 }
 
-/* deterministic scatter around viewport avoiding bowl/footer */
+/* scatter seeds (avoid bowl/footer) */
 function initSeeds(){
   const vw = innerWidth, vh = innerHeight;
   const bowl = cauldron.getBoundingClientRect();
@@ -276,7 +292,7 @@ picker.addEventListener('emoji-pick', e=>{
   renderPlaced(true);
 });
 
-/* drag logic */
+/* drag */
 function startDragSeed(ev, id){
   if (document.body.classList.contains('locked')) return;
   ev.preventDefault();
@@ -348,75 +364,56 @@ function spotInsideBowl(){
   } return {x:50,y:50};
 }
 
-/* rim placement (exact edge) */
+/* rim placement */
 function moveToRimPercent(x,y){
-  const cx=50, cy=50, r=44; // inner edge
+  const cx=50, cy=50, r=44;
   const ang = Math.atan2(y-cy, x-cx);
   return { x: cx + Math.cos(ang)*r, y: cy + Math.sin(ang)*r };
 }
 
-/* ---------- NEW choreography ---------- */
-/* Move all placed to inner ring (equal angles), spin & pulse */
+/* orbit choreography */
 function startOrbit(){
-  if (!placed.length){ // show something
-    placed.push({id:crypto.randomUUID(), emoji:"✨", x:50, y:60});
-    renderPlaced(true);
-  }
-  const N = placed.length;
-  const innerR = 24; // % radius for inner ring
+  if (!placed.length){ placed.push({id:crypto.randomUUID(), emoji:"✨", x:50, y:60}); renderPlaced(true); }
+  const N = placed.length, innerR = 24;
   for (let i=0;i<N;i++){
     const ang = (i/N) * Math.PI*2;
     const tx = 50 + Math.cos(ang)*innerR;
     const ty = 50 + Math.sin(ang)*innerR;
     const node = cauldron.querySelector(`.placed[data-id="${placed[i].id}"]`);
     if (!node) continue;
-    // animate into inner ring
-    node.animate([
-      { left: placed[i].x+'%', top: placed[i].y+'%', transform:'translate(-50%,-50%) scale(1)' },
-      { left: tx+'%', top: ty+'%', transform:'translate(-50%,-50%) scale(.96)' }
-    ], {duration:420, easing:'cubic-bezier(.2,.8,.2,1)'});
-    placed[i].x = tx; placed[i].y = ty;
-    node.style.left = tx+'%'; node.style.top = ty+'%';
-    node.classList.add('pulsing');
+    node.animate([{ left: placed[i].x+'%', top: placed[i].y+'%', transform:'translate(-50%,-50%) scale(1)' },{ left: tx+'%', top: ty+'%', transform:'translate(-50%,-50%) scale(.96)'}], {duration:420, easing:'cubic-bezier(.2,.8,.2,1)'});
+    placed[i].x = tx; placed[i].y = ty; node.style.left = tx+'%'; node.style.top = ty+'%'; node.classList.add('pulsing');
   }
   orbit.classList.add('spin');
 }
-
-/* After image is loaded: send chips outward to rim and reveal image with bounce */
 function endOrbitToRim(){
   orbit.classList.remove('spin');
   placed.forEach(p=>{
     const node = cauldron.querySelector(`.placed[data-id="${p.id}"]`); if (!node) return;
     const target = moveToRimPercent(p.x,p.y);
-    node.animate([
-      { left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1 },
-      { left: target.x+'%', top: target.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1 }
-    ], {duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
-    p.x = target.x; p.y = target.y;
-    node.style.left=p.x+'%'; node.style.top=p.y+'%';
-    node.classList.add('on-rim');
-    node.classList.remove('pulsing');
+    node.animate([{ left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(.96)' },{ left: target.x+'%', top: target.y+'%', transform:'translate(-50%,-50%) scale(.96)'}], {duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
+    p.x = target.x; p.y = target.y; node.style.left=p.x+'%'; node.style.top=p.y+'%'; node.classList.add('on-rim'); node.classList.remove('pulsing');
   });
-
-  // place ❌ on top-right rim
   const rim = moveToRimPercent(90,10);
   cancelBtn.style.left = rim.x+'%'; cancelBtn.style.top = rim.y+'%'; cancelBtn.classList.add('show');
-
-  // image bounce reveal: starts at scale .2 -> 1 with overshoot (via CSS transition)
   requestAnimationFrame(()=> imageEl.classList.add('revealed'));
 }
 
-/* prompt — cinematic story */
+/* ---------- PROMPT CORE (Variant #9) ---------- */
 function buildPrompt(){
   if (!placed.length) return "";
-  const nameOf = e => WORDS.get(e) || `the ${e} symbol`;
-  const dirOf = (x,y)=> {
-    const ang = (Math.atan2(y-50,x-50)*180/Math.PI+360)%360;
-    const dirs=["right","top-right","top","top-left","left","bottom-left","bottom","bottom-right"];
-    return dirs[Math.round((360-ang)/45)%8];
-  };
-  const parts = placed.map(p => `${nameOf(p.emoji)} at the ${dirOf(p.x,p.y)}`);
-  return `Create a cinematic, single-image story that blends all elements into one action: ${parts.join(', ')}. Interpret emojis as real objects, scenes, colors, or emotions (not glyphs). Coherent lighting, depth, motion; one consistent style; no text.`;
+
+  // 1) elements text (no positions)
+  const elements = placed.map(p => WORDS.get(p.emoji) || `the ${p.emoji} symbol`);
+
+  // 2) relationship cue to enforce narrative (picked by count)
+  const cues2 = ["tension","harmony","transformation","pursuit","reunion"];
+  const cues3 = ["tension","harmony","transformation","pursuit","reunion","contrast","metamorphosis"];
+  const r = (arr)=> arr[Math.floor(Math.random()*arr.length)];
+  const cue = elements.length<=2 ? r(cues2) : r(cues3);
+
+  // Final template (no positional language)
+  return `Combine ${elements.join(', ')} into a story-rich, cinematic composition. Show ${cue} between them, as if captured in a single dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Use coherent lighting, depth and motion in one consistent style. No text.`;
 }
 
 /* Pollinations */
@@ -434,17 +431,15 @@ cta.addEventListener('click', async ()=>{
     cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
       {duration:280,easing:'cubic-bezier(.3,.8,.2,1)'}); return;
   }
-  document.body.classList.add('waiting');
   startOrbit();
   try{
     const imgURL = await callPollinations(prompt);
     imageEl.src = imgURL;
     imageEl.onload = () => {
       endOrbitToRim();
-      document.body.classList.remove('waiting');
       document.body.classList.add('locked');
     };
-  }catch(e){ console.warn(e); document.body.classList.remove('waiting'); }
+  }catch(e){ console.warn(e); }
 });
 cancelBtn.addEventListener('click', resetApp);
 
