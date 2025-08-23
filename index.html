@@ -69,7 +69,7 @@
   .titleWrap{min-width:0; display:flex; flex:1 1 auto; flex-direction:column; gap:2px}
   .name{font-weight:750; letter-spacing:.2px; line-height:1.2; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .path{font-size:11px; color:#97a1b1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  .openVis{flex:0 0 auto; font-size:12px; color:#cfd5df; opacity:.9; display:inline-flex; gap:6px; align-items:center; pointer-events:none}
+  .openVis{flex:0 0 auto; font-size:12px; color:#cfd5df; opacity:.9; display:inline-flex; gap:6px; align-items:center}
   .bottom{display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0}
   .meta{display:flex; align-items:center; gap:10px; min-width:0; overflow:hidden}
   .ago{font-size:11px; font-weight:700; letter-spacing:.3px; display:inline-flex; align-items:center; gap:6px; flex:0 0 auto}
@@ -79,6 +79,9 @@
   .ago.t6{color:var(--t6)} .ago.t7{color:var(--t7)} .ago.t8{color:var(--t8)} .ago.t9{color:var(--t9)}
   .exact{font-size:11px;color:#cfd5df;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   footer{color:#9aa3b2;text-align:center;padding:18px;border-top:1px solid #161b25}
+  dialog::backdrop{background:rgba(0,0,0,.55)}
+  dialog{border:1px solid #22314a;border-radius:12px;background:#0f131a;color:var(--ink);padding:12px;max-width:96vw}
+  textarea{tab-size:2}
   @media (max-width:900px){.cards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}}
   @media (max-width:480px){.cards{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}.openVis{display:none}}
   @media (prefers-reduced-motion: reduce){*{transition:none !important}}
@@ -95,13 +98,29 @@
         <button id="sortName" aria-pressed="false" title="A → Z by name"><span>Name</span></button>
       </div>
       <button id="refresh" aria-label="Refresh list">Refresh</button>
+      <button id="auth" aria-label="Auth">🔑</button>
       <span id="status" class="status">—</span>
     </div>
   </div>
 </header>
 
 <main><div id="list"></div></main>
-<footer>Uses branch-SHA cache + ETag; no manual steps needed.</footer>
+<footer>Uses branch-SHA cache + ETag; timestamps are hydrated & cached. In-place editor requires a GitHub PAT.</footer>
+
+<!-- Editor dialog -->
+<dialog id="editor">
+  <form method="dialog" style="display:flex;flex-direction:column;gap:8px;min-width:min(960px,96vw);min-height:60vh">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <strong id="ed-path" style="font-size:13px;letter-spacing:.2px"></strong>
+      <div style="display:flex;gap:8px">
+        <button id="ed-cancel">Cancel</button>
+        <button id="ed-save" value="save" style="font-weight:700">Save</button>
+      </div>
+    </div>
+    <textarea id="ed-text" spellcheck="false" style="flex:1;resize:vertical;background:#0b0f16;color:#f5f6f8;border:1px solid #27324a;border-radius:10px;padding:10px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"></textarea>
+    <div id="ed-status" class="status">—</div>
+  </form>
+</dialog>
 
 <script>
 /* ===== Config ===== */
@@ -124,9 +143,29 @@ sortTimeBtn.onclick = () => setSort('time');
 sortNameBtn.onclick = () => setSort('name');
 
 /* ===== Cache keys ===== */
-const SHA_KEY  = `idx:sha:${USER}/${REPO}@${REF}`;
-const DATA_KEY = `idx:data:${USER}/${REPO}@${REF}`;
-const ETAG_KEY = `idx:etag:${USER}/${REPO}@${REF}`;
+const SHA_KEY   = `idx:sha:${USER}/${REPO}@${REF}`;
+const DATA_KEY  = `idx:data:${USER}/${REPO}@${REF}`;
+const ETAG_KEY  = `idx:etag:${USER}/${REPO}@${REF}`;
+const TOKEN_KEY = `gh:token:${USER}`;
+
+/* ===== Auth / headers ===== */
+let GH_TOKEN = localStorage.getItem(TOKEN_KEY) || '';
+function setToken(t){
+  GH_TOKEN = t || '';
+  if (t) localStorage.setItem(TOKEN_KEY, t);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+function authHeaders(h={}){ return GH_TOKEN ? {...h, Authorization:`Bearer ${GH_TOKEN}`} : h; }
+function datesKey(sha){ return `idx:dates:${USER}/${REPO}@${REF}:${sha}`; }
+
+/* ===== UI: auth button ===== */
+document.getElementById('auth').onclick = ()=>{
+  const hint = GH_TOKEN ? '********' : '';
+  const t = prompt('Paste a GitHub fine-grained PAT (with “Contents: Read and Write” on this repo). Leave empty to clear:', hint);
+  if (t === null) return;
+  setToken(t && t!=='********' ? t.trim() : '');
+  statusEl.textContent = GH_TOKEN ? 'Auth set.' : 'Auth cleared.';
+};
 
 /* ===== Utils ===== */
 function setSort(mode){
@@ -163,10 +202,21 @@ const EXCLUDE_TOP = /^(?:assets?|img|images?|icons?|fonts?|audio|sounds?|video|m
 
 /* ===== Rendering ===== */
 function buildCard(it){
-  const a = document.createElement('a');
-  a.className = 'card';
-  if(it.depth >= 2) a.classList.add('sub');
-  a.href = `https://${USER}.github.io/${REPO}/${it.path}`;
+  // Card root as a div (keyboard-accessible "link")
+  const card = document.createElement('div');
+  card.className = 'card';
+  if(it.depth >= 2) card.classList.add('sub');
+  card.setAttribute('role','link');
+  card.setAttribute('tabindex','0');
+  const href = `https://${USER}.github.io/${REPO}/${it.path}`;
+  card.addEventListener('click', (e)=>{
+    // ignore clicks on buttons inside
+    if (e.target.closest('button')) return;
+    window.open(href, '_blank', 'noopener');
+  });
+  card.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.open(href,'_blank','noopener'); }
+  });
 
   const top = document.createElement('div'); top.className = 'top';
   const ic = document.createElement('div'); ic.className = 'ic'; ic.innerHTML = fileIcon();
@@ -189,9 +239,19 @@ function buildCard(it){
     exact.textContent = isoLocal(d);
   }
   meta.append(when, exact);
-  bottom.append(meta, document.createElement('div'));
-  a.append(top, bottom);
-  return a;
+
+  const actions = document.createElement('div');
+  actions.style.display = 'flex';
+  actions.style.gap = '8px';
+  const editBtn = document.createElement('button');
+  editBtn.textContent = 'Edit';
+  editBtn.title = `Edit ${it.path}`;
+  editBtn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); openEditor(it.path); };
+  actions.append(editBtn);
+
+  bottom.append(meta, actions);
+  card.append(top, bottom);
+  return card;
 }
 
 function render(items){
@@ -232,12 +292,12 @@ function render(items){
   }
 }
 
-/* ✅ MISSING BEFORE — now included */
+/* Filter hook */
 function applyFilter(){ render(allItems); }
 
 /* ===== API helpers ===== */
 async function getJSON(url, headers = {}){
-  const r = await fetch(url, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...headers}});
+  const r = await fetch(url, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...authHeaders(headers)}});
   if(!r.ok) throw new Error(`${url} HTTP ${r.status}`);
   return {json: await r.json(), resp: r};
 }
@@ -257,6 +317,64 @@ function makeItemsFromTree(tree){
   }));
 }
 
+/* ===== Timestamp hydration (per-file last commit) ===== */
+async function getLastCommitISO(path){
+  const url = `https://api.github.com/repos/${USER}/${REPO}/commits?sha=${encodeURIComponent(REF)}&path=${encodeURIComponent(path)}&per_page=1`;
+  const {json} = await getJSON(url);
+  const c = json && json[0] && json[0].commit;
+  return c?.committer?.date || c?.author?.date || null;
+}
+
+// simple concurrency limiter
+async function mapLimit(arr, limit, worker){
+  const ret = Array(arr.length);
+  let i=0, active=0, done=0;
+  return new Promise((resolve,reject)=>{
+    const pump = () => {
+      while(active<limit && i<arr.length){
+        const idx=i++; active++;
+        Promise.resolve(worker(arr[idx], idx))
+          .then(v=>{ret[idx]=v;})
+          .catch(reject)
+          .finally(()=>{active--; done++; if(done===arr.length) resolve(ret); else pump();});
+      }
+    };
+    pump();
+  });
+}
+
+async function hydrateUpdatedAt(items, sha){
+  const key = datesKey(sha);
+  const memo = JSON.parse(localStorage.getItem(key) || '{}');
+
+  const todoIdx = [];
+  items.forEach((it, idx)=>{
+    if(memo[it.path]) it.updatedAt = memo[it.path];
+    else todoIdx.push(idx);
+  });
+
+  if(!todoIdx.length) return;
+
+  statusEl.textContent = `Fetching timestamps (${todoIdx.length})… ${GH_TOKEN?'(authed)':''}`;
+
+  const limit = GH_TOKEN ? 8 : 4;
+  try{
+    await mapLimit(todoIdx, limit, async (idx)=>{
+      const it = items[idx];
+      try{
+        const iso = await getLastCommitISO(it.path);
+        if(iso){ it.updatedAt = iso; memo[it.path] = iso; }
+      }catch(e){
+        // swallow non-fatal errors; leave missing
+        if(String(e?.message||e).includes('HTTP 403')) throw e;
+      }
+    });
+  }catch(e){
+    statusEl.textContent = 'Rate-limited by GitHub. Add a PAT (🔑) for faster/higher quota.';
+  }
+  localStorage.setItem(key, JSON.stringify(memo));
+}
+
 /* ===== Fast path with caching by SHA + ETag ===== */
 async function fetchIndex(){
   try{
@@ -265,11 +383,12 @@ async function fetchIndex(){
     const {json: branch} = await getJSON(`https://api.github.com/repos/${USER}/${REPO}/branches/${encodeURIComponent(REF)}`);
     const sha = branch.commit.sha;
 
-    // 2) Cache hit → instant paint
+    // 2) Cache hit → instant paint + ensure dates
     const cachedSha  = localStorage.getItem(SHA_KEY);
     const cachedData = localStorage.getItem(DATA_KEY);
     if(cachedSha === sha && cachedData){
       allItems = JSON.parse(cachedData);
+      await hydrateUpdatedAt(allItems, sha);
       render(allItems);
       statusEl.textContent = `Loaded ${allItems.length} file(s) from cache.`;
       // Background revalidation
@@ -291,7 +410,7 @@ async function revalidateTree(sha, paintOnSuccess=false){
   const headers = etag ? {'If-None-Match': etag} : {};
   statusEl.textContent = etag ? 'Revalidating tree…' : 'Loading tree…';
 
-  const r = await fetch(treeUrl, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...headers}});
+  const r = await fetch(treeUrl, {headers: {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28', ...authHeaders(headers)}});
   if(r.status === 304){
     statusEl.textContent = 'Up to date (HTTP 304).';
     return;
@@ -306,14 +425,117 @@ async function revalidateTree(sha, paintOnSuccess=false){
   localStorage.setItem(ETAG_KEY, newEtag);
   localStorage.setItem(DATA_KEY, JSON.stringify(items));
 
+  // Hydrate timestamps then paint
+  allItems = items;
+  await hydrateUpdatedAt(allItems, sha);
   if(paintOnSuccess){
-    allItems = items;
     render(allItems);
     statusEl.textContent = `Loaded ${allItems.length} file(s). Cached for next visit.`;
   }
 }
 
-/* init */
+/* ===== File I/O (read & write) ===== */
+function toBase64(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = ''; const step = 0x8000;
+  for(let i=0;i<bytes.length;i+=step){
+    bin += String.fromCharCode(...bytes.subarray(i,i+step));
+  }
+  return btoa(bin);
+}
+function fromBase64(b64){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+async function getFileText(path){
+  // Try raw first
+  const rawUrl = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(REF)}`;
+  const r = await fetch(rawUrl, {headers: {'Accept':'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28', ...authHeaders()}});
+  if(r.ok){
+    const ct = r.headers.get('content-type') || '';
+    if(!ct.includes('json')) return await r.text();
+  }
+  // Fallback to JSON and decode base64
+  const {json} = await getJSON(rawUrl);
+  if(json && json.content) return fromBase64(json.content.replace(/\n/g,''));
+  throw new Error(`Unable to load ${path}`);
+}
+
+async function getFileMeta(path){
+  const url = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(REF)}`;
+  const {json} = await getJSON(url);
+  return json; // includes .sha
+}
+
+async function putFileText(path, newText, message=`Edit ${path} via Auto Index`){
+  if(!GH_TOKEN) throw new Error('Missing GitHub token. Click 🔑 and paste a PAT.');
+  const meta = await getFileMeta(path);
+  const body = {
+    message,
+    content: toBase64(newText),
+    sha: meta.sha,
+    branch: REF
+  };
+  const url = `https://api.github.com/repos/${USER}/${REPO}/contents/${encodeURIComponent(path)}`;
+  const r = await fetch(url, {
+    method: 'PUT',
+    headers: {'Accept':'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28', ...authHeaders()},
+    body: JSON.stringify(body)
+  });
+  if(!r.ok){
+    const t = await r.text().catch(()=> '');
+    throw new Error(`Save failed: HTTP ${r.status} ${t}`);
+  }
+  return await r.json(); // contains .commit.committer.date
+}
+
+/* ===== Editor UI ===== */
+const ed = {
+  dlg: document.getElementById('editor'),
+  path: document.getElementById('ed-path'),
+  text: document.getElementById('ed-text'),
+  status: document.getElementById('ed-status'),
+  saveBtn: document.getElementById('ed-save'),
+  cancelBtn: document.getElementById('ed-cancel')
+};
+
+async function openEditor(path){
+  try{
+    ed.path.textContent = path;
+    ed.status.textContent = 'Loading…';
+    ed.text.value = await getFileText(path);
+    ed.status.textContent = 'Loaded.';
+    ed.dlg.showModal();
+  }catch(e){
+    alert(`Open failed: ${e.message||e}`);
+  }
+}
+
+ed.dlg.addEventListener('close', ()=>{
+  ed.text.value=''; ed.status.textContent='—';
+});
+
+ed.saveBtn.addEventListener('click', async (ev)=>{
+  ev.preventDefault();
+  try{
+    ed.status.textContent = 'Saving…';
+    const res = await putFileText(ed.path.textContent, ed.text.value);
+    ed.status.textContent = 'Saved. Refreshing…';
+    // Invalidate caches and fully reload index (branch SHA changes on commit)
+    localStorage.removeItem(SHA_KEY);
+    localStorage.removeItem(DATA_KEY);
+    localStorage.removeItem(ETAG_KEY);
+    ed.dlg.close();
+    await fetchIndex();
+  }catch(e){
+    ed.status.textContent = `Error: ${e.message||e}`;
+  }
+});
+
+/* ===== init ===== */
 fetchIndex();
 qEl.addEventListener('input', applyFilter);
 </script>
