@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
-<title>Emoji → Pollinations</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Emoji Story Mixer</title>
 <style>
   :root{
     --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
     --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
     --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
     --ease:cubic-bezier(.2,.8,.2,1);
-    --emerald:#10b981; --emerald-d:#0a8e65; --emerald-l:#59e0b9;
+    --emerald:#9af2d3; --emerald-mid:#48d9ad; --emerald-deep:#0ca678;
   }
   html,body{height:100%;margin:0}
   body{
@@ -27,18 +27,18 @@
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
-  /* ambient pulse overlay (enabled only when waiting) */
-  .waitFX{
-    position:fixed; inset:0; pointer-events:none; z-index:1;
+  /* ambient pulse overlay when waiting */
+  .waitFX{position:fixed; inset:0; pointer-events:none; z-index:1; opacity:0; mix-blend-mode:overlay}
+  .waiting .waitFX{
+    opacity:.35;
     background:
       radial-gradient(120vmax 120vmax at 20% 15%, #7ff0cf33, transparent 60%),
       radial-gradient(120vmax 120vmax at 80% 25%, #b39bff33, transparent 60%),
       radial-gradient(120vmax 120vmax at 30% 80%, #ff9bd433, transparent 60%);
-    opacity:0; mix-blend-mode:overlay;
+    animation:breath 2.6s ease-in-out infinite, hueShift 8s linear infinite;
   }
-  .waiting .waitFX{ opacity:.35; animation:breath 2.6s ease-in-out infinite, hueShift 8s linear infinite; }
-  @keyframes breath{ 0%{opacity:.15} 50%{opacity:.4} 100%{opacity:.15} }
-  @keyframes hueShift{ to{ filter:hue-rotate(45deg) } }
+  @keyframes breath{0%{opacity:.18}50%{opacity:.42}100%{opacity:.18}}
+  @keyframes hueShift{to{filter:hue-rotate(45deg)}}
 
   .stage{position:fixed; inset:0; display:grid; place-items:center; z-index:2}
 
@@ -48,17 +48,26 @@
     background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
     box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
     outline:1px solid var(--ring2);
-    overflow:hidden; display:grid; place-items:center;
-    transform:translateZ(0);
+    overflow:hidden; display:grid; place-items:center; transform:translateZ(0);
   }
   .waiting .cauldron{ animation:rot 8s linear infinite, pulse 2.2s ease-in-out infinite; }
-  @keyframes rot{ to{ transform:rotate(360deg) } }
-  @keyframes pulse{ 0%{ filter:saturate(1) brightness(1)} 50%{ filter:saturate(1.08) brightness(1.06)} 100%{ filter:saturate(1) brightness(1)} }
+  @keyframes rot{to{transform:rotate(360deg)}}
+  @keyframes pulse{0%{filter:saturate(1) brightness(1)}50%{filter:saturate(1.08) brightness(1.06)}100%{filter:saturate(1) brightness(1)}}
 
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
-  /* placed chips */
+  /* chips */
+  .chip, .seed, .plus{
+    width:56px; height:56px; border-radius:50%;
+    display:grid; place-items:center; user-select:none;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
+  }
+  .seed{ position:absolute; transform:translate(-50%,-50%); pointer-events:auto; animation:float var(--dur,9s) ease-in-out infinite var(--delay,0s); }
+  @keyframes float{0%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))}50%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px))}100%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))}}
+  .seed .e, .chip .e, .plus .e{font-size:28px}
+
   .placed{
     position:absolute; width:12vmin; max-width:72px; aspect-ratio:1; border-radius:50%;
     display:grid; place-items:center; cursor:grab;
@@ -70,73 +79,48 @@
   }
   .placed .e{font-size:clamp(24px, 8vmin, 44px); filter:drop-shadow(0 1px 0 #ffffffcc)}
   .placed.dropin{ animation:drop .38s var(--ease) }
-  @keyframes drop{ 0%{transform:translate(-50%,-50%) scale(.72)} 70%{transform:translate(-50%,-50%) scale(1.14)} 100%{transform:translate(-50%,-50%) scale(1)} }
+  @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
   .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
-  @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
-  .on-rim{ pointer-events:none; } /* lets image receive long-press */
+  @keyframes fadeout{to{ transform:translate(-50%,-50%) scale(.82); opacity:0 }}
+  .on-rim{ pointer-events:none; }
 
-  /* result image layer */
+  /* image */
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:30; }
-  .result-img{
-    width:100%; height:100%; object-fit:cover; display:block;
-    opacity:0; transform:scale(.92);
-    transition:opacity .6s var(--ease), transform .8s var(--ease) .1s;
-    pointer-events:auto; -webkit-touch-callout:default; user-select:none;
-  }
+  .result-img{ width:100%; height:100%; object-fit:cover; display:block; opacity:0; transform:scale(.92); transition:opacity .6s var(--ease), transform .8s var(--ease) .1s; pointer-events:auto; -webkit-touch-callout:default; user-select:none; }
   .result-img.revealed{ opacity:1; transform:scale(1) }
 
-  /* cancel puck ON THE RIM, above all */
+  /* cancel ON rim */
   .cancel{
-    position:absolute; width:56px; height:56px; border-radius:50%;
-    display:grid; place-items:center; background:radial-gradient(120% 120% at 30% 30%, #fff, #f6f7fb 60%, #e9eef9 100%);
+    position:absolute; width:56px; height:56px; border-radius:50%; display:grid; place-items:center;
+    background:radial-gradient(120% 120% at 30% 30%, #fff, #f6f7fb 60%, #e9eef9 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffff; font-size:26px; cursor:pointer;
     transform:translate(-50%,-50%); z-index:9999; opacity:0; transition:opacity .2s var(--ease);
-    /* will be positioned by JS to exact rim coords */
   }
-  .cancel.show{ opacity:1 }
+  .cancel.show{opacity:1}
 
-  /* floating seeds (unchanged) */
-  .seeds{position:fixed; inset:0; pointer-events:none; z-index:10}
-  .seed{
-    position:absolute; width:56px; height:56px; border-radius:50%;
-    display:grid; place-items:center; user-select:none; pointer-events:auto;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
-    transform:translate(-50%,-50%) scale(1);
-    transition:transform .18s var(--ease), box-shadow .18s var(--ease);
-    animation:float var(--dur,9s) ease-in-out infinite var(--delay,0s);
-  }
-  .seed .e{font-size:28px}
-  @keyframes float{
-    0%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) }
-    50%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px)) }
-    100%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) }
-  }
-
-  /* footer (input + CTA) */
-  .footer{ position:fixed; left:16px; right:16px; bottom:16px; z-index:50; display:flex; gap:12px; align-items:center; }
-  .cluster{ flex:1; display:flex; align-items:center; height:56px; padding:8px; gap:8px; border-radius:20px; background:linear-gradient(180deg, #ffffff70, #ffffff40); backdrop-filter: blur(10px) saturate(1.05); box-shadow:var(--shadow), inset 0 0 0 1px #00000012, inset 0 1px 0 #ffffff90; }
-  .input{ flex:1; height:40px; border-radius:12px; padding:8px 12px; outline:none; border:none; background:#ffffffea; box-shadow: inset 0 1px 0 #fff, 0 0 0 1px #00000014; font-size:17px; }
-  .add{ width:48px; height:48px; border-radius:14px; display:grid; place-items:center; cursor:pointer; flex:0 0 48px; background:radial-gradient(140% 140% at 30% 30%, #ffffff, #f5f7ff 60%, #e9f0ff 100%); box-shadow:var(--shadow), inset 0 1px 0 #ffffff; }
-  .add .e{ font-size:22px }
-
+  /* footer circles */
+  .footer{ position:fixed; left:16px; right:16px; bottom:16px; z-index:50; display:flex; gap:14px; align-items:center; justify-content:center; }
+  .circle-btn{ width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; }
+  .plus{ box-shadow:var(--shadow), inset 0 1px 0 #ffffff; }
   .cta{
-    flex:0 0 88px; width:88px; height:88px; border-radius:26px; display:grid; place-items:center; cursor:pointer; user-select:none;
     background:
-      radial-gradient(140% 160% at 75% 130%, #7ff0cf55, transparent 60%),
-      radial-gradient(120% 140% at 20% 10%, #ffffff90, transparent 55%),
-      linear-gradient(145deg, var(--emerald-l), var(--emerald), var(--emerald-d));
-    box-shadow:0 16px 36px rgba(16,185,129,.35), 0 8px 18px rgba(0,0,0,.18) inset, 0 -10px 24px rgba(0,0,0,.24) inset;
+      radial-gradient(160% 180% at 75% 130%, #a9ffe955, transparent 60%),
+      radial-gradient(120% 140% at 20% 10%, #ffffffb0, transparent 55%),
+      linear-gradient(145deg, var(--emerald), var(--emerald-mid), var(--emerald-deep));
+    box-shadow:
+      0 18px 40px rgba(12,166,120,.34),
+      0 8px 18px rgba(0,0,0,.18) inset,
+      0 -10px 24px rgba(0,0,0,.22) inset;
     transition:transform .18s var(--ease), filter .18s var(--ease);
     position:relative; overflow:hidden;
   }
-  .cta::after{ content:""; position:absolute; inset:-60%; background: conic-gradient(from 0deg, #7ff0cf33, #b39bff33, #ff9bd433, #7ff0cf33); animation:ctaSpin 7s linear infinite; mix-blend-mode:overlay; pointer-events:none; }
-  @keyframes ctaSpin{ to{ transform: rotate(360deg) } }
-  .cta:hover{ transform:translateY(-1px) scale(1.04) }
+  .cta::after{ content:""; position:absolute; inset:-60%; background: conic-gradient(from 0deg, #7ff0cf66, #b39bff66, #ff9bd466, #7ff0cf66); animation:ctaSpin 6s linear infinite; mix-blend-mode:overlay; pointer-events:none; }
+  @keyframes ctaSpin{to{transform:rotate(360deg)}}
+  .cta:hover{ transform:translateY(-1px) scale(1.05) }
   .cta:active{ transform:translateY(0) scale(.98) }
-  .cta .e{ font-size:44px; filter: drop-shadow(0 1px 0 #fff6) }
+  .cta .e{ font-size:36px; filter: drop-shadow(0 1px 0 #fff6) }
 
-  .locked .seed, .locked .cluster, .locked .cta { pointer-events:none; filter:saturate(.4) opacity(.7) }
+  .locked .seed, .locked .cta, .locked .plus { pointer-events:none; filter:saturate(.4) opacity(.7) }
 </style>
 </head>
 <body>
@@ -153,25 +137,108 @@
           <img id="image" class="result-img" alt="AI result" draggable="false"/>
         </div>
 
-        <!-- ❌ sits ON the rim; JS positions it exactly -->
         <button class="cancel" id="cancel" aria-label="reset">❌</button>
       </div>
     </div>
   </div>
 
+  <!-- footer: + picker & CTA, both circular -->
   <div class="footer">
-    <div class="cluster">
-      <input class="input" id="emojiInput" placeholder="emoji…" inputmode="text"/>
-      <button class="add" id="addBtn" aria-label="add"><span class="e">➕</span></button>
-    </div>
-    <button class="cta" id="cta" aria-label="generate"><span class="e">✨</span></button>
+    <button class="circle-btn plus" id="openPicker" aria-label="add"><span class="e">➕</span></button>
+    <button class="circle-btn cta" id="cta" aria-label="generate"><span class="e">✨</span></button>
   </div>
 
+  <!-- ===== Emoji Picker Component (as provided) ===== -->
+  <emoji-picker id="picker"></emoji-picker>
+  <script>
+  customElements.define('emoji-picker', class extends HTMLElement {
+    #shadow = this.attachShadow({ mode: 'closed' });
+    #data; #current = ''; #filtered = []; #focusIndex = 0;
+    constructor(){
+      super();
+      this.#shadow.innerHTML = `
+        <style>
+          :host{all:initial}
+          .picker{
+            position:fixed;inset:auto 0 0 0;margin:auto;width:min(760px,96vw);height:min(70vh,720px);
+            background:linear-gradient(180deg,#101624,#0e1320);border:1px solid #1c2432;border-radius:16px;
+            box-shadow:0 10px 30px rgba(0,0,0,.35),0 1px 0 rgba(255,255,255,.04) inset;
+            display:grid;grid-template-rows:auto 1fr;opacity:0;transform:translateY(24px) scale(.98);pointer-events:none;
+            transition:opacity 180ms cubic-bezier(.2,.7,.2,1),transform 260ms cubic-bezier(.2,.8,.2,1);z-index:99999
+          }
+          .show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+          .tabs{display:flex;gap:8px;overflow:auto;padding:8px 12px;border-bottom:1px solid #1c2432;background:#0f1421}
+          .tab{position:relative;display:inline-grid;place-items:center;width:42px;height:42px;border-radius:999px;border:1px solid #1c2432;background:#0f1421;cursor:pointer;user-select:none;transition:transform .08s ease}
+          .tab:active{transform:translateY(1px)}
+          .tab[aria-selected="true"]{outline:2px solid #6ee7ff}
+          .scroller{position:relative;overflow:auto;padding:12px}
+          .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:10px;align-content:start}
+          .cell{display:grid;place-items:center;height:48px;border-radius:10px;background:#0e1420;border:1px solid transparent;transition:transform .08s ease, background 180ms cubic-bezier(.2,.7,.2,1), border-color 180ms cubic-bezier(.2,.7,.2,1);opacity:0;animation:fadein .25s cubic-bezier(.2,.7,.2,1) both}
+          @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+          .cell:focus{outline:2px solid #6ee7ff}
+          .cell:hover{border-color:#27334a}
+          .cell:active{transform:translateY(1px)}
+          .emo{font-size:28px;line-height:1}
+        </style>
+        <div class="picker" role="dialog" aria-modal="true" aria-label="Emoji picker">
+          <div class="tabs" part="tabs" role="tablist"></div>
+          <div class="scroller"><div class="grid" role="listbox" aria-label="Emoji results"></div></div>
+        </div>`;
+      this.#data = {
+        people:{icon:"🙂",items:["😀","😃","😄","😁","😆","😉","😊","😍","🤔","😎","😭","🤣","🤗","🤨","😴","🤯","🤐","🥳"]},
+        hands:{icon:"🖐️",items:["👍","👎","👏","🙏","👋","🤝","✌️","☝️","👉","👈","👆","👇"]},
+        emotion:{icon:"❤️",items:["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","💥","✨","🔥","💤"]},
+        animals:{icon:"🐱",items:["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐣","🐧","🐦","🦉","🦄","🐛","🦋","🐝","🐢","🐙"]},
+        food:{icon:"🍕",items:["🍎","🍌","🍉","🍇","🍓","🍒","🍍","🥝","🍅","🥑","🍔","🍟","🍕","🌮","🍣","🍜","🍰","🍪","🍩","☕"]},
+        activities:{icon:"🎉",items:["⚽","🏀","🏈","🎾","🏓","🥊","🎸","🎧","🎲","🎮","🎯","🏆"]},
+        travel:{icon:"✈️",items:["🚗","🚕","🚌","🚄","🚆","🛩️","✈️","🚀","🛳️","⛵","🚲","🏝️"]},
+        objects:{icon:"💡",items:["💡","🔒","🔑","🧭","🕰️","⏰","📱","💻","🖱️","🖊️","📎","📦","🧯","🧰"]},
+        symbols:{icon:"🔣",items:["✅","❌","⚠️","ℹ️","♻️","➕","➖","➗","✳️","⭐","🆕","🆗"]},
+        flags:{icon:"🏳️‍🌈",items:["🏁","🏳️","🏴","🏳️‍🌈","🇪🇺","🇨🇿","🇸🇰","🇩🇪","🇪🇸","🇺🇸","🇬🇧"]}
+      };
+    }
+    connectedCallback(){
+      this.r = { root: this.#qs('.picker'), tabs: this.#qs('.tabs'), grid: this.#qs('.grid'), scroll: this.#qs('.scroller') };
+      this.#buildTabs(); this.#setCategory(Object.keys(this.#data)[0]);
+      window.addEventListener('keydown', this.#esc);
+      this.r.scroll.addEventListener('scroll', ()=> this.#render(true));
+    }
+    disconnectedCallback(){ window.removeEventListener('keydown', this.#esc); }
+    open(){ this.r.root.classList.add('show'); this.#render(); }
+    close(){ this.r.root.classList.remove('show'); }
+    get opened(){ return this.r.root.classList.contains('show'); }
+    set data(o){ if(o){ this.#data=o; this.#buildTabs(); this.#setCategory(Object.keys(this.#data)[0]); } }
+    get data(){ return this.#data; }
+    #qs(s){ return this.#shadow.querySelector(s); }
+    #esc = (e)=>{ if(e.key==='Escape' && this.opened) this.close(); };
+    #buildTabs(){ this.r.tabs.innerHTML=''; for(const [id,cat] of Object.entries(this.#data)){ const b=document.createElement('button'); b.className='tab'; b.setAttribute('role','tab'); b.dataset.id=id; b.innerHTML=`<span class="emo">${cat.icon}</span>`; b.onclick=()=>this.#setCategory(id); this.r.tabs.appendChild(b);} }
+    #setCategory(id){ this.#current=id; [...this.r.tabs.children].forEach(el=>el.setAttribute('aria-selected', el.dataset.id===id?'true':'false')); this.#filtered=this.#data[id].items.slice(); this.r.scroll.scrollTop=0; this.#render(); }
+    #render(keep=false){
+      const grid=this.r.grid;
+      if(!keep) grid.innerHTML='';
+      const cols=getComputedStyle(grid).gridTemplateColumns.split(' ').length||8;
+      const ROW_H=58, total=this.#filtered.length, rows=Math.ceil(total/cols);
+      const top=this.r.scroll.scrollTop, vh=this.r.scroll.clientHeight;
+      const firstRow=Math.max(0, Math.floor(top/ROW_H)-3);
+      const lastRow=Math.min(rows, firstRow+Math.ceil(vh/ROW_H)+6);
+      const start=firstRow*cols, end=Math.min(total, lastRow*cols);
+      grid.innerHTML='';
+      for(let i=0;i<start;i++){ const s=document.createElement('div'); s.style.visibility='hidden'; grid.appendChild(s);}
+      for(let i=start;i<end;i++){ const ch=this.#filtered[i]; const btn=document.createElement('button'); btn.type='button'; btn.className='cell'; btn.setAttribute('role','option'); btn.dataset.index=i; btn.innerHTML=`<span class="emo">${ch}</span>`; btn.onclick=()=>this.#choose(ch); grid.appendChild(btn); }
+      for(let i=end;i<rows*cols;i++){ const s=document.createElement('div'); s.style.visibility='hidden'; grid.appendChild(s);}
+    }
+    #choose(ch){ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); }
+  });
+  </script>
+  <!-- ===== End Picker ===== -->
+
 <script>
-/* ---- fixed startup emojis ---- */
+/* ---------- Core interaction ---------- */
+
+/* fixed startup set (includes 🐛) */
 const START_EMOJIS = ["🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙","🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧","❤️","😊","😁","😉","🎵","🎨","📷","🧸"];
 
-/* words for prompt */
+/* prompt words */
 const WORDS = new Map(Object.entries({
   "🐛":"a caterpillar","🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🦋":"a butterfly","🐝":"a bee","🐢":"a turtle","🐙":"an octopus",
   "🌸":"a cherry blossom","🌿":"green leaves","🌈":"a rainbow","🌊":"ocean waves","⭐":"a starry sky","☀️":"sunlight","🌙":"moonlight","⚡":"lightning","🔥":"flames","💧":"a water droplet",
@@ -180,21 +247,21 @@ const WORDS = new Map(Object.entries({
 
 /* DOM refs */
 const cauldron = document.getElementById('cauldron');
-const wrap     = document.getElementById('wrap');
 const imageEl  = document.getElementById('image');
 const seedsEl  = document.getElementById('seeds');
-const addBtn   = document.getElementById('addBtn');
 const cta      = document.getElementById('cta');
+const plusBtn  = document.getElementById('openPicker');
 const cancelBtn= document.getElementById('cancel');
-const emojiInput = document.getElementById('emojiInput');
+const picker   = document.getElementById('picker');
 
 /* state */
 let seeds = [];     // {id, emoji, x, y}
 let placed = [];    // {id, emoji, x%, y%}
 let dragging = null;
 
-/* init/reset */
+/* init */
 window.addEventListener('load', resetApp);
+
 function resetApp(){
   placed = [];
   imageEl.src = ""; imageEl.classList.remove('revealed');
@@ -203,18 +270,19 @@ function resetApp(){
   initSeeds(); renderSeeds(); renderPlaced(false);
 }
 
-/* deterministic scatter around viewport avoiding bowl/footer */
+/* deterministic scatter around viewport avoiding bowl/footer circles */
 function initSeeds(){
-  const vw = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
-  const vh = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+  const vw = innerWidth, vh = innerHeight;
   const bowl = cauldron.getBoundingClientRect();
   const R = bowl.width/2, cx = bowl.left + R, cy = bowl.top + R;
   const seedR = 28, minDist = seedR*2 + 16;
+  const footer = document.querySelector('.footer').getBoundingClientRect();
   const avoid = [
     {left: cx-R-24, top: cy-R-24, right: cx+R+24, bottom: cy+R+24},
-    (()=>{const f=document.querySelector('.footer').getBoundingClientRect(); return {left:f.left-16, top:f.top-16, right:f.right+16, bottom:f.bottom+16}})()
+    {left: footer.left-24, top: footer.top-24, right: footer.right+24, bottom: footer.bottom+24}
   ];
   let s=12345; const rnd=()=> (s=(1103515245*s+12345)%2**31)/2**31;
+
   seeds = []; let i=0, tries=0;
   while (i<START_EMOJIS.length && tries++<6000){
     const x = 20 + rnd()*(vw-40), y = 20 + rnd()*(vh-40);
@@ -242,20 +310,16 @@ function renderSeeds(){
   }
 }
 
-/* emoji-only input */
-emojiInput.addEventListener('input', ()=> {
-  emojiInput.value = Array.from(emojiInput.value).filter(ch => /\p{Extended_Pictographic}/u.test(ch)).join('');
+/* picker: open & handle pick */
+plusBtn.addEventListener('click', ()=> picker.open());
+picker.addEventListener('emoji-pick', e=>{
+  const emo = e.detail.emoji;
+  const pos = spotInsideBowl();
+  placed.push({id:crypto.randomUUID(), emoji:emo, x:pos.x, y:pos.y});
+  renderPlaced(true);
 });
-addBtn.addEventListener('click', addFromInput);
-emojiInput.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); addFromInput(); emojiInput.blur(); } });
-function addFromInput(){
-  const chars = Array.from(emojiInput.value || '').filter(ch => /\p{Extended_Pictographic}/u.test(ch));
-  if (!chars.length) return pulse(addBtn);
-  for (const e of chars){ const pos = spotInsideBowl(); placed.push({id:crypto.randomUUID(), emoji:e, x:pos.x, y:pos.y}); }
-  emojiInput.value = ''; renderPlaced(true);
-}
 
-/* drag */
+/* drag logic */
 function startDragSeed(ev, id){
   if (document.body.classList.contains('locked')) return;
   ev.preventDefault();
@@ -274,7 +338,7 @@ function startDragPlaced(ev, id){
 }
 function makeGhost(emoji){
   const g = document.createElement('div');
-  g.className='seed'; g.style.width='64px'; g.style.height='64px'; g.style.position='fixed'; g.style.zIndex=9999;
+  g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
   g.style.transform='translate(-50%,-50%) scale(1.0)'; g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
   g.innerHTML = `<span class="e">${emoji}</span>`; document.body.appendChild(g); return g;
 }
@@ -309,7 +373,7 @@ function renderPlaced(playDrop=false){
   }
 }
 
-/* geometry helpers */
+/* geometry */
 function coordsInCauldron(cx, cy){
   const r = cauldron.getBoundingClientRect(); const mx = cx - (r.left + r.width/2); const my = cy - (r.top  + r.height/2);
   const dist = Math.hypot(mx,my); const inside = dist <= r.width/2;
@@ -327,9 +391,9 @@ function spotInsideBowl(){
   } return {x:50,y:50};
 }
 
-/* rim placement (exact edge) */
+/* move to exact rim in % coords */
 function moveToRimPercent(x,y){
-  const cx=50, cy=50, r=44; // radius in % of width/height (44% ~= inside edge)
+  const cx=50, cy=50, r=44; // ~edge
   const ang = Math.atan2(y-cy, x-cx);
   return { x: cx + Math.cos(ang)*r, y: cy + Math.sin(ang)*r };
 }
@@ -337,18 +401,15 @@ function tuckPlacedToRim(){
   placed.forEach(p=>{
     const target = moveToRimPercent(p.x,p.y);
     const node = cauldron.querySelector(`.placed[data-id="${p.id}"]`); if (!node) return;
-    node.animate([
-      { left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(1)' },
-      { left: target.x+'%', top: target.y+'%', transform:'translate(-50%,-50%) scale(.96)' }
-    ], {duration:520, easing:'cubic-bezier(.2,.8,.2,1)'});
+    node.animate([{ left:p.x+'%', top:p.y+'%', transform:'translate(-50%,-50%) scale(1)' }, { left:target.x+'%', top:target.y+'%', transform:'translate(-50%,-50%) scale(.96)'}], {duration:520, easing:'cubic-bezier(.2,.8,.2,1)'});
     p.x = target.x; p.y = target.y; node.style.left=p.x+'%'; node.style.top=p.y+'%'; node.classList.add('on-rim');
   });
-  // place ❌ at 45° on rim
-  const rim = moveToRimPercent(90,10); // vector towards top-right
+  // place ❌ at top-right rim
+  const rim = moveToRimPercent(90,10);
   cancelBtn.style.left = rim.x+'%'; cancelBtn.style.top = rim.y+'%'; cancelBtn.classList.add('show');
 }
 
-/* prompt — engaging story */
+/* prompt — cinematic story */
 function buildPrompt(){
   if (!placed.length) return "";
   const nameOf = e => WORDS.get(e) || `the ${e} symbol`;
@@ -358,7 +419,7 @@ function buildPrompt(){
     return dirs[Math.round((360-ang)/45)%8];
   };
   const parts = placed.map(p => `${nameOf(p.emoji)} at the ${dirOf(p.x,p.y)}`);
-  return `Create a cinematic, single-image story that blends all elements into one action: ${parts.join(', ')}. Treat emojis as real objects, scenes, colors, or emotions (not glyphs). Use coherent lighting, depth, motion; one consistent style; no text.`;
+  return `Create a cinematic, single-image story that blends all elements into one action: ${parts.join(', ')}. Interpret emojis as real objects, scenes, colors, or emotions (not glyphs). Coherent lighting, depth, motion; one consistent style; no text.`;
 }
 
 /* Pollinations */
@@ -368,8 +429,8 @@ async function callPollinations(prompt){
   const blob = await res.blob(); return URL.createObjectURL(blob);
 }
 
-/* CTA / Cancel */
-document.getElementById('cta').addEventListener('click', async ()=>{
+/* CTA + Cancel */
+cta.addEventListener('click', async ()=>{
   if (document.body.classList.contains('locked')) return;
   const prompt = buildPrompt();
   if(!prompt){
@@ -382,7 +443,7 @@ document.getElementById('cta').addEventListener('click', async ()=>{
     imageEl.src = imgURL;
     imageEl.onload = () => {
       imageEl.classList.add('revealed');
-      tuckPlacedToRim();                // rim + above image
+      tuckPlacedToRim();
       document.body.classList.remove('waiting');
       document.body.classList.add('locked');
     };
@@ -390,7 +451,7 @@ document.getElementById('cta').addEventListener('click', async ()=>{
 });
 cancelBtn.addEventListener('click', resetApp);
 
-/* tiny helpers */
+/* helpers */
 function pulse(el){ el.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'}); }
 document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
