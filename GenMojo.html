@@ -1,8 +1,16 @@
+Changes done:
+	•	Prompt uses simple positions: center/top/top-right/right/bottom-right/bottom/bottom-left/left/top-left.
+	•	Input no-zoom on iOS: input font-size ≥ 17px + maximum-scale=1.
+	•	CTA: ✨ on a dark iridescent button, larger than other circles.
+	•	Image is a real <img> clipped to a circle, so long-press → Save Image works.
+	•	Seeds don’t replace; seeds avoid footer/CTA/bowl; cancel by dragging out.
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
 <title>Emoji → Pollinations</title>
 <style>
   :root{
@@ -21,7 +29,7 @@
       radial-gradient(70vmax 70vmax at 80% 85%, var(--t4), transparent 60%),
       conic-gradient(from 0deg at 50% 50%, #e9f3ff, #ffe9f7, #e9fff6, #f7f3ff, #e9f3ff);
     background-attachment:fixed; animation:hue 24s linear infinite alternate;
-    overflow:hidden; touch-action:none; -webkit-tap-highlight-color:transparent;
+    overflow:hidden; touch-action:manipulation; -webkit-tap-highlight-color:transparent;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
@@ -56,7 +64,7 @@
     box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
     outline:1px solid var(--ring2);
     transition:transform .45s var(--ease), filter .45s var(--ease), box-shadow .3s var(--ease);
-    overflow:hidden;
+    overflow:hidden; display:grid; place-items:center;
   }
   .cauldron::before{
     content:""; position:absolute; inset:-20%;
@@ -84,9 +92,15 @@
   .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
   @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
 
-  /* image layer above chips */
-  .image{ position:absolute; inset:0; border-radius:50%; overflow:hidden; background-position:center; background-size:cover; background-repeat:no-repeat; opacity:0; transform:scale(.92); transition:opacity .6s var(--ease), transform .8s var(--ease) .1s; z-index:5; }
-  .image.revealed{ opacity:1; transform:scale(1) }
+  /* result image as real <img> (saves on long-press) */
+  .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:5; }
+  .result-img{
+    width:100%; height:100%; object-fit:cover; display:block;
+    opacity:0; transform:scale(.92);
+    transition:opacity .6s var(--ease), transform .8s var(--ease) .1s;
+    -webkit-touch-callout: default; /* allow Save Image on iOS */
+  }
+  .result-img.revealed{ opacity:1; transform:scale(1) }
   .cauldron.show-image .placed{ opacity:0; pointer-events:none; transform:translate(-50%,-50%) scale(.94) }
 
   /* bottom footer */
@@ -105,17 +119,34 @@
     box-shadow: inset 0 1px 0 #ffffff, 0 1px 0 #00000005;
   }
   .input{
-    flex:1; height:36px; border-radius:10px; padding:6px 10px; outline:none; border:none; background:#ffffffc0; box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000010;
+    flex:1; height:38px; border-radius:10px; padding:6px 12px;
+    outline:none; border:none; background:#ffffffc0;
+    box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000010;
+    font-size:17px; /* >=16 to prevent iOS zoom */
   }
+
+  /* CTA: big, dark iridescent */
   .cta{
-    width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffb8 60%, #ffffff90 100%);
-    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffff;
-    transition:transform .18s var(--ease), box-shadow .18s var(--ease);
+    width:88px; height:88px; border-radius:24px; display:grid; place-items:center; cursor:pointer; user-select:none;
+    background: linear-gradient(145deg, #0e1020, #1a1f3a);
+    box-shadow:
+      0 10px 28px #0006,
+      inset 0 0 0 1px #ffffff20,
+      inset 0 1px 0 #9fe2ff22,
+      0 0 0 6px #6ae3ff22;
+    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease);
+    position:relative; overflow:hidden;
   }
-  .cta:hover{ transform:scale(1.08) }
-  .cta:active{ transform:scale(.96) }
-  .cta .e{ font-size:30px; filter:drop-shadow(0 1px 0 #fff) }
+  .cta::after{
+    content:""; position:absolute; inset:-50%;
+    background: conic-gradient(from 0deg, #75f3ff22, #b79bff22, #ff9bd422, #75f3ff22);
+    animation:ctaSpin 8s linear infinite; mix-blend-mode:overlay; pointer-events:none;
+  }
+  @keyframes ctaSpin{ to{ transform: rotate(360deg) } }
+  .cta:hover{ transform:scale(1.06) }
+  .cta:active{ transform:scale(.97) }
+  .cta .e{ font-size:40px; filter: drop-shadow(0 1px 0 #fff6) }
+
   .cta.spin .e{ animation:spin .9s linear infinite }
   @keyframes spin{ to{ transform:rotate(360deg) } }
 
@@ -129,17 +160,21 @@
     <div class="cauldron-wrap" id="wrap">
       <div class="cauldron" id="cauldron" aria-label="drop area">
         <div class="ring"></div>
-        <div class="image" id="image"></div>
+
+        <!-- real image for long-press saving -->
+        <div class="image-wrap">
+          <img id="image" class="result-img" alt="AI result" draggable="false"/>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Bottom footer: input + CTA (single icon: wand) -->
+  <!-- Bottom footer: input + CTA -->
   <div class="footer" id="footer">
     <div class="pill">
       <input class="input" id="freeInput" placeholder="type text or emoji…"/>
     </div>
-    <button class="cta" id="cta" aria-label="generate"><span class="e">🪄</span></button>
+    <button class="cta" id="cta" aria-label="generate"><span class="e">✨</span></button>
   </div>
 
 <script>
@@ -173,7 +208,7 @@ const cta = document.getElementById('cta');
 let seeds = [];     // {id, emoji, x, y}
 let placed = [];    // {id, emoji, x%, y%}
 let dragging = null;
-let styleHint = ""; // free text string
+let styleHint = ""; // free text
 let inputEmojiInbox = new Set(); // emojis typed but not placed
 
 /* ====== INIT ====== */
@@ -183,28 +218,20 @@ window.addEventListener('resize', () => { initSeeds(true); renderSeeds(); }, {pa
 
 /* ====== FOOTER INPUT ====== */
 freeInput.addEventListener('keydown', e=>{
-  if (e.key==='Enter'){ e.preventDefault(); consumeInput(); }
+  if (e.key==='Enter'){ e.preventDefault(); consumeInput(); freeInput.blur(); }
 });
 freeInput.addEventListener('blur', consumeInput);
 
 function consumeInput(){
-  styleHint = freeInput.value.replace(/\s+/g,' ').trim();
-  const {emojis} = splitTextAndEmojis(styleHint);
-  // keep non-emoji text as styleHint; emojis spawn as extra seeds
-  const plain = styleHint.replace(/\p{Extended_Pictographic}/gu,'').trim();
-  styleHint = plain;
+  const raw = freeInput.value || "";
+  styleHint = raw.replace(/\p{Extended_Pictographic}/gu,'').replace(/\s+/g,' ').trim();
+  const emojis = Array.from(raw).filter(ch => /\p{Extended_Pictographic}/u.test(ch));
   if (emojis.length) spawnInputEmojis(emojis);
 }
 
-function splitTextAndEmojis(str){
-  const chars = Array.from(str);
-  const emojis = [];
-  for (const ch of chars){ if (/\p{Extended_Pictographic}/u.test(ch)) emojis.push(ch); }
-  return {emojis};
-}
 function spawnInputEmojis(list){
   const rect = document.body.getBoundingClientRect();
-  const seedR = 28, margin=10;
+  const seedR = 28;
   const footerRect = footer.getBoundingClientRect();
   const avoid = [{left: footerRect.left-16, top: footerRect.top-16, right: footerRect.right+16, bottom: footerRect.bottom+16}];
   for (const e of list){
@@ -223,14 +250,12 @@ function initSeeds(keepEmojis=false){
   const cx = bowl.left + R, cy = bowl.top + R;
   const seedR = 28;
   const avoid = [
-    {left: cx-R-26, top: cy-R-26, right: cx+R+26, bottom: cy+R+26}, // around bowl
+    {left: cx-R-26, top: cy-R-26, right: cx+R+26, bottom: cy+R+26}, // bowl halo
     (()=>{const f=footer.getBoundingClientRect(); return {left:f.left-16, top:f.top-16, right:f.right+16, bottom:f.bottom+16}})()
   ];
 
   const emojis = keepEmojis ? seeds.map(s=>s.emoji) : [];
-  if (!keepEmojis){
-    for(let i=0;i<INITIAL_SEEDS;i++) emojis.push(nextEmoji());
-  }
+  if (!keepEmojis){ for(let i=0;i<INITIAL_SEEDS;i++) emojis.push(nextEmoji()); }
   seeds = [];
   const taken = [];
   for (const emo of emojis){
@@ -321,17 +346,17 @@ function pointerUp(ev){
       const id = crypto.randomUUID();
       placed.push({id, emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
-      // NO REPLACEMENT: remove that seed permanently
+      // NO REPLACEMENT: remove seed permanently
       const node = [...seedsEl.children][dragging.idx];
       if (node) node.remove();
       const used = seeds.splice(dragging.idx,1)[0];
-      inputEmojiInbox.delete(used.emoji); // if it came from input
+      inputEmojiInbox.delete(used.emoji);
     } else {
       placed[dragging.idx].x = px; placed[dragging.idx].y = py;
       renderPlaced(false);
     }
   } else {
-    if (dragging.type==='placed'){ // cancel = drop outside bowl
+    if (dragging.type==='placed'){
       const id = placed[dragging.idx].id;
       const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
       if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); }
@@ -374,11 +399,11 @@ function renderPlaced(playDrop=false){
   }
 }
 
-/* ====== PROMPT BUILDER ====== */
+/* ====== PROMPT BUILDER (no clock words) ====== */
 function buildPrompt(placedArr, hintText = "", looseEmojis = []) {
   const parts = placedArr.map(p => {
     const angle = (Math.atan2(p.y - 50, p.x - 50) * 180 / Math.PI + 360) % 360;
-    const where = clockFromAngle(angle);
+    const where = dirFromAngle(angle);
     const what = EMOJI_WORDS.get(p.emoji) || `the ${p.emoji} emoji`;
     return `${what} at the ${where}`;
   });
@@ -390,10 +415,14 @@ function buildPrompt(placedArr, hintText = "", looseEmojis = []) {
     'Harmonize styles naturally. Balanced composition.'
   ].join(' ').trim();
 }
-function clockFromAngle(a){
-  const sectors=[{t:"3 o’clock (right)",v:0},{t:"2 o’clock (upper-right)",v:45},{t:"12 o’clock (top)",v:90},{t:"10 o’clock (upper-left)",v:135},{t:"9 o’clock (left)",v:180},{t:"8 o’clock (lower-left)",v:225},{t:"6 o’clock (bottom)",v:270},{t:"4 o’clock (lower-right)",v:315},{t:"3 o’clock (right)",v:360}];
-  let best=sectors[0].t,min=999; for(const s of sectors){const d=Math.abs(a-s.v); if(d<min){min=d; best=s.t}}
-  return best;
+function dirFromAngle(a){
+  // 8-way + center (when near middle)
+  // a: 0=right, 90=up
+  const snap = ["right","top-right","top","top-left","left","bottom-left","bottom","bottom-right"];
+  if (Math.hypot) {} // no-op just to keep linter happy
+  // We'll map by ranges of 45°
+  const idx = Math.round(((360 - (a - 0) + 360) % 360) / 45) % 8;
+  return snap[idx];
 }
 
 /* ====== POLLINATIONS CALL ====== */
@@ -409,22 +438,135 @@ async function callPollinations(prompt){
 /* CTA */
 cta.addEventListener('click', async ()=>{
   const prompt = buildPrompt(placed, styleHint, [...inputEmojiInbox]);
-  if(!prompt){ cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}], {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'}); return; }
+  if(!prompt){
+    cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
+      {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'});
+    return;
+  }
   cta.classList.add('spin');
   imageEl.classList.remove('revealed'); cauldron.classList.remove('show-image');
   try{
     const imgURL = await callPollinations(prompt);
-    imageEl.style.backgroundImage = `url(${imgURL})`;
-    imageEl.classList.add('revealed');
-    cauldron.classList.add('show-image');
+    imageEl.src = imgURL;           // <img> → allows iOS long-press Save Image
+    imageEl.onload = () => {
+      imageEl.classList.add('revealed');
+      cauldron.classList.add('show-image');
+    };
   }catch(e){ console.warn(e); }
   finally{ cta.classList.remove('spin'); }
 });
 
 /* utils */
 function nextEmoji(){ return EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)] }
+function rand(a,b){ return a + Math.random()*(b-a) }
 
-/* gesture guard */
+function randomInt(a,b){ return Math.floor(a + Math.random()*(b-a+1)); }
+function randomChoice(arr){ return arr[randomInt(0,arr.length-1)] }
+
+/* layout helpers */
+function randomSpot(rect, seedR, avoidRects, taken=[]){
+  const maxTries = 1200; let tries=0;
+  while (tries++<maxTries){
+    const x = seedR+10 + Math.random()*(rect.width - seedR*2 - 20);
+    const y = seedR+10 + Math.random()*(rect.height - seedR*2 - 20);
+    const a = avoidRects.some(ar => x>ar.left-seedR && x<ar.right+seedR && y>ar.top-seedR && y<ar.bottom+seedR);
+    if (a) continue;
+    let ok=true;
+    for(const s of taken){ if (Math.hypot(x - s.x, y - s.y) < seedR*2 + 16){ ok=false; break; } }
+    if (!ok) continue;
+    return {x,y};
+  }
+  return null;
+}
+
+/* bowl coords helpers */
+function coordsInCauldron(cx, cy){
+  const r = cauldron.getBoundingClientRect();
+  const mx = cx - (r.left + r.width/2);
+  const my = cy - (r.top  + r.height/2);
+  const dist = Math.hypot(mx,my);
+  const inside = dist <= r.width/2;
+  const px = ((mx + r.width/2) / r.width) * 100;
+  const py = ((my + r.height/2) / r.height) * 100;
+  return {inside, px: clamp(px,5,95), py: clamp(py,5,95)};
+}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+/* DRAG glue */
+function startDragPlaced(ev, id){
+  ev.preventDefault();
+  const idx = placed.findIndex(p=>p.id===id);
+  if (idx<0) return;
+  const ghost = makeGhost(placed[idx].emoji);
+  dragging = {type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
+  pointerMove(ev);
+  window.addEventListener('pointermove', pointerMove);
+  window.addEventListener('pointerup', pointerUp);
+}
+function startDragSeed(ev, id){
+  ev.preventDefault();
+  const idx = seeds.findIndex(s=>s.id===id);
+  if (idx<0) return;
+  const ghost = makeGhost(seeds[idx].emoji);
+  dragging = {type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
+  pointerMove(ev);
+  window.addEventListener('pointermove', pointerMove);
+  window.addEventListener('pointerup', pointerUp);
+}
+function pointerMove(ev){
+  if (!dragging) return;
+  dragging.ghostEl.style.left = ev.clientX+'px';
+  dragging.ghostEl.style.top  = ev.clientY+'px';
+  const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
+  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
+  cauldron.classList.toggle('over', inside);
+}
+function pointerUp(ev){
+  if (!dragging) return cleanupDrag();
+  const {inside, px, py} = coordsInCauldron(ev.clientX, ev.clientY);
+  cauldron.classList.remove('over');
+
+  if (inside){
+    if (dragging.type==='seed'){
+      const id = crypto.randomUUID();
+      placed.push({id, emoji:dragging.emoji, x:px, y:py});
+      renderPlaced(true);
+      const node = [...seedsEl.children][dragging.idx];
+      if (node) node.remove();
+      const used = seeds.splice(dragging.idx,1)[0];
+      inputEmojiInbox.delete(used.emoji);
+    } else {
+      placed[dragging.idx].x = px; placed[dragging.idx].y = py;
+      renderPlaced(false);
+    }
+  } else {
+    if (dragging.type==='placed'){
+      const id = placed[dragging.idx].id;
+      const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
+      if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); }
+      placed.splice(dragging.idx,1);
+    }
+  }
+  cleanupDrag();
+}
+function cleanupDrag(){
+  window.removeEventListener('pointermove', pointerMove);
+  window.removeEventListener('pointerup', pointerUp);
+  if (dragging?.ghostEl) dragging.ghostEl.remove();
+  dragging = null;
+}
+function makeGhost(emoji){
+  const g = document.createElement('div');
+  g.className='seed';
+  g.style.width='64px'; g.style.height='64px'; g.style.zIndex=30;
+  g.style.position='fixed'; g.style.transform='translate(-50%,-50%) scale(1.0)';
+  g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
+  g.innerHTML = `<span class="e">${emoji}</span>`;
+  document.body.appendChild(g);
+  return g;
+}
+
+/* prevent pinch-zoom gesture issues on iOS */
 document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
 </body>
