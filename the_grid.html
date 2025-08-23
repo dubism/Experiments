@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-<title>Grid · Density Dropdown + Picker + Speed Toggle</title>
+<title>Grid · Picker + Speed Toggle</title>
 <style>
   :root{
     --bg:#0b0c0e;
@@ -89,18 +89,20 @@ function applyGrid(){
 }
 
 // ===== UI layout =====
-const PICKER_PX = 120;
-const UI_SPACER_PX = 12;
-const DENS_HEADER_PX = 36;
-const DENS_PANEL_PX  = 160;
+const PICKER_PX = 120;         // desired picker height
+const UI_SPACER_PX = 8;        // tighter gap
+const DENS_HEADER_PX = 44;     // header (min touch)
+const DENS_PANEL_PX  = 140;    // density items preview
 
-// --- CAP bottom stripe to 120 px ---
+// --- CAP bottom stripe (including safe-area) to 120 px ---
 const BOTTOM_STRIPE_MAX_PX = 120;
 let STRIPE_MAX_DPX = 0;
 
 // Touch ergonomics
 const TOUCH_MIN_PX = 48;
-let CHEVRON_CX_DPX = 0, CHEVRON_CY_DPX = 0, CHEVRON_HIT = null;
+
+// Chevron hit area (built each frame)
+let CHEVRON_HIT = null;
 
 let reservedBottomRows=0;
 
@@ -112,8 +114,8 @@ let pickLifeEnd=0,pickWallEnd=0,pickNutrEnd=0,pickEraseEnd=0;
 
 let noDrawBorderPxTop=0;
 
-// --- Step-rate selector (now a single toggle button) ---
-const RATE_PANEL_PX = 56;
+// --- Step-rate: single toggle button ---
+const RATE_PANEL_PX = 48;
 const RATE_OPTIONS = [
   {label:'ASAP', ms:0},
   {label:'20ms', ms:20},
@@ -122,23 +124,26 @@ const RATE_OPTIONS = [
 ];
 let stepMs = 50;
 let rateY0=0, rateY1=0;
-let RATE_BTN=null; // {x0,y0,x1,y1} in device px
-
-function safeBottomCssPx(){ return sabProbe.getBoundingClientRect().height||0; }
-function rowsFromPx(px){ return Math.max(2, Math.ceil((px*DPR)/CELL)); }
+let RATE_BTN=null; // {x0,y0,x1,y1} device px
 
 // DPR helpers
 function uiPx(px){ return Math.floor(px * DPR); }
 function uiLine(px){ return Math.max(1, Math.floor(px * DPR)); }
 
-function computeUI(){
-  const inset=safeBottomCssPx();
-  reservedBottomRows = Math.ceil(((inset+24)*DPR)/Math.max(1,CELL));
+function safeBottomCssPx(){ return sabProbe.getBoundingClientRect().height||0; }
+function rowsFromPx(px){ return Math.max(2, Math.ceil((px*DPR)/CELL)); }
 
+function computeUI(){
+  // reserve *only* the safe-area height, not an extra 24px
+  const inset = safeBottomCssPx();
+  reservedBottomRows = Math.ceil(((inset)*DPR)/Math.max(1,CELL));
+
+  // Picker rows = min(120px, requested)
   const PICK_ROWS = rowsFromPx(Math.min(PICKER_PX, BOTTOM_STRIPE_MAX_PX));
   const HEADER_ROWS= rowsFromPx(Math.max(DENS_HEADER_PX, TOUCH_MIN_PX));
   const SPACER_ROWS= rowsFromPx(UI_SPACER_PX);
 
+  // Bottom-up
   pickY1=ROWS-1-reservedBottomRows;
   pickY0=Math.max(0, pickY1 - PICK_ROWS + 1);
 
@@ -151,6 +156,7 @@ function computeUI(){
     const RATE_ROWS = rowsFromPx(RATE_PANEL_PX);
     rateY1 = densPanelY1;
     rateY0 = Math.max(0, rateY1 - RATE_ROWS + 1);
+
     densPanelY0 = Math.max(0, rateY0 - 1 - rowsFromPx(DENS_PANEL_PX) + 1);
     if (densPanelY0 > rateY0 - 1) densPanelY0 = Math.max(0, rateY0 - 1);
   } else {
@@ -159,10 +165,11 @@ function computeUI(){
   }
 
   densHeaderY1 = densOpen ? Math.max(0, densPanelY0 - 1) : Math.max(0, spacerY0 - 1);
-  densHeaderY0 = Math.max(0, densHeaderY1 - rowsFromPx(Math.max(DENS_HEADER_PX, TOUCH_MIN_PX)) + 1);
+  densHeaderY0 = Math.max(0, densHeaderY1 - HEADER_ROWS + 1);
 
   noDrawBorderPxTop = densHeaderY0*CELL;
 
+  // Picker columns (life, wall, nutr, erase)
   const totalUnits=8;
   const lifeUnits=3, wallUnits=3, nutrUnits=1, eraseUnits=1;
   const unitCols = Math.max(1, Math.floor(COLS/totalUnits));
@@ -211,64 +218,71 @@ function applyPick(px,py){
   lastPick={x:px, until:nowTS+700, readout};
 }
 
-// ===== input routing =====
-function isInNoDrawZonePx(py){ return py>=noDrawBorderPxTop; }
-function inHeader(row){ return row>=densHeaderY0 && row<=densHeaderY1; }
-function inPanel(row){ return densOpen && row>=densPanelY0 && row<=densPanelY1; }
-function inPicker(row){ return row>=pickY0 && row<=pickY1; }
-
-const touches=new Map();
-function normTouches(e){
-  const r=cv.getBoundingClientRect(); const out=[];
-  const list=(e.changedTouches||[]);
-  for(let i=0;i<list.length;i++){
-    const t=list[i]; out.push({id:t.identifier,x:(t.clientX-r.left)*DPR,y:(t.clientY-r.top)*DPR});
-  } return out;
+// ===== unified pointer/touch handling =====
+function toDevPx(e){
+  const r=cv.getBoundingClientRect();
+  // prefer pointer events
+  const x = ('clientX' in e)? e.clientX : (e.touches? e.touches[0].clientX : 0);
+  const y = ('clientY' in e)? e.clientY : (e.touches? e.touches[0].clientY : 0);
+  return {x:(x-r.left)*DPR, y:(y-r.top)*DPR};
 }
+const active = { drawing:false };
 
-function onStart(e){
+function handleDown(e){
   e.preventDefault();
-  for(const t of normTouches(e)){
-    const row=(t.y/CELL)|0;
-    const c={id:t.id,lastX:t.x,lastY:t.y,ui:null};
-    if (isInNoDrawZonePx(t.y)){
-      if (inHeader(row)){
-        c.ui='header';
-        if (CHEVRON_HIT && pointInRect(t.x, t.y, CHEVRON_HIT)) toggleDensityOpen();
-      }
-      else if (inPanel(row)){
-        c.ui='panel';
-        chooseRateAt(t.x,t.y); // single-toggle button
-      }
-      else if (inPicker(row)){ c.ui='picker'; applyPick(t.x,t.y); }
-      else c.ui='blocked';
-    } else {
-      c.ui='draw'; deposit(t.x,t.y,0,0,true);
-    }
-    touches.set(t.id,c);
-  }
-}
-function onMove(e){
-  e.preventDefault();
-  for(const t of normTouches(e)){
-    const prev=touches.get(t.id); if(!prev) continue;
-    const row=(t.y/CELL)|0;
-    if (isInNoDrawZonePx(t.y)){
-      if (inPanel(row)){ prev.ui='panel'; /* no hover needed */ continue; }
-      if (inPicker(row)){ prev.ui='picker'; applyPick(t.x,t.y); continue; }
-      prev.ui='blocked'; continue;
-    }
-    if (prev.ui!=='draw') continue;
-    const vx=t.x-prev.lastX, vy=t.y-prev.lastY; deposit(t.x,t.y,vx,vy,false);
-    prev.lastX=t.x; prev.lastY=t.y;
-  }
-}
-function onEnd(e){ for(const t of normTouches(e)) touches.delete(t.id); picking=null; }
+  const p=toDevPx(e); const row=(p.y/CELL)|0;
 
-cv.addEventListener('touchstart',onStart,{passive:false});
-cv.addEventListener('touchmove', onMove ,{passive:false});
-cv.addEventListener('touchend',  onEnd  ,{passive:false});
-cv.addEventListener('touchcancel',onEnd ,{passive:false});
+  // Large chevron area: entire right 30% of header
+  if (p.y>=densHeaderY0*CELL && p.y<=(densHeaderY1+1)*CELL){
+    const hit = CHEVRON_HIT;
+    if (hit && p.x>=hit.x0 && p.x<=hit.x1 && p.y>=hit.y0 && p.y<=hit.y1){
+      toggleDensityOpen(); return;
+    }
+  }
+
+  // Speed toggle: check by rect (not by rows)
+  if (densOpen && RATE_BTN){
+    if (p.x>=RATE_BTN.x0 && p.x<=RATE_BTN.x1 && p.y>=RATE_BTN.y0 && p.y<=RATE_BTN.y1){
+      nextRate(); return;
+    }
+  }
+
+  // Picker / draw routing
+  if (p.y>=noDrawBorderPxTop){
+    if (row>=pickY0 && row<=pickY1){ applyPick(p.x,p.y); return; }
+    // ignore other UI areas
+    return;
+  }
+
+  // drawing area
+  active.drawing=true;
+  active.lastX=p.x; active.lastY=p.y;
+  deposit(p.x,p.y,0,0,true);
+}
+function handleMove(e){
+  if(!active.drawing) return;
+  e.preventDefault();
+  const p=toDevPx(e);
+  if (p.y>=noDrawBorderPxTop){ active.drawing=false; return; }
+  const vx=p.x-active.lastX, vy=p.y-active.lastY;
+  deposit(p.x,p.y,vx,vy,false);
+  active.lastX=p.x; active.lastY=p.y;
+}
+function handleUp(e){
+  e.preventDefault();
+  active.drawing=false;
+  picking=null;
+}
+
+// pointer + touch (fallback)
+cv.addEventListener('pointerdown', handleDown, {passive:false});
+cv.addEventListener('pointermove', handleMove, {passive:false});
+cv.addEventListener('pointerup',   handleUp,   {passive:false});
+cv.addEventListener('pointercancel',handleUp,  {passive:false});
+cv.addEventListener('touchstart',  handleDown, {passive:false});
+cv.addEventListener('touchmove',   handleMove, {passive:false});
+cv.addEventListener('touchend',    handleUp,   {passive:false});
+cv.addEventListener('touchcancel', handleUp,   {passive:false});
 
 // ===== Density dropdown logic =====
 let densHoverIdx=-1;
@@ -329,7 +343,7 @@ function stepEmitters(dt){
 }
 
 function deposit(px,py,vx,vy,initial){
-  if(isInNoDrawZonePx(py)) return;
+  if(py>=noDrawBorderPxTop) return;
   const sp=Math.hypot(vx,vy);
   const baseR=2.2*CELL*params.brushRadius;
   const r=baseR+Math.min(7*CELL*params.brushRadius, sp*1.0);
@@ -511,11 +525,9 @@ function step(dt){
   }
 }
 
-// ===== helpers =====
-function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
-function pointInRect(px, py, r){ return px>=r.x0 && px<=r.x1 && py>=r.y0 && py<=r.y1; }
-function pickStripeHeightDPX(){ return (pickY1 - pickY0 + 1) * CELL; }
-function pickIconCapDPX(){ return Math.min(STRIPE_MAX_DPX, pickStripeHeightDPX()) * 0.6; }
+// ===== helpers for UI hit-tests & sizes =====
+function pickStripeHeightDPX(){ return Math.min(STRIPE_MAX_DPX, (pickY1 - pickY0 + 1) * CELL); }
+function pickIconCapDPX(){ return pickStripeHeightDPX() * 0.6; }
 function iconSizeFixedPx(cssPx){ return Math.min(uiPx(cssPx), Math.floor(pickIconCapDPX())); }
 function lineWidthFromSize(sz, k){ return Math.max(1, Math.floor(sz * k)); }
 
@@ -554,11 +566,11 @@ function render(){
     }
   }
 
-  // density dropdown
+  // density header
   drawDensityHeader();
   if(densOpen) drawDensityPanel();
 
-  // strict no-draw border at header top
+  // header-top divider
   const yDiv = (noDrawBorderPxTop|0);
   ctx.fillStyle='rgba(255,255,255,0.25)';
   ctx.fillRect(0, yDiv, W, Math.max(1, Math.round(DPR)));
@@ -566,10 +578,10 @@ function render(){
   // picker + icons
   drawPicker();
 
-  // preview ring
+  // brush preview ring
   drawPreviewSpot();
 
-  // pick indicator chip
+  // sticky readout
   if (picking) drawPickIndicator(picking.x, picking.readout);
   else if (lastPick && nowTS<lastPick.until) drawPickIndicator(lastPick.x, lastPick.readout);
 }
@@ -578,31 +590,35 @@ function drawDensityHeader(){
   for(let y=densHeaderY0;y<=densHeaderY1;y++){
     for(let x=0;x<COLS;x++){ ctx.fillStyle='hsl(220,12%,28%)'; fillCell(x,y); }
   }
-  // left mini grid icon (kept simple)
+  // left mini grid icon
   const cx = Math.max(2, Math.floor(COLS*0.02));
   drawMiniGridIcon((cx*CELL)|0, (Math.floor((densHeaderY0+densHeaderY1)/2)*CELL)|0, Math.max(8,Math.floor(CELL*3)), true);
 
-  // chevron hitbox
-  const rx = Math.floor(COLS*0.95); const cy = Math.floor((densHeaderY0+densHeaderY1)/2);
-  CHEVRON_CX_DPX = rx*CELL; CHEVRON_CY_DPX = cy*CELL;
-  const half = Math.round((TOUCH_MIN_PX * DPR) / 2);
-  CHEVRON_HIT = { x0: CHEVRON_CX_DPX - half, x1: CHEVRON_CX_DPX + half, y0: CHEVRON_CY_DPX - half, y1: CHEVRON_CY_DPX + half };
+  // Big chevron hit zone = right 30% of header band
+  CHEVRON_HIT = {
+    x0: Math.floor(W*0.70),
+    x1: W,
+    y0: densHeaderY0*CELL,
+    y1: (densHeaderY1+1)*CELL
+  };
 
-  // chevron visual (fixed size)
+  // Chevron visuals (center-right)
+  const cX = Math.floor((CHEVRON_HIT.x0 + CHEVRON_HIT.x1)/2);
+  const cY = Math.floor((CHEVRON_HIT.y0 + CHEVRON_HIT.y1)/2);
   ctx.strokeStyle='rgba(255,255,255,0.9)';
   ctx.lineWidth=uiLine(2);
   const cheW = uiPx(24), cheH = uiPx(14);
   if(!densOpen){
     ctx.beginPath();
-    ctx.moveTo(CHEVRON_CX_DPX - cheW/2, CHEVRON_CY_DPX - cheH/2);
-    ctx.lineTo(CHEVRON_CX_DPX,           CHEVRON_CY_DPX + cheH/2);
-    ctx.lineTo(CHEVRON_CX_DPX + cheW/2,  CHEVRON_CY_DPX - cheH/2);
+    ctx.moveTo(cX - cheW/2, cY - cheH/2);
+    ctx.lineTo(cX,            cY + cheH/2);
+    ctx.lineTo(cX + cheW/2,   cY - cheH/2);
     ctx.stroke();
   }else{
     ctx.beginPath();
-    ctx.moveTo(CHEVRON_CX_DPX - cheW/2, CHEVRON_CY_DPX + cheH/2);
-    ctx.lineTo(CHEVRON_CX_DPX,           CHEVRON_CY_DPX - cheH/2);
-    ctx.lineTo(CHEVRON_CX_DPX + cheW/2,  CHEVRON_CY_DPX + cheH/2);
+    ctx.moveTo(cX - cheW/2, cY + cheH/2);
+    ctx.lineTo(cX,            cY - cheH/2);
+    ctx.lineTo(cX + cheW/2,   cY + cheH/2);
     ctx.stroke();
   }
 
@@ -624,7 +640,7 @@ function drawDensityPanel(){
     for(let y=it.y0;y<=it.y1;y++){
       for(let x=1;x<COLS-1;x++){ ctx.fillStyle=(i===densHoverIdx)?'hsl(220,14%,30%)':'hsl(220,12%,24%)'; fillCell(x,y); }
     }
-    // preview miniature grid
+    // tiny preview grid
     const pxSize=Math.round(it.val*DPR);
     const wpx=(COLS-4)*CELL, hpx=(it.y1-it.y0+1)*CELL;
     const cols=Math.max(1,Math.floor(wpx/pxSize));
@@ -644,58 +660,47 @@ function drawDensityPanel(){
     }
   }
 
-  // rate toggle bar
   drawRatePanel();
 }
 
 function currentRateIndex(){
   for(let i=0;i<RATE_OPTIONS.length;i++) if (RATE_OPTIONS[i].ms===stepMs) return i;
-  return 2; // fallback to 50ms
+  return 2;
 }
 function nextRate(){
   const i=(currentRateIndex()+1)%RATE_OPTIONS.length;
   stepMs = RATE_OPTIONS[i].ms;
 }
 function rateButtonRect(){
-  // centered inside the rate band
   const bandX0 = 1*CELL, bandX1 = (COLS-1)*CELL;
   const bandY0 = rateY0*CELL, bandY1 = (rateY1+1)*CELL;
   const bandW  = bandX1 - bandX0, bandH = bandY1 - bandY0;
-  const w = Math.min(uiPx(150), Math.floor(bandW*0.5));
-  const h = Math.max(uiPx(28), Math.floor(bandH*0.6));
+  const w = Math.min(uiPx(180), Math.floor(bandW*0.6));
+  const h = Math.max(uiPx(32), Math.floor(bandH*0.7));
   const x = Math.floor((W - w)/2);
   const y = Math.floor(bandY0 + (bandH - h)/2);
   return {x0:x, y0:y, x1:x+w, y1:y+h, w, h};
 }
 function drawRatePanel(){
-  // background band
+  // band
   for(let y=rateY0; y<=rateY1; y++){
     for(let x=0; x<COLS; x++){
-      ctx.fillStyle='hsl(220,12%,22%)';
-      fillCell(x,y);
+      ctx.fillStyle='hsl(220,12%,22%)'; fillCell(x,y);
     }
   }
-  // button
+  // button rect
   RATE_BTN = rateButtonRect();
   ctx.fillStyle='hsl(220,12%,26%)';
   ctx.fillRect(RATE_BTN.x0, RATE_BTN.y0, RATE_BTN.w, RATE_BTN.h);
   ctx.strokeStyle='rgba(255,255,255,0.75)';
   ctx.lineWidth=uiLine(2);
   ctx.strokeRect(RATE_BTN.x0, RATE_BTN.y0, RATE_BTN.w, RATE_BTN.h);
-
   // label
   const label = `Speed: ${RATE_OPTIONS[currentRateIndex()].label}`;
   ctx.fillStyle='rgba(255,255,255,0.92)';
   ctx.font = `${uiPx(12)}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(label, RATE_BTN.x0 + RATE_BTN.w/2, RATE_BTN.y0 + RATE_BTN.h/2);
-}
-function chooseRateAt(px,py){
-  if (!densOpen) return;
-  if (!RATE_BTN) return;
-  if (px>=RATE_BTN.x0 && px<=RATE_BTN.x1 && py>=RATE_BTN.y0 && py<=RATE_BTN.y1){
-    nextRate();
-  }
 }
 
 // Picker drawing with icons
@@ -733,24 +738,20 @@ function drawPicker(){
       ctx.fillStyle=`hsl(6,85%,${48+10*(1-Math.abs(r01-0.5)*2)}%)`; fillCell(x,y);
     }
   }
-
-  // top border line of picker
+  // top border
   ctx.globalAlpha=0.28; ctx.fillStyle='hsl(220,10%,35%)';
   ctx.fillRect(0,(pickY0*CELL)|0, W, 1); ctx.globalAlpha=1;
 
   drawBrushIcons();
 }
-
 function mixHSL(a,b,k){ return [(a[0]*(1-k)+b[0]*k+360)%360, a[1]*(1-k)+b[1]*k, a[2]*(1-k)+b[2]*k]; }
 
-// Icons
 function drawBrushIcons(){
   const cy = Math.floor((pickY0+pickY1)/2)*CELL + CELL*0.5;
   const lifeSz  = iconSizeFixedPx(28);
   const wallSz  = iconSizeFixedPx(32);
   const dotSz   = iconSizeFixedPx(24);
   const eraseSz = iconSizeFixedPx(24);
-
   drawMiniGridIcon(Math.floor((pickLifeEnd*CELL)*0.5),                       cy, lifeSz,  false);
   drawBrickIcon   (Math.floor(((pickLifeEnd+pickWallEnd)*CELL)*0.5),          cy, wallSz);
   drawDotsIcon    (Math.floor(((pickWallEnd+pickNutrEnd)*CELL)*0.5),          cy, dotSz);
@@ -818,7 +819,7 @@ function drawPreviewSpot(){
   ctx.beginPath(); ctx.arc(px,py, r, 0, Math.PI*2); ctx.stroke();
 }
 
-// pick indicator
+// readout chip
 function drawPickIndicator(px, readout){
   const label = readout[0]||'';
   const w = Math.min(W*0.5, Math.max(120, label.length*10))*0.55;
