@@ -11,7 +11,8 @@
     --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
     --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
     --ease:cubic-bezier(.2,.8,.2,1);
-    --glass:#ffffff6a; --glassEdge:#ffffff80; --glassStroke:#0000000f;
+    --glass:#ffffff70; --glassEdge:#ffffff90; --glassStroke:#00000012;
+    --emerald:#10b981; --emerald-d:#0a8e65; --emerald-l:#59e0b9;
   }
   html,body{height:100%;margin:0}
   body{
@@ -38,7 +39,7 @@
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
     transform:translate(-50%,-50%) scale(1);
     transition:transform .18s var(--ease), box-shadow .18s var(--ease);
-    animation:float var(--dur,8s) ease-in-out infinite var(--delay,0s);
+    animation:float var(--dur,9s) ease-in-out infinite var(--delay,0s);
   }
   .seed .e{font-size:28px}
   @keyframes float{
@@ -54,7 +55,7 @@
     background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
     box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
     outline:1px solid var(--ring2);
-    transition:transform .45s var(--ease), filter .45s var(--ease), box-shadow .3s var(--ease);
+    transition:transform .45s var(--ease);
     overflow:hidden; display:grid; place-items:center;
   }
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
@@ -76,7 +77,7 @@
   .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
   @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
 
-  /* result image (real <img>) */
+  /* result image */
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:5; }
   .result-img{ width:100%; height:100%; object-fit:cover; display:block; opacity:0; transform:scale(.92); transition:opacity .6s var(--ease), transform .8s var(--ease) .1s; -webkit-touch-callout: default; }
   .result-img.revealed{ opacity:1; transform:scale(1) }
@@ -85,40 +86,50 @@
   /* footer */
   .footer{
     position:fixed; left:16px; right:16px; bottom:16px; z-index:40;
-    display:flex; gap:12px; align-items:center; justify-content:center;
+    display:flex; gap:12px; align-items:center;
     padding:12px; border-radius:20px;
-    background:linear-gradient(180deg, var(--glass), #ffffff3c);
+    background:linear-gradient(180deg, var(--glass), #ffffff40);
     backdrop-filter: blur(10px) saturate(1.1);
     box-shadow:var(--shadow), inset 0 0 0 1px var(--glassStroke), inset 0 1px 0 var(--glassEdge);
   }
   .pill{
-    flex:1; min-width:140px; height:52px; border-radius:14px;
-    display:flex; align-items:center; gap:8px; padding:0 12px;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffdd, #ffffffb0 60%, #ffffff90 100%);
+    flex:1; height:56px; border-radius:16px;
+    display:flex; align-items:center; gap:10px; padding:0 12px;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffc8 60%, #ffffffa0 100%);
     box-shadow: inset 0 1px 0 #ffffff, 0 1px 0 #00000005;
   }
-  .input{ flex:1; height:38px; border-radius:10px; padding:6px 12px; outline:none; border:none; background:#ffffffc0; box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000010; font-size:17px; }
+  .input{ flex:1; height:40px; border-radius:12px; padding:8px 12px; outline:none; border:none; background:#ffffffd8; box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000014; font-size:17px; }
   .add{
-    width:48px; height:48px; border-radius:12px; display:grid; place-items:center; cursor:pointer;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffff, #ffffffc8 60%, #ffffffa8 100%);
+    width:48px; height:48px; border-radius:14px; display:grid; place-items:center; cursor:pointer;
+    background:radial-gradient(140% 140% at 30% 30%, #ffffff, #f5f7ff 60%, #e9f0ff 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
-    transition:transform .16s var(--ease);
+    flex:0 0 48px;
   }
-  .add:active{ transform:scale(.95) }
   .add .e{ font-size:22px }
 
-  /* CTA: ✨ */
+  /* CTA emerald (no stroke) */
   .cta{
-    width:88px; height:88px; border-radius:24px; display:grid; place-items:center; cursor:pointer; user-select:none;
-    background: linear-gradient(145deg, #0e1020, #1a1f3a);
-    box-shadow: 0 10px 28px #0006, inset 0 0 0 1px #ffffff20, inset 0 1px 0 #9fe2ff22, 0 0 0 6px #6ae3ff22;
-    position:relative; overflow:hidden; transition:transform .18s var(--ease);
+    width:96px; height:96px; border-radius:26px; display:grid; place-items:center; cursor:pointer; user-select:none;
+    background:
+      radial-gradient(120% 140% at 30% 20%, #ffffff80, transparent 55%),
+      radial-gradient(140% 160% at 70% 120%, #7ff0cf55, transparent 60%),
+      linear-gradient(145deg, var(--emerald-l), var(--emerald), var(--emerald-d));
+    box-shadow:
+      0 16px 36px rgba(16,185,129,.35),
+      0 6px 14px rgba(16,185,129,.35) inset,
+      0 -10px 24px rgba(0,0,0,.18) inset;
+    transition:transform .18s var(--ease), filter .18s var(--ease);
+    position:relative; overflow:hidden;
   }
-  .cta::after{ content:""; position:absolute; inset:-50%; background: conic-gradient(from 0deg, #75f3ff22, #b79bff22, #ff9bd422, #75f3ff22); animation:ctaSpin 8s linear infinite; mix-blend-mode:overlay }
+  .cta::after{
+    content:""; position:absolute; inset:-60%;
+    background: conic-gradient(from 0deg, #7ff0cf33, #b39bff33, #ff9bd433, #7ff0cf33);
+    animation:ctaSpin 7s linear infinite; mix-blend-mode:overlay; pointer-events:none;
+  }
   @keyframes ctaSpin{ to{ transform: rotate(360deg) } }
-  .cta:hover{ transform:scale(1.06) }
-  .cta:active{ transform:scale(.97) }
-  .cta .e{ font-size:40px }
+  .cta:hover{ transform:translateY(-1px) scale(1.04) }
+  .cta:active{ transform:translateY(0) scale(.98) }
+  .cta .e{ font-size:44px; filter: drop-shadow(0 1px 0 #fff6) }
   .cta.spin .e{ animation:spin .9s linear infinite }
   @keyframes spin{ to{ transform:rotate(360deg) } }
 
@@ -129,8 +140,8 @@
   <div class="stage">
     <div class="seeds" id="seeds"></div>
 
-    <div class="cauldron-wrap" id="wrap">
-      <div class="cauldron" id="cauldron" aria-label="drop area">
+    <div class="cauldron-wrap">
+      <div class="cauldron" id="cauldron">
         <div class="ring"></div>
         <div class="image-wrap"><img id="image" class="result-img" alt="AI result" draggable="false"/></div>
       </div>
@@ -146,24 +157,23 @@
   </div>
 
 <script>
-/* ====== CONFIG ====== */
+/* ========== CONFIG ========== */
 const EMOJI_POOL = ["😂","❤️","🤣","👍","😭","🙏","🥰","😍","😊","😅","🔥","👏","😁","💀","😉","✨","🎉","🤔","😎","🎨","🎵","🎧","📷","🎥","🧸","💎","🧠","🐶","🐱","🦊","🐼","🦄","🐧","🐸","🐢","🐙","🦋","🐝","🌸","🌼","🌻","🌿","🍃","🌊","🌈","⛰️","🏙️","☀️","🌙","⭐","⚡","💧","🍎","🍊","🍓","🍩","🍕","🍪"];
-const INITIAL_SEEDS = 20;
+const INITIAL_SEEDS = 24;
 
-/* emoji → words for prompt */
 const EMOJI_WORDS = new Map(Object.entries({
-  "😂":"laughing / joy","❤️":"a red heart","🤣":"hysterical laughter","👍":"approval / thumbs up","😭":"tears / crying",
-  "🙏":"gratitude","🥰":"love / affection","😍":"adoration","😊":"smile","😅":"relief",
-  "🔥":"fire / flames","✨":"sparkles","🎉":"confetti","💀":"a skull","😉":"a wink",
+  "😂":"laughter","❤️":"a red heart","🤣":"hysterical laughter","👍":"approval","😭":"tears",
+  "🙏":"gratitude","🥰":"affection","😍":"adoration","😊":"a smile","😅":"relief",
+  "🔥":"flames","✨":"sparkles","🎉":"confetti","💀":"a skull","😉":"a wink",
   "🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🐧":"a penguin","🐸":"a frog","🐢":"a turtle","🐙":"an octopus",
-  "🦋":"a butterfly","🐝":"a bee","🌸":"a cherry blossom","🌼":"a daisy","🌻":"a sunflower","🌿":"green leaves","🍃":"leaf flutter",
+  "🦋":"a butterfly","🐝":"a bee","🌸":"a cherry blossom","🌼":"a daisy","🌻":"a sunflower","🌿":"green leaves","🍃":"leaves in motion",
   "🌊":"ocean waves","🌈":"a rainbow","⛰️":"mountains","🏙️":"a city skyline",
-  "☀️":"sun","🌙":"moon","⭐":"stars","⚡":"lightning","💧":"a water drop",
+  "☀️":"sunlight","🌙":"moonlight","⭐":"starry sky","⚡":"lightning","💧":"a water droplet",
   "🍎":"an apple","🍊":"an orange","🍓":"strawberries","🍩":"a donut","🍕":"pizza","🍪":"a cookie",
   "🎨":"paint","🎵":"a music note","🎧":"headphones","📷":"a camera","🎥":"a film camera","🧸":"a teddy bear","💎":"a diamond","🧠":"a brain"
 }));
 
-/* ====== DOM ====== */
+/* ========== DOM ========== */
 const cauldron = document.getElementById('cauldron');
 const imageEl  = document.getElementById('image');
 const seedsEl  = document.getElementById('seeds');
@@ -172,91 +182,81 @@ const freeInput= document.getElementById('freeInput');
 const addBtn   = document.getElementById('addBtn');
 const cta      = document.getElementById('cta');
 
-/* ====== STATE ====== */
+/* ========== STATE ========== */
 let seeds = [];     // {id, emoji, x, y}
 let placed = [];    // {id, type:'emoji'|'hint', emoji?, hint?, x, y}
 let dragging = null;
 
-/* ====== INIT ====== */
+/* ========== INIT ========== */
 initSeeds(); renderSeeds();
 
-/* ====== INPUT → ADD ====== */
+/* --- UI: input + add --- */
 addBtn.addEventListener('click', addFromInput);
-freeInput.addEventListener('keydown', e=>{
-  if (e.key==='Enter'){ e.preventDefault(); addFromInput(); freeInput.blur(); }
-});
+freeInput.addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); addFromInput(); freeInput.blur(); } });
 
 function addFromInput(){
   const raw = (freeInput.value || "").trim();
   if(!raw) return pulse(addBtn);
 
-  const all = Array.from(raw);
-  const emojis = all.filter(ch => /\p{Extended_Pictographic}/u.test(ch));
+  const emojis = Array.from(raw).filter(ch => /\p{Extended_Pictographic}/u.test(ch));
   const textOnly = raw.replace(/\p{Extended_Pictographic}/gu,'').replace(/\s+/g,' ').trim();
 
-  // 1) emoji characters → placed as emoji chips
-  if (emojis.length) {
-    emojis.forEach(e => placeChip({type:'emoji', emoji:e}));
-  }
-
-  // 2) plain text → a hint chip (💡), stores text invisibly
-  if (textOnly) {
-    placeChip({type:'hint', hint:textOnly, emoji:'💡'});
-  }
+  emojis.forEach(e => placeChip({type:'emoji', emoji:e}));
+  if (textOnly) placeChip({type:'hint', hint:textOnly, emoji:'💡'});
 
   freeInput.value = '';
   pulse(addBtn);
 }
 
 function placeChip(obj){
-  // find a non-overlapping spot inside the bowl
   const {x,y} = randomSpotInsideBowl();
   const id = crypto.randomUUID();
   placed.push({id, ...obj, x, y});
   renderPlaced(true);
 }
 
+/* --- layout helpers --- */
+function viewportRect(){
+  const w = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+  const h = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+  return {left:0, top:0, width:w, height:h, right:w, bottom:h};
+}
+
 function randomSpotInsideBowl(){
   const bowl = cauldron.getBoundingClientRect();
   const maxTries=400; let tries=0;
   while(tries++<maxTries){
-    const r = 42; // px radius from center range
-    // random within circle interior padding
-    const rx = (Math.random()*0.8 + 0.1) * bowl.width; // 10%..90%
-    const ry = (Math.random()*0.8 + 0.1) * bowl.height;
-    const cx = bowl.left + rx; const cy = bowl.top + ry;
-    // ensure inside circle
+    const px = 8 + Math.random()*84; // 8%..92%
+    const py = 8 + Math.random()*84;
+    const cx = bowl.left + px/100*bowl.width;
+    const cy = bowl.top  + py/100*bowl.height;
     const d = Math.hypot(cx-(bowl.left+bowl.width/2), cy-(bowl.top+bowl.height/2));
-    if (d > bowl.width/2 - 36) continue;
+    if (d > bowl.width/2 - 40) continue;
 
-    // convert to %
-    const px = (rx / bowl.width)*100;
-    const py = (ry / bowl.height)*100;
-
-    // avoid overlap with existing placed
     let ok=true;
     for(const p of placed){
       const dx = (p.x - px)/100*bowl.width;
       const dy = (p.y - py)/100*bowl.height;
-      if (Math.hypot(dx,dy) < 64) { ok=false; break; }
+      if (Math.hypot(dx,dy) < 66) { ok=false; break; }
     }
     if (ok) return {x:px, y:py};
   }
-  // fallback center
   return {x:50, y:50};
 }
 
-/* ====== SEEDS (floating) ====== */
+/* --- seeds around screen (not just top) --- */
 function initSeeds(){
-  const rect = document.body.getBoundingClientRect();
+  const rect = viewportRect();
   const bowl = cauldron.getBoundingClientRect();
   const R = bowl.width/2;
   const cx = bowl.left + R, cy = bowl.top + R;
   const seedR = 28;
+
   const avoid = [
-    {left: cx-R-26, top: cy-R-26, right: cx+R+26, bottom: cy+R+26},
+    {left: cx-R-24, top: cy-R-24, right: cx+R+24, bottom: cy+R+24},
     (()=>{const f=footer.getBoundingClientRect(); return {left:f.left-16, top:f.top-16, right:f.right+16, bottom:f.bottom+16}})()
   ];
+
   seeds = [];
   const taken=[];
   for(let i=0;i<INITIAL_SEEDS;i++){
@@ -268,7 +268,7 @@ function initSeeds(){
   }
 }
 function randomSpot(rect, seedR, avoidRects, taken=[]){
-  const maxTries = 1200; let tries=0;
+  const maxTries = 1500; let tries=0;
   while (tries++<maxTries){
     const x = seedR+10 + Math.random()*(rect.width - seedR*2 - 20);
     const y = seedR+10 + Math.random()*(rect.height - seedR*2 - 20);
@@ -281,6 +281,7 @@ function randomSpot(rect, seedR, avoidRects, taken=[]){
   }
   return null;
 }
+
 function renderSeeds(){
   seedsEl.innerHTML = '';
   for(const s of seeds){
@@ -288,9 +289,9 @@ function renderSeeds(){
     n.className = 'seed';
     n.style.left = s.x+'px'; n.style.top = s.y+'px';
     n.style.setProperty('--delay', `${(Math.random()*-6).toFixed(2)}s`);
-    n.style.setProperty('--dur', `${(6+Math.random()*4).toFixed(2)}s`);
-    n.style.setProperty('--fx', `${(Math.random()*8-4).toFixed(1)}px`);
-    n.style.setProperty('--fy', `${(Math.random()*4-2).toFixed(1)}px`);
+    n.style.setProperty('--dur', `${(7+Math.random()*4).toFixed(2)}s`);
+    n.style.setProperty('--fx', `${(Math.random()*14-7).toFixed(1)}px`);
+    n.style.setProperty('--fy', `${(Math.random()*8-4).toFixed(1)}px`);
     n.dataset.id = s.id;
     n.innerHTML = `<span class="e">${s.emoji}</span>`;
     seedsEl.appendChild(n);
@@ -298,7 +299,7 @@ function renderSeeds(){
   }
 }
 
-/* ====== DRAGGING ====== */
+/* ========== DRAGGING ========== */
 function startDragSeed(ev, id){
   ev.preventDefault();
   const idx = seeds.findIndex(s=>s.id===id);
@@ -322,12 +323,11 @@ function startDragPlaced(ev, id){
 function makeGhost(emoji){
   const g = document.createElement('div');
   g.className='seed';
-  g.style.width='64px'; g.style.height='64px'; g.style.position='fixed'; g.style.zIndex=10000;
+  g.style.width='64px'; g.style.height='64px'; g.style.position='fixed'; g.style.zIndex=9999;
   g.style.transform='translate(-50%,-50%) scale(1.0)';
   g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
   g.innerHTML = `<span class="e">${emoji}</span>`;
-  document.body.appendChild(g);
-  return g;
+  document.body.appendChild(g); return g;
 }
 function pointerMove(ev){
   if (!dragging) return;
@@ -347,7 +347,6 @@ function pointerUp(ev){
       const id = crypto.randomUUID();
       placed.push({id, type:'emoji', emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
-      // remove the seed
       const node = [...seedsEl.children][dragging.idx]; if (node) node.remove();
       seeds.splice(dragging.idx,1);
     } else {
@@ -371,7 +370,6 @@ function cleanupDrag(){
   dragging = null;
 }
 
-/* render placed */
 function renderPlaced(playDrop=false){
   Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
   for (const p of placed){
@@ -385,7 +383,7 @@ function renderPlaced(playDrop=false){
   }
 }
 
-/* bowl coords helpers */
+/* ========== Geometry ========== */
 function coordsInCauldron(cx, cy){
   const r = cauldron.getBoundingClientRect();
   const mx = cx - (r.left + r.width/2);
@@ -394,40 +392,38 @@ function coordsInCauldron(cx, cy){
   const inside = dist <= r.width/2;
   const px = ((mx + r.width/2) / r.width) * 100;
   const py = ((my + r.height/2) / r.height) * 100;
-  return {inside, px: clamp(px,5,95), py: clamp(py,5,95)};
-}
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-
-/* ====== PROMPT ====== */
-function buildPrompt() {
-  const emojiParts = [];
-  const hintTexts = [];
-
-  for (const p of placed) {
-    if (p.type === 'hint' && p.hint) {
-      hintTexts.push(p.hint);
-    } else if (p.type === 'emoji') {
-      const angle = (Math.atan2(p.y - 50, p.x - 50) * 180 / Math.PI + 360) % 360;
-      const where = dirFromAngle(angle);
-      const what  = EMOJI_WORDS.get(p.emoji) || `the ${p.emoji} emoji`;
-      emojiParts.push(`${what} at the ${where}`);
-    }
-  }
-
-  const hint = hintTexts.length ? ` Also reflect: “${hintTexts.join(', ')}”.` : '';
-  return [
-    emojiParts.join(', ') + (emojiParts.length ? '. ' : ''),
-    hint,
-    'Harmonize styles naturally. Balanced composition.'
-  ].join(' ').trim();
-}
-function dirFromAngle(a){
-  const dirs = ["right","top-right","top","top-left","left","bottom-left","bottom","bottom-right"];
-  const idx = Math.round((360 - a) / 45) % 8;
-  return dirs[idx];
+  return {inside, px: Math.max(6, Math.min(94, px)), py: Math.max(6, Math.min(94, py))};
 }
 
-/* ====== Pollinations ====== */
+/* ========== Prompt (coherent scene) ========== */
+function buildPromptCoherent(){
+  const emojiItems = placed.filter(p=>p.type==='emoji');
+  const hintTexts  = placed.filter(p=>p.type==='hint').map(p=>p.hint);
+
+  if (!emojiItems.length && !hintTexts.length) return "";
+
+  // choose a central subject if available (first animal/thing), others become motifs
+  const subject = emojiItems[0];
+  const motifs  = emojiItems.slice(1);
+
+  const nameOf = e => EMOJI_WORDS.get(e) || `the ${e} symbol`;
+  const dirOf = (x,y)=> {
+    const ang = (Math.atan2(y-50,x-50)*180/Math.PI+360)%360;
+    const dirs=["right","top-right","top","top-left","left","bottom-left","bottom","bottom-right"];
+    return dirs[Math.round((360-ang)/45)%8];
+  };
+
+  const subjectTxt = subject ? `a scene centered on ${nameOf(subject.emoji)}` : `a single cohesive scene`;
+  const motifsTxt = motifs.length
+    ? `, complemented by ${motifs.map(m=>`${nameOf(m.emoji)} at the ${dirOf(m.x,m.y)}`).join(', ')}`
+    : ``;
+  const mood = hintTexts.length ? `. Mood & style: ${hintTexts.join(', ')}.` : `.`;
+  const guard = ` Interpret emojis as real objects, places, colors, or emotions — not as glyphs. Compose one coherent image with depth, lighting, and consistent style. No text.`;
+
+  return `${subjectTxt}${motifsTxt}${mood}${guard}`;
+}
+
+/* ========== Pollinations ========== */
 async function callPollinations(prompt){
   const url = "https://image.pollinations.ai/prompt/" +
               encodeURIComponent(prompt) + "?width=768&height=768";
@@ -437,9 +433,9 @@ async function callPollinations(prompt){
   return URL.createObjectURL(blob);
 }
 
-/* ====== CTA ====== */
+/* ========== CTA ========== */
 cta.addEventListener('click', async ()=>{
-  const prompt = buildPrompt();
+  const prompt = buildPromptCoherent();
   if(!prompt){
     cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
       {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'});
@@ -455,64 +451,10 @@ cta.addEventListener('click', async ()=>{
   finally{ cta.classList.remove('spin'); }
 });
 
-/* ====== Seed utilities ====== */
-function randomSpot(rect, seedR, avoidRects, taken=[]){
-  const maxTries = 1200; let tries=0;
-  while (tries++<maxTries){
-    const x = seedR+10 + Math.random()*(rect.width - seedR*2 - 20);
-    const y = seedR+10 + Math.random()*(rect.height - seedR*2 - 20);
-    const a = avoidRects.some(ar => x>ar.left-seedR && x<ar.right+seedR && y>ar.top-seedR && y<ar.bottom+seedR);
-    if (a) continue;
-    let ok=true;
-    for(const s of taken){ if (Math.hypot(x - s.x, y - s.y) < seedR*2 + 16){ ok=false; break; } }
-    if (!ok) continue;
-    return {x,y};
-  }
-  return null;
-}
-
-/* ====== Seeds init (fixed, no relayout on resize) ====== */
-function initSeeds(){
-  const rect = document.body.getBoundingClientRect();
-  const bowl = cauldron.getBoundingClientRect();
-  const R = bowl.width/2;
-  const cx = bowl.left + R, cy = bowl.top + R;
-  const seedR = 28;
-  const avoid = [
-    {left: cx-R-26, top: cy-R-26, right: cx+R+26, bottom: cy+R+26},
-    (()=>{const f=footer.getBoundingClientRect(); return {left:f.left-16, top:f.top-16, right:f.right+16, bottom:f.bottom+16}})()
-  ];
-  seeds = [];
-  const taken=[];
-  for(let i=0;i<INITIAL_SEEDS;i++){
-    const emo = EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)];
-    const spot = randomSpot(rect, seedR, avoid, taken);
-    if (!spot) continue;
-    taken.push(spot);
-    seeds.push({id:crypto.randomUUID(), emoji:emo, x:spot.x, y:spot.y});
-  }
-}
-function renderSeeds(){
-  seedsEl.innerHTML = '';
-  for(const s of seeds){
-    const n = document.createElement('button');
-    n.className = 'seed';
-    n.style.left = s.x+'px'; n.style.top = s.y+'px';
-    n.style.setProperty('--delay', `${(Math.random()*-6).toFixed(2)}s`);
-    n.style.setProperty('--dur', `${(6+Math.random()*4).toFixed(2)}s`);
-    n.style.setProperty('--fx', `${(Math.random()*8-4).toFixed(1)}px`);
-    n.style.setProperty('--fy', `${(Math.random()*4-2).toFixed(1)}px`);
-    n.dataset.id = s.id;
-    n.innerHTML = `<span class="e">${s.emoji}</span>`;
-    seedsEl.appendChild(n);
-    n.addEventListener('pointerdown', e => startDragSeed(e, s.id));
-  }
-}
-
-/* helpers */
+/* ========== Helpers ========== */
 function pulse(el){ el.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.3,.8,.2,1)'}); }
 
-/* prevent pinch-zoom gesture issues on iOS */
+/* gesture guard */
 document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
 </body>
