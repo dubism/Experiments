@@ -2,94 +2,430 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Emoji → Pollinations Image</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Emoji → Pollinations</title>
 <style>
-  body{margin:0;height:100%;display:grid;place-items:center;
-    background:radial-gradient(circle at 30% 30%,#f0faff,#fff0fa,#fafff0);}
-  .stage{position:relative;width:min(70vmin,500px);aspect-ratio:1/1;}
-  .cauldron{position:relative;width:100%;height:100%;border-radius:50%;
-    background:#ffffff66;box-shadow:0 4px 20px #0002,inset 0 2px 6px #fff9;
-    overflow:hidden;display:grid;place-items:center;}
-  .ring{position:absolute;inset:6%;border:2px dashed #0002;border-radius:50%;}
-  .placed{position:absolute;width:64px;height:64px;border-radius:50%;
-    display:grid;place-items:center;background:#fff8;
-    box-shadow:0 2px 6px #0002;cursor:grab;transform:translate(-50%,-50%);}
-  .placed .e{font-size:32px;}
-  .image{position:absolute;inset:0;border-radius:50%;background-size:cover;
-    background-position:center;opacity:0;transition:.6s ease;}
-  .image.revealed{opacity:1;}
-  .footer{margin-top:20px;display:flex;gap:12px;justify-content:center}
-  .input{min-width:200px;padding:6px 10px;border-radius:10px;border:1px solid #0002}
-  .cta{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;
-    font-size:26px;cursor:pointer;background:#fff;box-shadow:0 2px 6px #0003;}
+  :root{
+    --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
+    --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
+    --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
+    --ease:cubic-bezier(.2,.8,.2,1);
+    --glass:#ffffff6a; --glassEdge:#ffffff80; --glassStroke:#0000000f;
+  }
+  html,body{height:100%;margin:0}
+  body{
+    background:
+      radial-gradient(60vmax 60vmax at 15% 10%, var(--t1), transparent 60%),
+      radial-gradient(70vmax 60vmax at 85% 20%, var(--t2), transparent 60%),
+      radial-gradient(60vmax 70vmax at 20% 85%, var(--t3), transparent 60%),
+      radial-gradient(70vmax 70vmax at 80% 85%, var(--t4), transparent 60%),
+      conic-gradient(from 0deg at 50% 50%, #e9f3ff, #ffe9f7, #e9fff6, #f7f3ff, #e9f3ff);
+    background-attachment:fixed; animation:hue 24s linear infinite alternate;
+    overflow:hidden; touch-action:none; -webkit-tap-highlight-color:transparent;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
+  }
+  @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
+
+  .stage{position:fixed; inset:0; display:grid; place-items:center}
+
+  /* floating seeds layer */
+  .seeds{position:fixed; inset:0; pointer-events:none; z-index:5}
+  .seed{
+    position:absolute; width:56px; height:56px; border-radius:50%;
+    display:grid; place-items:center; user-select:none; pointer-events:auto;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
+    transform:translate(-50%,-50%) scale(1);
+    transition:transform .18s var(--ease), box-shadow .18s var(--ease), filter .18s var(--ease), opacity .18s var(--ease);
+    animation:float var(--dur,8s) ease-in-out infinite var(--delay,0s);
+    will-change:transform;
+  }
+  .seed .e{font-size:28px}
+  @keyframes float{
+    0%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) scale(1); }
+    50%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px)) scale(1.02); }
+    100%{ transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px))) scale(1); }
+  }
+  .seed:hover{ transform:translate(-50%,-50%) scale(1.12) rotate(-2deg); box-shadow:var(--shadow-strong); }
+
+  /* central circle */
+  .cauldron-wrap{ position:relative; width:min(64vmin,520px); aspect-ratio:1/1; perspective:900px; z-index:20; display:grid; place-items:center }
+  .cauldron{
+    position:relative; width:100%; height:100%; border-radius:50%;
+    background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
+    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
+    outline:1px solid var(--ring2);
+    transition:transform .45s var(--ease), filter .45s var(--ease), box-shadow .3s var(--ease);
+    overflow:hidden;
+  }
+  .cauldron::before{
+    content:""; position:absolute; inset:-20%;
+    background:conic-gradient(from 0deg at 50% 50%, #ffffff22 0 10%, transparent 10% 40%, #ffffff18 40% 45%, transparent 45% 80%, #ffffff12 80% 85%, transparent 85% 100%);
+    animation:sweep 7.5s var(--ease) infinite; mix-blend-mode:screen; pointer-events:none;
+  }
+  @keyframes sweep{to{transform:rotate(360deg)}}
+  .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
+  .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
+  .cauldron.over .ring{ box-shadow:inset 0 0 0 9px #00c8ff15 }
+
+  /* placed chips inside */
+  .placed{
+    position:absolute; width:12vmin; max-width:72px; aspect-ratio:1/1; border-radius:50%;
+    display:grid; place-items:center; user-select:none; cursor:grab;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
+    transform:translate(-50%,-50%) scale(1);
+    transition:transform .25s var(--ease), filter .25s var(--ease), opacity .25s var(--ease);
+    z-index:2;
+  }
+  .placed .e{font-size:clamp(24px, 8vmin, 44px); filter:drop-shadow(0 1px 0 #ffffffcc)}
+  .placed.dropin{ animation:drop .38s var(--ease) }
+  @keyframes drop{ 0%{transform:translate(-50%,-50%) scale(.72)} 70%{transform:translate(-50%,-50%) scale(1.14)} 100%{transform:translate(-50%,-50%) scale(1)} }
+  .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
+  @keyframes fadeout{ to{ transform:translate(-50%,-50%) scale(.82); opacity:0 } }
+
+  /* image layer above chips */
+  .image{ position:absolute; inset:0; border-radius:50%; overflow:hidden; background-position:center; background-size:cover; background-repeat:no-repeat; opacity:0; transform:scale(.92); transition:opacity .6s var(--ease), transform .8s var(--ease) .1s; z-index:5; }
+  .image.revealed{ opacity:1; transform:scale(1) }
+  .cauldron.show-image .placed{ opacity:0; pointer-events:none; transform:translate(-50%,-50%) scale(.94) }
+
+  /* bottom footer */
+  .footer{
+    position:fixed; left:16px; right:16px; bottom:16px; z-index:40;
+    display:flex; gap:12px; align-items:center; justify-content:center;
+    padding:12px; border-radius:20px;
+    background:linear-gradient(180deg, var(--glass), #ffffff3c);
+    backdrop-filter: blur(10px) saturate(1.1);
+    box-shadow:var(--shadow), inset 0 0 0 1px var(--glassStroke), inset 0 1px 0 var(--glassEdge);
+  }
+  .pill{
+    flex:1; min-width:140px; height:52px; border-radius:14px;
+    display:flex; align-items:center; gap:8px; padding:0 12px;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffdd, #ffffffb0 60%, #ffffff90 100%);
+    box-shadow: inset 0 1px 0 #ffffff, 0 1px 0 #00000005;
+  }
+  .input{
+    flex:1; height:36px; border-radius:10px; padding:6px 10px; outline:none; border:none; background:#ffffffc0; box-shadow: inset 0 1px 0 #ffffff, 0 0 0 1px #00000010;
+  }
+  .cta{
+    width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffb8 60%, #ffffff90 100%);
+    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffff;
+    transition:transform .18s var(--ease), box-shadow .18s var(--ease);
+  }
+  .cta:hover{ transform:scale(1.08) }
+  .cta:active{ transform:scale(.96) }
+  .cta .e{ font-size:30px; filter:drop-shadow(0 1px 0 #fff) }
+  .cta.spin .e{ animation:spin .9s linear infinite }
+  @keyframes spin{ to{ transform:rotate(360deg) } }
+
+  ::selection{background:transparent}
 </style>
 </head>
 <body>
-  <div>
-    <div class="stage">
-      <div class="cauldron" id="cauldron">
+  <div class="stage">
+    <div class="seeds" id="seeds"></div>
+
+    <div class="cauldron-wrap" id="wrap">
+      <div class="cauldron" id="cauldron" aria-label="drop area">
         <div class="ring"></div>
         <div class="image" id="image"></div>
       </div>
     </div>
-    <div class="footer">
+  </div>
+
+  <!-- Bottom footer: input + CTA (single icon: wand) -->
+  <div class="footer" id="footer">
+    <div class="pill">
       <input class="input" id="freeInput" placeholder="type text or emoji…"/>
-      <button class="cta" id="cta">✅➔</button>
     </div>
+    <button class="cta" id="cta" aria-label="generate"><span class="e">🪄</span></button>
   </div>
 
 <script>
+/* ====== CONFIG ====== */
+const EMOJI_POOL = ["😂","❤️","🤣","👍","😭","🙏","🥰","😍","😊","😅","🔥","👏","😁","💀","😉","✨","🎉","🤔","😎","🎨","🎵","🎧","📷","🎥","🧸","💎","🧠","🐶","🐱","🦊","🐼","🦄","🐧","🐸","🐢","🐙","🦋","🐝","🌸","🌼","🌻","🌿","🍃","🌊","🌈","⛰️","🏙️","☀️","🌙","⭐","⚡","💧","🍎","🍊","🍓","🍩","🍕","🍪"];
+const INITIAL_SEEDS = 20;
+
+/* emoji → words for prompt */
+const EMOJI_WORDS = new Map(Object.entries({
+  "😂":"laughing / joy","❤️":"a red heart","🤣":"hysterical laughter","👍":"approval / thumbs up","😭":"tears / crying",
+  "🙏":"gratitude","🥰":"love / affection","😍":"adoration","😊":"smile","😅":"relief",
+  "🔥":"fire / flames","✨":"sparkles","🎉":"confetti","💀":"a skull","😉":"a wink",
+  "🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🐧":"a penguin","🐸":"a frog","🐢":"a turtle","🐙":"an octopus",
+  "🦋":"a butterfly","🐝":"a bee","🌸":"a cherry blossom","🌼":"a daisy","🌻":"a sunflower","🌿":"green leaves","🍃":"leaf flutter",
+  "🌊":"ocean waves","🌈":"a rainbow","⛰️":"mountains","🏙️":"a city skyline",
+  "☀️":"sun","🌙":"moon","⭐":"stars","⚡":"lightning","💧":"a water drop",
+  "🍎":"an apple","🍊":"an orange","🍓":"strawberries","🍩":"a donut","🍕":"pizza","🍪":"a cookie",
+  "🎨":"paint","🎵":"a music note","🎧":"headphones","📷":"a camera","🎥":"a film camera","🧸":"a teddy bear","💎":"a diamond","🧠":"a brain"
+}));
+
+/* ====== DOM ====== */
+const wrap = document.getElementById('wrap');
 const cauldron = document.getElementById('cauldron');
 const imageEl = document.getElementById('image');
-const cta = document.getElementById('cta');
+const seedsEl = document.getElementById('seeds');
+const footer = document.getElementById('footer');
 const freeInput = document.getElementById('freeInput');
+const cta = document.getElementById('cta');
 
-let placed = []; // {emoji, x%, y%}
+/* ====== STATE ====== */
+let seeds = [];     // {id, emoji, x, y}
+let placed = [];    // {id, emoji, x%, y%}
+let dragging = null;
+let styleHint = ""; // free text string
+let inputEmojiInbox = new Set(); // emojis typed but not placed
 
-// place some starter emojis
-['🐶','❤️','🌈'].forEach((emo,i)=>{
-  const angle = (i/3)*2*Math.PI;
-  const x = 50 + 30*Math.cos(angle);
-  const y = 50 + 30*Math.sin(angle);
-  addPlaced(emo,x,y);
+/* ====== INIT ====== */
+initSeeds();
+renderSeeds();
+window.addEventListener('resize', () => { initSeeds(true); renderSeeds(); }, {passive:true});
+
+/* ====== FOOTER INPUT ====== */
+freeInput.addEventListener('keydown', e=>{
+  if (e.key==='Enter'){ e.preventDefault(); consumeInput(); }
 });
+freeInput.addEventListener('blur', consumeInput);
 
-function addPlaced(emoji,x,y){
-  const id = Math.random().toString(36).slice(2);
-  placed.push({id,emoji,x,y});
-  const n = document.createElement('div');
-  n.className='placed'; n.dataset.id=id;
-  n.style.left=x+'%'; n.style.top=y+'%';
-  n.innerHTML=`<span class="e">${emoji}</span>`;
-  cauldron.appendChild(n);
+function consumeInput(){
+  styleHint = freeInput.value.replace(/\s+/g,' ').trim();
+  const {emojis} = splitTextAndEmojis(styleHint);
+  // keep non-emoji text as styleHint; emojis spawn as extra seeds
+  const plain = styleHint.replace(/\p{Extended_Pictographic}/gu,'').trim();
+  styleHint = plain;
+  if (emojis.length) spawnInputEmojis(emojis);
 }
 
-function buildPrompt(){
-  const parts = placed.map(p=>p.emoji);
-  const text = freeInput.value.trim();
-  return [...parts,text].filter(Boolean).join(' , ');
+function splitTextAndEmojis(str){
+  const chars = Array.from(str);
+  const emojis = [];
+  for (const ch of chars){ if (/\p{Extended_Pictographic}/u.test(ch)) emojis.push(ch); }
+  return {emojis};
+}
+function spawnInputEmojis(list){
+  const rect = document.body.getBoundingClientRect();
+  const seedR = 28, margin=10;
+  const footerRect = footer.getBoundingClientRect();
+  const avoid = [{left: footerRect.left-16, top: footerRect.top-16, right: footerRect.right+16, bottom: footerRect.bottom+16}];
+  for (const e of list){
+    inputEmojiInbox.add(e);
+    const {x,y} = randomSpot(rect, seedR, avoid);
+    seeds.push({id:crypto.randomUUID(), emoji:e, x, y});
+  }
+  renderSeeds();
 }
 
+/* ====== SEEDS LAYOUT: random, non-overlap, avoid bowl & footer ====== */
+function initSeeds(keepEmojis=false){
+  const rect = document.body.getBoundingClientRect();
+  const bowl = cauldron.getBoundingClientRect();
+  const R = bowl.width/2;
+  const cx = bowl.left + R, cy = bowl.top + R;
+  const seedR = 28;
+  const avoid = [
+    {left: cx-R-26, top: cy-R-26, right: cx+R+26, bottom: cy+R+26}, // around bowl
+    (()=>{const f=footer.getBoundingClientRect(); return {left:f.left-16, top:f.top-16, right:f.right+16, bottom:f.bottom+16}})()
+  ];
+
+  const emojis = keepEmojis ? seeds.map(s=>s.emoji) : [];
+  if (!keepEmojis){
+    for(let i=0;i<INITIAL_SEEDS;i++) emojis.push(nextEmoji());
+  }
+  seeds = [];
+  const taken = [];
+  for (const emo of emojis){
+    const spot = randomSpot(rect, seedR, avoid, taken);
+    if (!spot) continue;
+    taken.push(spot);
+    seeds.push({id:crypto.randomUUID(), emoji:emo, x:spot.x, y:spot.y});
+  }
+}
+function randomSpot(rect, seedR, avoidRects, taken=[]){
+  const maxTries = 1200; let tries=0;
+  while (tries++<maxTries){
+    const x = seedR+10 + Math.random()*(rect.width - seedR*2 - 20);
+    const y = seedR+10 + Math.random()*(rect.height - seedR*2 - 20);
+    const a = avoidRects.some(ar => x>ar.left-seedR && x<ar.right+seedR && y>ar.top-seedR && y<ar.bottom+seedR);
+    if (a) continue;
+    let ok=true;
+    for(const s of taken){ if (Math.hypot(x - s.x, y - s.y) < seedR*2 + 16){ ok=false; break; } }
+    if (!ok) continue;
+    return {x,y};
+  }
+  return null;
+}
+
+function renderSeeds(){
+  seedsEl.innerHTML = '';
+  for(const s of seeds){
+    const n = document.createElement('button');
+    n.className = 'seed';
+    n.style.left = s.x+'px'; n.style.top = s.y+'px';
+    n.style.setProperty('--delay', `${(Math.random()*-6).toFixed(2)}s`);
+    n.style.setProperty('--dur', `${(6+Math.random()*4).toFixed(2)}s`);
+    n.style.setProperty('--fx', `${(Math.random()*8-4).toFixed(1)}px`);
+    n.style.setProperty('--fy', `${(Math.random()*4-2).toFixed(1)}px`);
+    n.dataset.id = s.id;
+    n.innerHTML = `<span class="e">${s.emoji}</span>`;
+    seedsEl.appendChild(n);
+    n.addEventListener('pointerdown', e => startDragSeed(e, s.id));
+  }
+}
+
+/* ====== DRAGGING ====== */
+function startDragSeed(ev, id){
+  ev.preventDefault();
+  const idx = seeds.findIndex(s=>s.id===id);
+  if (idx<0) return;
+  const ghost = makeGhost(seeds[idx].emoji);
+  dragging = {type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
+  pointerMove(ev);
+  window.addEventListener('pointermove', pointerMove);
+  window.addEventListener('pointerup', pointerUp);
+}
+function startDragPlaced(ev, id){
+  ev.preventDefault();
+  const idx = placed.findIndex(p=>p.id===id);
+  if (idx<0) return;
+  const ghost = makeGhost(placed[idx].emoji);
+  dragging = {type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
+  pointerMove(ev);
+  window.addEventListener('pointermove', pointerMove);
+  window.addEventListener('pointerup', pointerUp);
+}
+function makeGhost(emoji){
+  const g = document.createElement('div');
+  g.className='seed';
+  g.style.width='64px'; g.style.height='64px'; g.style.zIndex=30;
+  g.style.position='fixed'; g.style.transform='translate(-50%,-50%) scale(1.0)';
+  g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
+  g.innerHTML = `<span class="e">${emoji}</span>`;
+  document.body.appendChild(g);
+  return g;
+}
+function pointerMove(ev){
+  if (!dragging) return;
+  dragging.ghostEl.style.left = ev.clientX+'px';
+  dragging.ghostEl.style.top  = ev.clientY+'px';
+  const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
+  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
+  cauldron.classList.toggle('over', inside);
+}
+function pointerUp(ev){
+  if (!dragging) return cleanupDrag();
+  const {inside, px, py} = coordsInCauldron(ev.clientX, ev.clientY);
+  cauldron.classList.remove('over');
+
+  if (inside){
+    if (dragging.type==='seed'){
+      const id = crypto.randomUUID();
+      placed.push({id, emoji:dragging.emoji, x:px, y:py});
+      renderPlaced(true);
+      // NO REPLACEMENT: remove that seed permanently
+      const node = [...seedsEl.children][dragging.idx];
+      if (node) node.remove();
+      const used = seeds.splice(dragging.idx,1)[0];
+      inputEmojiInbox.delete(used.emoji); // if it came from input
+    } else {
+      placed[dragging.idx].x = px; placed[dragging.idx].y = py;
+      renderPlaced(false);
+    }
+  } else {
+    if (dragging.type==='placed'){ // cancel = drop outside bowl
+      const id = placed[dragging.idx].id;
+      const node = cauldron.querySelector(`.placed[data-id="${id}"]`);
+      if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); }
+      placed.splice(dragging.idx,1);
+    }
+  }
+  cleanupDrag();
+}
+function cleanupDrag(){
+  window.removeEventListener('pointermove', pointerMove);
+  window.removeEventListener('pointerup', pointerUp);
+  if (dragging?.ghostEl) dragging.ghostEl.remove();
+  dragging = null;
+}
+
+/* bowl coords */
+function coordsInCauldron(cx, cy){
+  const r = cauldron.getBoundingClientRect();
+  const mx = cx - (r.left + r.width/2);
+  const my = cy - (r.top  + r.height/2);
+  const dist = Math.hypot(mx,my);
+  const inside = dist <= r.width/2;
+  const px = ((mx + r.width/2) / r.width) * 100;
+  const py = ((my + r.height/2) / r.height) * 100;
+  return {inside, px: clamp(px,5,95), py: clamp(py,5,95)};
+}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+/* placed render */
+function renderPlaced(playDrop=false){
+  Array.from(cauldron.querySelectorAll('.placed')).forEach(n=>n.remove());
+  for (const p of placed){
+    const n = document.createElement('div');
+    n.className='placed'; n.dataset.id=p.id;
+    n.style.left=p.x+'%'; n.style.top=p.y+'%';
+    n.innerHTML=`<span class="e">${p.emoji}</span>`;
+    if (playDrop) n.classList.add('dropin');
+    n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id));
+    cauldron.appendChild(n);
+  }
+}
+
+/* ====== PROMPT BUILDER ====== */
+function buildPrompt(placedArr, hintText = "", looseEmojis = []) {
+  const parts = placedArr.map(p => {
+    const angle = (Math.atan2(p.y - 50, p.x - 50) * 180 / Math.PI + 360) % 360;
+    const where = clockFromAngle(angle);
+    const what = EMOJI_WORDS.get(p.emoji) || `the ${p.emoji} emoji`;
+    return `${what} at the ${where}`;
+  });
+  const extras = looseEmojis.map(e => (EMOJI_WORDS.get(e) || `the ${e} emoji`) + " (unplaced element)");
+  const hint = hintText ? ` Also reflect: “${hintText}”.` : "";
+  return [
+    [...parts, ...extras].join(', ') + (parts.length || extras.length ? '. ' : ''),
+    hint,
+    'Harmonize styles naturally. Balanced composition.'
+  ].join(' ').trim();
+}
+function clockFromAngle(a){
+  const sectors=[{t:"3 o’clock (right)",v:0},{t:"2 o’clock (upper-right)",v:45},{t:"12 o’clock (top)",v:90},{t:"10 o’clock (upper-left)",v:135},{t:"9 o’clock (left)",v:180},{t:"8 o’clock (lower-left)",v:225},{t:"6 o’clock (bottom)",v:270},{t:"4 o’clock (lower-right)",v:315},{t:"3 o’clock (right)",v:360}];
+  let best=sectors[0].t,min=999; for(const s of sectors){const d=Math.abs(a-s.v); if(d<min){min=d; best=s.t}}
+  return best;
+}
+
+/* ====== POLLINATIONS CALL ====== */
 async function callPollinations(prompt){
   const url = "https://image.pollinations.ai/prompt/" +
               encodeURIComponent(prompt) + "?width=768&height=768";
   const res = await fetch(url,{mode:"cors"});
+  if(!res.ok) throw new Error('Pollinations error');
   const blob = await res.blob();
   return URL.createObjectURL(blob);
 }
 
+/* CTA */
 cta.addEventListener('click', async ()=>{
-  const prompt = buildPrompt();
-  console.log("Prompt →",prompt);
-  imageEl.classList.remove('revealed');
-  imageEl.style.backgroundImage='';
+  const prompt = buildPrompt(placed, styleHint, [...inputEmojiInbox]);
+  if(!prompt){ cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}], {duration:280, easing:'cubic-bezier(.3,.8,.2,1)'}); return; }
+  cta.classList.add('spin');
+  imageEl.classList.remove('revealed'); cauldron.classList.remove('show-image');
   try{
     const imgURL = await callPollinations(prompt);
     imageEl.style.backgroundImage = `url(${imgURL})`;
     imageEl.classList.add('revealed');
-  }catch(e){ console.error(e); }
+    cauldron.classList.add('show-image');
+  }catch(e){ console.warn(e); }
+  finally{ cta.classList.remove('spin'); }
 });
+
+/* utils */
+function nextEmoji(){ return EMOJI_POOL[Math.floor(Math.random()*EMOJI_POOL.length)] }
+
+/* gesture guard */
+document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
 </body>
 </html>
