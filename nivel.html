@@ -3,36 +3,29 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — touch / sound / motion</title>
+<title>RGB String-Dots — sound / motion / touch</title>
 <style>
-  :root{
-    --bg:#000; --ink:#fff; --muted:#a6b0bf;
-    --panel:rgba(16,18,24,.78); --line:rgba(255,255,255,.12);
-  }
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;
-    font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
-  canvas{display:block;width:100vw;height:100vh;touch-action:none; }
+  :root{ --bg:#000; --ink:#fff; --muted:#a6b0bf; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+  canvas{display:block;width:100vw;height:100vh;touch-action:none;}
 
-  /* Minimal controls */
   .hud{
-    position:fixed; left:10px; bottom:10px; z-index:3;
-    background:var(--panel); border:1px solid var(--line); border-radius:12px;
-    padding:10px 12px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    position:fixed; left:10px; bottom:10px; z-index:3; display:grid; gap:8px;
+    grid-template-columns:auto 1fr auto; align-items:center;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px;
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
   }
-  .row{display:grid; grid-template-columns:auto 1fr; gap:8px 10px; align-items:center}
-  label{color:#d6deea; font-size:12px; white-space:nowrap}
-  input[type=range]{width:160px}
-  .pill{position:fixed; right:10px; bottom:10px; z-index:3;
-    background:rgba(255,255,255,.08); border:1px solid var(--line); border-radius:999px;
-    padding:7px 10px; color:#cfd7e3; font-size:12px; }
+  .hud label{color:#d6deea;font-size:12px;white-space:nowrap}
+  .hud input[type=range]{width:160px}
+  .hud .val{color:#cfd7e3;font-size:12px;min-width:34px;text-align:right}
+  .pill{position:fixed; right:10px; bottom:10px; z-index:3; background:rgba(255,255,255,.08);
+    border:1px solid var(--line); border-radius:999px; padding:7px 10px; color:#cfd7e3; font-size:12px;}
 
-  /* Permission overlay (one tap on iOS) */
   #overlay{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
     background:linear-gradient(180deg, rgba(0,0,0,.9), rgba(0,0,0,.65)); z-index:5; transition:opacity .25s}
   #overlay.hide{opacity:0; pointer-events:none}
   .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px; text-align:center}
-  button{appearance:none; border:0; border-radius:999px; padding:10px 14px; font-weight:650; cursor:pointer;
-    background:#e6f0ff; color:#0b1220}
+  button{appearance:none;border:0;border-radius:999px;padding:10px 14px;font-weight:650;cursor:pointer;background:#e6f0ff;color:#0b1220}
   .chips{display:flex; gap:8px; justify-content:center; margin-top:8px}
   .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
     border:1px solid var(--line); background:rgba(255,255,255,.06); font-size:12px; color:#cfd7e3}
@@ -43,13 +36,12 @@
 <body>
   <canvas id="cv"></canvas>
 
-  <div class="hud" id="hud">
-    <div class="row">
-      <label for="stiff">String looseness</label>
-      <input id="stiff" type="range" min="0" max="100" value="45" />
-      <label for="damp">Bounce</label>
-      <input id="damp" type="range" min="0" max="100" value="35" />
-    </div>
+  <!-- Controls: looseness, bounce, grid spacing, dot size -->
+  <div class="hud">
+    <label for="stiff">Looseness</label><input id="stiff" type="range" min="0" max="100" value="45"><span id="stiffV" class="val">45</span>
+    <label for="damp">Bounce</label>   <input id="damp"  type="range" min="0" max="100" value="35"><span id="dampV"  class="val">35</span>
+    <label for="space">Grid</label>    <input id="space" type="range" min="12" max="60" value="28"><span id="spaceV" class="val">28</span>
+    <label for="dot">Dot</label>       <input id="dot"   type="range" min="1"  max="8"  value="3"><span  id="dotV"   class="val">3</span>
   </div>
   <div class="pill" id="pill">Mic – • Motion –</div>
 
@@ -67,9 +59,9 @@
 
 <script>
 (() => {
-  // ---------- Canvas & sizing ----------
+  // ----- Canvas & sizing -----
   const cvs = document.getElementById('cv');
-  const ctx = cvs.getContext('2d', { alpha:false });
+  const ctx  = cvs.getContext('2d', { alpha:false });
   let dpr = Math.max(1, devicePixelRatio || 1);
   let needsLayout = false;
 
@@ -82,10 +74,36 @@
   addEventListener('resize', resize, { passive:true });
   resize();
 
-  // ---------- Triangular grid (hex packing) ----------
+  // ----- UI -----
+  const ui = {
+    stiff:  document.getElementById('stiff'),
+    damp:   document.getElementById('damp'),
+    space:  document.getElementById('space'),
+    dot:    document.getElementById('dot'),
+    stiffV: document.getElementById('stiffV'),
+    dampV:  document.getElementById('dampV'),
+    spaceV: document.getElementById('spaceV'),
+    dotV:   document.getElementById('dotV'),
+  };
+  function syncVals(){
+    ui.stiffV.textContent = ui.stiff.value;
+    ui.dampV .textContent = ui.damp.value;
+    ui.spaceV.textContent = ui.space.value;
+    ui.dotV  .textContent = ui.dot.value;
+  }
+  ['input','change'].forEach(ev=>{
+    ui.stiff.addEventListener(ev, syncVals);
+    ui.damp .addEventListener(ev, syncVals);
+    ui.space.addEventListener(ev, ()=>{ syncVals(); spacing = Number(ui.space.value); needsLayout = true; });
+    ui.dot  .addEventListener(ev, ()=>{ syncVals(); radius  = Number(ui.dot.value); });
+  });
+  syncVals();
+
+  // ----- Grid (perfect triangular / hex packing) -----
   const dots = [];  // {rx,ry,x,y,vx,vy}
-  let spacing = 28; // CSS px between horizontal neighbors
-  let radius  = 2.6; // CSS px dot radius
+  let spacing = Number(ui.space.value); // CSS px between horizontal neighbors
+  let radius  = Number(ui.dot.value);   // CSS px dot radius
+
   function S(){ return spacing * dpr; }
   function R(){ return radius  * dpr; }
 
@@ -93,36 +111,34 @@
     dots.length = 0;
     const W = cvs.width, H = cvs.height, s = S();
     const rowH = s * Math.sqrt(3)/2;  // vertical distance between rows
-    const offX = (W % s) / 2;
-    const offY = (H % rowH) / 2;
 
-    // Fill rows; odd rows are horizontally shifted by s/2
-    for (let j = 0, y = offY; y <= H - offY + 1; j++, y += rowH){
+    // Center the lattice
+    const cols = Math.floor(W / s);
+    const rows = Math.floor(H / rowH);
+    const offX = (W - cols * s) / 2;
+    const offY = (H - rows * rowH) / 2;
+
+    for (let j=0; j<=rows; j++){
+      const y = offY + j * rowH;
       const xShift = (j % 2) ? s/2 : 0;
-      for (let x = offX + xShift; x <= W - offX + 1; x += s){
+      for (let i=0; i<=cols; i++){
+        const x = offX + xShift + i * s;
         dots.push({ rx:x, ry:y, x, y, vx:0, vy:0 });
       }
     }
   }
   buildTriGrid();
 
-  // ---------- Physics ("strings"): spring + damping ----------
-  // We expose two user sliders: looseness (inverse stiffness) and bounce (damping).
-  const uiStiff = document.getElementById('stiff');
-  const uiDamp  = document.getElementById('damp');
-
+  // ----- Physics ("strings"): spring to rest + damping -----
   function params(){
-    // Map looseness slider (0..100) → stiffness k (N): lower k = looser.
-    // Choose stable range for dt ~ 16ms: k in [2, 40] scaled by dpi/spacing.
-    const loose = Number(uiStiff.value); // 0..100 (looser to tighter visually)
+    const loose = Number(ui.stiff.value); // 0..100 (looser → smaller k)
     const k = 2 + (100 - loose) * 0.38;   // 2..40
-    // Bounce slider → damping ratio-ish c. 0..1.4
-    const b = Number(uiDamp.value);
-    const c = 0.02 + b * 0.013;          // ~0.02..1.32
+    const b = Number(ui.damp.value);
+    const c = 0.02 + b * 0.013;           // 0.02..1.32
     return { k, c };
   }
 
-  // ---------- Inputs → external disturbances ----------
+  // ----- Inputs -----
   let ripples = []; // {x,y,t,amp}
   function addRipple(cssX, cssY, amp = 1){
     const rect = cvs.getBoundingClientRect();
@@ -154,15 +170,13 @@
       src.connect(ana);
       const buf = new Uint8Array(ana.fftSize);
       micOK = true;
-      function tick(){
+      (function tick(){
         ana.getByteTimeDomainData(buf);
-        let sum=0;
-        for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+        let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
         const rms=Math.sqrt(sum/buf.length);
-        audioLevel = audioLevel*0.86 + rms*0.14; // smooth
+        audioLevel = audioLevel*0.86 + rms*0.14;
         requestAnimationFrame(tick);
-      }
-      tick();
+      })();
     }catch(e){ micOK = false; }
   }
 
@@ -176,25 +190,22 @@
       }
       addEventListener('devicemotion', e=>{
         const g = e.accelerationIncludingGravity || {};
-        tilt.x = g.x || 0;
-        tilt.y = -(g.y || 0);
+        tilt.x = g.x || 0; tilt.y = -(g.y || 0);
         motOK = true;
       }, {passive:true});
-      setTimeout(()=>{ if(!motOK){ /* probably denied */ } }, 800);
+      setTimeout(()=>{ if(!motOK){} }, 800);
     }catch(e){ motOK=false; }
   }
 
-  // Overlay buttons
+  // Overlay
   const overlay = document.getElementById('overlay');
   const stMicEl = document.getElementById('stMic');
   const stMotEl = document.getElementById('stMot');
   function mark(el, cls){ el.classList.remove('ok','err'); if (cls) el.classList.add(cls); }
-
   document.getElementById('enable').addEventListener('click', async ()=>{
     mark(stMicEl,''); mark(stMotEl,'');
     await Promise.allSettled([enableMic(), enableMotion()]);
     mark(stMicEl, micOK ? 'ok' : 'err');
-    // motion flag set upon first event; give it a moment:
     setTimeout(()=> mark(stMotEl, motOK ? 'ok' : 'err'), 500);
     overlay.classList.add('hide');
   });
@@ -203,45 +214,36 @@
   const pill = document.getElementById('pill');
   function setPill(){ pill.textContent = `Mic ${micOK?'✓':'–'} • Motion ${motOK?'✓':'–'}`; }
 
-  // ---------- Simulation step ----------
+  // ----- Simulation -----
   let lastT = performance.now()/1000;
 
   function step(){
     const now = performance.now()/1000;
-    let dt = now - lastT;
-    lastT = now;
-    if (dt > 0.05) dt = 0.05;
+    let dt = now - lastT; if (dt > 0.05) dt = 0.05; lastT = now;
 
-    // (Re)layout if needed
     if (needsLayout){ buildTriGrid(); needsLayout=false; }
 
-    // External fields
-    const s = S();
-    const rippleDecay = 1.8; // seconds
-    ripples = ripples.filter(r => now - r.t < rippleDecay);
+    // prune ripples
+    ripples = ripples.filter(r => now - r.t < 1.8);
 
     const {k, c} = params();
-
-    // Integrate each dot (mass = 1)
-    // Force = -k*(x - rx) - c*vx + Fext
-    // Fext from ripples (radial), audio (swirl), and tilt (constant).
-    const audioMag = audioLevel * 0.28 * s; // scale
+    const s = S();
+    const audioMag = audioLevel * 0.28 * s;
     const tiltMag  = 0.10 * s;
 
     for (let i=0;i<dots.length;i++){
       const d = dots[i];
 
-      // Spring force to rest
+      // Hooke + damping
       let fx = -k * (d.x - d.rx) - c * d.vx;
       let fy = -k * (d.y - d.ry) - c * d.vy;
 
-      // Ripples
+      // Ripples (radial)
       for (let j=0;j<ripples.length;j++){
         const r = ripples[j];
         const age = now - r.t;
         const rr = Math.hypot(d.x - r.x, d.y - r.y) + 1e-6;
-        // traveling wavefront envelope
-        const travel = (age * (1.5 * s)); // wavefront radius
+        const travel = (age * (1.5 * s));
         const g = Math.exp(-((rr - travel)*(rr - travel)) / (2 * (0.9*s)*(0.9*s)));
         const amp = r.amp * g;
         const ux = (d.x - r.x)/rr, uy=(d.y - r.y)/rr;
@@ -249,15 +251,15 @@
         fy += uy * amp * 1.6 * s;
       }
 
-      // Audio swirl (perpendicular components)
+      // Audio swirl
       fx += Math.sin((d.rx + d.ry + now*420)*0.003) * audioMag;
       fy += Math.cos((d.rx - d.ry - now*420)*0.003) * audioMag;
 
-      // Tilt (gravity-like)
+      // Tilt
       fx += tilt.x * tiltMag;
       fy += tilt.y * tiltMag;
 
-      // Integrate (semi-implicit Euler)
+      // Integrate
       d.vx += fx * dt;
       d.vy += fy * dt;
       d.x  += d.vx * dt;
@@ -265,36 +267,42 @@
     }
   }
 
-  // ---------- Render ----------
+  // ----- Render (redraw everything each frame; no traces) -----
   function render(){
-    ctx.setTransform(1,0,0,1,0,0);
+    // Hard clear (no trails)
+    ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#000';
     ctx.fillRect(0,0,cvs.width,cvs.height);
 
-    // For each dot, draw three additive layers (R,G,B) with slight per-channel
-    // offset based on displacement vector angle, each rotated by ±120°.
+    // Draw R/G/B layers additively for each dot
     ctx.globalCompositeOperation = 'lighter';
     const r = R();
 
     for (let i=0;i<dots.length;i++){
       const d = dots[i];
-      // Displacement vector from rest
       const dx = d.x - d.rx, dy = d.y - d.ry;
       const disp = Math.hypot(dx,dy);
+
+      // If very still → show crisp white
+      if (disp < 0.35 * dpr){
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(d.rx, d.ry, r, 0, Math.PI*2); ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
+        continue;
+      }
+
       const baseAngle = Math.atan2(dy, dx);
+      const sep = Math.min(disp * 0.65, 0.9 * S()); // per-channel offset
 
-      // Chromatic separation proportional to displacement, clamped
-      const sep = Math.min(disp * 0.65, 0.9 * S()); // channel distance
-
-      // Channel angles: base ±120°, base
-      const A = [
+      // Slightly different scale per channel to avoid perfect overlaps
+      const channels = [
         { ang: baseAngle + 0,                col:'rgb(255,0,0)', scale: 1.00 },
         { ang: baseAngle + 2*Math.PI/3,     col:'rgb(0,255,0)', scale: 0.92 },
         { ang: baseAngle - 2*Math.PI/3,     col:'rgb(0,0,255)', scale: 1.08 }
       ];
-
       for (let k=0;k<3;k++){
-        const a = A[k];
+        const a = channels[k];
         const offx = Math.cos(a.ang) * sep * a.scale;
         const offy = Math.sin(a.ang) * sep * a.scale;
         ctx.fillStyle = a.col;
@@ -302,27 +310,25 @@
         ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2);
         ctx.fill();
       }
-
-      // When very still, ensure crisp white dot
-      if (disp < 0.35 * dpr){
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(d.rx, d.ry, r, 0, Math.PI*2);
-        ctx.fill();
-        ctx.globalCompositeOperation = 'lighter';
-      }
     }
   }
 
-  // ---------- Main loop ----------
-  function loop(){
-    step();
-    render();
-    setPill();
-    requestAnimationFrame(loop);
-  }
+  // ----- Main loop -----
+  function loop(){ step(); render(); setPill(); requestAnimationFrame(loop); }
   loop();
+
+  // ----- Permissions wiring -----
+  const overlay = document.getElementById('overlay');
+  const stMicEl = document.getElementById('stMic');
+  const stMotEl = document.getElementById('stMot');
+  function mark(el, cls){ el.classList.remove('ok','err'); if (cls) el.classList.add(cls); }
+  document.getElementById('enable').addEventListener('click', async ()=>{
+    mark(stMicEl,''); mark(stMotEl,'');
+    await Promise.allSettled([enableMic(), enableMotion()]);
+    mark(stMicEl, micOK ? 'ok' : 'err');
+    setTimeout(()=> mark(stMotEl, motOK ? 'ok' : 'err'), 500);
+    overlay.classList.add('hide');
+  });
 })();
 </script>
 </body>
