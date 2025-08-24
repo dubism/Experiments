@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Emoji Story Mixer — Ring Seeds + Full Picker</title>
+<title>Emoji Story Mixer — rim spacing + round CTA</title>
 <style>
   :root{
     --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
@@ -29,30 +29,17 @@
 
   .stage{position:fixed; inset:0; display:grid; grid-template-rows:auto 1fr auto; z-index:2}
 
-  /* ---------- KIND CAROUSEL ---------- */
+  /* ---------- KIND CAROUSEL (unchanged visuals) ---------- */
   .kindWrap{ position:relative; z-index:60; padding:12px 0 4px; display:grid; place-items:center; }
   .kindRail{ display:flex; gap:16px; padding:12px 24px; margin:0 auto; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; max-width:min(90vw, 720px); scrollbar-width:none; }
   .kindRail::-webkit-scrollbar{display:none}
   .spacer{ flex:0 0 45vw; }
-  .kchip{
-    flex:0 0 auto; width:64px; height:64px; border-radius:50%;
-    display:grid; place-items:center; scroll-snap-align:center;
+  .kchip{ flex:0 0 auto; width:64px; height:64px; border-radius:50%; display:grid; place-items:center; scroll-snap-align:center;
     background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
-    transform:scale(.9); transition:transform .18s var(--ease), filter .18s var(--ease), box-shadow .18s var(--ease);
-    position:relative;
-  }
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffff; transform:scale(.9); transition:transform .18s var(--ease), filter .18s var(--ease), box-shadow .18s var(--ease); position:relative;}
   .kchip .e{font-size:34px}
-  .kchip.active{
-    transform:scale(1.30);
-    box-shadow:0 22px 48px rgba(100,150,255,.30), 0 0 0 2px #ffffff inset, 0 0 0 6px #a6d1ff66;
-    filter:saturate(1.25);
-  }
-  .kchip.active::after{
-    content:""; position:absolute; inset:-20%; border-radius:50%;
-    background:conic-gradient(#b8f0ff66, #e9d0ff66, #b8f0ff66);
-    mix-blend-mode:overlay; animation:shine 4s linear infinite; pointer-events:none;
-  }
+  .kchip.active{ transform:scale(1.30); box-shadow:0 22px 48px rgba(100,150,255,.30), 0 0 0 2px #ffffff inset, 0 0 0 6px #a6d1ff66; filter:saturate(1.25); }
+  .kchip.active::after{ content:""; position:absolute; inset:-20%; border-radius:50%; background:conic-gradient(#b8f0ff66, #e9d0ff66, #b8f0ff66); mix-blend-mode:overlay; animation:shine 4s linear infinite; pointer-events:none; }
   @keyframes shine{to{transform:rotate(360deg)}}
 
   /* ---------- BOWL ---------- */
@@ -72,40 +59,24 @@
 
   /* Image */
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
-  .result-img{
-    width:100%; height:100%; object-fit:cover; display:block;
-    opacity:0; transform:scale(.2);
-    transition:opacity .6s var(--ease), transform .9s cubic-bezier(.22,1.2,.22,1);
-    pointer-events:auto; -webkit-touch-callout:default; user-select:none;
-  }
+  .result-img{ width:100%; height:100%; object-fit:cover; display:block; opacity:0; transform:scale(.2);
+    transition:opacity .6s var(--ease), transform .9s cubic-bezier(.22,1.2,.22,1); pointer-events:auto; -webkit-touch-callout:default; user-select:none;}
   .result-img.revealed{ opacity:1; transform:scale(1) }
 
-  /* Non-clipped overlay + seeds layer */
+  /* Overlays */
   .overlay{ position:absolute; inset:0; pointer-events:none; z-index:30; }
-  .seeds{ position:fixed; inset:0; z-index:25; pointer-events:none; } /* always visible above bg */
+  .seeds{ position:fixed; inset:0; z-index:25; pointer-events:none; }
+
   /* Chips */
-  .seed,.chip,.plus{
-    width:56px; height:56px; border-radius:50%;
-    display:grid; place-items:center; user-select:none;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
-  }
+  .seed,.chip,.plus{ width:56px; height:56px; border-radius:50%; display:grid; place-items:center; user-select:none;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%); box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001; }
   .seed{ position:absolute; transform:translate(-50%,-50%); pointer-events:auto; animation:float var(--dur,9s) ease-in-out infinite var(--delay,0s); }
-  @keyframes float{
-    0%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))} 
-    50%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px))}
-    100%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))}
-  }
+  @keyframes float{ 0%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))} 50%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px))} 100%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))} }
   .seed .e{font-size:36px}
 
-  .placed{
-    position:absolute; width:12vmin; max-width:80px; aspect-ratio:1; border-radius:50%;
-    display:grid; place-items:center; cursor:grab; pointer-events:auto;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
-    transform:translate(-50%,-50%) scale(1);
-    transition:transform .25s var(--ease), opacity .25s var(--ease);
-  }
+  .placed{ position:absolute; width:12vmin; max-width:80px; aspect-ratio:1; border-radius:50%; display:grid; place-items:center; cursor:grab; pointer-events:auto;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%); box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
+    transform:translate(-50%,-50%) scale(1); transition:transform .25s var(--ease), opacity .25s var(--ease);}
   .placed .e{font-size:clamp(34px, 9vmin, 64px)}
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
@@ -113,43 +84,36 @@
   @keyframes fadeout{to{ transform:translate(-50%,-50%) scale(.82); opacity:0 }}
   .on-rim{ pointer-events:none; }
 
-  /* Waiting pulse per chip */
+  /* Waiting pulse */
   .waitPulse{ animation:chipPulse 1.8s ease-in-out infinite; }
-  @keyframes chipPulse{
-    0%  { transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
-    50% { transform:translate(calc(-50% + var(--ix,0px)), calc(-50% + var(--iy,0px))) scale(.94); opacity:.85 }
-    100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
-  }
+  @keyframes chipPulse{ 0%{ transform:translate(calc(-50% + 0px), calc(-50% + 0px)) scale(1); opacity:1 } 50%{ transform:translate(calc(-50% + var(--ix,0px)), calc(-50% + var(--iy,0px))) scale(.94); opacity:.85 } 100%{ transform:translate(calc(-50% + 0px), calc(-50% + 0px)) scale(1); opacity:1 } }
 
   /* Cancel */
-  .cancel{
-    position:absolute; width:56px; height:56px; border-radius:50%;
-    display:grid; place-items:center; cursor:pointer; pointer-events:auto;
-    background:radial-gradient(120% 120% at 30% 30%, #fff, #f6f7fb 60%, #e9eef9 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
-    font-size:26px; transform:translate(-50%,-50%); opacity:0; transition:opacity .2s var(--ease);
-    z-index:9999;
-  }
+  .cancel{ position:absolute; width:56px; height:56px; border-radius:50%; display:grid; place-items:center; cursor:pointer; pointer-events:auto;
+    background:radial-gradient(120% 120% at 30% 30%, #fff, #f6f7fb 60%, #e9eef9 100%); box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
+    font-size:26px; transform:translate(-50%,-50%); opacity:0; transition:opacity .2s var(--ease); z-index:9999; }
   .cancel.show{ opacity:1 }
 
   /* Footer */
   .footer{ position:fixed; left:16px; right:16px; bottom:16px; z-index:50; display:flex; gap:14px; align-items:center; justify-content:center; }
   .circle-btn{ width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; }
-  .plus{
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
-  }
+
+  .plus{ background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%); box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001; }
+
+  /* >>> CTA: fully clipped, no square artifact <<< */
   .cta{
+    position:relative; overflow:hidden; border-radius:50%; clip-path:circle(50% at 50% 50%);
     background:
       radial-gradient(160% 180% at 75% 130%, #a9ffe955, transparent 60%),
       radial-gradient(120% 140% at 20% 10%, #ffffffb0, transparent 55%),
       linear-gradient(145deg, var(--emerald), var(--emerald-mid), var(--emerald-deep));
     box-shadow: 0 18px 40px rgba(12,166,120,.34), 0 8px 18px rgba(0,0,0,.18) inset, 0 -10px 24px rgba(0,0,0,.22) inset;
     transition:transform .18s var(--ease), filter .18s var(--ease);
-    position:relative; overflow:hidden; border-radius:50%;
+    -webkit-mask-image: -webkit-radial-gradient(white, black); /* iOS clip fix */
+    contain:paint;
   }
   .cta::after{
-    content:""; position:absolute; inset:-60%; border-radius:50%;
+    content:""; position:absolute; inset:-60%; border-radius:50%; clip-path:circle(50% at 50% 50%);
     background: conic-gradient(from 0deg, #7ff0cf66, #b39bff66, #ff9bd466, #7ff0cf66);
     animation:ctaSpin 6s linear infinite; mix-blend-mode:overlay; pointer-events:none;
   }
@@ -158,25 +122,21 @@
   .cta:active{ transform:translateY(0) scale(.98) }
   .cta .e{ font-size:40px; filter: drop-shadow(0 1px 0 #fff6) }
 
-  .locked .kindRail, .locked .kchip { pointer-events:auto; filter:none }
+  /* Locked state: CTA/+ disabled, carousel stays live */
   .locked .seed, .locked .cta, .locked .plus { pointer-events:none; filter:saturate(.4) opacity(.7) }
 </style>
 </head>
 <body>
   <div class="stage">
-    <!-- KIND CAROUSEL -->
+    <!-- Kind carousel -->
     <div class="kindWrap">
-      <div class="kindRail" id="kindRail" aria-label="Prompt kinds">
-        <div class="spacer"></div>
-        <!-- chips injected -->
-        <div class="spacer"></div>
-      </div>
+      <div class="kindRail" id="kindRail"><div class="spacer"></div><div class="spacer"></div></div>
     </div>
 
     <div class="centerWrap">
       <div class="seeds" id="seeds"></div>
 
-      <div class="cauldron-wrap" id="wrap">
+      <div class="cauldron-wrap">
         <div class="cauldron" id="cauldron">
           <div class="ring"></div>
           <div class="image-wrap"><img id="image" class="result-img" alt="AI result" draggable="false"/></div>
@@ -193,404 +153,305 @@
     </div>
   </div>
 
-  <!-- Expanded Emoji Picker (all emojis + flags, no skin tones, with ✖️ close) -->
+  <!-- Picker (from previous build) -->
   <emoji-picker id="picker"></emoji-picker>
   <script>
   customElements.define('emoji-picker', class extends HTMLElement {
-    #s=this.attachShadow({mode:'closed'});
-    #data; #cat='all'; #filtered=[];
-    constructor(){
-      super();
-      this.#s.innerHTML = `
-        <style>
-          :host{all:initial}
-          .p{
-            position:fixed; inset:auto 0 0 0; margin:auto; width:min(860px,96vw); height:min(72vh,760px);
-            background:linear-gradient(180deg, #ffffffcc, #f6fbffcc);
-            border:1px solid #ffffffa0; border-radius:18px;
-            box-shadow:0 16px 48px rgba(0,0,0,.2), 0 1px 0 rgba(255,255,255,.6) inset;
-            backdrop-filter: blur(12px) saturate(1.05);
-            display:grid; grid-template-rows:auto 1fr; opacity:0; transform:translateY(24px) scale(.98); pointer-events:none;
-            transition:opacity 180ms cubic-bezier(.2,.7,.2,1), transform 260ms cubic-bezier(.2,.8,.2,1); z-index:99999
-          }
-          .show{opacity:1; transform:translateY(0) scale(1); pointer-events:auto}
-          .bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; background:linear-gradient(180deg,#ffffffee,#f7fbffee); border-bottom:1px solid #ffffffaa; border-top-left-radius:18px; border-top-right-radius:18px;}
-          .tabs{display:flex; gap:8px; overflow:auto; padding:0 4px}
-          .t{width:42px; height:42px; border-radius:999px; border:1px solid #ffffffc4; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%); box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 #ffffff; cursor:pointer; display:grid; place-items:center; flex:0 0 auto;}
-          .close{width:42px; height:42px; border-radius:999px; cursor:pointer; flex:0 0 auto; border:1px solid #ffffffc4; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%); box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 #ffffff;}
-          .scroller{position:relative; overflow:auto; padding:12px; border-bottom-left-radius:18px; border-bottom-right-radius:18px;}
-          .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(48px,1fr)); gap:10px; align-content:start}
-          .cell{display:grid; place-items:center; height:54px; border-radius:12px; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f3f7ff 70%); border:1px solid #ffffffc8; box-shadow:0 1px 0 #ffffff inset; transition:transform .08s ease, box-shadow .18s ease;}
-          .cell:hover{ box-shadow:0 0 0 2px #bfe6ff; }
-          .emo{font-size:34px; line-height:1}
-        </style>
-        <div class="p" role="dialog" aria-modal="true" aria-label="Emoji picker">
-          <div class="bar">
-            <div class="tabs" role="tablist"></div>
-            <button class="close" title="Close">✖️</button>
-          </div>
-          <div class="scroller"><div class="grid" role="listbox" aria-label="Emoji results"></div></div>
-        </div>
-      `;
+    #s=this.attachShadow({mode:'closed'}); #data; #cat='all'; #filtered=[];
+    constructor(){ super();
+      this.#s.innerHTML=`<style>
+        :host{all:initial}
+        .p{position:fixed; inset:auto 0 0 0; margin:auto; width:min(860px,96vw); height:min(72vh,760px);
+          background:linear-gradient(180deg, #ffffffcc, #f6fbffcc); border:1px solid #ffffffa0; border-radius:18px;
+          box-shadow:0 16px 48px rgba(0,0,0,.2), 0 1px 0 rgba(255,255,255,.6) inset; backdrop-filter: blur(12px) saturate(1.05);
+          display:grid; grid-template-rows:auto 1fr; opacity:0; transform:translateY(24px) scale(.98); pointer-events:none;
+          transition:opacity 180ms cubic-bezier(.2,.7,.2,1), transform 260ms cubic-bezier(.2,.8,.2,1); z-index:99999}
+        .show{opacity:1; transform:translateY(0) scale(1); pointer-events:auto}
+        .bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px;
+          background:linear-gradient(180deg,#ffffffee,#f7fbffee); border-bottom:1px solid #ffffffaa; border-top-left-radius:18px; border-top-right-radius:18px;}
+        .tabs{display:flex; gap:8px; overflow:auto; padding:0 4px}
+        .t,.close{width:42px; height:42px; border-radius:999px; border:1px solid #ffffffc4;
+          background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%); box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 #ffffff; cursor:pointer; display:grid; place-items:center;}
+        .scroller{position:relative; overflow:auto; padding:12px; border-bottom-left-radius:18px; border-bottom-right-radius:18px;}
+        .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(48px,1fr)); gap:10px; align-content:start}
+        .cell{display:grid; place-items:center; height:54px; border-radius:12px; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f3f7ff 70%); border:1px solid #ffffffc8; box-shadow:0 1px 0 #ffffff inset;}
+        .emo{font-size:34px; line-height:1}
+      </style>
+      <div class="p">
+        <div class="bar"><div class="tabs"></div><button class="close" title="Close">✖️</button></div>
+        <div class="scroller"><div class="grid"></div></div>
+      </div>`;
     }
     connectedCallback(){
       this.r={root:this.#s.querySelector('.p'),tabs:this.#s.querySelector('.tabs'),grid:this.#s.querySelector('.grid'),scroll:this.#s.querySelector('.scroller'),close:this.#s.querySelector('.close')};
-      this.#data=this.#catalog();
-      this.#tabs(); this.#set('all');
-      this.r.scroll.addEventListener('scroll',()=>this.#render(true));
+      this.#data=this.#catalog(); this.#tabs(); this.#set('all');
       this.r.close.addEventListener('click',()=>this.close());
-      addEventListener('keydown', e=>{ if(e.key==='Escape') this.close(); });
     }
-    open(){ this.r.root.classList.add('show'); this.#render(); }
+    open(){ this.r.root.classList.add('show'); }
     close(){ this.r.root.classList.remove('show'); }
-
     #tabs(){ this.r.tabs.innerHTML=''; for(const [id,cat] of Object.entries(this.#data)){ const b=document.createElement('button'); b.className='t'; b.dataset.id=id; b.innerHTML=`<span style="font-size:20px">${cat.icon}</span>`; b.onclick=()=>this.#set(id); this.r.tabs.appendChild(b);} }
-    #set(id){ this.#cat=id; this.#filtered=this.#data[id].items; this.r.scroll.scrollTop=0; this.#render(); }
-
-    #render(){
-      const g=this.r.grid; g.innerHTML='';
-      for(const ch of this.#filtered){
-        const btn=document.createElement('button'); btn.className='cell'; btn.innerHTML=`<span class="emo">${ch}</span>`;
-        btn.onclick=()=>{ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); };
-        g.appendChild(btn);
-      }
-    }
-
+    #set(id){ this.#cat=id; this.r.grid.innerHTML=''; for(const ch of this.#data[id].items){ const btn=document.createElement('button'); btn.className='cell'; btn.innerHTML=`<span class="emo">${ch}</span>`; btn.onclick=()=>{ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); }; this.r.grid.appendChild(btn);} }
     #catalog(){
-      const SKIN_A=0x1F3FB, SKIN_B=0x1F3FF;
+      const SKA=0x1F3FB, SKB=0x1F3FF;
       const blocks=[[0x1F600,0x1F64F],[0x1F300,0x1F5FF],[0x1F680,0x1F6FF],[0x1F900,0x1F9FF],[0x1FA70,0x1FAFF],[0x2600,0x26FF],[0x2700,0x27BF]];
-      const pictos=[];
-      for(const [a,b] of blocks){
-        for(let cp=a; cp<=b; cp++){
-          if(cp>=SKIN_A && cp<=SKIN_B) continue;
-          const ch=String.fromCodePoint(cp);
-          if(!(/\s/.test(ch))) pictos.push(ch);
-        }
-      }
+      const pict=[]; for(const [a,b] of blocks){ for(let cp=a; cp<=b; cp++){ if(cp>=SKA&&cp<=SKB) continue; const ch=String.fromCodePoint(cp); if(!(/\s/.test(ch))) pict.push(ch);} }
       const CODES=("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW").split(" ");
       const RI=0x1F1E6, flag=cc=>String.fromCodePoint(RI+(cc.charCodeAt(0)-65), RI+(cc.charCodeAt(1)-65));
       const flags=CODES.map(flag);
-      return { all:{icon:"🧭",items:pictos}, flags:{icon:"🏳️",items:flags} };
+      return { all:{icon:"🧭",items:pict}, flags:{icon:"🏳️",items:flags} };
     }
   });
   </script>
 
 <script>
-/* -------------------- Data -------------------- */
-const START_EMOJIS = ["🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙","🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧","❤️","😊","😁","😉","🎵","🎨","📷","🧸"];
+/* ---------- Data ---------- */
+const START_EMOJIS=["🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙","🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧","❤️","😊","😁","😉","🎵","🎨","📷","🧸"];
+const WORDS=new Map(Object.entries({"🐛":"a caterpillar","🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🦋":"a butterfly","🐝":"a bee","🐢":"a turtle","🐙":"an octopus","🌸":"a cherry blossom","🌿":"green leaves","🌈":"a rainbow","🌊":"ocean waves","⭐":"a starry sky","☀️":"sunlight","🌙":"moonlight","⚡":"lightning","🔥":"flames","💧":"a water droplet","❤️":"a red heart","😊":"a smile","😁":"joy","😉":"a playful wink","🎵":"a music note","🎨":"paint","📷":"a camera","🧸":"a teddy bear","✨":"sparkles"}));
+const KIND_EMOJIS=["🥺","🤯","🤬","😳","🫣","😬","🤮","😈","🤑","💩","🧓","🥷","🧚‍♀️","👾"];
+let activeKind=null;
 
-const WORDS = new Map(Object.entries({
-  "🐛":"a caterpillar","🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🦋":"a butterfly","🐝":"a bee","🐢":"a turtle","🐙":"an octopus",
-  "🌸":"a cherry blossom","🌿":"green leaves","🌈":"a rainbow","🌊":"ocean waves","⭐":"a starry sky","☀️":"sunlight","🌙":"moonlight","⚡":"lightning","🔥":"flames","💧":"a water droplet",
-  "❤️":"a red heart","😊":"a smile","😁":"joy","😉":"a playful wink","🎵":"a music note","🎨":"paint","📷":"a camera","🧸":"a teddy bear","✨":"sparkles"
-}));
-
-/* Prompt kinds (unchanged) */
-const KIND_EMOJIS = ["🥺","🤯","🤬","😳","🫣","😬","🤮","😈","🤑","💩","🧓","🥷","🧚‍♀️","👾"];
-let activeKind = null;
-
-function kindPrompt(kind, elements){
-  if (!elements.length){ const pick=["🐛","🦄","🌈","⚡","🔥","🌊","🧸"].map(e=>WORDS.get(e)); elements=pick.slice(0,3); }
-  const join = elements.join(', ');
-  switch(kind){
-    case "🥺": return `Render ${join} as soft, oversized plush characters in a toy-box world. Hyper-cute proportions, glossy eyes, pastel lighting, gentle vignetting, cinematic depth of field. No text.`;
-    case "🤯": return `Explode ${join} into a mind-bending collage of fractured geometry and neon afterimages. Motion trails, prismatic aberrations, impossible perspective, energy bursting outward. Single coherent frame. No text.`;
-    case "🤬": return `Depict ${join} as a rebellious street mural mid-creation: spray-paint strokes, ripped posters, bold stencils, chaotic drips. Gritty textures, strong contrast, wide-angle drama. No text.`;
-    case "😳": return `Stage ${join} under a harsh spotlight on an empty stage, caught mid-awkward moment. Blush tones, nervous motion blur, exaggerated expressions; deep shadows and theatrical haze. No text.`;
-    case "🫣": return `Show ${join} peeking from behind objects in a suspenseful scene. Partial reveals, occlusion, layered depth, film-grain, rim lighting, and reflective surfaces. Single frame; no text.`;
-    case "😬": return `Create a cringe-comedy claymation still of ${join}. Hand-made textures, fingerprints, slightly off symmetry, stop-motion lighting and comedic timing. No text.`;
-    case "🤮": return `Fuse ${join} into a gooey monster made of slime and confetti. Viscous translucency, specular highlights, playful gross-out humor—colorful and cartoonish, not realistic gore. No text.`;
-    case "😈": return `Portray ${join} as mischievous heist crew mid-escape: dynamic angles, neon city at night, reflections, cheeky grins, motion blur. Stylish, comic-noir energy. No text.`;
-    case "🤑": return `Transform ${join} into a baroque treasure spectacle: gold leaf, jeweled inlays, reflective metals, extravagant composition, luxurious bokeh. No text.`;
-    case "💩": return `Turn ${join} into slapstick puppets in a messy comedy scene. Over-the-top expressions, splat effects, vibrant props, freeze-frame humor. No text.`;
-    case "🧓": return `Illustrate ${join} as folklore icons woven into an embroidered tapestry. Natural dyes, textile grain, warm candlelight. No text.`;
-    case "🥷": return `Depict ${join} as panels of a high-speed ninja chase, compressed into one dramatic poster. Ink brush motion slashes, moonlit rooftops. No text.`;
-    case "🧚‍♀️": return `Reimagine ${join} in a bioluminescent woodland: tiny fairies, floating spores, iridescent wings, dreamy lens bloom. No text.`;
-    case "👾": return `Glitch-meld ${join} into a retro arcade boss: pixel surfaces, CRT bloom, chroma bleed, synthwave palette, vapor haze. No text.`;
-    default:
-      const cues=["tension","harmony","transformation","pursuit","reunion","contrast","metamorphosis"];
-      const cue=cues[Math.floor(Math.random()*cues.length)];
-      return `Combine ${join} into a story-rich, cinematic composition. Show ${cue} between them, as if captured in a single dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Use coherent lighting, depth and motion in one consistent style. No text.`;
-  }
+/* Prompt kinds (same as before) */
+function kindPrompt(kind,elements){ if(!elements.length){elements=["a caterpillar","a unicorn","a rainbow"];}
+  const join=elements.join(', ');
+  const T={
+    "🥺":`Render ${join} as soft, oversized plush characters in a toy-box world. Hyper-cute proportions, glossy eyes, pastel lighting, gentle vignetting, cinematic depth of field. No text.`,
+    "🤯":`Explode ${join} into a mind-bending collage of fractured geometry and neon afterimages. Motion trails, prismatic aberrations, impossible perspective, energy bursting outward. Single coherent frame. No text.`,
+    "🤬":`Depict ${join} as a rebellious street mural mid-creation: spray-paint strokes, ripped posters, bold stencils, chaotic drips. Gritty textures, strong contrast, wide-angle drama. No text.`,
+    "😳":`Stage ${join} under a harsh spotlight on an empty stage, caught mid-awkward moment. Blush tones, nervous motion blur, exaggerated expressions; deep shadows and theatrical haze. No text.`,
+    "🫣":`Show ${join} peeking from behind objects in a suspenseful scene. Partial reveals, occlusion, layered depth, film-grain, rim lighting, and reflective surfaces. Single frame; no text.`,
+    "😬":`Create a cringe-comedy claymation still of ${join}. Hand-made textures, fingerprints, slightly off symmetry, stop-motion lighting and comedic timing. No text.`,
+    "🤮":`Fuse ${join} into a gooey monster made of slime and confetti. Viscous translucency, specular highlights, playful gross-out humor—colorful and cartoonish, not realistic gore. No text.`,
+    "😈":`Portray ${join} as mischievous heist crew mid-escape: dynamic angles, neon city at night, reflections, cheeky grins, motion blur. Stylish, comic-noir energy. No text.`,
+    "🤑":`Transform ${join} into a baroque treasure spectacle: gold leaf, jeweled inlays, reflective metals, extravagant composition, luxurious bokeh. No text.`,
+    "💩":`Turn ${join} into slapstick puppets in a messy comedy scene. Over-the-top expressions, splat effects, vibrant props, freeze-frame humor. No text.`,
+    "🧓":`Illustrate ${join} as folklore icons woven into an embroidered tapestry. Natural dyes, textile grain, warm candlelight. No text.`,
+    "🥷":`Depict ${join} as panels of a high-speed ninja chase, compressed into one dramatic poster. Ink brush motion slashes, moonlit rooftops. No text.`,
+    "🧚‍♀️":`Reimagine ${join} in a bioluminescent woodland: tiny fairies, floating spores, iridescent wings, dreamy lens bloom. No text.`,
+    "👾":`Glitch-meld ${join} into a retro arcade boss: pixel surfaces, CRT bloom, chroma bleed, synthwave palette, vapor haze. No text.`
+  };
+  return T[kind] ?? `Combine ${join} into a story-rich, cinematic composition. Show tension between them, as if captured in a single dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Coherent lighting and depth. No text.`;
 }
 
-/* -------------------- DOM -------------------- */
-const cauldron = document.getElementById('cauldron');
-const overlay  = document.getElementById('overlay');
-const imageEl  = document.getElementById('image');
-const seedsEl  = document.getElementById('seeds');
-const cta      = document.getElementById('cta');
-const plusBtn  = document.getElementById('openPicker');
-const cancelBtn= document.getElementById('cancel');
-const picker   = document.getElementById('picker');
-const kindRail = document.getElementById('kindRail');
+/* ---------- DOM ---------- */
+const cauldron=document.getElementById('cauldron');
+const overlay=document.getElementById('overlay');
+const imageEl=document.getElementById('image');
+const seedsEl=document.getElementById('seeds');
+const cta=document.getElementById('cta');
+const cancelBtn=document.getElementById('cancel');
+const picker=document.getElementById('picker');
+const kindRail=document.getElementById('kindRail');
 
 let seeds=[]; let placed=[]; let dragging=null; let snapTimer=null; let lastActiveKind=null;
 
-window.addEventListener('load', () => { buildKindRail(); resetApp(); });
+window.addEventListener('load',()=>{ buildKindRail(); resetApp(); });
 
-/* -------------------- Kind Carousel -------------------- */
+/* Carousel */
 function buildKindRail(){
-  const chips = KIND_EMOJIS.map(k=>{
-    const b=document.createElement('button');
-    b.className='kchip'; b.type='button'; b.dataset.kind=k;
-    b.innerHTML=`<span class="e">${k}</span>`;
-    b.addEventListener('click', ()=> centerChip(b));
-    return b;
+  const before=kindRail.firstElementChild; // spacer
+  KIND_EMOJIS.forEach(k=>{
+    const b=document.createElement('button'); b.className='kchip'; b.dataset.kind=k;
+    b.innerHTML=`<span class="e">${k}</span>`; b.addEventListener('click',()=>centerChip(b));
+    kindRail.insertBefore(b, kindRail.lastElementChild);
   });
-  chips.forEach(ch => kindRail.insertBefore(ch, kindRail.lastElementChild));
-  setTimeout(()=> centerChip(chips[0]),0);
+  setTimeout(()=>centerChip(kindRail.querySelector('.kchip')),0);
   kindRail.addEventListener('scroll', onRailScroll, {passive:true});
   requestAnimationFrame(updateActiveChipVisual);
 }
 function centerChip(chip){
-  const railRect = kindRail.getBoundingClientRect();
-  const cRect = chip.getBoundingClientRect();
-  const offset = (cRect.left + cRect.width/2) - (railRect.left + railRect.width/2);
-  kindRail.scrollBy({left: offset, behavior:'smooth'});
+  const R=kindRail.getBoundingClientRect(), C=chip.getBoundingClientRect();
+  kindRail.scrollBy({left:(C.left+C.width/2)-(R.left+R.width/2), behavior:'smooth'});
 }
 function onRailScroll(){
   updateActiveChipVisual();
-  if (snapTimer) clearTimeout(snapTimer);
-  snapTimer = setTimeout(()=>{
-    const active = getActiveChip(); if (!active) return;
-    const k = active.dataset.kind; activeKind = k;
-    if (lastActiveKind !== k){ lastActiveKind = k; generateFromState(); }
-  }, 300);
+  if(snapTimer) clearTimeout(snapTimer);
+  snapTimer=setTimeout(()=>{
+    const active=getActiveChip(); if(!active) return;
+    const k=active.dataset.kind; activeKind=k;
+    if(lastActiveKind!==k){ lastActiveKind=k; generateFromState(); }
+  },300);
 }
-function getActiveChip(){
-  const railRect = kindRail.getBoundingClientRect();
-  const centerX = railRect.left + railRect.width/2;
-  let best=null, bestDist=1e9;
-  for (const chip of kindRail.querySelectorAll('.kchip')){
-    const r = chip.getBoundingClientRect();
-    const cx = r.left + r.width/2;
-    const d = Math.abs(cx - centerX);
-    if (d < bestDist){ best=chip; bestDist=d; }
-  }
+function getActiveChip(){ const R=kindRail.getBoundingClientRect(), cx=R.left+R.width/2; let best=null, d=1e9;
+  for(const chip of kindRail.querySelectorAll('.kchip')){ const r=chip.getBoundingClientRect(), c=r.left+r.width/2, dd=Math.abs(c-cx); if(dd<d){d=dd; best=chip;} }
   return best;
 }
-function updateActiveChipVisual(){
-  const active = getActiveChip();
-  for (const chip of kindRail.querySelectorAll('.kchip')){
-    chip.classList.toggle('active', chip===active);
-  }
-}
+function updateActiveChipVisual(){ const a=getActiveChip(); for(const c of kindRail.querySelectorAll('.kchip')) c.classList.toggle('active', c===a); }
 
-/* -------------------- Core interaction -------------------- */
+/* ---------- Core ---------- */
 function resetApp(){
   placed=[]; imageEl.src=""; imageEl.classList.remove('revealed');
   document.body.classList.remove('locked','waiting'); cancelBtn.classList.remove('show');
-  Array.from(overlay.querySelectorAll('.placed')).forEach(n=>n.remove());
+  overlay.querySelectorAll('.placed').forEach(n=>n.remove());
   initSeeds(); renderSeeds(); renderPlaced(false);
 }
 
-/* NEW: deterministic ring of seeds around the bowl (always visible) */
+/* Seeds: clearly OUTSIDE the bowl */
 function initSeeds(){
-  const bowl = cauldron.getBoundingClientRect();
-  const cx = bowl.left + bowl.width/2;
-  const cy = bowl.top  + bowl.height/2;
-
-  const R = bowl.width*0.62;             // ring radius outside bowl
-  const N = START_EMOJIS.length;
-  let angle0 = -Math.PI/2;               // start at top
-
-  seeds = [];
-  for (let i=0;i<N;i++){
-    const a = angle0 + i*(2*Math.PI/N);
-    const jitter = (Math.random()*10-5);
-    const x = cx + Math.cos(a)*(R+jitter);
-    const y = cy + Math.sin(a)*(R+jitter);
-    seeds.push({ id:crypto.randomUUID(), emoji:START_EMOJIS[i], x, y });
+  const b=cauldron.getBoundingClientRect();
+  const cx=b.left+b.width/2, cy=b.top+b.height/2;
+  const bowlR=b.width/2;
+  const R=b.width*0.90;               // >> far outside the bowl rim <<
+  const N=START_EMOJIS.length; let a0=-Math.PI/2;
+  seeds=[];
+  for(let i=0;i<N;i++){
+    const a=a0+i*(2*Math.PI/N);
+    const jitter=(Math.random()*16-8);
+    const x=cx+Math.cos(a)*(R+jitter);
+    const y=cy+Math.sin(a)*(R+jitter);
+    seeds.push({id:crypto.randomUUID(), emoji:START_EMOJIS[i], x,y});
   }
 }
-
 function renderSeeds(){
-  seedsEl.innerHTML = '';
+  seedsEl.innerHTML='';
   for(const s of seeds){
-    const n = document.createElement('button');
-    n.className = 'seed';
-    n.style.left = s.x+'px'; n.style.top = s.y+'px';
+    const n=document.createElement('button'); n.className='seed';
+    n.style.left=s.x+'px'; n.style.top=s.y+'px';
     n.style.setProperty('--delay', `${(-Math.random()*6).toFixed(2)}s`);
     n.style.setProperty('--dur', `${(7+Math.random()*4).toFixed(2)}s`);
     n.style.setProperty('--fx', `${(Math.random()*14-7).toFixed(1)}px`);
     n.style.setProperty('--fy', `${(Math.random()*8-4).toFixed(1)}px`);
-    n.dataset.id = s.id;
-    n.innerHTML = `<span class="e">${s.emoji}</span>`;
+    n.dataset.id=s.id; n.innerHTML=`<span class="e">${s.emoji}</span>`;
+    n.addEventListener('pointerdown', e=>startDragSeed(e,s.id));
     seedsEl.appendChild(n);
-    n.addEventListener('pointerdown', e => startDragSeed(e, s.id));
   }
 }
 
-/* Picker open + choose */
-document.getElementById('openPicker').addEventListener('click', ()=> picker.open());
-picker.addEventListener('emoji-pick', e=>{
-  const emo = e.detail.emoji;
-  const pos = spotInsideBowl();
-  placed.push({id:crypto.randomUUID(), emoji:emo, x:pos.x, y:pos.y});
-  renderPlaced(true);
+/* Picker */
+document.getElementById('openPicker').addEventListener('click',()=>picker.open());
+picker.addEventListener('emoji-pick',e=>{
+  const emo=e.detail.emoji; const pos=spotInsideBowl();
+  placed.push({id:crypto.randomUUID(), emoji:emo, x:pos.x, y:pos.y}); renderPlaced(true);
 });
 
-/* Drag seeds into bowl */
-function startDragSeed(ev, id){
-  if (document.body.classList.contains('locked')) return;
-  ev.preventDefault();
-  const idx = seeds.findIndex(s=>s.id===id); if (idx<0) return;
-  const ghost = makeGhost(seeds[idx].emoji);
-  dragging = {type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
+/* Dragging */
+function startDragSeed(ev,id){ if(document.body.classList.contains('locked')) return; ev.preventDefault();
+  const idx=seeds.findIndex(s=>s.id===id); if(idx<0) return;
+  const ghost=makeGhost(seeds[idx].emoji);
+  dragging={type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
   pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
 }
-/* Drag placed within bowl */
-function startDragPlaced(ev, id){
-  if (document.body.classList.contains('locked')) return;
-  ev.preventDefault();
-  const idx = placed.findIndex(p=>p.id===id); if (idx<0) return;
-  const ghost = makeGhost(placed[idx].emoji);
-  dragging = {type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
+function startDragPlaced(ev,id){ if(document.body.classList.contains('locked')) return; ev.preventDefault();
+  const idx=placed.findIndex(p=>p.id===id); if(idx<0) return;
+  const ghost=makeGhost(placed[idx].emoji);
+  dragging={type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
   pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
 }
-
-function makeGhost(emoji){
-  const g = document.createElement('div');
-  g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
+function makeGhost(emoji){ const g=document.createElement('div'); g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
   g.style.transform='translate(-50%,-50%) scale(1.0)'; g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
-  g.innerHTML = `<span class="e" style="font-size:36px">${emoji}</span>`;
-  document.body.appendChild(g); return g;
-}
-
-function pointerMove(ev){
-  if (!dragging) return;
-  dragging.ghostEl.style.left = ev.clientX+'px'; dragging.ghostEl.style.top  = ev.clientY+'px';
-  const {inside} = coordsInCauldron(ev.clientX, ev.clientY);
-  dragging.ghostEl.style.transform = `translate(-50%,-50%) scale(${inside?1.26:1.04})`;
-  cauldron.classList.toggle('over', inside);
+  g.innerHTML=`<span class="e" style="font-size:36px">${emoji}</span>`; document.body.appendChild(g); return g; }
+function pointerMove(ev){ if(!dragging) return;
+  dragging.ghostEl.style.left=ev.clientX+'px'; dragging.ghostEl.style.top=ev.clientY+'px';
+  const {inside}=coordsInCauldron(ev.clientX,ev.clientY);
+  dragging.ghostEl.style.transform=`translate(-50%,-50%) scale(${inside?1.26:1.04})`;
+  cauldron.classList.toggle('over',inside);
 }
 function pointerUp(ev){
-  if (!dragging) return cleanupDrag();
-  const {inside, px, py} = coordsInCauldron(ev.clientX, ev.clientY); cauldron.classList.remove('over');
-  if (inside){
-    if (dragging.type==='seed'){
+  if(!dragging) return cleanupDrag();
+  const {inside,px,py}=coordsInCauldron(ev.clientX,ev.clientY); cauldron.classList.remove('over');
+  if(inside){
+    if(dragging.type==='seed'){
       placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py}); renderPlaced(true);
-      const node = [...seedsEl.children][dragging.idx]; if (node) node.remove(); seeds.splice(dragging.idx,1);
-    } else { placed[dragging.idx].x = px; placed[dragging.idx].y = py; renderPlaced(false); }
-  } else if (dragging.type==='placed'){
-    const id = placed[dragging.idx].id; const node = overlay.querySelector(`.placed[data-id="${id}"]`);
-    if (node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); } placed.splice(dragging.idx,1);
+      const node=[...seedsEl.children][dragging.idx]; if(node) node.remove(); seeds.splice(dragging.idx,1);
+    }else{ placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false); }
+  }else if(dragging.type==='placed'){
+    const id=placed[dragging.idx].id; const node=overlay.querySelector(`.placed[data-id="${id}"]`);
+    if(node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); } placed.splice(dragging.idx,1);
   }
   cleanupDrag();
 }
 function cleanupDrag(){ removeEventListener('pointermove', pointerMove); removeEventListener('pointerup', pointerUp); dragging?.ghostEl?.remove(); dragging=null; }
 
 function renderPlaced(playDrop=false){
-  Array.from(overlay.querySelectorAll('.placed')).forEach(n=>n.remove());
-  for (const p of placed){
-    const n = document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
+  overlay.querySelectorAll('.placed').forEach(n=>n.remove());
+  for(const p of placed){
+    const n=document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
     n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
-    if (playDrop) n.classList.add('dropin');
-    n.addEventListener('pointerdown', e=>startDragPlaced(e, p.id));
+    if(playDrop) n.classList.add('dropin');
+    n.addEventListener('pointerdown', e=>startDragPlaced(e,p.id));
     overlay.appendChild(n);
   }
 }
 
-/* Geometry helpers */
-function coordsInCauldron(cx, cy){
-  const r = cauldron.getBoundingClientRect(); const mx = cx - (r.left + r.width/2); const my = cy - (r.top  + r.height/2);
-  const dist = Math.hypot(mx,my); const inside = dist <= r.width/2;
-  const px = ((mx + r.width/2) / r.width) * 100; const py = ((my + r.height/2) / r.height) * 100;
-  return {inside, px: Math.max(6, Math.min(94, px)), py: Math.max(6, Math.min(94, py))};
+/* Geometry */
+function coordsInCauldron(cx,cy){
+  const r=cauldron.getBoundingClientRect(); const mx=cx-(r.left+r.width/2); const my=cy-(r.top+r.height/2);
+  const inside=Math.hypot(mx,my)<=r.width/2;
+  const px=((mx+r.width/2)/r.width)*100; const py=((my+r.height/2)/r.height)*100;
+  return {inside, px:Math.max(6,Math.min(94,px)), py:Math.max(6,Math.min(94,py))};
 }
 function spotInsideBowl(){
-  const bowl = cauldron.getBoundingClientRect(); const maxTries=400; let tries=0;
-  while(tries++<maxTries){
-    const px = 8 + Math.random()*84, py = 8 + Math.random()*84;
-    const cx = bowl.left + px/100*bowl.width, cy = bowl.top + py/100*bowl.height;
-    const d = Math.hypot(cx-(bowl.left+bowl.width/2), cy-(bowl.top+bowl.height/2)); if (d > bowl.width/2 - 40) continue;
-    let ok=true; for(const p of placed){ const dx=(p.x-px)/100*bowl.width, dy=(p.y-py)/100*bowl.height; if (Math.hypot(dx,dy)<66){ok=false;break;} }
-    if (ok) return {x:px,y:py};
+  const r=cauldron.getBoundingClientRect(); let tries=0;
+  while(tries++<300){ const px=8+Math.random()*84, py=8+Math.random()*84;
+    const cx=r.left+px/100*r.width, cy=r.top+py/100*r.height;
+    if(Math.hypot(cx-(r.left+r.width/2),cy-(r.top+r.height/2))<r.width/2-40) return {x:px,y:py};
   } return {x:50,y:50};
 }
-function moveToRimPercent(x,y){
-  const cx=50, cy=50, r=44; const ang = Math.atan2(y-cy, x-cx);
-  return { x: cx + Math.cos(ang)*r, y: cy + Math.sin(ang)*r };
-}
 
-/* Waiting pulse + reveal */
+/* Waiting + Reveal */
 function startWaitingPulse(){
   document.body.classList.add('waiting');
-  const bowl = cauldron.getBoundingClientRect();
-  const cx = 50, cy = 50;
-  if (!placed.length){ placed.push({id:crypto.randomUUID(), emoji:"✨", x:52, y:52}); renderPlaced(true); }
-  for (const p of placed){
-    const node = overlay.querySelector(`.placed[data-id="${p.id}"]`);
-    if (!node) continue;
-    const dxPct = (cx - p.x) * 0.12;
-    const dyPct = (cy - p.y) * 0.12;
-    const ix = dxPct/100 * bowl.width;
-    const iy = dyPct/100 * bowl.height;
-    node.style.setProperty('--ix', ix.toFixed(2)+'px');
-    node.style.setProperty('--iy', iy.toFixed(2)+'px');
+  const bowl=cauldron.getBoundingClientRect(); const cx=50, cy=50;
+  if(!placed.length){ placed.push({id:crypto.randomUUID(), emoji:"✨", x:52, y:52}); renderPlaced(true); }
+  for(const p of placed){
+    const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) continue;
+    const dxPct=(cx-p.x)*0.12, dyPct=(cy-p.y)*0.12;
+    const ix=dxPct/100*bowl.width, iy=dyPct/100*bowl.height;
+    node.style.setProperty('--ix', ix.toFixed(2)+'px'); node.style.setProperty('--iy', iy.toFixed(2)+'px');
     node.classList.add('waitPulse');
   }
 }
+
+/* NEW: even spacing on rim to prevent overlaps */
 function sendToRimAndReveal(){
   document.body.classList.remove('waiting');
-  for (const p of placed){
-    const node = overlay.querySelector(`.placed[data-id="${p.id}"]`); if (!node) continue;
+  const n=placed.length; if(!n) return;
+  const cx=50, cy=50, r=44; // percent
+  placed.forEach((p,i)=>{
+    const ang = -Math.PI/2 + i*(2*Math.PI/n);
+    const tx = cx + Math.cos(ang)*r, ty = cy + Math.sin(ang)*r;
+    const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) return;
     node.classList.remove('waitPulse');
-    const target = moveToRimPercent(p.x,p.y);
-    node.animate([
-      { left: p.x+'%', top: p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1 },
-      { left: target.x+'%', top: target.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1 }
-    ], {duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
-    p.x = target.x; p.y = target.y;
-    node.style.left = p.x+'%'; node.style.top = p.y+'%';
-    node.classList.add('on-rim');
-  }
-  const rim = moveToRimPercent(90,10);
-  cancelBtn.style.left = rim.x+'%'; cancelBtn.style.top = rim.y+'%'; cancelBtn.classList.add('show');
+    node.animate([{left:p.x+'%', top:p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1},
+                  {left:tx+'%', top:ty+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1}],
+                  {duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
+    p.x=tx; p.y=ty; node.style.left=p.x+'%'; node.style.top=p.y+'%'; node.classList.add('on-rim');
+  });
+  const rimX = cx + Math.cos(-Math.PI/2)*r, rimY = cy + Math.sin(-Math.PI/2)*r; // top
+  cancelBtn.style.left=rimX+'%'; cancelBtn.style.top=rimY+'%'; cancelBtn.classList.add('show');
   requestAnimationFrame(()=> imageEl.classList.add('revealed'));
 }
 
-/* Prompt builders */
-function buildElementsList(){ return placed.map(p => WORDS.get(p.emoji) || `the ${p.emoji} symbol`); }
+/* Prompt */
+function buildElementsList(){ return placed.map(p=>WORDS.get(p.emoji)||`the ${p.emoji} symbol`); }
 function buildPrompt(){
-  const elements = buildElementsList();
-  if (activeKind) return kindPrompt(activeKind, elements);
-  const cues=["tension","harmony","transformation","pursuit","reunion","contrast","metamorphosis"];
-  const cue=cues[Math.floor(Math.random()*cues.length)];
-  return `Combine ${elements.join(', ')} into a story-rich, cinematic composition. Show ${cue} between them, as if captured in a single dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Use coherent lighting, depth and motion in one consistent style. No text.`;
+  const elements=buildElementsList();
+  if(activeKind){ return kindPrompt(activeKind, elements); }
+  return `Combine ${elements.join(', ')} into a story-rich, cinematic composition. Show harmony between them in one dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Coherent lighting and depth. No text.`;
 }
 
-/* Pollinations (keyless) */
+/* Pollinations */
 async function callPollinations(prompt){
-  const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) + "?width=768&height=768";
-  const res = await fetch(url,{mode:"cors"}); if(!res.ok) throw new Error('Pollinations error');
-  const blob = await res.blob(); return URL.createObjectURL(blob);
+  const url="https://image.pollinations.ai/prompt/"+encodeURIComponent(prompt)+"?width=768&height=768";
+  const res=await fetch(url,{mode:"cors"}); if(!res.ok) throw new Error('Pollinations error');
+  const blob=await res.blob(); return URL.createObjectURL(blob);
 }
 
 /* Generate */
 async function generateFromState(){
-  const prompt = buildPrompt();
-  if(!prompt){
-    cauldron.animate([{transform:'translateX(0)'},{transform:'translateX(-7px)'},{transform:'translateX(7px)'},{transform:'translateX(0)'}],
-      {duration:280,easing:'cubic-bezier(.3,.8,.2,1)'}); return;
-  }
+  const prompt=buildPrompt();
   startWaitingPulse();
   try{
-    const imgURL = await callPollinations(prompt);
-    imageEl.src = imgURL;
-    imageEl.onload = () => {
-      sendToRimAndReveal();
-      document.body.classList.add('locked'); // carousel still interactive
-    };
+    const imgURL=await callPollinations(prompt);
+    imageEl.src=imgURL;
+    imageEl.onload=()=>{ sendToRimAndReveal(); document.body.classList.add('locked'); };
   }catch(e){ console.warn(e); document.body.classList.remove('waiting'); }
 }
 
 /* CTA + Cancel */
-cta.addEventListener('click', generateFromState);
+document.getElementById('cta').addEventListener('click', generateFromState);
 cancelBtn.addEventListener('click', resetApp);
 
-/* iOS gesture zoom guard */
+/* iOS zoom guard */
 document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
 </body>
