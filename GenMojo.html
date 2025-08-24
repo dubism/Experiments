@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,9 +13,8 @@
     --ease:cubic-bezier(.2,.8,.2,1);
     --emerald:#9af2d3; --emerald-mid:#48d9ad; --emerald-deep:#0ca678;
     --ink:#0a0b0d;
-    --progress:0;
-    --shake-ampl:0;   /* 0→1 ramp while waiting */
-    --blur:0px;       /* 0→3px ramp while waiting */
+    --shake-ampl:0;   /* 0→1 (CSS-animated while waiting) */
+    --blur:0px;       /* 0→3px (CSS-animated while waiting) */
   }
   @property --shake-ampl{syntax:'<number>';initial-value:0;inherits:false}
   @property --blur{syntax:'<length>';initial-value:0px;inherits:false}
@@ -28,24 +28,31 @@
       radial-gradient(70vmax 70vmax at 80% 85%, var(--t4), transparent 60%),
       conic-gradient(from 0deg at 50% 50%, #e9f3ff, #ffe9f7, #e9fff6, #f7f3ff, #e9f3ff);
     background-attachment:fixed; animation:hue 24s linear infinite alternate;
-    overflow:hidden; touch-action:none; -webkit-tap-highlight-color:transparent;
+    overflow:hidden; -webkit-tap-highlight-color:transparent;
     user-select:none; color:var(--ink);
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
-  /* Layout: center (bowl) → carousel → footer */
-  .stage{position:fixed; inset:0; display:grid; grid-template-rows:1fr auto auto; z-index:2}
+  /* Layout: Bowl (fills) → Carousel → Buttons. All visible in 1 screen. */
+  .stage{
+    position:fixed; inset:0;
+    display:grid; grid-template-rows:1fr auto auto;
+    gap:10px; padding:10px 12px calc(env(safe-area-inset-bottom,16px) + 6px);
+  }
 
   /* ---------- BOWL ---------- */
-  .centerWrap{ display:grid; place-items:center; }
+  .centerWrap{ display:grid; place-items:center; min-height:0 }
   .cauldron-wrap{
     position:relative; width:min(64vmin,520px); aspect-ratio:1;
     display:grid; place-items:center;
     animation:shake-linear 700ms linear infinite;
-    /* amplitude is controlled by --shake-ampl which ramps from 0→1 while waiting */
     transform:translate(0,0);
   }
+  /* smaller on short screens so carousel+buttons still fit */
+  @media (max-height:740px){ .cauldron-wrap{ width:min(56vmin,460px); } }
+  @media (max-height:640px){ .cauldron-wrap{ width:min(50vmin,420px); } }
+
   @keyframes shake-linear{
     0%  { transform: translate( calc( 0px * var(--shake-ampl)),  calc( 0px * var(--shake-ampl))); }
     12% { transform: translate( calc( 2px * var(--shake-ampl)),  calc(-2px * var(--shake-ampl))); }
@@ -68,7 +75,7 @@
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
-  /* Brew (everything inside bowl; gets blur + gentle “breathe+spin”) */
+  /* Brew (inside bowl): continuous stir + blur ramp while waiting */
   .brew{ position:absolute; inset:0; border-radius:50%; overflow:hidden; filter:blur(var(--blur)) saturate(1.06); }
   @keyframes breatheSpin {
     0%   { transform: scale(.985) rotate(-1.2deg); }
@@ -76,8 +83,11 @@
     100% { transform: scale(.985) rotate(-1.2deg); }
   }
   .waiting .brew{ animation: breatheSpin 1.3s ease-in-out infinite; }
+  /* ramp both variables in ~3s when waiting starts */
+  @keyframes rampVars { from{ --shake-ampl:0; --blur:0px; } to{ --shake-ampl:1; --blur:3px; } }
+  body.waiting{ animation: rampVars 3s ease-in-out forwards; }
 
-  /* Waiting visuals (continuous stirring; no “timer” feel) */
+  /* Waiting visuals (always stirring; not “timer-y”) */
   .liquid, .beams { position:absolute; inset:10%; border-radius:50%; pointer-events:none; opacity:0; }
   .waiting .liquid{ opacity:1; }
   .waiting .beams{ opacity:.8; }
@@ -146,10 +156,8 @@
     100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
   }
 
-  /* ---------- KIND CAROUSEL (moved below bowl) ---------- */
-  .kindWrap{
-    position:relative; z-index:60; padding:10px 0 16px; display:grid; place-items:center;
-  }
+  /* ---------- KIND CAROUSEL (below bowl) ---------- */
+  .kindWrap{ display:grid; place-items:center; }
   .kindShell{
     width:min(92vw, 820px);
     background:linear-gradient(180deg,#ffffffee,#f6fbffee);
@@ -162,12 +170,15 @@
     transform:perspective(1000px) rotateX(6deg);
   }
   .kindRail{
-    display:flex; gap:16px; padding:12px 20px; margin:0 auto;
-    overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
-    max-width:100%; scrollbar-width:none; scroll-padding-inline:50vw;
+    display:flex; gap:16px; padding:12px 20px;
+    overflow-x:auto; overflow-y:hidden; /* H-only */
+    scroll-snap-type:x mandatory; scroll-snap-stop:always;
+    -webkit-overflow-scrolling:touch;
+    touch-action:pan-x;                /* constrain to X */
+    overscroll-behavior-x:contain; overscroll-behavior-y:none;
   }
   .kindRail::-webkit-scrollbar{display:none}
-  .spacer{ flex:0 0 60vw; }
+  .spacer{ flex:0 0 50vw; }
   .kchip{
     flex:0 0 auto; width:64px; height:64px; border-radius:50%;
     display:grid; place-items:center; scroll-snap-align:center;
@@ -191,12 +202,13 @@
   }
   @keyframes shine{to{transform:rotate(360deg)}}
 
-  /* ---------- Footer (buttons) ---------- */
+  /* ---------- Buttons (row 3) ---------- */
   .footer{
-    position:fixed; left:16px; right:16px; bottom:16px; z-index:50;
     display:flex; gap:14px; align-items:center; justify-content:center;
+    padding-top:8px;
   }
   .circle-btn{ width:72px; height:72px; min-width:72px; min-height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; touch-action:manipulation; }
+  @media (max-height:640px){ .circle-btn{ width:64px; height:64px; min-width:64px; min-height:64px; } }
 
   .plus{ transition:transform .18s var(--ease); }
   .plus:active{ transform:scale(.96) }
@@ -229,8 +241,10 @@
   }
   @keyframes ripple{ from{transform:translate(-50%,-50%) scale(.2); opacity:.5} to{transform:translate(-50%,-50%) scale(8); opacity:0} }
 
+  /* Status */
   .status{
-    position:fixed; left:0; right:0; bottom:110px; display:grid; place-items:center; z-index:40; pointer-events:none;
+    position:fixed; left:0; right:0; bottom:calc(env(safe-area-inset-bottom,0) + 110px);
+    display:grid; place-items:center; z-index:40; pointer-events:none;
     font-size:14px; font-weight:600; letter-spacing:.2px; color:#19443a;
     text-shadow:0 1px 0 #ffffffa8;
     opacity:0; transform:translateY(8px); transition:opacity .2s var(--ease), transform .25s var(--ease);
@@ -259,7 +273,7 @@
       </div>
     </div>
 
-    <!-- KIND CAROUSEL (moved below bowl, above buttons) -->
+    <!-- Carousel -->
     <div class="kindWrap">
       <div class="kindShell">
         <div class="kindRail" id="kindRail"><div class="spacer"></div><div class="spacer"></div></div>
@@ -296,7 +310,7 @@ const kindRail=document.getElementById('kindRail');
 const statusEl=document.getElementById('status');
 
 let seeds=[]; let placed=[]; let dragging=null; let snapTimer=null; let lastActiveKind=null;
-let progressTicker=null, sparkTimer=null;
+let sparkTimer=null;
 let genTimer=null, genSerial=0, latestSerial=0;
 
 window.addEventListener('load',()=>{ buildKindRail(); resetApp(); });
@@ -323,7 +337,9 @@ function onRailScroll(){
     const active=getActiveChip(); if(!active) return;
     const k=active.dataset.kind; activeKind=k;
     if(lastActiveKind!==k){ lastActiveKind=k; scheduleGenerate('kind-change'); }
-  },240);
+    // snap-to-center (light assist)
+    centerChip(active);
+  },180);
 }
 function getActiveChip(){ const R=kindRail.getBoundingClientRect(), cx=R.left+R.width/2; let best=null, d=1e9;
   for(const chip of kindRail.querySelectorAll('.kchip')){ const r=chip.getBoundingClientRect(), c=r.left+r.width/2, dd=Math.abs(c-cx); if(dd<d){d=dd; best=chip;} }
@@ -334,12 +350,13 @@ function updateActiveChipVisual(){ const a=getActiveChip(); for(const c of kindR
 /* ---------- Core ---------- */
 function resetApp(){
   placed=[]; imageEl.src=""; imageEl.classList.remove('revealed');
-  document.body.classList.remove('waiting'); document.documentElement.style.setProperty('--shake-ampl','0');
+  document.body.classList.remove('waiting');
+  document.documentElement.style.setProperty('--shake-ampl','0');
   document.documentElement.style.setProperty('--blur','0px');
   cauldron.setAttribute('aria-busy','false'); statusEl.textContent='';
   overlay.innerHTML='';
   if(genTimer){ clearTimeout(genTimer); genTimer=null; }
-  clearInterval(progressTicker); clearInterval(sparkTimer);
+  clearInterval(sparkTimer);
   initSeeds(); renderSeeds(); renderPlaced(false);
 }
 
@@ -473,17 +490,12 @@ function spotInsideBowl(){
   } return {x:50,y:50};
 }
 
-/* ====== Waiting visuals (continuous; no “timer” UI) ====== */
+/* ====== Waiting visuals ====== */
 function ensureWaiting(){
   if(!document.body.classList.contains('waiting')){
     document.body.classList.add('waiting');
     cauldron.setAttribute('aria-busy','true');
     statusEl.textContent='Mixing…';
-
-    // ramp blur & shake over ~3s (pure CSS variables)
-    document.documentElement.style.setProperty('--shake-ampl','0');
-    document.documentElement.style.setProperty('--blur','0px');
-    // just touching the class starts CSS animations declared in styles
 
     // subtle chip pulses inward while waiting
     const bowl=cauldron.getBoundingClientRect(); const cx=50, cy=50;
@@ -495,7 +507,7 @@ function ensureWaiting(){
       node.classList.add('waitPulse');
     }
 
-    // continuous ambient “sparks” (kept soft; not a timer)
+    // ambient sparks (soft; not “timer”)
     clearInterval(sparkTimer);
     sparkTimer=setInterval(spawnSparks, 260);
   }
@@ -512,16 +524,14 @@ function spawnSparks(){
   const r=cauldron.getBoundingClientRect();
   const center={x:r.left+r.width/2, y:r.top+r.height/2};
   for(let i=0;i<5;i++){
-    const s=document.createElement('div'); s.className='spark';
-    const ang=Math.random()*Math.PI*2, dist=(r.width*0.16)+(Math.random()*r.width*0.12);
-    const dx=Math.cos(ang)*dist, dy=Math.sin(ang)*dist;
+    const s=document.createElement('div');
     s.style.position='fixed'; s.style.left=center.x+'px'; s.style.top=center.y+'px';
     s.style.width='10px'; s.style.height='10px'; s.style.borderRadius='50%'; s.style.background='#fff';
     s.style.boxShadow='0 0 16px #9ff4db, 0 0 4px #fff inset'; s.style.opacity='0'; s.style.pointerEvents='none';
     s.animate([
       {transform:'translate(0,0) scale(.6)', opacity:0},
       {opacity:.95, offset:.08},
-      {transform:`translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(0)`, opacity:0}
+      {transform:`translate(${(Math.cos(Math.random()*Math.PI*2)*r.width*0.22).toFixed(1)}px, ${(Math.sin(Math.random()*Math.PI*2)*r.width*0.22).toFixed(1)}px) scale(0)`, opacity:0}
     ],{duration:900+Math.random()*400, easing:'var(--ease)', fill:'forwards'});
     document.body.appendChild(s); setTimeout(()=>s.remove(),1200);
   }
@@ -580,13 +590,13 @@ async function callPollinations(prompt){
 }
 
 /* ====== Generation control ====== */
-function scheduleGenerate(reason){
+function scheduleGenerate(){
   ensureWaiting();
   imageEl.classList.remove('revealed'); // fade old image while waiting new
   if(genTimer) clearTimeout(genTimer);
-  genTimer=setTimeout(()=>generateNow(reason), 420); // coalesce quick edits
+  genTimer=setTimeout(()=>generateNow(), 420); // coalesce quick edits
 }
-async function generateNow(reason){
+async function generateNow(){
   genTimer=null;
   const serial=++genSerial; latestSerial=serial;
   const prompt=buildPrompt();
@@ -619,7 +629,7 @@ cta.addEventListener('click', (e)=>{
 
   ensureWaiting(); imageEl.classList.remove('revealed');
   if(genTimer){ clearTimeout(genTimer); genTimer=null; }
-  generateNow('cta');
+  generateNow();
 });
 
 /* Cancel = full reset */
@@ -628,7 +638,41 @@ cancelBtn.addEventListener('click', resetApp);
 /* iOS zoom guard */
 document.addEventListener('gesturestart', e=>e.preventDefault());
 
-/* ======= Custom <emoji-picker> ======= */
+/* ======= Chip interactions continue to trigger renders ======= */
+function buildElementsList(){ return placed.map(p=>WORDS.get(p.emoji)||`the ${p.emoji} symbol`); }
+
+/* ======= Seed + Placed rendering helpers ======= */
+function renderPlaced(playDrop=false){
+  overlay.innerHTML='';
+  for(const p of placed){
+    const n=document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
+    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
+    if(playDrop) n.classList.add('dropin');
+    n.addEventListener('pointerdown', e=>startDragPlaced(e,p.id));
+    overlay.appendChild(n);
+  }
+}
+
+/* Geometry helpers */
+function spotInsideBowl(){
+  const r=cauldron.getBoundingClientRect(); let tries=0;
+  while(tries++<300){ const px=8+Math.random()*84, py=8+Math.random()*84;
+    const cx=r.left+px/100*r.width, cy=r.top+py/100*r.height;
+    if(Math.hypot(cx-(r.left+r.width/2),cy-(r.top+r.height/2))<r.width/2-40) return {x:px,y:py};
+  } return {x:50,y:50};
+}
+function coordsInCauldron(cx,cy){
+  const r=cauldron.getBoundingClientRect(); const mx=cx-(r.left+r.width/2); const my=cy-(r.top+r.height/2);
+  const inside=Math.hypot(mx,my)<=r.width/2;
+  const px=((mx+r.width/2)/r.width)*100; const py=((my+r.height/2)/r.height)*100;
+  return {inside, px:Math.max(6,Math.min(94,px)), py:Math.max(6,Math.min(94,py))};
+}
+
+/* Drag & drop & picker already call scheduleGenerate() after add/remove. */
+</script>
+
+<script>
+/* ======= Custom <emoji-picker> (unchanged API) ======= */
 customElements.define('emoji-picker', class extends HTMLElement {
   #s=this.attachShadow({mode:'closed'}); #data; #cat='all';
   constructor(){ super();
