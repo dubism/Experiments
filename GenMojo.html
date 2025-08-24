@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+l<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -11,6 +11,8 @@
     --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
     --ease:cubic-bezier(.2,.8,.2,1);
     --emerald:#9af2d3; --emerald-mid:#48d9ad; --emerald-deep:#0ca678;
+    --ink:#0a0b0d;
+    --progress:0; /* 0..360deg (visual only) */
   }
   html,body{height:100%;margin:0}
   body{
@@ -23,6 +25,7 @@
     background-attachment:fixed; animation:hue 24s linear infinite alternate;
     overflow:hidden; touch-action:none; -webkit-tap-highlight-color:transparent;
     user-select:none;
+    color:var(--ink);
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
@@ -31,25 +34,41 @@
 
   /* ---------- KIND CAROUSEL ---------- */
   .kindWrap{ position:relative; z-index:60; padding:12px 0 4px; display:grid; place-items:center; }
-  .kindRail{ display:flex; gap:16px; padding:12px 24px; margin:0 auto; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; max-width:min(90vw, 720px); scrollbar-width:none; }
+  .kindWrap::before,
+  .kindWrap::after{
+    content:""; position:absolute; inset:auto 0; height:66px; top:12px; pointer-events:none;
+    background:linear-gradient(90deg, #fff0, #ffffff90 12%, #fff0 24%) left/30% 100% no-repeat,
+               linear-gradient(270deg, #fff0, #ffffff90 12%, #fff0 24%) right/30% 100% no-repeat;
+    mask:linear-gradient(#000,#000);
+    opacity:.55; filter:blur(8px); border-radius:12px;
+  }
+  .kindRail{
+    display:flex; gap:16px; padding:12px 24px; margin:0 auto;
+    overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
+    max-width:min(92vw, 760px); scrollbar-width:none;
+    scroll-padding-inline:50vw;
+  }
   .kindRail::-webkit-scrollbar{display:none}
-  .spacer{ flex:0 0 45vw; }
+  .spacer{ flex:0 0 60vw; } /* larger so edge items can center */
   .kchip{
     flex:0 0 auto; width:64px; height:64px; border-radius:50%;
     display:grid; place-items:center; scroll-snap-align:center;
     background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
-    transform:scale(.9); transition:transform .18s var(--ease), filter .18s var(--ease), box-shadow .18s var(--ease);
+    transform:scale(.9);
+    transition:transform .18s var(--ease), filter .18s var(--ease), box-shadow .18s var(--ease);
     position:relative;
+    touch-action:manipulation;
   }
   .kchip .e{font-size:34px}
+  .kchip:active{ transform:scale(.86) }
   .kchip.active{
-    transform:scale(1.30);
-    box-shadow:0 22px 48px rgba(100,150,255,.30), 0 0 0 2px #ffffff inset, 0 0 0 6px #a6d1ff66;
+    transform:scale(1.32);
+    box-shadow:0 22px 48px rgba(100,150,255,.30), 0 0 0 2px #ffffff inset, 0 0 0 10px #a6d1ff66;
     filter:saturate(1.25);
   }
   .kchip.active::after{
-    content:""; position:absolute; inset:-20%; border-radius:50%;
+    content:""; position:absolute; inset:-22%; border-radius:50%;
     background:conic-gradient(#b8f0ff66, #e9d0ff66, #b8f0ff66);
     mix-blend-mode:overlay; animation:shine 4s linear infinite; pointer-events:none;
   }
@@ -66,9 +85,39 @@
     overflow:hidden; display:grid; place-items:center;
   }
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
-  .waiting .cauldron{ animation:bowlPulse 2.2s ease-in-out infinite; }
-  @keyframes bowlPulse{0%{filter:saturate(1) brightness(1)}50%{filter:saturate(1.08) brightness(1.06)}100%{filter:saturate(1) brightness(1)}}
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
+
+  /* Liquid + beams (only visible while waiting) */
+  .liquid, .beams { position:absolute; inset:10%; border-radius:50%; pointer-events:none; opacity:0; }
+  .waiting .liquid{ opacity:1; }
+  .waiting .beams{ opacity:.8; }
+  .liquid{
+    background:
+      radial-gradient(40% 60% at 30% 30%, #ffffffd0, #ffffff10 70%),
+      conic-gradient(from 0deg, #bffbe7 0 40%, #dfe8ff 40% 70%, #ffdff2 70% 100%);
+    mix-blend-mode:soft-light;
+    animation:swirl 3.6s linear infinite;
+    filter:blur(2px) saturate(1.1);
+  }
+  @keyframes swirl{to{transform:rotate(360deg)}}
+  .beams{
+    background: conic-gradient(from 0deg, #ffffff00 0 8%, #ffffff55 10% 12%, #ffffff00 14% 26%, #ffffff55 28% 30%, #ffffff00 32% 44%, #ffffff55 46% 48%, #ffffff00 50% 100%);
+    animation:beams 2.6s linear infinite;
+    filter:blur(6px);
+  }
+  @keyframes beams{to{transform:rotate(-360deg)}}
+
+  /* Progress arc (cosmetic; rotates while waiting) */
+  .progress{
+    position:absolute; inset:4%; border-radius:50%; pointer-events:none;
+    mask: radial-gradient(circle at 50% 50%, #0000 58%, #000 59%), /* ring thickness */
+          conic-gradient(from 270deg, #000 var(--progress), #0000 0);
+    background: conic-gradient(from 270deg, #00e2b2cc, #67f1c8cc, #00e2b2cc);
+    box-shadow: 0 0 0 1px #ffffff80 inset;
+    opacity:0; transform:scale(.96);
+    transition:opacity .2s var(--ease), transform .35s var(--ease);
+  }
+  .waiting .progress{ opacity:1; transform:scale(1) }
 
   /* Image */
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
@@ -105,8 +154,9 @@
     background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
     transform:translate(-50%,-50%) scale(1);
-    transition:transform .25s var(--ease), opacity .25s var(--ease);
+    transition:transform .25s var(--ease), opacity .25s var(--ease), box-shadow .2s var(--ease);
   }
+  .placed:active{ transform:translate(-50%,-50%) scale(.95); box-shadow:0 0 0 2px #00c8ff33, var(--shadow) }
   .placed .e{font-size:clamp(34px, 9vmin, 64px)}
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
@@ -114,12 +164,22 @@
   @keyframes fadeout{to{ transform:translate(-50%,-50%) scale(.82); opacity:0 }}
   .on-rim{ pointer-events:none; }
 
-  /* Waiting pulse */
+  /* Waiting pulse on placed items */
   .waitPulse{ animation:chipPulse 1.8s ease-in-out infinite; }
   @keyframes chipPulse{
     0%  { transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
-    50% { transform:translate(calc(-50% + var(--ix,0px)), calc(-50% + var(--iy,0px))) scale(.94); opacity:.85 }
+    50% { transform:translate(calc(-50% + var(--ix,0px)), calc(-50% + var(--iy,0px))) scale(.94); opacity:.9 }
     100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
+  }
+
+  /* Sparks (waiting) */
+  .spark{ position:absolute; width:10px; height:10px; border-radius:50%; background:#fff;
+          box-shadow:0 0 16px #9ff4db, 0 0 4px #fff inset; opacity:0; pointer-events:none }
+  @keyframes sparkFly{
+    0%{transform:translate(0,0) scale(.6); opacity:0}
+    8%{opacity:.95}
+    70%{opacity:.95}
+    100%{transform:translate(var(--dx),var(--dy)) scale(0); opacity:0}
   }
 
   /* Cancel */
@@ -129,20 +189,23 @@
     background:radial-gradient(120% 120% at 30% 30%, #fff, #f6f7fb 60%, #e9eef9 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
     font-size:26px; transform:translate(-50%,-50%); opacity:0; transition:opacity .2s var(--ease);
-    z-index:9999;
+    z-index:9999; touch-action:manipulation;
   }
   .cancel.show{ opacity:1 }
+  .cancel:active{ transform:translate(-50%,-50%) scale(.96) }
 
   /* Footer */
   .footer{ position:fixed; left:16px; right:16px; bottom:16px; z-index:50; display:flex; gap:14px; align-items:center; justify-content:center; }
-  .circle-btn{ width:72px; height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; }
+  .circle-btn{ width:72px; height:72px; min-width:72px; min-height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; touch-action:manipulation; }
 
   .plus{
     background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
+    transition:transform .18s var(--ease);
   }
+  .plus:active{ transform:scale(.96) }
 
-  /* >>> CTA: fully clipped, no square artifact <<< */
+  /* CTA — fully clipped, ripple-safe */
   .cta{
     position:relative; overflow:hidden; border-radius:50%; clip-path:circle(50% at 50% 50%);
     background:
@@ -164,6 +227,23 @@
   .cta:active{ transform:translateY(0) scale(.98) }
   .cta .e{ font-size:40px; filter: drop-shadow(0 1px 0 #fff6) }
 
+  /* CTA ripple */
+  .cta .ripple{
+    position:absolute; left:var(--x); top:var(--y); width:10px; height:10px; border-radius:50%;
+    transform:translate(-50%,-50%); pointer-events:none; background:#ffffff; opacity:.45;
+    animation:ripple .6s ease-out forwards;
+  }
+  @keyframes ripple{ from{transform:translate(-50%,-50%) scale(.2); opacity:.5} to{transform:translate(-50%,-50%) scale(8); opacity:0} }
+
+  /* Status */
+  .status{
+    position:fixed; left:0; right:0; bottom:110px; display:grid; place-items:center; z-index:40; pointer-events:none;
+    font-size:14px; font-weight:600; letter-spacing:.2px; color:#19443a;
+    text-shadow:0 1px 0 #ffffffa8;
+    opacity:0; transform:translateY(8px); transition:opacity .2s var(--ease), transform .25s var(--ease);
+  }
+  .waiting .status{ opacity:1; transform:translateY(0) }
+
   /* Locked state */
   .locked .seed, .locked .cta, .locked .plus { pointer-events:none; filter:saturate(.4) opacity(.7) }
 </style>
@@ -179,8 +259,14 @@
       <div class="seeds" id="seeds"></div>
 
       <div class="cauldron-wrap">
-        <div class="cauldron" id="cauldron">
+        <div class="cauldron" id="cauldron" aria-live="polite" aria-busy="false">
           <div class="ring"></div>
+
+          <!-- waiting visuals -->
+          <div class="liquid" id="liquid" aria-hidden="true"></div>
+          <div class="beams" aria-hidden="true"></div>
+          <div class="progress" id="progress" aria-hidden="true"></div>
+
           <div class="image-wrap"><img id="image" class="result-img" alt="AI result" draggable="false"/></div>
         </div>
         <div class="overlay" id="overlay">
@@ -195,55 +281,10 @@
     </div>
   </div>
 
-  <!-- Expanded Emoji Picker (unchanged) -->
+  <div class="status" id="status">Mixing…</div>
+
+  <!-- Expanded Emoji Picker -->
   <emoji-picker id="picker"></emoji-picker>
-  <script>
-  customElements.define('emoji-picker', class extends HTMLElement {
-    #s=this.attachShadow({mode:'closed'}); #data; #cat='all'; #filtered=[];
-    constructor(){ super();
-      this.#s.innerHTML=`<style>
-        :host{all:initial}
-        .p{position:fixed; inset:auto 0 0 0; margin:auto; width:min(860px,96vw); height:min(72vh,760px);
-          background:linear-gradient(180deg, #ffffffcc, #f6fbffcc); border:1px solid #ffffffa0; border-radius:18px;
-          box-shadow:0 16px 48px rgba(0,0,0,.2), 0 1px 0 rgba(255,255,255,.6) inset; backdrop-filter: blur(12px) saturate(1.05);
-          display:grid; grid-template-rows:auto 1fr; opacity:0; transform:translateY(24px) scale(.98); pointer-events:none;
-          transition:opacity 180ms cubic-bezier(.2,.7,.2,1), transform 260ms cubic-bezier(.2,.8,.2,1); z-index:99999}
-        .show{opacity:1; transform:translateY(0) scale(1); pointer-events:auto}
-        .bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px;
-          background:linear-gradient(180deg,#ffffffee,#f7fbffee); border-bottom:1px solid #ffffffaa; border-top-left-radius:18px; border-top-right-radius:18px;}
-        .tabs{display:flex; gap:8px; overflow:auto; padding:0 4px}
-        .t,.close{width:42px; height:42px; border-radius:999px; border:1px solid #ffffffc4;
-          background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%); box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 #ffffff; cursor:pointer; display:grid; place-items:center;}
-        .scroller{position:relative; overflow:auto; padding:12px; border-bottom-left-radius:18px; border-bottom-right-radius:18px;}
-        .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(48px,1fr)); gap:10px; align-content:start}
-        .cell{display:grid; place-items:center; height:54px; border-radius:12px; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f3f7ff 70%); border:1px solid #ffffffc8; box-shadow:0 1px 0 #ffffff inset;}
-        .emo{font-size:34px; line-height:1}
-      </style>
-      <div class="p">
-        <div class="bar"><div class="tabs"></div><button class="close" title="Close">✖️</button></div>
-        <div class="scroller"><div class="grid"></div></div>
-      </div>`;
-    }
-    connectedCallback(){
-      this.r={root:this.#s.querySelector('.p'),tabs:this.#s.querySelector('.tabs'),grid:this.#s.querySelector('.grid'),scroll:this.#s.querySelector('.scroller'),close:this.#s.querySelector('.close')};
-      this.#data=this.#catalog(); this.#tabs(); this.#set('all');
-      this.r.close.addEventListener('click',()=>this.close());
-    }
-    open(){ this.r.root.classList.add('show'); }
-    close(){ this.r.root.classList.remove('show'); }
-    #tabs(){ this.r.tabs.innerHTML=''; for(const [id,cat] of Object.entries(this.#data)){ const b=document.createElement('button'); b.className='t'; b.dataset.id=id; b.innerHTML=`<span style="font-size:20px">${cat.icon}</span>`; b.onclick=()=>this.#set(id); this.r.tabs.appendChild(b);} }
-    #set(id){ this.#cat=id; this.r.grid.innerHTML=''; for(const ch of this.#data[id].items){ const btn=document.createElement('button'); btn.className='cell'; btn.innerHTML=`<span class="emo">${ch}</span>`; btn.onclick=()=>{ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); }; this.r.grid.appendChild(btn);} }
-    #catalog(){
-      const SKA=0x1F3FB, SKB=0x1F3FF;
-      const blocks=[[0x1F600,0x1F64F],[0x1F300,0x1F5FF],[0x1F680,0x1F6FF],[0x1F900,0x1F9FF],[0x1FA70,0x1FAFF],[0x2600,0x26FF],[0x2700,0x27BF]];
-      const pict=[]; for(const [a,b] of blocks){ for(let cp=a; cp<=b; cp++){ if(cp>=SKA&&cp<=SKB) continue; const ch=String.fromCodePoint(cp); if(!(/\s/.test(ch))) pict.push(ch);} }
-      const CODES=("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW").split(" ");
-      const RI=0x1F1E6, flag=cc=>String.fromCodePoint(RI+(cc.charCodeAt(0)-65), RI+(cc.charCodeAt(1)-65));
-      const flags=CODES.map(flag);
-      return { all:{icon:"🧭",items:pict}, flags:{icon:"🏳️",items:flags} };
-    }
-  });
-  </script>
 
 <script>
 /* ---------- Data ---------- */
@@ -283,8 +324,11 @@ const cta=document.getElementById('cta');
 const cancelBtn=document.getElementById('cancel');
 const picker=document.getElementById('picker');
 const kindRail=document.getElementById('kindRail');
+const statusEl=document.getElementById('status');
+const progressEl=document.getElementById('progress');
 
 let seeds=[]; let placed=[]; let dragging=null; let snapTimer=null; let lastActiveKind=null;
+let progressTicker=null, sparkTimer=null;
 
 window.addEventListener('load',()=>{ buildKindRail(); resetApp(); });
 
@@ -310,7 +354,7 @@ function onRailScroll(){
     const active=getActiveChip(); if(!active) return;
     const k=active.dataset.kind; activeKind=k;
     if(lastActiveKind!==k){ lastActiveKind=k; generateFromState(); }
-  },300);
+  },260);
 }
 function getActiveChip(){ const R=kindRail.getBoundingClientRect(), cx=R.left+R.width/2; let best=null, d=1e9;
   for(const chip of kindRail.querySelectorAll('.kchip')){ const r=chip.getBoundingClientRect(), c=r.left+r.width/2, dd=Math.abs(c-cx); if(dd<d){d=dd; best=chip;} }
@@ -322,7 +366,10 @@ function updateActiveChipVisual(){ const a=getActiveChip(); for(const c of kindR
 function resetApp(){
   placed=[]; imageEl.src=""; imageEl.classList.remove('revealed');
   document.body.classList.remove('locked','waiting'); cancelBtn.classList.remove('show');
+  cauldron.setAttribute('aria-busy','false'); statusEl.textContent='';
   overlay.querySelectorAll('.placed').forEach(n=>n.remove());
+  clearInterval(progressTicker); clearInterval(sparkTimer);
+  document.documentElement.style.setProperty('--progress','0deg');
   initSeeds(); renderSeeds(); renderPlaced(false);
 }
 
@@ -466,11 +513,17 @@ function spotInsideBowl(){
   } return {x:50,y:50};
 }
 
-/* Waiting + Reveal */
+/* Waiting visuals */
 function startWaitingPulse(){
   document.body.classList.add('waiting');
-  const bowl=cauldron.getBoundingClientRect(); const cx=50, cy=50;
+  cauldron.setAttribute('aria-busy','true');
+  statusEl.textContent='Mixing…';
+
+  // ensure at least one token visible pulsing
   if(!placed.length){ placed.push({id:crypto.randomUUID(), emoji:"✨", x:52, y:52}); renderPlaced(true); }
+
+  // pulse placed tokens inward
+  const bowl=cauldron.getBoundingClientRect(); const cx=50, cy=50;
   for(const p of placed){
     const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) continue;
     const dxPct=(cx-p.x)*0.12, dyPct=(cy-p.y)*0.12;
@@ -478,11 +531,40 @@ function startWaitingPulse(){
     node.style.setProperty('--ix', ix.toFixed(2)+'px'); node.style.setProperty('--iy', iy.toFixed(2)+'px');
     node.classList.add('waitPulse');
   }
+
+  // progress arc ticker (cosmetic)
+  let deg=0;
+  clearInterval(progressTicker);
+  progressTicker=setInterval(()=>{
+    deg=(deg+6)%360; document.documentElement.style.setProperty('--progress', deg+'deg');
+  }, 60);
+
+  // sparks
+  clearInterval(sparkTimer);
+  sparkTimer=setInterval(spawnSparks, 240);
+}
+function spawnSparks(){
+  const r=cauldron.getBoundingClientRect();
+  const center={x:r.left+r.width/2, y:r.top+r.height/2};
+  for(let i=0;i<6;i++){
+    const s=document.createElement('div'); s.className='spark';
+    const ang=Math.random()*Math.PI*2, dist=(r.width*0.18)+(Math.random()*r.width*0.12);
+    const dx=Math.cos(ang)*dist, dy=Math.sin(ang)*dist;
+    s.style.left=center.x+'px'; s.style.top=center.y+'px';
+    s.style.setProperty('--dx', dx.toFixed(1)+'px');
+    s.style.setProperty('--dy', dy.toFixed(1)+'px');
+    s.style.animation=`sparkFly ${600+Math.random()*500|0}ms var(--ease) forwards`;
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),1200);
+  }
 }
 
 /* Even spacing on rim after reveal */
 function sendToRimAndReveal(){
   document.body.classList.remove('waiting');
+  cauldron.setAttribute('aria-busy','false');
+  statusEl.textContent='';
+  clearInterval(progressTicker); clearInterval(sparkTimer);
   const n=placed.length; if(!n) return;
   const cx=50, cy=50, r=44; // percent
   placed.forEach((p,i)=>{
@@ -524,15 +606,73 @@ async function generateFromState(){
     const imgURL=await callPollinations(prompt);
     imageEl.src=imgURL;
     imageEl.onload=()=>{ sendToRimAndReveal(); document.body.classList.add('locked'); };
-  }catch(e){ console.warn(e); document.body.classList.remove('waiting'); }
+  }catch(e){ console.warn(e); document.body.classList.remove('waiting'); cauldron.setAttribute('aria-busy','false'); statusEl.textContent='Generation failed. Try again.'; }
 }
 
 /* CTA + Cancel */
-document.getElementById('cta').addEventListener('click', generateFromState);
+document.getElementById('cta').addEventListener('click', (e)=>{
+  // ripple
+  const r=document.createElement('span'); r.className='ripple';
+  const rect=e.currentTarget.getBoundingClientRect();
+  r.style.setProperty('--x', (e.clientX-rect.left)+'px');
+  r.style.setProperty('--y', (e.clientY-rect.top)+'px');
+  e.currentTarget.appendChild(r);
+  setTimeout(()=>r.remove(),650);
+  generateFromState();
+});
 cancelBtn.addEventListener('click', resetApp);
 
 /* iOS zoom guard */
 document.addEventListener('gesturestart', e=>e.preventDefault());
+</script>
+
+<script>
+/* ======= Custom <emoji-picker> (unchanged API) ======= */
+customElements.define('emoji-picker', class extends HTMLElement {
+  #s=this.attachShadow({mode:'closed'}); #data; #cat='all';
+  constructor(){ super();
+    this.#s.innerHTML=`<style>
+      :host{all:initial}
+      .p{position:fixed; inset:auto 0 0 0; margin:auto; width:min(860px,96vw); height:min(72vh,760px);
+        background:linear-gradient(180deg, #ffffffcc, #f6fbffcc); border:1px solid #ffffffa0; border-radius:18px;
+        box-shadow:0 16px 48px rgba(0,0,0,.2), 0 1px 0 rgba(255,255,255,.6) inset; backdrop-filter: blur(12px) saturate(1.05);
+        display:grid; grid-template-rows:auto 1fr; opacity:0; transform:translateY(24px) scale(.98); pointer-events:none;
+        transition:opacity 180ms cubic-bezier(.2,.7,.2,1), transform 260ms cubic-bezier(.2,.8,.2,1); z-index:99999}
+      .show{opacity:1; transform:translateY(0) scale(1); pointer-events:auto}
+      .bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px;
+        background:linear-gradient(180deg,#ffffffee,#f7fbffee); border-bottom:1px solid #ffffffaa; border-top-left-radius:18px; border-top-right-radius:18px;}
+      .tabs{display:flex; gap:8px; overflow:auto; padding:0 4px}
+      .t,.close{width:42px; height:42px; border-radius:999px; border:1px solid #ffffffc4;
+        background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%); box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 #ffffff; cursor:pointer; display:grid; place-items:center;}
+      .scroller{position:relative; overflow:auto; padding:12px; border-bottom-left-radius:18px; border-bottom-right-radius:18px;}
+      .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(48px,1fr)); gap:10px; align-content:start}
+      .cell{display:grid; place-items:center; height:54px; border-radius:12px; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f3f7ff 70%); border:1px solid #ffffffc8; box-shadow:0 1px 0 #ffffff inset;}
+      .emo{font-size:34px; line-height:1}
+    </style>
+    <div class="p">
+      <div class="bar"><div class="tabs"></div><button class="close" title="Close">✖️</button></div>
+      <div class="scroller"><div class="grid"></div></div>
+    </div>`;
+  }
+  connectedCallback(){
+    this.r={root:this.#s.querySelector('.p'),tabs:this.#s.querySelector('.tabs'),grid:this.#s.querySelector('.grid'),scroll:this.#s.querySelector('.scroller'),close:this.#s.querySelector('.close')};
+    this.#data=this.#catalog(); this.#tabs(); this.#set('all');
+    this.r.close.addEventListener('click',()=>this.close());
+  }
+  open(){ this.r.root.classList.add('show'); }
+  close(){ this.r.root.classList.remove('show'); }
+  #tabs(){ this.r.tabs.innerHTML=''; for(const [id,cat] of Object.entries(this.#data)){ const b=document.createElement('button'); b.className='t'; b.dataset.id=id; b.innerHTML=`<span style="font-size:20px">${cat.icon}</span>`; b.onclick=()=>this.#set(id); this.r.tabs.appendChild(b);} }
+  #set(id){ this.#cat=id; this.r.grid.innerHTML=''; for(const ch of this.#data[id].items){ const btn=document.createElement('button'); btn.className='cell'; btn.innerHTML=`<span class="emo">${ch}</span>`; btn.onclick=()=>{ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); }; this.r.grid.appendChild(btn);} }
+  #catalog(){
+    const SKA=0x1F3FB, SKB=0x1F3FF;
+    const blocks=[[0x1F600,0x1F64F],[0x1F300,0x1F5FF],[0x1F680,0x1F6FF],[0x1F900,0x1F9FF],[0x1FA70,0x1FAFF],[0x2600,0x26FF],[0x2700,0x27BF]];
+    const pict=[]; for(const [a,b] of blocks){ for(let cp=a; cp<=b; cp++){ if(cp>=SKA&&cp<=SKB) continue; const ch=String.fromCodePoint(cp); if(!(/\s/.test(ch))) pict.push(ch);} }
+    const CODES=("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW").split(" ");
+    const RI=0x1F1E6, flag=cc=>String.fromCodePoint(RI+(cc.charCodeAt(0)-65), RI+(cc.charCodeAt(1)-65));
+    const flags=CODES.map(flag);
+    return { all:{icon:"🧭",items:pict}, flags:{icon:"🏳️",items:flags} };
+  }
+});
 </script>
 </body>
 </html>
