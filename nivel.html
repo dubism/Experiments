@@ -24,7 +24,8 @@
   #overlay{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
     background:linear-gradient(180deg, rgba(0,0,0,.9), rgba(0,0,0,.65)); z-index:5; transition:opacity .25s}
   #overlay.hide{opacity:0; pointer-events:none}
-  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px; text-align:center}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px; text-align:center; width:min(92vw,380px)}
+  .row{display:flex; gap:10px; justify-content:center}
   button{appearance:none;border:0;border-radius:999px;padding:10px 14px;font-weight:650;cursor:pointer;background:#e6f0ff;color:#0b1220}
   .chips{display:flex; gap:8px; justify-content:center; margin-top:8px}
   .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
@@ -49,7 +50,10 @@
     <div class="panel">
       <div style="font-weight:650;margin-bottom:6px">Enable sensors</div>
       <div style="color:#c9d2df;margin-bottom:10px">Tap once to allow microphone & motion (iOS requires this).</div>
-      <button id="enable">Enable mic + motion</button>
+      <div class="row">
+        <button id="enable">Enable mic + motion</button>
+        <button id="skip" style="background:#d7ddea">Skip sensors</button>
+      </div>
       <div class="chips">
         <div id="stMic" class="chip"><span class="dot"></span><span>Mic</span></div>
         <div id="stMot" class="chip"><span class="dot"></span><span>Motion</span></div>
@@ -63,6 +67,8 @@
   const cvs = document.getElementById('cv');
   const ctx  = cvs.getContext('2d', { alpha:false });
   let dpr = Math.max(1, devicePixelRatio || 1);
+
+  // declare before use
   let needsLayout = false;
 
   function resize(){
@@ -112,7 +118,6 @@
     const W = cvs.width, H = cvs.height, s = S();
     const rowH = s * Math.sqrt(3)/2;  // vertical distance between rows
 
-    // Center the lattice
     const cols = Math.floor(W / s);
     const rows = Math.floor(H / rowH);
     const offX = (W - cols * s) / 2;
@@ -129,7 +134,7 @@
   }
   buildTriGrid();
 
-  // ----- Physics ("strings"): spring to rest + damping -----
+  // ----- Physics (spring to rest + damping) -----
   function params(){
     const loose = Number(ui.stiff.value); // 0..100 (looser → smaller k)
     const k = 2 + (100 - loose) * 0.38;   // 2..40
@@ -158,57 +163,69 @@
 
   // Mic
   let audioLevel = 0, micOK = false;
-  async function enableMic(){
-    try{
-      const AC = window.AudioContext || window.webkitAudioContext;
-      const ac = new AC();
-      await ac.resume();
-      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-      const src = ac.createMediaStreamSource(stream);
-      const ana = ac.createAnalyser();
-      ana.fftSize = 1024;
-      src.connect(ana);
-      const buf = new Uint8Array(ana.fftSize);
-      micOK = true;
-      (function tick(){
-        ana.getByteTimeDomainData(buf);
-        let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
-        const rms=Math.sqrt(sum/buf.length);
-        audioLevel = audioLevel*0.86 + rms*0.14;
-        requestAnimationFrame(tick);
-      })();
-    }catch(e){ micOK = false; }
+  function enableMic(){
+    return new Promise(async (resolve) => {
+      try{
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ac = new AC();
+        await ac.resume();
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        const src = ac.createMediaStreamSource(stream);
+        const ana = ac.createAnalyser();
+        ana.fftSize = 1024;
+        src.connect(ana);
+        const buf = new Uint8Array(ana.fftSize);
+        micOK = true;
+        (function tick(){
+          ana.getByteTimeDomainData(buf);
+          let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+          const rms=Math.sqrt(sum/buf.length);
+          audioLevel = audioLevel*0.86 + rms*0.14;
+          requestAnimationFrame(tick);
+        })();
+        resolve(true);
+      }catch(e){ micOK = false; resolve(false); }
+    });
   }
 
   // Motion
   let tilt = {x:0,y:0}, motOK=false;
-  async function enableMotion(){
-    try{
-      if (typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
-        const res = await DeviceMotionEvent.requestPermission();
-        if (res!=='granted') throw new Error('denied');
-      }
-      addEventListener('devicemotion', e=>{
-        const g = e.accelerationIncludingGravity || {};
-        tilt.x = g.x || 0; tilt.y = -(g.y || 0);
-        motOK = true;
-      }, {passive:true});
-      setTimeout(()=>{ if(!motOK){} }, 800);
-    }catch(e){ motOK=false; }
+  function enableMotion(){
+    return new Promise(async (resolve) => {
+      try{
+        if (typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
+          const res = await DeviceMotionEvent.requestPermission();
+          if (res!=='granted') throw new Error('denied');
+        }
+        let got = false;
+        const handler = (e)=>{
+          const g = e.accelerationIncludingGravity || {};
+          tilt.x = g.x || 0; tilt.y = -(g.y || 0);
+          motOK = true; got = true;
+        };
+        addEventListener('devicemotion', handler, {passive:true});
+        setTimeout(()=>{ resolve(got); }, 800);
+      }catch(e){ motOK=false; resolve(false); }
+    });
   }
 
-  // Overlay
+  // Overlay / permissions — always proceed; never block
   const overlay = document.getElementById('overlay');
   const stMicEl = document.getElementById('stMic');
   const stMotEl = document.getElementById('stMot');
+  const skipBtn = document.getElementById('skip');
   function mark(el, cls){ el.classList.remove('ok','err'); if (cls) el.classList.add(cls); }
+
   document.getElementById('enable').addEventListener('click', async ()=>{
     mark(stMicEl,''); mark(stMotEl,'');
-    await Promise.allSettled([enableMic(), enableMotion()]);
-    mark(stMicEl, micOK ? 'ok' : 'err');
-    setTimeout(()=> mark(stMotEl, motOK ? 'ok' : 'err'), 500);
-    overlay.classList.add('hide');
+    const [m1,m2] = await Promise.allSettled([enableMic(), enableMotion()]);
+    const micOk = m1.status==='fulfilled' ? m1.value : false;
+    const motOk = m2.status==='fulfilled' ? m2.value : false;
+    mark(stMicEl, micOk ? 'ok' : 'err');
+    mark(stMotEl, motOk ? 'ok' : 'err');
+    overlay.classList.add('hide'); // unconditionally hide so UI never gets stuck
   });
+  skipBtn.addEventListener('click', ()=> overlay.classList.add('hide'));
 
   // Status pill
   const pill = document.getElementById('pill');
@@ -267,14 +284,12 @@
     }
   }
 
-  // ----- Render (redraw everything each frame; no traces) -----
+  // ----- Render (hard clear every frame; no trails) -----
   function render(){
-    // Hard clear (no trails)
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#000';
     ctx.fillRect(0,0,cvs.width,cvs.height);
 
-    // Draw R/G/B layers additively for each dot
     ctx.globalCompositeOperation = 'lighter';
     const r = R();
 
@@ -283,19 +298,10 @@
       const dx = d.x - d.rx, dy = d.y - d.ry;
       const disp = Math.hypot(dx,dy);
 
-      // If very still → show crisp white
-      if (disp < 0.35 * dpr){
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(d.rx, d.ry, r, 0, Math.PI*2); ctx.fill();
-        ctx.globalCompositeOperation = 'lighter';
-        continue;
-      }
+      const baseAngle = disp < 1e-6 ? 0 : Math.atan2(dy, dx);
+      const sep = Math.min(disp * 0.65, 0.9 * S());
 
-      const baseAngle = Math.atan2(dy, dx);
-      const sep = Math.min(disp * 0.65, 0.9 * S()); // per-channel offset
-
-      // Slightly different scale per channel to avoid perfect overlaps
+      // Slightly different per-channel response
       const channels = [
         { ang: baseAngle + 0,                col:'rgb(255,0,0)', scale: 1.00 },
         { ang: baseAngle + 2*Math.PI/3,     col:'rgb(0,255,0)', scale: 0.92 },
@@ -310,25 +316,20 @@
         ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2);
         ctx.fill();
       }
+
+      // When very still, overwrite with crisp white (no trails)
+      if (disp < 0.35 * dpr){
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(d.rx, d.ry, r, 0, Math.PI*2); ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
+      }
     }
   }
 
   // ----- Main loop -----
   function loop(){ step(); render(); setPill(); requestAnimationFrame(loop); }
   loop();
-
-  // ----- Permissions wiring -----
-  const overlay = document.getElementById('overlay');
-  const stMicEl = document.getElementById('stMic');
-  const stMotEl = document.getElementById('stMot');
-  function mark(el, cls){ el.classList.remove('ok','err'); if (cls) el.classList.add(cls); }
-  document.getElementById('enable').addEventListener('click', async ()=>{
-    mark(stMicEl,''); mark(stMotEl,'');
-    await Promise.allSettled([enableMic(), enableMotion()]);
-    mark(stMicEl, micOK ? 'ok' : 'err');
-    setTimeout(()=> mark(stMotEl, motOK ? 'ok' : 'err'), 500);
-    overlay.classList.add('hide');
-  });
 })();
 </script>
 </body>
