@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -89,6 +90,10 @@
   }
 
   let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  // 🔧 FIX: declare before resize() runs
+  let needsRebuild = false;
+
   function resize(){
     const rect = canvas.getBoundingClientRect();
     canvas.width  = Math.floor(rect.width  * dpr);
@@ -117,7 +122,6 @@
     }
   }
   rebuildGrid();
-  let needsRebuild = false;
 
   // Disturbance field
   let ripples = [];
@@ -136,4 +140,201 @@
     ripples.push({
       x: (px - rect.left) * dpr,
       y: (py - rect.top)  * dpr,
-      t: performance.now() / 100
+      t: performance.now() / 1000,
+      strength,
+      sigma: S() * 0.9,
+      speed: S() * 1.7
+    });
+    disturbanceLevel = Math.min(1, disturbanceLevel + 0.25 * strength);
+  }
+
+  // Pointer → ripples
+  let dragging = false;
+  canvas.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    addRipple(e.clientX, e.clientY, Math.max(0.5, e.pressure || 0.7));
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    addRipple(e.clientX, e.clientY, Math.max(0.3, e.pressure || 0.5));
+  });
+  const stopDrag = () => (dragging = false);
+  canvas.addEventListener('pointerup', stopDrag);
+  canvas.addEventListener('pointercancel', stopDrag);
+  canvas.addEventListener('pointerleave', stopDrag);
+  canvas.style.touchAction = 'none';
+
+  // Microphone
+  async function enableAudio(){
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AC();
+      await audioCtx.resume();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const src = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      src.connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      audioEnabled = true;
+      mark(stMic,'ok');
+      function sample(){
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i=0;i<buf.length;i++){
+          const v = (buf[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / buf.length);
+        audioLevel = audioLevel * 0.85 + rms * 0.15;
+        requestAnimationFrame(sample);
+      }
+      sample();
+    } catch (err) {
+      audioEnabled = false;
+      mark(stMic,'err');
+      showToast('Microphone unavailable or denied.');
+      console.warn('Mic not available:', err);
+    }
+  }
+
+  // Motion (iOS needs explicit permission)
+  async function enableMotion(){
+    try {
+      if (typeof DeviceMotionEvent !== 'undefined' &&
+          typeof DeviceMotionEvent.requestPermission === 'function') {
+        const res = await DeviceMotionEvent.requestPermission();
+        if (res !== 'granted') throw new Error('Motion denied');
+      }
+      addEventListener('devicemotion', (e) => {
+        if (!e.accelerationIncludingGravity) return;
+        const ax = e.accelerationIncludingGravity.x || 0;
+        const ay = e.accelerationIncludingGravity.y || 0;
+        tilt.x = ax;
+        tilt.y = -ay;
+        motionEnabled = true;
+        mark(stMot,'ok');
+      }, { passive:true });
+      setTimeout(()=>{ if (!motionEnabled){ mark(stMot,'err'); showToast('Motion sensors unavailable or denied.'); } }, 1000);
+    } catch (err) {
+      motionEnabled = false;
+      mark(stMot,'err');
+      showToast('Motion permission denied.');
+      console.warn('Motion not available:', err);
+    }
+  }
+
+  async function attemptEnable(){
+    enableBtn.disabled = true;
+    btnLabel.textContent = 'Requesting…';
+    mark(stMic,''); mark(stMot,'');
+    await Promise.allSettled([enableAudio(), enableMotion()]);
+    btnLabel.textContent = 'Enabled';
+    setTimeout(()=>overlay.classList.add('hide'), 300);
+  }
+
+  enableBtn.addEventListener('click', attemptEnable);
+  skipBtn.addEventListener('click', () => {
+    mark(stMic,''); mark(stMot,'');
+    overlay.classList.add('hide');
+    showToast('Sensors skipped — touch works.');
+  });
+
+  // Tiny fast pseudo-noise
+  function noise2D(x, y){
+    return Math.sin(x * 0.0013 + y * 0.0017) + Math.sin(x * 0.0031 - y * 0.0027);
+  }
+
+  // Draw
+  function draw(){
+    const now = performance.now() / 1000;
+
+    disturbanceLevel = Math.max(0, disturbanceLevel * 0.96 + Math.min(1, audioLevel * 1.8) * 0.04);
+
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    ripples = ripples.filter(r => (now - r.t) < 4);
+
+    const s = S();
+    const colorSep = 0.60 * s * disturbanceLevel;
+    const tiltScale = 0.12 * s;
+    const audioScale = 0.18 * s * audioLevel;
+    const baseDispScale = 0.35 * s * disturbanceLevel;
+
+    statusEl.textContent = `Mic ${audioEnabled ? '✓' : '–'} • Motion ${motionEnabled ? '✓' : '–'} • D ${disturbanceLevel.toFixed(2)}`;
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.85;
+
+    function colorPass(offx, offy, fill){
+      ctx.fillStyle = fill;
+      const rad = R();
+      for (let i = 0; i < points.length; i++){
+        const p = points[i];
+
+        const n = noise2D(p.x + now*300, p.y - now*240);
+        const ang = n * 1.2;
+        let dx = Math.cos(ang) * baseDispScale;
+        let dy = Math.sin(ang) * baseDispScale;
+
+        for (let j=0;j<ripples.length;j++){
+          const r = ripples[j];
+          const age = now - r.t;
+          const rr = Math.hypot(p.x - r.x, p.y - r.y);
+          const wavefront = r.speed * age;
+          const g = Math.exp(-((rr - wavefront)*(rr - wavefront)) / (2 * r.sigma * r.sigma)) * r.strength;
+          if (g > 0.001){
+            const ux = (p.x - r.x) / (rr + 1e-6);
+            const uy = (p.y - r.y) / (rr + 1e-6);
+            dx += ux * g * s * 0.9;
+            dy += uy * g * s * 0.9;
+          }
+        }
+
+        dx += tilt.x * tiltScale + Math.sin((p.x + p.y + now*400) * 0.003) * audioScale;
+        dy += tilt.y * tiltScale + Math.cos((p.x - p.y - now*400) * 0.003) * audioScale;
+
+        const cx = p.x + dx + offx;
+        const cy = p.y + dy + offy;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    const tri = [
+      {x:  1.0, y:  0.0, color: 'rgb(255,0,0)'},
+      {x: -0.5, y:  Math.sqrt(3)/2, color: 'rgb(0,255,0)'},
+      {x: -0.5, y: -Math.sqrt(3)/2, color: 'rgb(0,0,255)'}
+    ];
+    for (const c of tri){ colorPass(c.x * colorSep, c.y * colorSep, c.color); }
+
+    if (disturbanceLevel < 0.002){
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff';
+      const rad = R();
+      for (let i = 0; i < points.length; i++){
+        const p = points[i];
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  function layoutLoop(){
+    if (needsRebuild){ rebuildGrid(); needsRebuild = false; }
+    requestAnimationFrame(layoutLoop);
+  }
+  layoutLoop();
+})();
+</script>
+</body>
+</html>
