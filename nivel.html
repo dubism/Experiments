@@ -1,339 +1,328 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>RGB Dot Field — reactive to sound, motion, touch</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>RGB String-Dots — touch / sound / motion</title>
 <style>
   :root{
-    --bg:#000; --ink:#fff; --muted:#9aa4ad;
-    --accent:#e6f0ff; --ink2:#0b1220;
+    --bg:#000; --ink:#fff; --muted:#a6b0bf;
+    --panel:rgba(16,18,24,.78); --line:rgba(255,255,255,.12);
   }
-  html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--ink);
-    font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; overflow:hidden;}
-  #stage{ position:fixed; inset:0; }
-  canvas{ width:100vw; height:100vh; display:block; touch-action:none; }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;
+    font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+  canvas{display:block;width:100vw;height:100vh;touch-action:none; }
 
-  #overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-    background:linear-gradient(180deg, rgba(0,0,0,.9), rgba(0,0,0,.65)); z-index:10; transition:opacity .25s ease;}
-  #overlay.hide{ opacity:0; pointer-events:none; }
+  /* Minimal controls */
+  .hud{
+    position:fixed; left:10px; bottom:10px; z-index:3;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:10px 12px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  }
+  .row{display:grid; grid-template-columns:auto 1fr; gap:8px 10px; align-items:center}
+  label{color:#d6deea; font-size:12px; white-space:nowrap}
+  input[type=range]{width:160px}
+  .pill{position:fixed; right:10px; bottom:10px; z-index:3;
+    background:rgba(255,255,255,.08); border:1px solid var(--line); border-radius:999px;
+    padding:7px 10px; color:#cfd7e3; font-size:12px; }
 
-  .panel{ background:rgba(10,12,16,.78); border:1px solid rgba(255,255,255,.1);
-    border-radius:14px; padding:18px 18px; width:min(92vw,380px); text-align:center;
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
-  .panel h1{ margin:0 0 6px; font-size:16px; font-weight:650; color:#e9edf2; letter-spacing:.2px; }
-  .panel p{ margin:0 0 12px; color:var(--muted); }
-  .row{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-  button{ appearance:none; border:0; border-radius:999px; padding:12px 16px; background:var(--accent);
-    color:var(--ink2); font-weight:650; cursor:pointer; }
-  button:disabled{ opacity:.6; cursor:default; }
-  .sub{ font-size:12px; color:#c7d0db; margin-top:10px; }
-
-  .states{ display:flex; gap:8px; justify-content:center; margin:8px 0 0; }
-  .chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
-    border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.06); font-size:12px; color:#cfd7e3; }
-  .dot{ width:8px; height:8px; border-radius:50%; background:#999; }
-  .ok .dot{ background:#39d98a; }
-  .err .dot{ background:#ff6b6b; }
-
-  #status{ position:fixed; right:10px; bottom:10px; z-index:11; background:rgba(255,255,255,.08);
-    border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:8px 12px; color:#cfd7e3; font-size:12px;
-    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
-
-  #toast{ position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
-    background:rgba(255,255,255,.95); color:#111; border-radius:10px; padding:10px 14px; font-size:13px;
-    box-shadow:0 8px 24px rgba(0,0,0,.35); opacity:0; pointer-events:none; transition:opacity .25s, transform .25s;
-    z-index:12; }
-  #toast.show{ opacity:1; transform:translateX(-50%) translateY(-4px); }
+  /* Permission overlay (one tap on iOS) */
+  #overlay{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(180deg, rgba(0,0,0,.9), rgba(0,0,0,.65)); z-index:5; transition:opacity .25s}
+  #overlay.hide{opacity:0; pointer-events:none}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px; text-align:center}
+  button{appearance:none; border:0; border-radius:999px; padding:10px 14px; font-weight:650; cursor:pointer;
+    background:#e6f0ff; color:#0b1220}
+  .chips{display:flex; gap:8px; justify-content:center; margin-top:8px}
+  .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
+    border:1px solid var(--line); background:rgba(255,255,255,.06); font-size:12px; color:#cfd7e3}
+  .dot{width:8px;height:8px;border-radius:50%;background:#999}
+  .ok .dot{background:#39d98a} .err .dot{background:#ff6b6b}
 </style>
 </head>
 <body>
-  <div id="stage"><canvas id="c"></canvas></div>
+  <canvas id="cv"></canvas>
+
+  <div class="hud" id="hud">
+    <div class="row">
+      <label for="stiff">String looseness</label>
+      <input id="stiff" type="range" min="0" max="100" value="45" />
+      <label for="damp">Bounce</label>
+      <input id="damp" type="range" min="0" max="100" value="35" />
+    </div>
+  </div>
+  <div class="pill" id="pill">Mic – • Motion –</div>
 
   <div id="overlay">
     <div class="panel">
-      <h1>Enable sensors</h1>
-      <p>On iOS Safari you must tap once. You’ll see checks for mic &amp; motion.</p>
-      <div class="row">
-        <button id="enable"><span id="btnLabel">Enable mic + motion</span></button>
-        <button id="skip" style="background:#d7ddea;">Skip sensors</button>
-      </div>
-      <div class="states">
+      <div style="font-weight:650;margin-bottom:6px">Enable sensors</div>
+      <div style="color:#c9d2df;margin-bottom:10px">Tap once to allow microphone & motion (iOS requires this).</div>
+      <button id="enable">Enable mic + motion</button>
+      <div class="chips">
         <div id="stMic" class="chip"><span class="dot"></span><span>Mic</span></div>
         <div id="stMot" class="chip"><span class="dot"></span><span>Motion</span></div>
       </div>
-      <div class="sub">You can still interact with touch if denied.</div>
     </div>
   </div>
-  <div id="status">Waiting for mic/motion…</div>
-  <div id="toast"></div>
 
 <script>
 (() => {
-  const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d', { alpha: false });
-  const statusEl = document.getElementById('status');
-  const overlay = document.getElementById('overlay');
-  const enableBtn = document.getElementById('enable');
-  const skipBtn = document.getElementById('skip');
-  const btnLabel = document.getElementById('btnLabel');
-  const stMic = document.getElementById('stMic');
-  const stMot = document.getElementById('stMot');
-  const toast = document.getElementById('toast');
-
-  function showToast(msg){
-    toast.textContent = msg;
-    toast.classList.add('show');
-    clearTimeout(showToast.t);
-    showToast.t = setTimeout(()=>toast.classList.remove('show'), 2200);
-  }
-
-  let dpr = Math.max(1, window.devicePixelRatio || 1);
-
-  // 🔧 FIX: declare before resize() runs
-  let needsRebuild = false;
+  // ---------- Canvas & sizing ----------
+  const cvs = document.getElementById('cv');
+  const ctx = cvs.getContext('2d', { alpha:false });
+  let dpr = Math.max(1, devicePixelRatio || 1);
+  let needsLayout = false;
 
   function resize(){
-    const rect = canvas.getBoundingClientRect();
-    canvas.width  = Math.floor(rect.width  * dpr);
-    canvas.height = Math.floor(rect.height * dpr);
-    needsRebuild = true;
+    const r = cvs.getBoundingClientRect();
+    cvs.width  = Math.floor(r.width  * dpr);
+    cvs.height = Math.floor(r.height * dpr);
+    needsLayout = true;
   }
   addEventListener('resize', resize, { passive:true });
   resize();
 
-  // Grid
-  let spacingPx = 28; // CSS pixels between dots
-  let radius = 2.6;   // CSS pixel radius of each dot
-  function S(){ return spacingPx * dpr; }
-  function R(){ return radius * dpr; }
+  // ---------- Triangular grid (hex packing) ----------
+  const dots = [];  // {rx,ry,x,y,vx,vy}
+  let spacing = 28; // CSS px between horizontal neighbors
+  let radius  = 2.6; // CSS px dot radius
+  function S(){ return spacing * dpr; }
+  function R(){ return radius  * dpr; }
 
-  let points = [];
-  function rebuildGrid(){
-    points.length = 0;
-    const w = canvas.width, h = canvas.height, s = S();
-    const offX = (w % s) / 2;
-    const offY = (h % s) / 2;
-    for (let y = offY; y <= h - offY; y += s) {
-      for (let x = offX; x <= w - offX; x += s) {
-        points.push({ x, y });
+  function buildTriGrid(){
+    dots.length = 0;
+    const W = cvs.width, H = cvs.height, s = S();
+    const rowH = s * Math.sqrt(3)/2;  // vertical distance between rows
+    const offX = (W % s) / 2;
+    const offY = (H % rowH) / 2;
+
+    // Fill rows; odd rows are horizontally shifted by s/2
+    for (let j = 0, y = offY; y <= H - offY + 1; j++, y += rowH){
+      const xShift = (j % 2) ? s/2 : 0;
+      for (let x = offX + xShift; x <= W - offX + 1; x += s){
+        dots.push({ rx:x, ry:y, x, y, vx:0, vy:0 });
       }
     }
   }
-  rebuildGrid();
+  buildTriGrid();
 
-  // Disturbance field
-  let ripples = [];
-  let disturbanceLevel = 0;    // 0..1
-  let audioLevel = 0;          // 0..~0.5 typical
-  let tilt = { x:0, y:0 };     // device motion vector
-  let audioEnabled = false, motionEnabled = false;
+  // ---------- Physics ("strings"): spring + damping ----------
+  // We expose two user sliders: looseness (inverse stiffness) and bounce (damping).
+  const uiStiff = document.getElementById('stiff');
+  const uiDamp  = document.getElementById('damp');
 
-  function mark(el, state){ // 'ok' | 'err' | ''
-    el.classList.remove('ok','err');
-    if (state) el.classList.add(state);
+  function params(){
+    // Map looseness slider (0..100) → stiffness k (N): lower k = looser.
+    // Choose stable range for dt ~ 16ms: k in [2, 40] scaled by dpi/spacing.
+    const loose = Number(uiStiff.value); // 0..100 (looser to tighter visually)
+    const k = 2 + (100 - loose) * 0.38;   // 2..40
+    // Bounce slider → damping ratio-ish c. 0..1.4
+    const b = Number(uiDamp.value);
+    const c = 0.02 + b * 0.013;          // ~0.02..1.32
+    return { k, c };
   }
 
-  function addRipple(px, py, strength = 1){
-    const rect = canvas.getBoundingClientRect();
+  // ---------- Inputs → external disturbances ----------
+  let ripples = []; // {x,y,t,amp}
+  function addRipple(cssX, cssY, amp = 1){
+    const rect = cvs.getBoundingClientRect();
     ripples.push({
-      x: (px - rect.left) * dpr,
-      y: (py - rect.top)  * dpr,
-      t: performance.now() / 1000,
-      strength,
-      sigma: S() * 0.9,
-      speed: S() * 1.7
+      x: (cssX - rect.left) * dpr,
+      y: (cssY - rect.top)  * dpr,
+      t: performance.now()/1000,
+      amp
     });
-    disturbanceLevel = Math.min(1, disturbanceLevel + 0.25 * strength);
   }
-
-  // Pointer → ripples
+  // Touch / pointer
   let dragging = false;
-  canvas.addEventListener('pointerdown', (e) => {
-    dragging = true;
-    addRipple(e.clientX, e.clientY, Math.max(0.5, e.pressure || 0.7));
-  });
-  canvas.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    addRipple(e.clientX, e.clientY, Math.max(0.3, e.pressure || 0.5));
-  });
-  const stopDrag = () => (dragging = false);
-  canvas.addEventListener('pointerup', stopDrag);
-  canvas.addEventListener('pointercancel', stopDrag);
-  canvas.addEventListener('pointerleave', stopDrag);
-  canvas.style.touchAction = 'none';
+  cvs.addEventListener('pointerdown', e => { dragging = true; addRipple(e.clientX,e.clientY, 1.0); });
+  cvs.addEventListener('pointermove', e => { if (dragging) addRipple(e.clientX,e.clientY, 0.5); });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev => cvs.addEventListener(ev, ()=> dragging=false));
+  cvs.style.touchAction = 'none';
 
-  // Microphone
-  async function enableAudio(){
-    try {
+  // Mic
+  let audioLevel = 0, micOK = false;
+  async function enableMic(){
+    try{
       const AC = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = new AC();
-      await audioCtx.resume();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const src = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 1024;
-      src.connect(analyser);
-      const buf = new Uint8Array(analyser.fftSize);
-      audioEnabled = true;
-      mark(stMic,'ok');
-      function sample(){
-        analyser.getByteTimeDomainData(buf);
-        let sum = 0;
-        for (let i=0;i<buf.length;i++){
-          const v = (buf[i] - 128) / 128;
-          sum += v * v;
-        }
-        const rms = Math.sqrt(sum / buf.length);
-        audioLevel = audioLevel * 0.85 + rms * 0.15;
-        requestAnimationFrame(sample);
+      const ac = new AC();
+      await ac.resume();
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      const src = ac.createMediaStreamSource(stream);
+      const ana = ac.createAnalyser();
+      ana.fftSize = 1024;
+      src.connect(ana);
+      const buf = new Uint8Array(ana.fftSize);
+      micOK = true;
+      function tick(){
+        ana.getByteTimeDomainData(buf);
+        let sum=0;
+        for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+        const rms=Math.sqrt(sum/buf.length);
+        audioLevel = audioLevel*0.86 + rms*0.14; // smooth
+        requestAnimationFrame(tick);
       }
-      sample();
-    } catch (err) {
-      audioEnabled = false;
-      mark(stMic,'err');
-      showToast('Microphone unavailable or denied.');
-      console.warn('Mic not available:', err);
-    }
+      tick();
+    }catch(e){ micOK = false; }
   }
 
-  // Motion (iOS needs explicit permission)
+  // Motion
+  let tilt = {x:0,y:0}, motOK=false;
   async function enableMotion(){
-    try {
-      if (typeof DeviceMotionEvent !== 'undefined' &&
-          typeof DeviceMotionEvent.requestPermission === 'function') {
+    try{
+      if (typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
         const res = await DeviceMotionEvent.requestPermission();
-        if (res !== 'granted') throw new Error('Motion denied');
+        if (res!=='granted') throw new Error('denied');
       }
-      addEventListener('devicemotion', (e) => {
-        if (!e.accelerationIncludingGravity) return;
-        const ax = e.accelerationIncludingGravity.x || 0;
-        const ay = e.accelerationIncludingGravity.y || 0;
-        tilt.x = ax;
-        tilt.y = -ay;
-        motionEnabled = true;
-        mark(stMot,'ok');
-      }, { passive:true });
-      setTimeout(()=>{ if (!motionEnabled){ mark(stMot,'err'); showToast('Motion sensors unavailable or denied.'); } }, 1000);
-    } catch (err) {
-      motionEnabled = false;
-      mark(stMot,'err');
-      showToast('Motion permission denied.');
-      console.warn('Motion not available:', err);
-    }
+      addEventListener('devicemotion', e=>{
+        const g = e.accelerationIncludingGravity || {};
+        tilt.x = g.x || 0;
+        tilt.y = -(g.y || 0);
+        motOK = true;
+      }, {passive:true});
+      setTimeout(()=>{ if(!motOK){ /* probably denied */ } }, 800);
+    }catch(e){ motOK=false; }
   }
 
-  async function attemptEnable(){
-    enableBtn.disabled = true;
-    btnLabel.textContent = 'Requesting…';
-    mark(stMic,''); mark(stMot,'');
-    await Promise.allSettled([enableAudio(), enableMotion()]);
-    btnLabel.textContent = 'Enabled';
-    setTimeout(()=>overlay.classList.add('hide'), 300);
-  }
+  // Overlay buttons
+  const overlay = document.getElementById('overlay');
+  const stMicEl = document.getElementById('stMic');
+  const stMotEl = document.getElementById('stMot');
+  function mark(el, cls){ el.classList.remove('ok','err'); if (cls) el.classList.add(cls); }
 
-  enableBtn.addEventListener('click', attemptEnable);
-  skipBtn.addEventListener('click', () => {
-    mark(stMic,''); mark(stMot,'');
+  document.getElementById('enable').addEventListener('click', async ()=>{
+    mark(stMicEl,''); mark(stMotEl,'');
+    await Promise.allSettled([enableMic(), enableMotion()]);
+    mark(stMicEl, micOK ? 'ok' : 'err');
+    // motion flag set upon first event; give it a moment:
+    setTimeout(()=> mark(stMotEl, motOK ? 'ok' : 'err'), 500);
     overlay.classList.add('hide');
-    showToast('Sensors skipped — touch works.');
   });
 
-  // Tiny fast pseudo-noise
-  function noise2D(x, y){
-    return Math.sin(x * 0.0013 + y * 0.0017) + Math.sin(x * 0.0031 - y * 0.0027);
+  // Status pill
+  const pill = document.getElementById('pill');
+  function setPill(){ pill.textContent = `Mic ${micOK?'✓':'–'} • Motion ${motOK?'✓':'–'}`; }
+
+  // ---------- Simulation step ----------
+  let lastT = performance.now()/1000;
+
+  function step(){
+    const now = performance.now()/1000;
+    let dt = now - lastT;
+    lastT = now;
+    if (dt > 0.05) dt = 0.05;
+
+    // (Re)layout if needed
+    if (needsLayout){ buildTriGrid(); needsLayout=false; }
+
+    // External fields
+    const s = S();
+    const rippleDecay = 1.8; // seconds
+    ripples = ripples.filter(r => now - r.t < rippleDecay);
+
+    const {k, c} = params();
+
+    // Integrate each dot (mass = 1)
+    // Force = -k*(x - rx) - c*vx + Fext
+    // Fext from ripples (radial), audio (swirl), and tilt (constant).
+    const audioMag = audioLevel * 0.28 * s; // scale
+    const tiltMag  = 0.10 * s;
+
+    for (let i=0;i<dots.length;i++){
+      const d = dots[i];
+
+      // Spring force to rest
+      let fx = -k * (d.x - d.rx) - c * d.vx;
+      let fy = -k * (d.y - d.ry) - c * d.vy;
+
+      // Ripples
+      for (let j=0;j<ripples.length;j++){
+        const r = ripples[j];
+        const age = now - r.t;
+        const rr = Math.hypot(d.x - r.x, d.y - r.y) + 1e-6;
+        // traveling wavefront envelope
+        const travel = (age * (1.5 * s)); // wavefront radius
+        const g = Math.exp(-((rr - travel)*(rr - travel)) / (2 * (0.9*s)*(0.9*s)));
+        const amp = r.amp * g;
+        const ux = (d.x - r.x)/rr, uy=(d.y - r.y)/rr;
+        fx += ux * amp * 1.6 * s;
+        fy += uy * amp * 1.6 * s;
+      }
+
+      // Audio swirl (perpendicular components)
+      fx += Math.sin((d.rx + d.ry + now*420)*0.003) * audioMag;
+      fy += Math.cos((d.rx - d.ry - now*420)*0.003) * audioMag;
+
+      // Tilt (gravity-like)
+      fx += tilt.x * tiltMag;
+      fy += tilt.y * tiltMag;
+
+      // Integrate (semi-implicit Euler)
+      d.vx += fx * dt;
+      d.vy += fy * dt;
+      d.x  += d.vx * dt;
+      d.y  += d.vy * dt;
+    }
   }
 
-  // Draw
-  function draw(){
-    const now = performance.now() / 1000;
-
-    disturbanceLevel = Math.max(0, disturbanceLevel * 0.96 + Math.min(1, audioLevel * 1.8) * 0.04);
-
+  // ---------- Render ----------
+  function render(){
     ctx.setTransform(1,0,0,1,0,0);
     ctx.fillStyle = '#000';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillRect(0,0,cvs.width,cvs.height);
 
-    ripples = ripples.filter(r => (now - r.t) < 4);
-
-    const s = S();
-    const colorSep = 0.60 * s * disturbanceLevel;
-    const tiltScale = 0.12 * s;
-    const audioScale = 0.18 * s * audioLevel;
-    const baseDispScale = 0.35 * s * disturbanceLevel;
-
-    statusEl.textContent = `Mic ${audioEnabled ? '✓' : '–'} • Motion ${motionEnabled ? '✓' : '–'} • D ${disturbanceLevel.toFixed(2)}`;
-
+    // For each dot, draw three additive layers (R,G,B) with slight per-channel
+    // offset based on displacement vector angle, each rotated by ±120°.
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.85;
+    const r = R();
 
-    function colorPass(offx, offy, fill){
-      ctx.fillStyle = fill;
-      const rad = R();
-      for (let i = 0; i < points.length; i++){
-        const p = points[i];
+    for (let i=0;i<dots.length;i++){
+      const d = dots[i];
+      // Displacement vector from rest
+      const dx = d.x - d.rx, dy = d.y - d.ry;
+      const disp = Math.hypot(dx,dy);
+      const baseAngle = Math.atan2(dy, dx);
 
-        const n = noise2D(p.x + now*300, p.y - now*240);
-        const ang = n * 1.2;
-        let dx = Math.cos(ang) * baseDispScale;
-        let dy = Math.sin(ang) * baseDispScale;
+      // Chromatic separation proportional to displacement, clamped
+      const sep = Math.min(disp * 0.65, 0.9 * S()); // channel distance
 
-        for (let j=0;j<ripples.length;j++){
-          const r = ripples[j];
-          const age = now - r.t;
-          const rr = Math.hypot(p.x - r.x, p.y - r.y);
-          const wavefront = r.speed * age;
-          const g = Math.exp(-((rr - wavefront)*(rr - wavefront)) / (2 * r.sigma * r.sigma)) * r.strength;
-          if (g > 0.001){
-            const ux = (p.x - r.x) / (rr + 1e-6);
-            const uy = (p.y - r.y) / (rr + 1e-6);
-            dx += ux * g * s * 0.9;
-            dy += uy * g * s * 0.9;
-          }
-        }
+      // Channel angles: base ±120°, base
+      const A = [
+        { ang: baseAngle + 0,                col:'rgb(255,0,0)', scale: 1.00 },
+        { ang: baseAngle + 2*Math.PI/3,     col:'rgb(0,255,0)', scale: 0.92 },
+        { ang: baseAngle - 2*Math.PI/3,     col:'rgb(0,0,255)', scale: 1.08 }
+      ];
 
-        dx += tilt.x * tiltScale + Math.sin((p.x + p.y + now*400) * 0.003) * audioScale;
-        dy += tilt.y * tiltScale + Math.cos((p.x - p.y - now*400) * 0.003) * audioScale;
-
-        const cx = p.x + dx + offx;
-        const cy = p.y + dy + offy;
-
+      for (let k=0;k<3;k++){
+        const a = A[k];
+        const offx = Math.cos(a.ang) * sep * a.scale;
+        const offy = Math.sin(a.ang) * sep * a.scale;
+        ctx.fillStyle = a.col;
         ctx.beginPath();
-        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2);
         ctx.fill();
       }
-    }
 
-    const tri = [
-      {x:  1.0, y:  0.0, color: 'rgb(255,0,0)'},
-      {x: -0.5, y:  Math.sqrt(3)/2, color: 'rgb(0,255,0)'},
-      {x: -0.5, y: -Math.sqrt(3)/2, color: 'rgb(0,0,255)'}
-    ];
-    for (const c of tri){ colorPass(c.x * colorSep, c.y * colorSep, c.color); }
-
-    if (disturbanceLevel < 0.002){
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = '#fff';
-      const rad = R();
-      for (let i = 0; i < points.length; i++){
-        const p = points[i];
+      // When very still, ensure crisp white dot
+      if (disp < 0.35 * dpr){
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#fff';
         ctx.beginPath();
-        ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+        ctx.arc(d.rx, d.ry, r, 0, Math.PI*2);
         ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
       }
     }
-
-    requestAnimationFrame(draw);
   }
-  draw();
 
-  function layoutLoop(){
-    if (needsRebuild){ rebuildGrid(); needsRebuild = false; }
-    requestAnimationFrame(layoutLoop);
+  // ---------- Main loop ----------
+  function loop(){
+    step();
+    render();
+    setPill();
+    requestAnimationFrame(loop);
   }
-  layoutLoop();
+  loop();
 })();
 </script>
 </body>
