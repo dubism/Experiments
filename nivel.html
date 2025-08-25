@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — fast spikes, audible reaction, precise sliders</title>
+<title>RGB String-Dots — no blocking, fast spikes, precise sliders</title>
 <style>
   :root{ --bg:#000; --ink:#fff; --muted:#a6b0bf; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
   canvas{display:block;width:100vw;height:100vh;touch-action:none;}
 
+  /* HUD */
   .hud{
     position:fixed; left:10px; bottom:10px; z-index:3; display:grid; gap:8px 10px;
     grid-template-columns:auto 170px 54px; align-items:center;
@@ -18,20 +19,13 @@
   .hud label{color:#d6deea;font-size:12px;white-space:nowrap}
   .hud input[type=range]{width:170px}
   .hud .val{color:#cfd7e3;font-size:12px;min-width:54px;text-align:right}
-  .pill{position:fixed; right:10px; bottom:10px; z-index:3; background:rgba(255,255,255,.08);
-    border:1px solid var(--line); border-radius:999px; padding:7px 10px; color:#cfd7e3; font-size:12px;}
 
-  #overlay{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-    background:linear-gradient(180deg, rgba(0,0,0,.9), rgba(0,0,0,.65)); z-index:5; transition:opacity .25s}
-  #overlay.hide{opacity:0; pointer-events:none}
-  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px; text-align:center; width:min(92vw,380px)}
-  .row{display:flex; gap:10px; justify-content:center}
-  button{appearance:none;border:0;border-radius:999px;padding:10px 14px;font-weight:650;cursor:pointer;background:#e6f0ff;color:#0b1220}
-  .chips{display:flex; gap:8px; justify-content:center; margin-top:8px}
-  .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
-    border:1px solid var(--line); background:rgba(255,255,255,.06); font-size:12px; color:#cfd7e3}
-  .dot{width:8px;height:8px;border-radius:50%;background:#999}
-  .ok .dot{background:#39d98a} .err .dot{background:#ff6b6b}
+  /* Sensor controls (non-blocking) */
+  .sensors{ position:fixed; right:10px; bottom:10px; display:flex; gap:8px; z-index:3; }
+  .btn{ appearance:none; border:1px solid var(--line); background:rgba(255,255,255,.08); color:#e8eef7;
+        padding:8px 10px; border-radius:10px; cursor:pointer; font-weight:600; }
+  .btn.ok{ background:rgba(57,217,138,.14); border-color:rgba(57,217,138,.4) }
+  .btn.err{ background:rgba(255,107,107,.14); border-color:rgba(255,107,107,.4) }
 </style>
 </head>
 <body>
@@ -44,21 +38,11 @@
     <label for="space">Grid</label>      <input id="space"  type="range" min="12" max="60" value="28"><span id="spaceV"  class="val">28</span>
     <label for="dot">Dot</label>         <input id="dot"    type="range" min="1"  max="8"  value="3"><span  id="dotV"    class="val">3</span>
   </div>
-  <div class="pill" id="pill">Mic – • Motion –</div>
 
-  <div id="overlay">
-    <div class="panel">
-      <div style="font-weight:650;margin-bottom:6px">Enable sensors</div>
-      <div style="color:#c9d2df;margin-bottom:10px">Tap once to allow microphone & motion (iOS requires this).</div>
-      <div class="row">
-        <button id="enable">Enable mic + motion</button>
-        <button id="skip" style="background:#d7ddea">Skip</button>
-      </div>
-      <div class="chips">
-        <div id="stMic" class="chip"><span class="dot"></span><span>Mic</span></div>
-        <div id="stMot" class="chip"><span class="dot"></span><span>Motion</span></div>
-      </div>
-    </div>
+  <!-- Non-blocking sensor buttons -->
+  <div class="sensors">
+    <button class="btn" id="micBtn">Enable Mic</button>
+    <button class="btn" id="motionBtn">Enable Motion</button>
   </div>
 
 <script>
@@ -66,7 +50,10 @@
   // ===== Canvas =====
   const cvs = document.getElementById('cv');
   const ctx  = cvs.getContext('2d', { alpha:false });
-  let dpr = Math.max(1, devicePixelRatio || 1);
+  const micBtn = document.getElementById('micBtn');
+  const motBtn = document.getElementById('motionBtn');
+
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
   let needsLayout = false;
 
   function resize(){
@@ -103,17 +90,15 @@
   });
   syncVals();
 
-  // Derived physics params from sliders — linear and *literal*:
-  // k = k_min .. k_max, Looseness higher -> smaller k
-  // damping c = c_min .. c_max, Bounce higher -> smaller c (more oscillation)
-  const K_MIN = 6,  K_MAX = 120;  // higher = snappier
-  const C_MIN = 0.02, C_MAX = 2.2;
+  // Physics params — linear and literal
+  const K_MIN = 6,  K_MAX = 160;     // higher = snappier (wider range for spikes)
+  const C_MIN = 0.01, C_MAX = 2.2;   // higher = more damping
 
   function params(){
     const L = Number(ui.loose.value);   // 0..100
     const B = Number(ui.bounce.value);  // 0..100
-    const k = K_MIN + (100 - L) * (K_MAX - K_MIN) / 100;               // Looseness↑ → k↓
-    const c = C_MIN + (100 - B) * (C_MAX - C_MIN) / 100;               // Bounce↑   → c↓
+    const k = K_MIN + (100 - L) * (K_MAX - K_MIN) / 100; // Looseness↑ → k↓
+    const c = C_MIN + (100 - B) * (C_MAX - C_MIN) / 100; // Bounce↑   → c↓
     return { k, c };
   }
 
@@ -153,7 +138,7 @@
       y: (cssY - rect.top)  * dpr,
       t: performance.now()/1000,
       amp,
-      life: 0.45 // seconds — short, punchy
+      life: 0.35 // seconds — short
     });
   }
   let dragging = false;
@@ -162,52 +147,44 @@
   ['pointerup','pointercancel','pointerleave'].forEach(ev => cvs.addEventListener(ev, ()=> dragging=false));
   cvs.style.touchAction = 'none';
 
-  // Microphone → audible spikes (attack/decay envelope + transient detector)
-  let audioEnv = 0, micOK = false;
-  let audioPeak = 0;
+  // Microphone (non-blocking; button triggers permission)
+  let audioEnv = 0, micOK = false, audioPeak = 0;
   function enableMic(){
     return new Promise(async (resolve) => {
       try{
         const AC = window.AudioContext || window.webkitAudioContext;
-        const ac = new AC();
-        await ac.resume();
+        const ac = new AC(); await ac.resume();
         const stream = await navigator.mediaDevices.getUserMedia({audio:true});
         const src = ac.createMediaStreamSource(stream);
-        const ana = ac.createAnalyser();
-        ana.fftSize = 1024;
-        src.connect(ana);
+        const ana = ac.createAnalyser(); ana.fftSize = 1024; src.connect(ana);
         const buf = new Uint8Array(ana.fftSize);
-        micOK = true;
+        micOK = true; micBtn.classList.remove('err'); micBtn.classList.add('ok'); micBtn.textContent='Mic ✓';
 
-        const ATTACK = 0.08, RELEASE = 0.20; // fast attack, short sustain
-        const THRESH = 0.04;                 // gate to avoid noise floor
-        const GAIN   = 6.5;                  // audible reaction gain
-
+        const ATTACK = 0.06, RELEASE = 0.18, THRESH = 0.035, GAIN = 7.5;
         (function tick(){
           ana.getByteTimeDomainData(buf);
-          let sum=0;
-          for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
-          const rms = Math.sqrt(sum/buf.length);        // 0..~0.7
-          // envelope follower (attack/decay)
-          audioEnv = (rms > audioEnv) ? (audioEnv + (rms - audioEnv)* (1 - Math.exp(-1/ (60*ATTACK))))
-                                      : (audioEnv + (rms - audioEnv)* (1 - Math.exp(-1/ (60*RELEASE))));
-          // simple transient: rising edge over threshold
+          let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+          const rms=Math.sqrt(sum/buf.length);
+          // envelope (fast attack/short sustain)
+          const atk = 1 - Math.exp(-1/(60*ATTACK));
+          const rel = 1 - Math.exp(-1/(60*RELEASE));
+          audioEnv = (rms > audioEnv) ? audioEnv + (rms - audioEnv)*atk : audioEnv + (rms - audioEnv)*rel;
+          // transient
           const spike = Math.max(0, rms - Math.max(THRESH, audioPeak*0.9));
           audioPeak = Math.max(rms, audioPeak*0.92);
-
-          // If a spike, inject a brief global impulse around center
-          if (spike > 0.015){
+          if (spike > 0.012){
             const cx = cvs.width*0.5, cy = cvs.height*0.5;
-            ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: GAIN * spike, life: 0.30 });
+            ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: GAIN * spike, life: 0.28 });
           }
           requestAnimationFrame(tick);
         })();
         resolve(true);
-      }catch(e){ micOK = false; resolve(false); }
+      }catch(e){ micOK=false; micBtn.classList.add('err'); micBtn.textContent='Mic ⚠︎'; resolve(false); }
     });
   }
+  micBtn.addEventListener('click', enableMic);
 
-  // Motion
+  // Motion (non-blocking; button triggers permission)
   let tilt = {x:0,y:0}, motOK=false;
   function enableMotion(){
     return new Promise(async (resolve) => {
@@ -217,35 +194,19 @@
           if (res!=='granted') throw new Error('denied');
         }
         let got = false;
-        const handler = (e)=>{
+        addEventListener('devicemotion', e=>{
           const g = e.accelerationIncludingGravity || {};
           tilt.x = g.x || 0; tilt.y = -(g.y || 0);
           motOK = true; got = true;
-        };
-        addEventListener('devicemotion', handler, {passive:true});
-        setTimeout(()=>{ resolve(got); }, 800);
-      }catch(e){ motOK=false; resolve(false); }
+          motBtn.classList.remove('err'); motBtn.classList.add('ok'); motBtn.textContent='Motion ✓';
+        }, {passive:true});
+        setTimeout(()=>{ if(!got){ motBtn.classList.add('err'); motBtn.textContent='Motion ⚠︎'; } resolve(got); }, 800);
+      }catch(e){ motOK=false; motBtn.classList.add('err'); motBtn.textContent='Motion ⚠︎'; resolve(false); }
     });
   }
+  motBtn.addEventListener('click', enableMotion);
 
-  // Overlay / permissions — never block UI
-  const overlay = document.getElementById('overlay');
-  const stMicEl = document.getElementById('stMic');
-  const stMotEl = document.getElementById('stMot');
-  const skipBtn = document.getElementById('skip');
-  function mark(el, cls){ el.classList.remove('ok','err'); if (cls) el.classList.add(cls); }
-  document.getElementById('enable').addEventListener('click', async ()=>{
-    mark(stMicEl,''); mark(stMotEl,'');
-    const [m1,m2] = await Promise.allSettled([enableMic(), enableMotion()]);
-    mark(stMicEl, (m1.status==='fulfilled' && m1.value) ? 'ok' : 'err');
-    mark(stMotEl, (m2.status==='fulfilled' && m2.value) ? 'ok' : 'err');
-    overlay.classList.add('hide');
-  });
-  skipBtn.addEventListener('click', ()=> overlay.classList.add('hide'));
-  const pill = document.getElementById('pill');
-  function setPill(){ pill.textContent = `Mic ${micOK?'✓':'–'} • Motion ${motOK?'✓':'–'}`; }
-
-  // ===== Simulation (spiky, short-lived) =====
+  // ===== Simulation (spiky, short-lived; fast response) =====
   let lastT = performance.now()/1000;
 
   function step(){
@@ -254,19 +215,18 @@
 
     if (needsLayout){ buildTriGrid(); needsLayout=false; }
 
-    // short, punchy ripples
+    // short ripples
     ripples = ripples.filter(r => now - r.t < r.life);
 
     const {k, c} = params();
     const s = S();
 
     // Audio force magnitude — noticeable
-    const audioMag = audioEnv * 1.4 * s;  // boosted
+    const audioMag = audioEnv * 1.6 * s;  // boosted
     const tiltMag  = 0.08 * s;
 
-    // Two substeps for snappier stability at high k
-    const sub = 2;
-    const h = dt / sub;
+    // Two substeps for stability at high k
+    const sub = 2; const h = dt / sub;
 
     for (let ss=0; ss<sub; ss++){
       for (let i=0;i<dots.length;i++){
@@ -276,20 +236,20 @@
         let fx = -k * (d.x - d.rx) - c * d.vx;
         let fy = -k * (d.y - d.ry) - c * d.vy;
 
-        // Ripples: very sharp Gaussian shell (narrow sigma)
+        // Ripples: sharp Gaussian shell
         for (let j=0;j<ripples.length;j++){
           const r = ripples[j];
           const age = now - r.t + ss*h;
           const rr = Math.hypot(d.x - r.x, d.y - r.y) + 1e-6;
-          const travel = (age * (2.2 * s)); // faster wavefront
-          const sigma  = 0.45 * s;          // tight
+          const travel = (age * (2.4 * s)); // faster
+          const sigma  = 0.42 * s;          // tight
           const g = Math.exp(-((rr - travel)*(rr - travel)) / (2 * sigma * sigma)) * r.amp;
           const ux = (d.x - r.x)/rr, uy=(d.y - r.y)/rr;
-          fx += ux * g * 2.1 * s;
-          fy += uy * g * 2.1 * s;
+          fx += ux * g * 2.2 * s;
+          fy += uy * g * 2.2 * s;
         }
 
-        // Audio swirl (add a *kick* feel)
+        // Audio swirl kick
         fx += Math.sin((d.rx + d.ry + now*900)*0.004) * audioMag;
         fy += Math.cos((d.rx - d.ry - now*900)*0.004) * audioMag;
 
@@ -321,7 +281,6 @@
       const disp = Math.hypot(dx,dy);
       const baseAngle = disp < 1e-6 ? 0 : Math.atan2(dy, dx);
 
-      // Channel separation: directly proportional, clamped
       const sep = Math.min(disp * 0.70, 0.8 * S());
 
       const channels = [
@@ -337,7 +296,6 @@
         ctx.beginPath(); ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2); ctx.fill();
       }
 
-      // Snap clean to white when nearly still
       if (disp < 0.35 * dpr){
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = '#fff';
@@ -348,21 +306,8 @@
   }
 
   // ===== Loop =====
-  function loop(){ step(); render(); setPill(); requestAnimationFrame(loop); }
+  function loop(){ step(); render(); requestAnimationFrame(loop); }
   loop();
-
-  // ===== Permissions wiring =====
-  const overlay = document.getElementById('overlay');
-  document.getElementById('enable').addEventListener('click', async ()=>{
-    const stMicEl = document.getElementById('stMic');
-    const stMotEl = document.getElementById('stMot');
-    stMicEl.classList.remove('ok','err'); stMotEl.classList.remove('ok','err');
-    const [m1,m2] = await Promise.allSettled([enableMic(), enableMotion()]);
-    stMicEl.classList.add((m1.status==='fulfilled' && m1.value)?'ok':'err');
-    stMotEl.classList.add((m2.status==='fulfilled' && m2.value)?'ok':'err');
-    overlay.classList.add('hide'); // never block
-  });
-  document.getElementById('skip').addEventListener('click', ()=> overlay.classList.add('hide'));
 })();
 </script>
 </body>
