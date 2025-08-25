@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — sound / motion / touch</title>
+<title>RGB String-Dots — fast spikes, audible reaction, precise sliders</title>
 <style>
   :root{ --bg:#000; --ink:#fff; --muted:#a6b0bf; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
   canvas{display:block;width:100vw;height:100vh;touch-action:none;}
 
   .hud{
-    position:fixed; left:10px; bottom:10px; z-index:3; display:grid; gap:8px;
-    grid-template-columns:auto 1fr auto; align-items:center;
+    position:fixed; left:10px; bottom:10px; z-index:3; display:grid; gap:8px 10px;
+    grid-template-columns:auto 170px 54px; align-items:center;
     background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px;
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
   }
   .hud label{color:#d6deea;font-size:12px;white-space:nowrap}
-  .hud input[type=range]{width:160px}
-  .hud .val{color:#cfd7e3;font-size:12px;min-width:34px;text-align:right}
+  .hud input[type=range]{width:170px}
+  .hud .val{color:#cfd7e3;font-size:12px;min-width:54px;text-align:right}
   .pill{position:fixed; right:10px; bottom:10px; z-index:3; background:rgba(255,255,255,.08);
     border:1px solid var(--line); border-radius:999px; padding:7px 10px; color:#cfd7e3; font-size:12px;}
 
@@ -37,12 +37,12 @@
 <body>
   <canvas id="cv"></canvas>
 
-  <!-- Controls: looseness, bounce, grid spacing, dot size -->
-  <div class="hud">
-    <label for="stiff">Looseness</label><input id="stiff" type="range" min="0" max="100" value="45"><span id="stiffV" class="val">45</span>
-    <label for="damp">Bounce</label>   <input id="damp"  type="range" min="0" max="100" value="35"><span id="dampV"  class="val">35</span>
-    <label for="space">Grid</label>    <input id="space" type="range" min="12" max="60" value="28"><span id="spaceV" class="val">28</span>
-    <label for="dot">Dot</label>       <input id="dot"   type="range" min="1"  max="8"  value="3"><span  id="dotV"   class="val">3</span>
+  <!-- Controls: Looseness (↓k), Bounce (↓damping), Grid spacing, Dot size -->
+  <div class="hud" id="hud">
+    <label for="loose">Looseness</label><input id="loose" type="range" min="0" max="100" value="45"><span id="looseV" class="val">45</span>
+    <label for="bounce">Bounce</label>   <input id="bounce" type="range" min="0" max="100" value="35"><span id="bounceV" class="val">35</span>
+    <label for="space">Grid</label>      <input id="space"  type="range" min="12" max="60" value="28"><span id="spaceV"  class="val">28</span>
+    <label for="dot">Dot</label>         <input id="dot"    type="range" min="1"  max="8"  value="3"><span  id="dotV"    class="val">3</span>
   </div>
   <div class="pill" id="pill">Mic – • Motion –</div>
 
@@ -52,7 +52,7 @@
       <div style="color:#c9d2df;margin-bottom:10px">Tap once to allow microphone & motion (iOS requires this).</div>
       <div class="row">
         <button id="enable">Enable mic + motion</button>
-        <button id="skip" style="background:#d7ddea">Skip sensors</button>
+        <button id="skip" style="background:#d7ddea">Skip</button>
       </div>
       <div class="chips">
         <div id="stMic" class="chip"><span class="dot"></span><span>Mic</span></div>
@@ -63,12 +63,10 @@
 
 <script>
 (() => {
-  // ----- Canvas & sizing -----
+  // ===== Canvas =====
   const cvs = document.getElementById('cv');
   const ctx  = cvs.getContext('2d', { alpha:false });
   let dpr = Math.max(1, devicePixelRatio || 1);
-
-  // declare before use
   let needsLayout = false;
 
   function resize(){
@@ -80,49 +78,60 @@
   addEventListener('resize', resize, { passive:true });
   resize();
 
-  // ----- UI -----
+  // ===== UI (precise mappings, labels are literal) =====
   const ui = {
-    stiff:  document.getElementById('stiff'),
-    damp:   document.getElementById('damp'),
+    loose:  document.getElementById('loose'),   // higher -> looser -> LOWER stiffness
+    bounce: document.getElementById('bounce'),  // higher -> MORE bounce -> LOWER damping
     space:  document.getElementById('space'),
     dot:    document.getElementById('dot'),
-    stiffV: document.getElementById('stiffV'),
-    dampV:  document.getElementById('dampV'),
+    looseV: document.getElementById('looseV'),
+    bounceV:document.getElementById('bounceV'),
     spaceV: document.getElementById('spaceV'),
     dotV:   document.getElementById('dotV'),
   };
   function syncVals(){
-    ui.stiffV.textContent = ui.stiff.value;
-    ui.dampV .textContent = ui.damp.value;
-    ui.spaceV.textContent = ui.space.value;
-    ui.dotV  .textContent = ui.dot.value;
+    ui.looseV.textContent  = ui.loose.value;
+    ui.bounceV.textContent = ui.bounce.value;
+    ui.spaceV.textContent  = ui.space.value;
+    ui.dotV.textContent    = ui.dot.value;
   }
   ['input','change'].forEach(ev=>{
-    ui.stiff.addEventListener(ev, syncVals);
-    ui.damp .addEventListener(ev, syncVals);
-    ui.space.addEventListener(ev, ()=>{ syncVals(); spacing = Number(ui.space.value); needsLayout = true; });
-    ui.dot  .addEventListener(ev, ()=>{ syncVals(); radius  = Number(ui.dot.value); });
+    ui.loose .addEventListener(ev, syncVals);
+    ui.bounce.addEventListener(ev, syncVals);
+    ui.space .addEventListener(ev, ()=>{ spacing = Number(ui.space.value); needsLayout = true; syncVals(); });
+    ui.dot   .addEventListener(ev, ()=>{ radius  = Number(ui.dot.value);  syncVals(); });
   });
   syncVals();
 
-  // ----- Grid (perfect triangular / hex packing) -----
-  const dots = [];  // {rx,ry,x,y,vx,vy}
-  let spacing = Number(ui.space.value); // CSS px between horizontal neighbors
-  let radius  = Number(ui.dot.value);   // CSS px dot radius
+  // Derived physics params from sliders — linear and *literal*:
+  // k = k_min .. k_max, Looseness higher -> smaller k
+  // damping c = c_min .. c_max, Bounce higher -> smaller c (more oscillation)
+  const K_MIN = 6,  K_MAX = 120;  // higher = snappier
+  const C_MIN = 0.02, C_MAX = 2.2;
 
+  function params(){
+    const L = Number(ui.loose.value);   // 0..100
+    const B = Number(ui.bounce.value);  // 0..100
+    const k = K_MIN + (100 - L) * (K_MAX - K_MIN) / 100;               // Looseness↑ → k↓
+    const c = C_MIN + (100 - B) * (C_MAX - C_MIN) / 100;               // Bounce↑   → c↓
+    return { k, c };
+  }
+
+  // ===== Grid (triangular) =====
+  const dots = [];  // {rx,ry,x,y,vx,vy}
+  let spacing = Number(ui.space.value); // CSS px
+  let radius  = Number(ui.dot.value);   // CSS px
   function S(){ return spacing * dpr; }
   function R(){ return radius  * dpr; }
 
   function buildTriGrid(){
     dots.length = 0;
     const W = cvs.width, H = cvs.height, s = S();
-    const rowH = s * Math.sqrt(3)/2;  // vertical distance between rows
-
+    const rowH = s * Math.sqrt(3)/2;
     const cols = Math.floor(W / s);
     const rows = Math.floor(H / rowH);
     const offX = (W - cols * s) / 2;
     const offY = (H - rows * rowH) / 2;
-
     for (let j=0; j<=rows; j++){
       const y = offY + j * rowH;
       const xShift = (j % 2) ? s/2 : 0;
@@ -134,35 +143,28 @@
   }
   buildTriGrid();
 
-  // ----- Physics (spring to rest + damping) -----
-  function params(){
-    const loose = Number(ui.stiff.value); // 0..100 (looser → smaller k)
-    const k = 2 + (100 - loose) * 0.38;   // 2..40
-    const b = Number(ui.damp.value);
-    const c = 0.02 + b * 0.013;           // 0.02..1.32
-    return { k, c };
-  }
-
-  // ----- Inputs -----
-  let ripples = []; // {x,y,t,amp}
-  function addRipple(cssX, cssY, amp = 1){
+  // ===== Inputs =====
+  // Touch → sharp impulses (spiky)
+  let ripples = []; // {x,y,t,amp,life}
+  function addImpulse(cssX, cssY, amp = 1){
     const rect = cvs.getBoundingClientRect();
     ripples.push({
       x: (cssX - rect.left) * dpr,
       y: (cssY - rect.top)  * dpr,
       t: performance.now()/1000,
-      amp
+      amp,
+      life: 0.45 // seconds — short, punchy
     });
   }
-  // Touch / pointer
   let dragging = false;
-  cvs.addEventListener('pointerdown', e => { dragging = true; addRipple(e.clientX,e.clientY, 1.0); });
-  cvs.addEventListener('pointermove', e => { if (dragging) addRipple(e.clientX,e.clientY, 0.5); });
+  cvs.addEventListener('pointerdown', e => { dragging = true; addImpulse(e.clientX,e.clientY, 1.3); });
+  cvs.addEventListener('pointermove', e => { if (dragging) addImpulse(e.clientX,e.clientY, 0.7); });
   ['pointerup','pointercancel','pointerleave'].forEach(ev => cvs.addEventListener(ev, ()=> dragging=false));
   cvs.style.touchAction = 'none';
 
-  // Mic
-  let audioLevel = 0, micOK = false;
+  // Microphone → audible spikes (attack/decay envelope + transient detector)
+  let audioEnv = 0, micOK = false;
+  let audioPeak = 0;
   function enableMic(){
     return new Promise(async (resolve) => {
       try{
@@ -176,11 +178,28 @@
         src.connect(ana);
         const buf = new Uint8Array(ana.fftSize);
         micOK = true;
+
+        const ATTACK = 0.08, RELEASE = 0.20; // fast attack, short sustain
+        const THRESH = 0.04;                 // gate to avoid noise floor
+        const GAIN   = 6.5;                  // audible reaction gain
+
         (function tick(){
           ana.getByteTimeDomainData(buf);
-          let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
-          const rms=Math.sqrt(sum/buf.length);
-          audioLevel = audioLevel*0.86 + rms*0.14;
+          let sum=0;
+          for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+          const rms = Math.sqrt(sum/buf.length);        // 0..~0.7
+          // envelope follower (attack/decay)
+          audioEnv = (rms > audioEnv) ? (audioEnv + (rms - audioEnv)* (1 - Math.exp(-1/ (60*ATTACK))))
+                                      : (audioEnv + (rms - audioEnv)* (1 - Math.exp(-1/ (60*RELEASE))));
+          // simple transient: rising edge over threshold
+          const spike = Math.max(0, rms - Math.max(THRESH, audioPeak*0.9));
+          audioPeak = Math.max(rms, audioPeak*0.92);
+
+          // If a spike, inject a brief global impulse around center
+          if (spike > 0.015){
+            const cx = cvs.width*0.5, cy = cvs.height*0.5;
+            ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: GAIN * spike, life: 0.30 });
+          }
           requestAnimationFrame(tick);
         })();
         resolve(true);
@@ -209,82 +228,85 @@
     });
   }
 
-  // Overlay / permissions — always proceed; never block
+  // Overlay / permissions — never block UI
   const overlay = document.getElementById('overlay');
   const stMicEl = document.getElementById('stMic');
   const stMotEl = document.getElementById('stMot');
   const skipBtn = document.getElementById('skip');
   function mark(el, cls){ el.classList.remove('ok','err'); if (cls) el.classList.add(cls); }
-
   document.getElementById('enable').addEventListener('click', async ()=>{
     mark(stMicEl,''); mark(stMotEl,'');
     const [m1,m2] = await Promise.allSettled([enableMic(), enableMotion()]);
-    const micOk = m1.status==='fulfilled' ? m1.value : false;
-    const motOk = m2.status==='fulfilled' ? m2.value : false;
-    mark(stMicEl, micOk ? 'ok' : 'err');
-    mark(stMotEl, motOk ? 'ok' : 'err');
-    overlay.classList.add('hide'); // unconditionally hide so UI never gets stuck
+    mark(stMicEl, (m1.status==='fulfilled' && m1.value) ? 'ok' : 'err');
+    mark(stMotEl, (m2.status==='fulfilled' && m2.value) ? 'ok' : 'err');
+    overlay.classList.add('hide');
   });
   skipBtn.addEventListener('click', ()=> overlay.classList.add('hide'));
-
-  // Status pill
   const pill = document.getElementById('pill');
   function setPill(){ pill.textContent = `Mic ${micOK?'✓':'–'} • Motion ${motOK?'✓':'–'}`; }
 
-  // ----- Simulation -----
+  // ===== Simulation (spiky, short-lived) =====
   let lastT = performance.now()/1000;
 
   function step(){
     const now = performance.now()/1000;
-    let dt = now - lastT; if (dt > 0.05) dt = 0.05; lastT = now;
+    let dt = now - lastT; if (dt > 0.033) dt = 0.033; lastT = now;
 
     if (needsLayout){ buildTriGrid(); needsLayout=false; }
 
-    // prune ripples
-    ripples = ripples.filter(r => now - r.t < 1.8);
+    // short, punchy ripples
+    ripples = ripples.filter(r => now - r.t < r.life);
 
     const {k, c} = params();
     const s = S();
-    const audioMag = audioLevel * 0.28 * s;
-    const tiltMag  = 0.10 * s;
 
-    for (let i=0;i<dots.length;i++){
-      const d = dots[i];
+    // Audio force magnitude — noticeable
+    const audioMag = audioEnv * 1.4 * s;  // boosted
+    const tiltMag  = 0.08 * s;
 
-      // Hooke + damping
-      let fx = -k * (d.x - d.rx) - c * d.vx;
-      let fy = -k * (d.y - d.ry) - c * d.vy;
+    // Two substeps for snappier stability at high k
+    const sub = 2;
+    const h = dt / sub;
 
-      // Ripples (radial)
-      for (let j=0;j<ripples.length;j++){
-        const r = ripples[j];
-        const age = now - r.t;
-        const rr = Math.hypot(d.x - r.x, d.y - r.y) + 1e-6;
-        const travel = (age * (1.5 * s));
-        const g = Math.exp(-((rr - travel)*(rr - travel)) / (2 * (0.9*s)*(0.9*s)));
-        const amp = r.amp * g;
-        const ux = (d.x - r.x)/rr, uy=(d.y - r.y)/rr;
-        fx += ux * amp * 1.6 * s;
-        fy += uy * amp * 1.6 * s;
+    for (let ss=0; ss<sub; ss++){
+      for (let i=0;i<dots.length;i++){
+        const d = dots[i];
+
+        // Hooke to rest + damping (semi-implicit Euler)
+        let fx = -k * (d.x - d.rx) - c * d.vx;
+        let fy = -k * (d.y - d.ry) - c * d.vy;
+
+        // Ripples: very sharp Gaussian shell (narrow sigma)
+        for (let j=0;j<ripples.length;j++){
+          const r = ripples[j];
+          const age = now - r.t + ss*h;
+          const rr = Math.hypot(d.x - r.x, d.y - r.y) + 1e-6;
+          const travel = (age * (2.2 * s)); // faster wavefront
+          const sigma  = 0.45 * s;          // tight
+          const g = Math.exp(-((rr - travel)*(rr - travel)) / (2 * sigma * sigma)) * r.amp;
+          const ux = (d.x - r.x)/rr, uy=(d.y - r.y)/rr;
+          fx += ux * g * 2.1 * s;
+          fy += uy * g * 2.1 * s;
+        }
+
+        // Audio swirl (add a *kick* feel)
+        fx += Math.sin((d.rx + d.ry + now*900)*0.004) * audioMag;
+        fy += Math.cos((d.rx - d.ry - now*900)*0.004) * audioMag;
+
+        // Tilt
+        fx += tilt.x * tiltMag;
+        fy += tilt.y * tiltMag;
+
+        // Integrate
+        d.vx += fx * h;
+        d.vy += fy * h;
+        d.x  += d.vx * h;
+        d.y  += d.vy * h;
       }
-
-      // Audio swirl
-      fx += Math.sin((d.rx + d.ry + now*420)*0.003) * audioMag;
-      fy += Math.cos((d.rx - d.ry - now*420)*0.003) * audioMag;
-
-      // Tilt
-      fx += tilt.x * tiltMag;
-      fy += tilt.y * tiltMag;
-
-      // Integrate
-      d.vx += fx * dt;
-      d.vy += fy * dt;
-      d.x  += d.vx * dt;
-      d.y  += d.vy * dt;
     }
   }
 
-  // ----- Render (hard clear every frame; no trails) -----
+  // ===== Render (no trails, full redraw) =====
   function render(){
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#000';
@@ -297,27 +319,25 @@
       const d = dots[i];
       const dx = d.x - d.rx, dy = d.y - d.ry;
       const disp = Math.hypot(dx,dy);
-
       const baseAngle = disp < 1e-6 ? 0 : Math.atan2(dy, dx);
-      const sep = Math.min(disp * 0.65, 0.9 * S());
 
-      // Slightly different per-channel response
+      // Channel separation: directly proportional, clamped
+      const sep = Math.min(disp * 0.70, 0.8 * S());
+
       const channels = [
         { ang: baseAngle + 0,                col:'rgb(255,0,0)', scale: 1.00 },
-        { ang: baseAngle + 2*Math.PI/3,     col:'rgb(0,255,0)', scale: 0.92 },
-        { ang: baseAngle - 2*Math.PI/3,     col:'rgb(0,0,255)', scale: 1.08 }
+        { ang: baseAngle + 2*Math.PI/3,     col:'rgb(0,255,0)', scale: 0.94 },
+        { ang: baseAngle - 2*Math.PI/3,     col:'rgb(0,0,255)', scale: 1.06 }
       ];
       for (let k=0;k<3;k++){
         const a = channels[k];
         const offx = Math.cos(a.ang) * sep * a.scale;
         const offy = Math.sin(a.ang) * sep * a.scale;
         ctx.fillStyle = a.col;
-        ctx.beginPath();
-        ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2); ctx.fill();
       }
 
-      // When very still, overwrite with crisp white (no trails)
+      // Snap clean to white when nearly still
       if (disp < 0.35 * dpr){
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = '#fff';
@@ -327,9 +347,22 @@
     }
   }
 
-  // ----- Main loop -----
+  // ===== Loop =====
   function loop(){ step(); render(); setPill(); requestAnimationFrame(loop); }
   loop();
+
+  // ===== Permissions wiring =====
+  const overlay = document.getElementById('overlay');
+  document.getElementById('enable').addEventListener('click', async ()=>{
+    const stMicEl = document.getElementById('stMic');
+    const stMotEl = document.getElementById('stMot');
+    stMicEl.classList.remove('ok','err'); stMotEl.classList.remove('ok','err');
+    const [m1,m2] = await Promise.allSettled([enableMic(), enableMotion()]);
+    stMicEl.classList.add((m1.status==='fulfilled' && m1.value)?'ok':'err');
+    stMotEl.classList.add((m2.status==='fulfilled' && m2.value)?'ok':'err');
+    overlay.classList.add('hide'); // never block
+  });
+  document.getElementById('skip').addEventListener('click', ()=> overlay.classList.add('hide'));
 })();
 </script>
 </body>
