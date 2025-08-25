@@ -12,8 +12,8 @@
     --ease:cubic-bezier(.2,.8,.2,1);
     --emerald:#9af2d3; --emerald-mid:#48d9ad; --emerald-deep:#0ca678;
     --ink:#0a0b0d;
-    --shake-ampl:0;   /* 0→1 (CSS-animated while waiting) */
-    --blur:0px;       /* 0→3px (CSS-animated while waiting) */
+    --shake-ampl:0;   /* 0→1 while waiting */
+    --blur:0px;       /* 0→3px while waiting */
   }
   @property --shake-ampl{syntax:'<number>';initial-value:0;inherits:false}
   @property --blur{syntax:'<length>';initial-value:0px;inherits:false}
@@ -33,7 +33,7 @@
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
-  /* Layout: Bowl → Buttons (near bowl) → Carousel at bottom */
+  /* Layout: Bowl → Buttons → Carousel at bottom */
   .stage{
     position:fixed; inset:0;
     display:grid; grid-template-rows:1fr auto auto;
@@ -73,27 +73,30 @@
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
+  /* Brew: idle animation always on; waiting intensifies blur & shake + adds beams */
   .brew{ position:absolute; inset:0; border-radius:50%; overflow:hidden; filter:blur(var(--blur)) saturate(1.06); }
-  @keyframes breatheSpin { 0%{transform:scale(.985) rotate(-1.2deg)} 50%{transform:scale(1.015) rotate(1.2deg)} 100%{transform:scale(.985) rotate(-1.2deg)} }
-  .waiting .brew{ animation: breatheSpin 1.3s ease-in-out infinite; }
+  @keyframes breatheSpin { 0%{transform:scale(.992) rotate(-.8deg)} 50%{transform:scale(1.008) rotate(.8deg)} 100%{transform:scale(.992) rotate(-.8deg)} }
+  .brew{ animation: breatheSpin 2.4s ease-in-out infinite; } /* idle stirring */
   @keyframes rampVars { from{ --shake-ampl:0; --blur:0px; } to{ --shake-ampl:1; --blur:3px; } }
   body.waiting{ animation: rampVars 3s ease-in-out forwards; }
 
-  .liquid, .beams { position:absolute; inset:10%; border-radius:50%; pointer-events:none; opacity:0; }
-  .waiting .liquid{ opacity:1; }
-  .waiting .beams{ opacity:.8; }
+  .liquid, .beams { position:absolute; inset:10%; border-radius:50%; pointer-events:none; }
   .liquid{
+    opacity:.35; /* visible even when idle */
     background:
       radial-gradient(40% 60% at 30% 30%, #ffffffd0, #ffffff10 70%),
       conic-gradient(from 0deg, #bffbe7 0 40%, #dfe8ff 40% 70%, #ffdff2 70% 100%);
     mix-blend-mode:soft-light; filter:saturate(1.1);
-    animation:swirl 3.6s linear infinite;
+    animation:swirl 6s linear infinite; /* slower when idle */
   }
+  .waiting .liquid{ opacity:.9; animation-duration:3.6s; } /* stronger while waiting */
   @keyframes swirl{to{transform:rotate(360deg)}}
   .beams{
+    opacity:0;
     background: conic-gradient(from 0deg, #ffffff00 0 8%, #ffffff55 10% 12%, #ffffff00 14% 26%, #ffffff55 28% 30%, #ffffff00 32% 44%, #ffffff55 46% 48%, #ffffff00 50% 100%);
     animation:beams 2.6s linear infinite; filter:blur(6px);
   }
+  .waiting .beams{ opacity:.8; }
   @keyframes beams{to{transform:rotate(-360deg)}}
 
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
@@ -134,8 +137,6 @@
   .placed .e{font-size:clamp(34px, 9vmin, 64px)}
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
-  .placed.fadeout{ animation:fadeout .25s var(--ease) forwards }
-  @keyframes fadeout{to{ transform:translate(-50%,-50%) scale(.82); opacity:0 }}
 
   .waitPulse{ animation:chipPulse 1.8s ease-in-out infinite; }
   @keyframes chipPulse{
@@ -144,17 +145,17 @@
     100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
   }
 
-  /* ---------- Buttons (row 2, just below bowl) ---------- */
+  /* ---------- Buttons (row 2) ---------- */
   .footer{
     display:flex; gap:14px; align-items:center; justify-content:center;
-    padding-top:2px; /* tighter to bowl */
+    padding-top:2px;
   }
   .circle-btn{ width:72px; height:72px; min-width:72px; min-height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; touch-action:manipulation; }
   @media (max-height:640px){ .circle-btn{ width:64px; height:64px; min-width:64px; min-height:64px; } }
   .plus{ transition:transform .18s var(--ease); }
   .plus:active{ transform:scale(.96) }
 
-  /* ---------- Carousel (row 3, at bottom) ---------- */
+  /* ---------- Carousel (row 3) ---------- */
   .kindWrap{ display:grid; place-items:center; }
   .kindShell{
     width:min(92vw, 820px);
@@ -208,7 +209,7 @@
     <div class="centerWrap">
       <div class="seeds" id="seeds"></div>
       <div class="cauldron-wrap" id="cauldronWrap">
-        <div class="cauldron" id="cauldron" aria-live="polite" aria-busy="false">
+        <div class="cauldron" id="cauldron" aria-busy="false">
           <div class="ring"></div>
           <div class="brew">
             <div class="liquid" aria-hidden="true"></div>
@@ -222,13 +223,13 @@
       </div>
     </div>
 
-    <!-- Buttons (moved above carousel) -->
+    <!-- Buttons -->
     <div class="footer">
       <button class="circle-btn plus" id="openPicker" aria-label="add"><span class="e">➕</span></button>
       <button class="circle-btn cancel" id="cancel" aria-label="reset"><span class="e">❌</span></button>
     </div>
 
-    <!-- Carousel at very bottom -->
+    <!-- Carousel -->
     <div class="kindWrap">
       <div class="kindShell">
         <div class="kindRail" id="kindRail"><div class="spacer"></div><div class="spacer"></div></div>
@@ -257,8 +258,9 @@ const kindRail=document.getElementById('kindRail');
 let seeds=[]; let placed=[]; let dragging=null; let snapTimer=null; let lastActiveKind=null;
 let sparkTimer=null;
 let genTimer=null, genSerial=0, latestSerial=0;
+let currentObjectURL=null;
 
-window.addEventListener('load',()=>{ buildKindRail(); resetApp(); });
+window.addEventListener('load',()=>{ buildKindRail(); resetApp(true); });
 
 /* ---------- Carousel ---------- */
 function buildKindRail(){
@@ -292,22 +294,31 @@ function getActiveChip(){ const R=kindRail.getBoundingClientRect(), cx=R.left+R.
 function updateActiveChipVisual(){ const a=getActiveChip(); for(const c of kindRail.querySelectorAll('.kchip')) c.classList.toggle('active', c===a); }
 
 /* ---------- Core ---------- */
-function resetApp(){
-  placed=[]; imageEl.src=""; imageEl.classList.remove('revealed');
+function resetApp(isInitial=false){
+  // clear any displayed image and revoke old blob
+  if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
+  imageEl.classList.remove('revealed');
+  imageEl.removeAttribute('src');
+
+  placed=[]; overlay.innerHTML='';
   document.body.classList.remove('waiting');
   document.documentElement.style.setProperty('--shake-ampl','0');
   document.documentElement.style.setProperty('--blur','0px');
   cauldron.setAttribute('aria-busy','false');
-  overlay.innerHTML='';
+
   if(genTimer){ clearTimeout(genTimer); genTimer=null; }
   clearInterval(sparkTimer);
+
   initSeeds(); renderSeeds(); renderPlaced(false);
+
+  // ensure no accidental generate on first paint
+  if(!isInitial){ /* keep behavior same for manual resets */ }
 }
 
 /* Helpers */
 function rect(el){ const r=el.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}; }
 
-/* Scatter seeds avoiding UI (bowl + buttons near bowl + bottom carousel) */
+/* Scatter seeds avoiding UI (bowl + buttons + bottom carousel) */
 function initSeeds(){
   const vw=window.innerWidth, vh=window.innerHeight;
   const bowl   = rect(cauldron);
@@ -368,14 +379,18 @@ picker.addEventListener('emoji-pick',e=>{
 /* Dragging */
 function startDragSeed(ev,id){ ev.preventDefault();
   const idx=seeds.findIndex(s=>s.id===id); if(idx<0) return;
+  const node=[...seedsEl.children].find(n=>n.dataset.id===id);
+  if(node) node.style.visibility='hidden';                 // hide original to avoid "copy"
   const ghost=makeGhost(seeds[idx].emoji);
-  dragging={type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost};
+  dragging={type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost, originalEl:node};
   pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
 }
 function startDragPlaced(ev,id){ ev.preventDefault();
   const idx=placed.findIndex(p=>p.id===id); if(idx<0) return;
+  const node=overlay.querySelector(`.placed[data-id="${id}"]`);
+  if(node) node.style.visibility='hidden';                 // hide original to avoid "copy"
   const ghost=makeGhost(placed[idx].emoji);
-  dragging={type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost};
+  dragging={type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost, originalEl:node, start:{x:placed[idx].x,y:placed[idx].y}};
   pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
 }
 function makeGhost(emoji){ const g=document.createElement('div'); g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
@@ -390,23 +405,39 @@ function pointerMove(ev){ if(!dragging) return;
 function pointerUp(ev){
   if(!dragging) return cleanupDrag();
   const {inside,px,py}=coordsInCauldron(ev.clientX,ev.clientY); cauldron.classList.remove('over');
-  if(inside){
-    if(dragging.type==='seed'){
+
+  if(dragging.type==='seed'){
+    if(inside){
       placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
-      const node=[...seedsEl.children][dragging.idx]; if(node) node.remove(); seeds.splice(dragging.idx,1);
+      // remove the original seed (which we hid)
+      if(dragging.idx>=0){ seeds.splice(dragging.idx,1); renderSeeds(); }
       scheduleGenerate('seed-add');
-    }else{ placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false); scheduleGenerate('move'); }
-  }else if(dragging.type==='placed'){
-    const id=placed[dragging.idx].id; const node=overlay.querySelector(`.placed[data-id="${id}"]`);
-    if(node){ node.classList.add('fadeout'); setTimeout(()=>node.remove(),260); }
-    placed.splice(dragging.idx,1);
-    renderPlaced(false);
-    scheduleGenerate('placed-remove');
+    }else{
+      // not dropped inside: simply restore original visibility
+      if(dragging.originalEl) dragging.originalEl.style.visibility='';
+    }
+  }else{ // dragging placed
+    if(inside){
+      placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false);
+      scheduleGenerate('move');
+    }else{
+      // Convert placed chip back into a floating seed at drop point (stay usable)
+      const screenX=ev.clientX, screenY=ev.clientY;
+      seeds.push({ id:crypto.randomUUID(), emoji:dragging.emoji, x:screenX, y:screenY });
+      // remove from bowl
+      placed.splice(dragging.idx,1);
+      renderPlaced(false); renderSeeds();
+    }
   }
   cleanupDrag();
 }
-function cleanupDrag(){ removeEventListener('pointermove', pointerMove); removeEventListener('pointerup', pointerUp); dragging?.ghostEl?.remove(); dragging=null; }
+function cleanupDrag(){
+  removeEventListener('pointermove', pointerMove); removeEventListener('pointerup', pointerUp);
+  if(dragging?.ghostEl) dragging.ghostEl.remove();
+  if(dragging?.originalEl) dragging.originalEl.style.visibility=''; // ensure restored
+  dragging=null;
+}
 
 function renderPlaced(playDrop=false){
   overlay.innerHTML='';
@@ -507,9 +538,9 @@ function kindPrompt(kind,elements){ if(!elements.length){elements=["a caterpilla
     "🤮":`Fuse ${join} into a gooey monster made of slime and confetti. Viscous translucency, specular highlights, playful gross-out humor—colorful and cartoonish, not realistic gore. No text.`,
     "😈":`Portray ${join} as mischievous heist crew mid-escape: dynamic angles, neon city at night, reflections, cheeky grins, motion blur. Stylish, comic-noir energy. No text.`,
     "🤑":`Transform ${join} into a baroque treasure spectacle: gold leaf, jeweled inlays, reflective metals, extravagant composition, luxurious bokeh. No text.`,
-    "💩":`Turn ${join} into slapstick puppets in a messy comedy scene. Over-the-top expressions, splat effects, vibrant props, freeze-frame humor. No text.`,
+    "💩":`Turn ${join} into slapstick puppets in a messy comedy scene. Over-the-top expressions, splat effects, vibrant props. No text.`,
     "🧓":`Illustrate ${join} as folklore icons woven into an embroidered tapestry. Natural dyes, textile grain, warm candlelight. No text.`,
-    "🥷":`Depict ${join} as panels of a high-speed ninja chase, compressed into one dramatic poster. Ink brush motion slashes, moonlit rooftops. No text.`,
+    "🥷":`Depict ${join} as panels of a high-speed ninja chase, compressed into one dramatic poster. Ink brush slashes, moonlit rooftops. No text.`,
     "🧚‍♀️":`Reimagine ${join} in a bioluminescent woodland: tiny fairies, floating spores, iridescent wings, dreamy lens bloom. No text.`,
     "👾":`Glitch-meld ${join} into a retro arcade boss: pixel surfaces, CRT bloom, chroma bleed, synthwave palette, vapor haze. No text.`
   };
@@ -543,6 +574,8 @@ async function generateNow(){
   try{
     const imgURL=await callPollinations(prompt);
     if(serial!==latestSerial) return;
+    if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} }
+    currentObjectURL=imgURL;
     imageEl.src=imgURL;
     imageEl.onload=()=>{
       if(serial!==latestSerial) return;
@@ -557,14 +590,14 @@ async function generateNow(){
 }
 
 /* Cancel = full reset */
-cancelBtn.addEventListener('click', resetApp);
+cancelBtn.addEventListener('click', ()=>resetApp(false));
 
 /* iOS zoom guard */
 document.addEventListener('gesturestart', e=>e.preventDefault());
 </script>
 
 <script>
-/* ======= Custom <emoji-picker> (unchanged API) ======= */
+/* ======= Custom <emoji-picker> ======= */
 customElements.define('emoji-picker', class extends HTMLElement {
   #s=this.attachShadow({mode:'closed'}); #data; #cat='all';
   constructor(){ super();
