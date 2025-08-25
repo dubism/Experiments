@@ -3,15 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — hardened</title>
+<title>RGB String-Dots — cam skip+normalize+smooth</title>
 <style>
   :root{ --bg:#000; --ink:#fff; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
-  canvas{display:block;width:100vw;height:100vh;touch-action:none;z-index:0;position:relative}
+  canvas{display:block;width:100vw;height:100vh;touch-action:none}
 
-  /* Control Center */
   .cc{
-    position:fixed; left:10px; right:10px; bottom:10px; z-index:1000;
+    position:fixed; left:10px; right:10px; bottom:10px; z-index:3;
     background:var(--panel); border:1px solid var(--line); border-radius:14px;
     backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
   }
@@ -27,6 +26,7 @@
   .btn{appearance:none;border:1px solid var(--line);background:rgba(255,255,255,.08);color:#e8eef7;padding:6px 10px;border-radius:9px;cursor:pointer;font-weight:600;font-size:12px}
   .btn.ok{background:rgba(57,217,138,.14);border-color:rgba(57,217,138,.4)}
   .btn.err{background:rgba(255,107,107,.14);border-color:rgba(255,107,107,.4)}
+
   .meter{position:relative;height:6px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;grid-column:1/-1}
   .meter__fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:#9bd2ff}
 
@@ -39,12 +39,7 @@
     .ctrl.span2{grid-column:span 2}
   }
 
-  /* Hidden camera sampler */
   video.cam, canvas.cam { position:fixed; left:-9999px; top:-9999px; width:1px; height:1px; opacity:0; pointer-events:none }
-
-  /* Error badge */
-  .errbadge{position:fixed;top:8px;left:8px;z-index:1100;background:rgba(255,0,0,.12);color:#ffdede;border:1px solid rgba(255,0,0,.35);padding:6px 8px;border-radius:8px;font-size:12px;max-width:70vw;display:none}
-  .errbadge.show{display:block}
 </style>
 </head>
 <body>
@@ -55,7 +50,6 @@
     <div class="cc__title">Controls</div><div class="cc__chev" aria-hidden="true">▾</div>
   </div>
   <div class="cc__body">
-    <!-- Defaults per your screenshot -->
     <div class="ctrl"><div class="ctrl__label">Looseness</div><input id="loose" type="range" min="0" max="100" value="20"><div id="looseV" class="ctrl__val">20</div></div>
     <div class="ctrl"><div class="ctrl__label">Bounce</div>   <input id="bounce" type="range" min="0" max="100" value="20"><div id="bounceV" class="ctrl__val">20</div></div>
     <div class="ctrl"><div class="ctrl__label">Grid</div>     <input id="space"  type="range" min="12" max="60" value="25"><div id="spaceV"  class="ctrl__val">25</div></div>
@@ -92,48 +86,31 @@
 <video id="camVideo" class="cam" playsinline muted autoplay></video>
 <canvas id="camCanvas" class="cam"></canvas>
 
-<div id="err" class="errbadge"></div>
-
 <script>
 "use strict";
 (function(){
-  /* ========= error surface ========= */
-  var errEl = document.getElementById('err');
-  function showErr(msg){
-    try{
-      errEl.textContent = msg;
-      errEl.classList.add('show');
-      console.log('[RGB Dots Error]', msg);
-    }catch(_){}
-  }
-  window.onerror = function(message, source, lineno, colno, error){
-    showErr(String(message) + ' @' + lineno + ':' + colno);
-  };
-
-  /* ========= canvas ========= */
+  /* ---------- Canvas ---------- */
   var cvs = document.getElementById('cv');
   var ctx = cvs.getContext('2d', { alpha:false });
   var dpr = Math.max(1, window.devicePixelRatio || 1);
   var needsLayout = false;
 
   function resize(){
-    try{
-      var r = cvs.getBoundingClientRect();
-      cvs.width  = Math.max(1, Math.floor(r.width  * dpr));
-      cvs.height = Math.max(1, Math.floor(r.height * dpr));
-      needsLayout = true;
-    }catch(e){ showErr('resize: '+e.message); }
+    var r = cvs.getBoundingClientRect();
+    cvs.width  = Math.max(1, Math.floor(r.width  * dpr));
+    cvs.height = Math.max(1, Math.floor(r.height * dpr));
+    needsLayout = true;
   }
   window.addEventListener('resize', resize, { passive:true });
   resize();
 
-  /* ========= CC collapse ========= */
+  /* ---------- CC collapse ---------- */
   var cc = document.getElementById('cc');
   document.getElementById('ccHead').addEventListener('click', function(){
     cc.dataset.collapsed = (cc.dataset.collapsed === 'true') ? 'false' : 'true';
   });
 
-  /* ========= UI ========= */
+  /* ---------- UI ---------- */
   var ui = {
     loose:  document.getElementById('loose'),
     bounce: document.getElementById('bounce'),
@@ -183,7 +160,7 @@
   });
   syncVals();
 
-  /* ========= physics params ========= */
+  /* ---------- Physics ---------- */
   var K_MIN = 6,  K_MAX = 160;
   var C_MIN = 0.01, C_MAX = 2.2;
   function params(){
@@ -195,8 +172,8 @@
     };
   }
 
-  /* ========= grid (triangular) ========= */
-  var dots = [];  // {rx,ry,x,y,vx,vy,ci,rj}
+  /* ---------- Grid (triangular) ---------- */
+  var dots = [];  // {rx,ry,x,y,vx,vy,ci,rj,camScale,camTarget}
   var spacing = Number(ui.space.value);
   var radius  = Number(ui.dot.value);
   var gridCols = 0, gridRows = 0;
@@ -205,47 +182,43 @@
   function R(){ return radius  * dpr; }
 
   function buildTriGrid(){
-    try{
-      dots.length = 0;
-      var W = cvs.width, H = cvs.height, s = S();
-      var rowH = s * Math.sqrt(3)/2;
+    dots.length = 0;
+    var W = cvs.width, H = cvs.height, s = S();
+    var rowH = s * Math.sqrt(3)/2;
 
-      var cols = Math.max(1, Math.floor(W / s));
-      var rows = Math.max(1, Math.floor(H / rowH));
-      gridCols = cols + 1;
-      gridRows = rows + 1;
+    var cols = Math.max(1, Math.floor(W / s));
+    var rows = Math.max(1, Math.floor(H / rowH));
+    gridCols = cols + 1;
+    gridRows = rows + 1;
 
-      var offX = (W - cols * s) / 2;
-      var offY = (H - rows * rowH) / 2;
+    var offX = (W - cols * s) / 2;
+    var offY = (H - rows * rowH) / 2;
 
-      for (var j=0; j<=rows; j++){
-        var y = offY + j * rowH;
-        var xShift = (j % 2) ? s/2 : 0;
-        for (var i=0; i<=cols; i++){
-          var x = offX + xShift + i * s;
-          dots.push({ rx:x, ry:y, x:x, y:y, vx:0, vy:0, ci:i + (j%2?0.5:0), rj:j });
-        }
+    for (var j=0; j<=rows; j++){
+      var y = offY + j * rowH;
+      var xShift = (j % 2) ? s/2 : 0;
+      for (var i=0; i<=cols; i++){
+        var x = offX + xShift + i * s;
+        dots.push({ rx:x, ry:y, x:x, y:y, vx:0, vy:0, ci:i + (j%2?0.5:0), rj:j, camScale:1, camTarget:1 });
       }
-    }catch(e){ showErr('buildTriGrid: '+e.message); }
+    }
   }
   buildTriGrid();
 
-  /* ========= touch impulses ========= */
+  /* ---------- Touch ---------- */
   var ripples = []; // {x,y,t,amp,life,sigma}
   function addImpulse(cssX, cssY, baseAmp){
-    try{
-      var rect = cvs.getBoundingClientRect();
-      var sens = Number(ui.touchSens.value)/100;
-      var sigma = (Number(ui.touchRad.value)/100) * S();
-      ripples.push({
-        x: (cssX - rect.left) * dpr,
-        y: (cssY - rect.top)  * dpr,
-        t: performance.now()/1000,
-        amp: baseAmp * (0.5 + 1.5*sens),
-        life: 0.35,
-        sigma: sigma
-      });
-    }catch(e){ showErr('touch: '+e.message); }
+    var rect = cvs.getBoundingClientRect();
+    var sens = Number(ui.touchSens.value)/100;
+    var sigma = (Number(ui.touchRad.value)/100) * S();
+    ripples.push({
+      x: (cssX - rect.left) * dpr,
+      y: (cssY - rect.top)  * dpr,
+      t: performance.now()/1000,
+      amp: baseAmp * (0.5 + 1.5*sens),
+      life: 0.35,
+      sigma: sigma
+    });
   }
   var dragging = false;
   cvs.addEventListener('pointerdown', function(e){ dragging = true; addImpulse(e.clientX,e.clientY, 1.3); });
@@ -253,12 +226,12 @@
   ['pointerup','pointercancel','pointerleave'].forEach(function(ev){ cvs.addEventListener(ev, function(){ dragging=false; }); });
   cvs.style.touchAction = 'none';
 
-  /* ========= microphone ========= */
+  /* ---------- Mic ---------- */
   var micOK = false;
   var rms = 0, noise = 0.01, env = 0, peak = 0, strength = 0;
   function enableMic(){
+    var AC = window.AudioContext || window.webkitAudioContext;
     try{
-      var AC = window.AudioContext || window.webkitAudioContext;
       var ac = new AC();
       ac.resume().then(function(){
         return navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}});
@@ -269,103 +242,87 @@
         micOK = true; ui.micBtn.classList.add('ok'); ui.micBtn.textContent='Mic ✓';
 
         var ATTACK = 0.05, RELEASE = 0.15, NOISE_TC = 0.995, GAIN = 22, RIPPLE_GAIN = 8, SPIKE_GATE = 0.006;
-
         (function tick(){
-          try{
-            ana.getByteTimeDomainData(buf);
-            var sum=0; for(var i=0;i<buf.length;i++){ var v=(buf[i]-128)/128; sum+=v*v; }
-            rms = Math.sqrt(sum/buf.length);
-            noise = (rms < noise) ? (NOISE_TC*noise + (1-NOISE_TC)*rms) : (0.999*noise + 0.001*rms);
-            var atk = 1 - Math.exp(-1/(60*ATTACK));
-            var rel = 1 - Math.exp(-1/(60*RELEASE));
-            env = (rms > env) ? env + (rms - env)*atk : env + (rms - env)*rel;
-            var relAmp = Math.max(0, rms - noise);
-            strength = Math.min(1.5, Math.sqrt(relAmp * GAIN));
-            var spike = Math.max(0, rms - Math.max(noise*1.2, peak*0.92));
-            peak = Math.max(rms, peak*0.92);
-            if (spike > SPIKE_GATE){
-              var cx = cvs.width*0.5, cy = cvs.height*0.5;
-              ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: RIPPLE_GAIN * spike, life: 0.25, sigma: 0.42*S() });
-            }
-            ui.meterFill.style.width = (Math.min(1, (rms - noise)*40) * 100).toFixed(1) + '%';
-          }catch(e){ showErr('mic tick: '+e.message); }
+          ana.getByteTimeDomainData(buf);
+          var sum=0; for(var i=0;i<buf.length;i++){ var v=(buf[i]-128)/128; sum+=v*v; }
+          rms = Math.sqrt(sum/buf.length);
+          noise = (rms < noise) ? (NOISE_TC*noise + (1-NOISE_TC)*rms) : (0.999*noise + 0.001*rms);
+          var atk = 1 - Math.exp(-1/(60*ATTACK));
+          var rel = 1 - Math.exp(-1/(60*RELEASE));
+          env = (rms > env) ? env + (rms - env)*atk : env + (rms - env)*rel;
+          var relAmp = Math.max(0, rms - noise);
+          strength = Math.min(1.5, Math.sqrt(relAmp * GAIN));
+          var spike = Math.max(0, rms - Math.max(noise*1.2, peak*0.92));
+          peak = Math.max(rms, peak*0.92);
+          if (spike > SPIKE_GATE){
+            var cx = cvs.width*0.5, cy = cvs.height*0.5;
+            ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: RIPPLE_GAIN * spike, life: 0.25, sigma: 0.42*S() });
+          }
+          ui.meterFill.style.width = (Math.min(1, (rms - noise)*40) * 100).toFixed(1) + '%';
           requestAnimationFrame(tick);
         })();
-      }).catch(function(e){ micOK=false; ui.micBtn.classList.add('err'); ui.micBtn.textContent='Mic ⚠︎'; showErr('mic: '+e.message); });
-    }catch(e){ micOK=false; ui.micBtn.classList.add('err'); ui.micBtn.textContent='Mic ⚠︎'; showErr('mic init: '+e.message); }
+      }).catch(function(){ ui.micBtn.classList.add('err'); ui.micBtn.textContent='Mic ⚠︎'; });
+    }catch(_){ ui.micBtn.classList.add('err'); ui.micBtn.textContent='Mic ⚠︎'; }
   }
   ui.micBtn.addEventListener('click', enableMic);
 
-  /* ========= motion ========= */
-  var tilt = {x:0,y:0}, shake = 0, motOK=false;
+  /* ---------- Motion ---------- */
+  var tilt = {x:0,y:0}, shake = 0;
   function enableMotion(){
-    try{
-      function start(){
-        var got = false, hp = 0;
-        window.addEventListener('devicemotion', function(e){
-          var g = e.accelerationIncludingGravity || {};
-          tilt.x = g.x || 0; tilt.y = -(g.y || 0);
-          var a = e.acceleration || {};
-          var mag = Math.hypot(a.x||0, a.y||0, a.z||0);
-          hp = Math.max(0, mag - 0.8) * 0.6 + hp * 0.85;
-          shake = hp;
-          motOK = true; got = true;
-          ui.motionBtn.classList.add('ok'); ui.motionBtn.textContent='Motion ✓';
-        }, {passive:true});
-        setTimeout(function(){ if(!got){ ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; } }, 800);
-      }
-      if (typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
-        DeviceMotionEvent.requestPermission().then(function(res){
-          if (res==='granted') start(); else throw new Error('denied');
-        }).catch(function(e){ ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; showErr('motion: '+e.message); });
-      } else {
-        start();
-      }
-    }catch(e){ ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; showErr('motion init: '+e.message); }
+    function start(){
+      var got=false, hp=0;
+      window.addEventListener('devicemotion', function(e){
+        var g = e.accelerationIncludingGravity || {};
+        tilt.x = g.x || 0; tilt.y = -(g.y || 0);
+        var a = e.acceleration || {};
+        var mag = Math.hypot(a.x||0, a.y||0, a.z||0);
+        hp = Math.max(0, mag - 0.8) * 0.6 + hp * 0.85;
+        shake = hp; got=true; ui.motionBtn.classList.add('ok'); ui.motionBtn.textContent='Motion ✓';
+      }, {passive:true});
+      setTimeout(function(){ if(!got){ ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; } }, 800);
+    }
+    if (typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
+      DeviceMotionEvent.requestPermission().then(function(res){ if (res==='granted') start(); else ui.motionBtn.classList.add('err'); }).catch(function(){ ui.motionBtn.classList.add('err'); });
+    } else { start(); }
   }
   ui.motionBtn.addEventListener('click', enableMotion);
 
-  /* ========= camera (grid-res sampling) ========= */
+  /* ---------- Camera (skip frames + normalize + smooth) ---------- */
   var camVideo = document.getElementById('camVideo');
   var camCanvas = document.getElementById('camCanvas');
   var camCtx = camCanvas.getContext('2d');
   var camOK = false;
-  var camLuma = []; camLuma.length = 0;
-
-  function ensureCamBuffer(){
+  var camLuma = [], camNorm = [];
+  function ensureBuffers(){
     var need = gridCols * gridRows;
-    if (camLuma.length !== need){
-      camLuma = new Array(need);
-      for (var i=0;i<need;i++) camLuma[i] = 0.5;
-    }
+    if (camLuma.length !== need){ camLuma = new Array(need); for (var i=0;i<need;i++) camLuma[i]=0.5; }
+    if (camNorm.length !== need){ camNorm = new Array(need); for (var j=0;j<need;j++) camNorm[j]=0.5; }
   }
 
   function enableCamera(){
-    try{
-      var constraints = { video:{ facingMode:{ ideal:'environment' }, width:{ ideal:4096 }, height:{ ideal:4096 } }, audio:false };
-      navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
-        camVideo.srcObject = stream;
-        return camVideo.play().then(function(){
-          try{
-            var tracks = stream.getVideoTracks();
-            if (tracks && tracks[0] && tracks[0].getCapabilities){
-              var caps = tracks[0].getCapabilities();
-              if (caps.zoom && typeof caps.zoom.min !== 'undefined'){
-                tracks[0].applyConstraints({ advanced:[{ zoom: caps.zoom.min }] }).catch(function(){});
-              }
+    var constraints = { video:{ facingMode:{ ideal:'environment' }, width:{ ideal:4096 }, height:{ ideal:4096 } }, audio:false };
+    navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
+      camVideo.srcObject = stream;
+      return camVideo.play().then(function(){
+        try{
+          var tracks = stream.getVideoTracks();
+          if (tracks && tracks[0] && tracks[0].getCapabilities){
+            var caps = tracks[0].getCapabilities();
+            if (caps.zoom && typeof caps.zoom.min !== 'undefined'){
+              tracks[0].applyConstraints({ advanced:[{ zoom: caps.zoom.min }] }).catch(function(){});
             }
-          }catch(_){}
-          camOK = true; ui.camBtn.classList.add('ok'); ui.camBtn.textContent='Camera ✓';
-        });
-      }).catch(function(e){ camOK=false; ui.camBtn.classList.add('err'); ui.camBtn.textContent='Camera ⚠︎'; showErr('camera: '+e.message); });
-    }catch(e){ camOK=false; ui.camBtn.classList.add('err'); ui.camBtn.textContent='Camera ⚠︎'; showErr('camera init: '+e.message); }
+          }
+        }catch(_){}
+        camOK = true; ui.camBtn.classList.add('ok'); ui.camBtn.textContent='Camera ✓';
+      });
+    }).catch(function(){ ui.camBtn.classList.add('err'); ui.camBtn.textContent='Camera ⚠︎'; });
   }
   ui.camBtn.addEventListener('click', enableCamera);
 
   function sampleCameraToGrid(){
     if (!camOK || gridCols<=0 || gridRows<=0) return;
     if (camVideo.readyState < 2) return;
-    ensureCamBuffer();
+    ensureBuffers();
 
     if (camCanvas.width !== gridCols || camCanvas.height !== gridRows){
       camCanvas.width = gridCols; camCanvas.height = gridRows;
@@ -382,19 +339,32 @@
 
     camCtx.drawImage(camVideo, sx, sy, sw, sh, 0, 0, cw, ch);
     var img = camCtx.getImageData(0,0,cw,ch).data;
-    var p=0;
+
+    // Fill camLuma at grid resolution
+    var minV = 1e9, maxV = -1e9, p = 0;
     for (var j=0;j<ch;j++){
       for (var i=0;i<cw;i++){
         var idx = (j*cw + i) * 4;
         var r = img[idx], g = img[idx+1], b = img[idx+2];
         var y = (0.2126*r + 0.7152*g + 0.0722*b) / 255;
         camLuma[p++] = y;
+        if (y < minV) minV = y;
+        if (y > maxV) maxV = y;
       }
+    }
+    // Normalize to 0..1 (edge-stretch). Flat frame -> 0.5
+    var span = maxV - minV;
+    if (span > 1e-6){
+      for (var n=0;n<camLuma.length;n++) camNorm[n] = (camLuma[n] - minV) / span;
+    } else {
+      for (var m=0;m<camLuma.length;m++) camNorm[m] = 0.5;
     }
   }
 
-  /* ========= simulation ========= */
+  /* ---------- Simulation ---------- */
   var lastT = performance.now()/1000;
+  var frameCount = 0;
+  var CAM_SMOOTH = 0.18;   // smoothing toward camera scale target per frame (0..1)
 
   function step(){
     var now = performance.now()/1000;
@@ -402,12 +372,38 @@
 
     if (needsLayout){
       buildTriGrid();
-      ensureCamBuffer();
+      ensureBuffers();
       needsLayout = false;
     }
 
-    if (camOK && Number(ui.camSens.value) > 0) sampleCameraToGrid();
+    // Process camera only every 3rd frame
+    var camSens = Number(ui.camSens.value)/100;
+    if (camOK && camSens > 0 && (frameCount % 3 === 0)) sampleCameraToGrid();
+    frameCount++;
 
+    // Update camera target scales (from normalized brightness)
+    if (camSens > 0 && camNorm.length === gridCols*gridRows){
+      for (var i=0;i<dots.length;i++){
+        var d = dots[i];
+        var ci = Math.max(0, Math.min(gridCols-1, Math.round(d.ci)));
+        var rj = Math.max(0, Math.min(gridRows-1, Math.round(d.rj)));
+        var lum = camNorm[rj*gridCols + ci]; if (lum === undefined) lum = 0.5;
+        var target = 1 + camSens * (lum*2 - 1); // 0->0x, .5->1x, 1->2x
+        if (target < 0) target = 0; if (target > 2) target = 2;
+        d.camTarget = target;
+        // Smooth toward target
+        d.camScale += (d.camTarget - d.camScale) * CAM_SMOOTH;
+      }
+    } else {
+      // Smooth back to nominal when cam off
+      for (var j=0;j<dots.length;j++){
+        var dj = dots[j];
+        dj.camTarget = 1;
+        dj.camScale += (1 - dj.camScale) * CAM_SMOOTH;
+      }
+    }
+
+    // prune ripples
     ripples = ripples.filter(function(r){ return now - r.t < r.life; });
 
     var pc = params(), k = pc.k, c = pc.c;
@@ -423,27 +419,27 @@
     var sub = 2, h = dt / sub;
 
     for (var ss=0; ss<sub; ss++){
-      for (var i=0;i<dots.length;i++){
-        var d = dots[i];
+      for (var q=0;q<dots.length;q++){
+        var d2 = dots[q];
 
-        var fx = -k * (d.x - d.rx) - c * d.vx;
-        var fy = -k * (d.y - d.ry) - c * d.vy;
+        var fx = -k * (d2.x - d2.rx) - c * d2.vx;
+        var fy = -k * (d2.y - d2.ry) - c * d2.vy;
 
-        for (var j=0;j<ripples.length;j++){
-          var rp = ripples[j];
+        for (var r=0;r<ripples.length;r++){
+          var rp = ripples[r];
           var age = now - rp.t + ss*h;
-          var rr = Math.hypot(d.x - rp.x, d.y - rp.y) + 1e-6;
+          var rr = Math.hypot(d2.x - rp.x, d2.y - rp.y) + 1e-6;
           var travel = (age * (2.4 * s));
           var sigma  = (rp.sigma != null ? rp.sigma : (0.42 * s));
           var g = Math.exp(-((rr - travel)*(rr - travel)) / (2 * sigma * sigma)) * rp.amp;
-          var ux = (d.x - rp.x)/rr, uy=(d.y - rp.y)/rr;
+          var ux = (d2.x - rp.x)/rr, uy=(d2.y - rp.y)/rr;
           fx += ux * g * 2.2 * s;
           fy += uy * g * 2.2 * s;
         }
 
         if (x_target > 0){
-          var sx = Math.sin((d.rx + d.ry + now*900)*0.004);
-          var sy = Math.cos((d.rx - d.ry - now*900)*0.004);
+          var sx = Math.sin((d2.rx + d2.ry + now*900)*0.004);
+          var sy = Math.cos((d2.rx - d2.ry - now*900)*0.004);
           fx += sx * (k * x_target);
           fy += sy * (k * x_target);
         }
@@ -451,67 +447,56 @@
         if (motionSens > 0){
           fx += tilt.x * tiltMag;
           fy += tilt.y * tiltMag;
-          fx += (Math.sin(now*40 + d.rx*0.002) * shakeMag);
-          fy += (Math.cos(now*40 - d.ry*0.002) * shakeMag);
+          fx += (Math.sin(now*40 + d2.rx*0.002) * shakeMag);
+          fy += (Math.cos(now*40 - d2.ry*0.002) * shakeMag);
         }
 
-        d.vx += fx * h; d.vy += fy * h; d.x += d.vx * h; d.y += d.vy * h;
+        d2.vx += fx * h; d2.vy += fy * h; d2.x += d2.vx * h; d2.y += d2.vy * h;
       }
     }
   }
 
-  /* ========= render ========= */
+  /* ---------- Render ---------- */
   function render(){
-    try{
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0,0,cvs.width,cvs.height);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,cvs.width,cvs.height);
 
-      ctx.globalCompositeOperation = 'lighter';
-      var rNom = R();
-      var camSens = Number(ui.camSens.value)/100;
+    ctx.globalCompositeOperation = 'lighter';
+    var rNom = R();
 
-      for (var i=0;i<dots.length;i++){
-        var d = dots[i];
-        var dx = d.x - d.rx, dy = d.y - d.ry;
-        var disp = Math.hypot(dx,dy);
-        var baseAngle = disp < 1e-6 ? 0 : Math.atan2(dy, dx);
-        var sep = Math.min(disp * 0.70, 0.8 * S());
+    for (var i=0;i<dots.length;i++){
+      var d = dots[i];
+      var dx = d.x - d.rx, dy = d.y - d.ry;
+      var disp = Math.hypot(dx,dy);
+      var baseAngle = disp < 1e-6 ? 0 : Math.atan2(dy, dx);
+      var sep = Math.min(disp * 0.70, 0.8 * S());
 
-        var scale = 1; // default
-        if (camOK && camSens > 0){
-          var ci = Math.max(0, Math.min(gridCols-1, Math.round(d.ci)));
-          var rj = Math.max(0, Math.min(gridRows-1, Math.round(d.rj)));
-          var lum = camLuma[rj*gridCols + ci]; if (lum === undefined) lum = 0.5;
-          scale = 1 + camSens * (lum*2 - 1); // 0→0x, .5→1x, 1→2x
-          if (scale < 0) scale = 0; if (scale > 2) scale = 2;
-        }
-        var r = rNom * scale;
+      var r = rNom * d.camScale; // smoothed camera scale (0..2×)
 
-        var channels = [
-          { ang: baseAngle + 0,            col:'rgb(255,0,0)', scale:1.00 },
-          { ang: baseAngle + 2*Math.PI/3,  col:'rgb(0,255,0)', scale:0.94 },
-          { ang: baseAngle - 2*Math.PI/3,  col:'rgb(0,0,255)', scale:1.06 }
-        ];
-        for (var k=0;k<3;k++){
-          var a = channels[k];
-          var offx = Math.cos(a.ang) * sep * a.scale;
-          var offy = Math.sin(a.ang) * sep * a.scale;
-          ctx.fillStyle = a.col;
-          ctx.beginPath(); ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2); ctx.fill();
-        }
-
-        if (disp < 0.35 * dpr){
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.fillStyle = '#fff';
-          ctx.beginPath(); ctx.arc(d.rx, d.ry, r, 0, Math.PI*2); ctx.fill();
-          ctx.globalCompositeOperation = 'lighter';
-        }
+      var channels = [
+        { ang: baseAngle + 0,            col:'rgb(255,0,0)', scale:1.00 },
+        { ang: baseAngle + 2*Math.PI/3,  col:'rgb(0,255,0)', scale:0.94 },
+        { ang: baseAngle - 2*Math.PI/3,  col:'rgb(0,0,255)', scale:1.06 }
+      ];
+      for (var k=0;k<3;k++){
+        var a = channels[k];
+        var offx = Math.cos(a.ang) * sep * a.scale;
+        var offy = Math.sin(a.ang) * sep * a.scale;
+        ctx.fillStyle = a.col;
+        ctx.beginPath(); ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2); ctx.fill();
       }
-    }catch(e){ showErr('render: '+e.message); }
+
+      if (disp < 0.35 * dpr){
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(d.rx, d.ry, r, 0, Math.PI*2); ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
+      }
+    }
   }
 
-  /* ========= loop ========= */
+  /* ---------- Loop ---------- */
   function loop(){ step(); render(); requestAnimationFrame(loop); }
   loop();
 })();
