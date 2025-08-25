@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — mobile CC, precise sliders</title>
+<title>RGB String-Dots — camera mapping</title>
 <style>
   :root{ --bg:#000; --ink:#fff; --muted:#a6b0bf; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
@@ -46,6 +46,9 @@
     .ctrl{ grid-column:span 1; }
     .ctrl.span2{ grid-column:span 2; }
   }
+
+  /* hidden video/canvas for camera sampling */
+  video.cam, canvas.cam { position:fixed; inset:-9999px auto auto -9999px; width:1px; height:1px; opacity:0; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -56,13 +59,12 @@
       <div class="cc__title">Controls</div><div class="cc__chev" aria-hidden="true">▾</div>
     </div>
     <div class="cc__body">
-      <!-- Defaults: Looseness 20, Bounce 20, Grid 25, Dot 7 -->
+      <!-- Defaults from your screenshot -->
       <div class="ctrl"><div class="ctrl__label">Looseness</div><input id="loose" type="range" min="0" max="100" value="20"><div id="looseV" class="ctrl__val">20</div></div>
       <div class="ctrl"><div class="ctrl__label">Bounce</div>   <input id="bounce" type="range" min="0" max="100" value="20"><div id="bounceV" class="ctrl__val">20</div></div>
       <div class="ctrl"><div class="ctrl__label">Grid</div>     <input id="space"  type="range" min="12" max="60" value="25"><div id="spaceV"  class="ctrl__val">25</div></div>
       <div class="ctrl"><div class="ctrl__label">Dot</div>      <input id="dot"    type="range" min="1"  max="10" value="7"><div  id="dotV"    class="ctrl__val">7</div></div>
 
-      <!-- Motion sensitivity (default 0.50) + permission -->
       <div class="ctrl ctrl--withbtn span2">
         <div class="ctrl__label">Motion sensitivity</div>
         <input id="motionSens" type="range" min="0" max="100" value="50" step="1">
@@ -70,7 +72,6 @@
         <button class="btn" id="motionBtn" type="button">Motion</button>
       </div>
 
-      <!-- Sound sensitivity (default 0.35) + permission -->
       <div class="ctrl ctrl--withbtn span2">
         <div class="ctrl__label">Sound sensitivity</div>
         <input id="soundSens" type="range" min="0" max="100" value="35" step="1">
@@ -78,14 +79,26 @@
         <button class="btn" id="micBtn" type="button">Mic</button>
       </div>
 
-      <!-- Touch controls -->
+      <!-- New: Camera -->
+      <div class="ctrl ctrl--withbtn span2">
+        <div class="ctrl__label">Camera sensitivity</div>
+        <input id="camSens" type="range" min="0" max="100" value="60" step="1">
+        <div id="camSensV" class="ctrl__val">0.60</div>
+        <button class="btn" id="camBtn" type="button">Camera</button>
+      </div>
+
+      <!-- Touch controls kept -->
       <div class="ctrl"><div class="ctrl__label">Touch sensitivity</div><input id="touchSens" type="range" min="0" max="100" value="70"><div id="touchSensV" class="ctrl__val">0.70</div></div>
       <div class="ctrl"><div class="ctrl__label">Touch radius</div><input id="touchRad" type="range" min="10" max="100" value="45"><div id="touchRadV" class="ctrl__val">0.45</div></div>
 
-      <!-- Live mic level meter -->
+      <!-- Live mic level -->
       <div class="meter span2" aria-hidden="true"><div class="meter__fill" id="meterFill"></div></div>
     </div>
   </section>
+
+  <!-- hidden camera elements -->
+  <video id="camVideo" class="cam" playsinline muted autoplay></video>
+  <canvas id="camCanvas" class="cam"></canvas>
 
 <script>
 (() => {
@@ -128,8 +141,11 @@
     touchRad:   document.getElementById('touchRad'),
     touchSensV: document.getElementById('touchSensV'),
     touchRadV:  document.getElementById('touchRadV'),
+    camSens:    document.getElementById('camSens'),
+    camSensV:   document.getElementById('camSensV'),
     micBtn:     document.getElementById('micBtn'),
     motionBtn:  document.getElementById('motionBtn'),
+    camBtn:     document.getElementById('camBtn'),
     meterFill:  document.getElementById('meterFill'),
   };
 
@@ -142,6 +158,7 @@
     ui.soundSensV.textContent  = (Number(ui.soundSens.value)/100).toFixed(2);
     ui.touchSensV.textContent  = (Number(ui.touchSens.value)/100).toFixed(2);
     ui.touchRadV.textContent   = (Number(ui.touchRad.value)/100).toFixed(2);
+    ui.camSensV.textContent    = (Number(ui.camSens.value)/100).toFixed(2);
   }
   ['input','change'].forEach(ev=>{
     ui.loose .addEventListener(ev, syncVals);
@@ -152,6 +169,7 @@
     ui.soundSens .addEventListener(ev, syncVals);
     ui.touchSens .addEventListener(ev, syncVals);
     ui.touchRad  .addEventListener(ev, syncVals);
+    ui.camSens   .addEventListener(ev, syncVals);
   });
   syncVals();
 
@@ -167,9 +185,11 @@
   }
 
   // ===== Grid (triangular) =====
-  const dots = [];  // {rx,ry,x,y,vx,vy}
+  const dots = [];  // {rx,ry,x,y,vx,vy, ci, rj}
   let spacing = Number(ui.space.value);
   let radius  = Number(ui.dot.value);
+  let gridCols = 0, gridRows = 0; // number of columns/rows used for camera sampling
+
   function S(){ return spacing * dpr; }
   function R(){ return radius  * dpr; }
 
@@ -177,33 +197,38 @@
     dots.length = 0;
     const W = cvs.width, H = cvs.height, s = S();
     const rowH = s * Math.sqrt(3)/2;
+
     const cols = Math.floor(W / s);
     const rows = Math.floor(H / rowH);
+    gridCols = cols + 1;  // sampling grid size (match lattice span)
+    gridRows = rows + 1;
+
     const offX = (W - cols * s) / 2;
     const offY = (H - rows * rowH) / 2;
+
     for (let j=0; j<=rows; j++){
       const y = offY + j * rowH;
       const xShift = (j % 2) ? s/2 : 0;
       for (let i=0; i<=cols; i++){
         const x = offX + xShift + i * s;
-        dots.push({ rx:x, ry:y, x, y, vx:0, vy:0 });
+        dots.push({ rx:x, ry:y, x, y, vx:0, vy:0, ci:i + (j%2?0.5:0), rj:j });
       }
     }
+    // ci uses 0.5 offset on odd rows; when sampling we'll clamp safely.
   }
   buildTriGrid();
 
-  // ===== Inputs =====
-  // Touch → impulse; slider control
+  // ===== Inputs (touch/mic/motion) — same as before =====
   let ripples = []; // {x,y,t,amp,life, sigma}
   function addImpulse(cssX, cssY, baseAmp){
     const rect = cvs.getBoundingClientRect();
-    const sens = Number(ui.touchSens.value)/100;   // 0..1
-    const sigma = (Number(ui.touchRad.value)/100) * S(); // 0..1 of grid spacing
+    const sens = Number(ui.touchSens.value)/100;
+    const sigma = (Number(ui.touchRad.value)/100) * S();
     ripples.push({
       x: (cssX - rect.left) * dpr,
       y: (cssY - rect.top)  * dpr,
       t: performance.now()/1000,
-      amp: baseAmp * (0.5 + 1.5*sens), // 0.5..2.0x
+      amp: baseAmp * (0.5 + 1.5*sens),
       life: 0.35,
       sigma
     });
@@ -214,7 +239,7 @@
   ['pointerup','pointercancel','pointerleave'].forEach(ev => cvs.addEventListener(ev, ()=> dragging=false));
   cvs.style.touchAction = 'none';
 
-  // ===== Microphone (unchanged pipeline) =====
+  // Microphone
   let micOK = false;
   let rms = 0, noise = 0.01, env = 0, peak = 0, strength = 0;
   function enableMic(){
@@ -228,8 +253,7 @@
         const buf = new Uint8Array(ana.fftSize);
         micOK = true; ui.micBtn.classList.add('ok'); ui.micBtn.textContent='Mic ✓';
 
-        const ATTACK = 0.05, RELEASE = 0.15;
-        const NOISE_TC = 0.995, GAIN = 22, RIPPLE_GAIN = 8, SPIKE_GATE = 0.006;
+        const ATTACK = 0.05, RELEASE = 0.15, NOISE_TC = 0.995, GAIN = 22, RIPPLE_GAIN = 8, SPIKE_GATE = 0.006;
 
         (function tick(){
           ana.getByteTimeDomainData(buf);
@@ -256,7 +280,7 @@
   }
   ui.micBtn.addEventListener('click', enableMic);
 
-  // ===== Motion: orientation + linear acceleration =====
+  // Motion (orientation + linear acceleration)
   let tilt = {x:0,y:0}, shake = 0, motOK=false;
   function enableMotion(){
     return new Promise(async (resolve) => {
@@ -265,19 +289,14 @@
           const res = await DeviceMotionEvent.requestPermission();
           if (res!=='granted') throw new Error('denied');
         }
-        let got = false;
-        // High-pass for linear acceleration magnitude (shake)
-        let hp = 0;
+        let got = false; let hp = 0;
         addEventListener('devicemotion', e=>{
           const g = e.accelerationIncludingGravity || {};
-          tilt.x = g.x || 0; tilt.y = -(g.y || 0);  // orientation vector
-
-          const a = e.acceleration || {};           // gravity-removed (linear)
-          const mag = Math.hypot(a.x||0, a.y||0, a.z||0); // m/s^2
-          // simple high-pass / decay
+          tilt.x = g.x || 0; tilt.y = -(g.y || 0);
+          const a = e.acceleration || {};
+          const mag = Math.hypot(a.x||0, a.y||0, a.z||0);
           hp = Math.max(0, mag - 0.8) * 0.6 + hp * 0.85;
-          shake = hp; // 0..~several; we’ll scale later
-
+          shake = hp;
           motOK = true; got = true;
           ui.motionBtn.classList.add('ok'); ui.motionBtn.textContent='Motion ✓';
         }, {passive:true});
@@ -287,27 +306,120 @@
   }
   ui.motionBtn.addEventListener('click', enableMotion);
 
-  // ===== Simulation (same dynamics; inputs scaled by sliders) =====
+  // ===== Camera (permission + widest angle, per-cell brightness) =====
+  const camVideo = document.getElementById('camVideo');
+  const camCanvas = document.getElementById('camCanvas');
+  const camCtx = camCanvas.getContext('2d');
+  let camOK = false, camStream = null;
+  // downsampled brightness buffer (gridRows x gridCols), values 0..1
+  let camLuma = [];
+
+  function initCamBuffer(){ camLuma = new Array(gridRows * gridCols).fill(0.5); }
+  initCamBuffer();
+
+  function enableCamera(){
+    return new Promise(async (resolve)=>{
+      try{
+        const constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width:  { ideal: 4096 },
+            height: { ideal: 4096 }
+          },
+          audio: false
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        camStream = stream;
+        camVideo.srcObject = stream;
+        await camVideo.play();
+        // Try to force widest zoom if supported
+        const [track] = stream.getVideoTracks();
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.zoom && caps.zoom.min !== undefined){
+          try{ await track.applyConstraints({ advanced:[{ zoom: caps.zoom.min }] }); }catch(_){}
+        }
+        camOK = true; ui.camBtn.classList.add('ok'); ui.camBtn.textContent='Camera ✓';
+        resolve(true);
+      }catch(e){
+        camOK = false; ui.camBtn.classList.add('err'); ui.camBtn.textContent='Camera ⚠︎'; resolve(false);
+      }
+    });
+  }
+  ui.camBtn.addEventListener('click', enableCamera);
+
+  // Cover-fit helper: draw video to camCanvas sized to gridCols x gridRows
+  function sampleCameraToGrid(){
+    if (!camOK) return;
+    if (gridCols <= 0 || gridRows <= 0) return;
+
+    // Resize the sampling canvas to grid resolution
+    if (camCanvas.width !== gridCols || camCanvas.height !== gridRows){
+      camCanvas.width = gridCols;
+      camCanvas.height = gridRows;
+    }
+
+    const vw = camVideo.videoWidth || 640;
+    const vh = camVideo.videoHeight || 480;
+    if (!vw || !vh) return;
+
+    // Draw with "cover" logic
+    const cw = camCanvas.width, ch = camCanvas.height;
+    const rVideo = vw / vh, rCanvas = cw / ch;
+    let sx, sy, sw, sh;
+    if (rVideo > rCanvas) { // video is wider → crop sides
+      sh = vh;
+      sw = sh * rCanvas;
+      sx = (vw - sw) / 2;
+      sy = 0;
+    } else {                // video is taller → crop top/bottom
+      sw = vw;
+      sh = sw / rCanvas;
+      sx = 0;
+      sy = (vh - sh) / 2;
+    }
+    camCtx.drawImage(camVideo, sx, sy, sw, sh, 0, 0, cw, ch);
+
+    // Read one pixel per grid cell (already downsampled)
+    const img = camCtx.getImageData(0, 0, cw, ch).data;
+    for (let j=0;j<ch;j++){
+      for (let i=0;i<cw;i++){
+        const idx = (j*cw + i) * 4;
+        const r = img[idx], g = img[idx+1], b = img[idx+2];
+        // linear luminance
+        const y = (0.2126*r + 0.7152*g + 0.0722*b) / 255;
+        camLuma[j*gridCols + i] = y;
+      }
+    }
+  }
+
+  // ===== Simulation (same dynamics; plus camera scale) =====
   let lastT = performance.now()/1000;
 
   function step(){
     const now = performance.now()/1000;
     let dt = now - lastT; if (dt > 0.033) dt = 0.033; lastT = now;
-    if (needsLayout){ buildTriGrid(); needsLayout=false; }
 
+    if (needsLayout){
+      buildTriGrid();
+      initCamBuffer();
+      needsLayout=false;
+    }
+
+    // Camera sampling (cheap: grid resolution)
+    if (camOK && Number(ui.camSens.value) > 0) sampleCameraToGrid();
+
+    // prune ripples
     ripples = ripples.filter(r => now - r.t < r.life);
 
     const {k, c} = params();
     const s = S();
 
-    // Slider sensitivities
-    const motionSens = Number(ui.motionSens.value) / 100; // 0..1
-    const soundSens  = Number(ui.soundSens.value)  / 100; // 0..1
+    const motionSens = Number(ui.motionSens.value)/100;
+    const soundSens  = Number(ui.soundSens.value)/100;
 
-    // Audio → target displacement (k-independent)
-    const x_target = soundSens * strength * 0.40 * s;
+    const x_target = soundSens * Math.min(1.5, Math.sqrt(Math.max(0, rms - noise) * 22)) * 0.40 * s;
     const tiltMag  = motionSens * (0.08 * s);
-    const shakeMag = motionSens * (Math.min(1.0, shake / 5) * 0.60 * s); // fast spikes
+    const shakeMag = motionSens * (Math.min(1.0, (shake / 5)) * 0.60 * s);
 
     const sub = 2; const h = dt / sub;
 
@@ -339,65 +451,8 @@
           fy += sy * (k * x_target);
         }
 
-        // Tilt (orientation) + shake (linear acceleration)
+        // Tilt + shake
         if (motionSens > 0){
           fx += tilt.x * tiltMag;
           fy += tilt.y * tiltMag;
-          // add brief omnidirectional push from shakes
-          fx += (Math.sin(now*40 + d.rx*0.002) * shakeMag);
-          fy += (Math.cos(now*40 - d.ry*0.002) * shakeMag);
-        }
-
-        d.vx += fx * h;
-        d.vy += fy * h;
-        d.x  += d.vx * h;
-        d.y  += d.vy * h;
-      }
-    }
-  }
-
-  // ===== Render (no trails) =====
-  function render(){
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0,0,cvs.width,cvs.height);
-
-    ctx.globalCompositeOperation = 'lighter';
-    const r = R();
-
-    for (let i=0;i<dots.length;i++){
-      const d = dots[i];
-      const dx = d.x - d.rx, dy = d.y - d.ry;
-      const disp = Math.hypot(dx,dy);
-      const baseAngle = disp < 1e-6 ? 0 : Math.atan2(dy, dx);
-      const sep = Math.min(disp * 0.70, 0.8 * S());
-
-      const channels = [
-        { ang: baseAngle + 0,                col:'rgb(255,0,0)', scale: 1.00 },
-        { ang: baseAngle + 2*Math.PI/3,     col:'rgb(0,255,0)', scale: 0.94 },
-        { ang: baseAngle - 2*Math.PI/3,     col:'rgb(0,0,255)', scale: 1.06 }
-      ];
-      for (let k=0;k<3;k++){
-        const a = channels[k];
-        const offx = Math.cos(a.ang) * sep * a.scale;
-        const offy = Math.sin(a.ang) * sep * a.scale;
-        ctx.fillStyle = a.col;
-        ctx.beginPath(); ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2); ctx.fill();
-      }
-
-      if (disp < 0.35 * dpr){
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(d.rx, d.ry, r, 0, Math.PI*2); ctx.fill();
-        ctx.globalCompositeOperation = 'lighter';
-      }
-    }
-  }
-
-  // ===== Loop =====
-  function loop(){ step(); render(); requestAnimationFrame(loop); }
-  loop();
-})();
-</script>
-</body>
-</html>
+         
