@@ -3,55 +3,94 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — no blocking, fast spikes, precise sliders</title>
+<title>RGB String-Dots — controls consolidated, mobile-first, collapsible</title>
 <style>
   :root{ --bg:#000; --ink:#fff; --muted:#a6b0bf; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
   canvas{display:block;width:100vw;height:100vh;touch-action:none;}
 
-  /* HUD */
-  .hud{
-    position:fixed; left:10px; bottom:10px; z-index:3; display:grid; gap:8px 10px;
-    grid-template-columns:auto 170px 54px; align-items:center;
-    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px;
-    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  /* Control Center (CC) */
+  .cc{
+    position:fixed; left:10px; right:10px; bottom:10px; z-index:3;
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
   }
-  .hud label{color:#d6deea;font-size:12px;white-space:nowrap}
-  .hud input[type=range]{width:170px}
-  .hud .val{color:#cfd7e3;font-size:12px;min-width:54px;text-align:right}
-
-  /* Sensor controls (non-blocking) */
-  .sensors{ position:fixed; right:10px; bottom:10px; display:flex; gap:8px; z-index:3; }
-  .btn{ appearance:none; border:1px solid var(--line); background:rgba(255,255,255,.08); color:#e8eef7;
-        padding:8px 10px; border-radius:10px; cursor:pointer; font-weight:600; }
+  .cc__head{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:10px 12px; cursor:pointer;
+  }
+  .cc__title{ font-weight:650; letter-spacing:.2px; }
+  .cc__chev{ width:22px; height:22px; border-radius:999px; display:grid; place-items:center;
+    border:1px solid var(--line); background:rgba(255,255,255,.06); }
+  .cc__body{ padding:6px 12px 10px; display:grid; gap:10px; grid-template-columns:1fr; }
+  /* Each control row: label + slider + value + optional button (mic/motion) */
+  .ctrl{
+    display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:center;
+    background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08);
+    border-radius:10px; padding:8px 10px;
+  }
+  .ctrl--withbtn{ grid-template-columns:auto 1fr auto auto; }
+  .ctrl__label{ color:#d6deea; font-size:12px; white-space:nowrap; }
+  .ctrl__val{ color:#cfd7e3; font-size:12px; min-width:40px; text-align:right; }
+  .ctrl input[type=range]{ width:100%; }
+  .btn{
+    appearance:none; border:1px solid var(--line); background:rgba(255,255,255,.08); color:#e8eef7;
+    padding:6px 10px; border-radius:9px; cursor:pointer; font-weight:600; font-size:12px;
+  }
   .btn.ok{ background:rgba(57,217,138,.14); border-color:rgba(57,217,138,.4) }
   .btn.err{ background:rgba(255,107,107,.14); border-color:rgba(255,107,107,.4) }
+
+  /* Collapse */
+  .cc[data-collapsed="true"] .cc__body{ display:none; }
+  .cc[data-collapsed="true"] .cc__chev{ transform:rotate(180deg); }
+
+  /* Small screens: keep compact vertical stacking */
+  @media (min-width:520px){
+    .cc__body{ grid-template-columns:1fr 1fr; }
+    .ctrl{ grid-column:span 1; }
+    .ctrl.span2{ grid-column:span 2; }
+  }
 </style>
 </head>
 <body>
   <canvas id="cv"></canvas>
 
-  <!-- Controls: Looseness (↓k), Bounce (↓damping), Grid spacing, Dot size -->
-  <div class="hud" id="hud">
-    <label for="loose">Looseness</label><input id="loose" type="range" min="0" max="100" value="45"><span id="looseV" class="val">45</span>
-    <label for="bounce">Bounce</label>   <input id="bounce" type="range" min="0" max="100" value="35"><span id="bounceV" class="val">35</span>
-    <label for="space">Grid</label>      <input id="space"  type="range" min="12" max="60" value="28"><span id="spaceV"  class="val">28</span>
-    <label for="dot">Dot</label>         <input id="dot"    type="range" min="1"  max="8"  value="3"><span  id="dotV"    class="val">3</span>
-  </div>
+  <!-- CC: all controls here; collapsible -->
+  <section class="cc" id="cc" data-collapsed="false">
+    <div class="cc__head" id="ccHead">
+      <div class="cc__title">Controls</div>
+      <div class="cc__chev" aria-hidden="true">▾</div>
+    </div>
+    <div class="cc__body">
+      <div class="ctrl"><div class="ctrl__label">Looseness</div><input id="loose" type="range" min="0" max="100" value="45"><div id="looseV" class="ctrl__val">45</div></div>
+      <div class="ctrl"><div class="ctrl__label">Bounce</div>   <input id="bounce" type="range" min="0" max="100" value="35"><div id="bounceV" class="ctrl__val">35</div></div>
+      <div class="ctrl"><div class="ctrl__label">Grid</div>     <input id="space"  type="range" min="12" max="60" value="28"><div id="spaceV"  class="ctrl__val">28</div></div>
+      <div class="ctrl"><div class="ctrl__label">Dot</div>      <input id="dot"    type="range" min="1"  max="8"  value="3"><div  id="dotV"    class="ctrl__val">3</div></div>
 
-  <!-- Non-blocking sensor buttons -->
-  <div class="sensors">
-    <button class="btn" id="micBtn">Enable Mic</button>
-    <button class="btn" id="motionBtn">Enable Motion</button>
-  </div>
+      <!-- Motion sensitivity + permission -->
+      <div class="ctrl ctrl--withbtn span2">
+        <div class="ctrl__label">Motion sensitivity</div>
+        <input id="motionSens" type="range" min="0" max="100" value="50" step="1">
+        <div id="motionSensV" class="ctrl__val">0.50</div>
+        <button class="btn" id="motionBtn" type="button">Enable</button>
+      </div>
+
+      <!-- Sound sensitivity + permission -->
+      <div class="ctrl ctrl--withbtn span2">
+        <div class="ctrl__label">Sound sensitivity</div>
+        <input id="soundSens" type="range" min="0" max="100" value="10" step="1">
+        <div id="soundSensV" class="ctrl__val">0.10</div>
+        <button class="btn" id="micBtn" type="button">Enable</button>
+      </div>
+    </div>
+  </section>
 
 <script>
 (() => {
   // ===== Canvas =====
   const cvs = document.getElementById('cv');
   const ctx  = cvs.getContext('2d', { alpha:false });
-  const micBtn = document.getElementById('micBtn');
-  const motBtn = document.getElementById('motionBtn');
 
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   let needsLayout = false;
@@ -65,34 +104,51 @@
   addEventListener('resize', resize, { passive:true });
   resize();
 
-  // ===== UI (precise mappings, labels are literal) =====
+  // ===== CC collapse =====
+  const cc = document.getElementById('cc');
+  document.getElementById('ccHead').addEventListener('click', () => {
+    cc.dataset.collapsed = (cc.dataset.collapsed === 'true') ? 'false' : 'true';
+  });
+
+  // ===== UI (precise mappings; labels are literal) =====
   const ui = {
-    loose:  document.getElementById('loose'),   // higher -> looser -> LOWER stiffness
-    bounce: document.getElementById('bounce'),  // higher -> MORE bounce -> LOWER damping
+    loose:  document.getElementById('loose'),
+    bounce: document.getElementById('bounce'),
     space:  document.getElementById('space'),
     dot:    document.getElementById('dot'),
     looseV: document.getElementById('looseV'),
     bounceV:document.getElementById('bounceV'),
     spaceV: document.getElementById('spaceV'),
     dotV:   document.getElementById('dotV'),
+    motionSens: document.getElementById('motionSens'),
+    soundSens:  document.getElementById('soundSens'),
+    motionSensV:document.getElementById('motionSensV'),
+    soundSensV: document.getElementById('soundSensV'),
+    micBtn:     document.getElementById('micBtn'),
+    motionBtn:  document.getElementById('motionBtn'),
   };
+
   function syncVals(){
-    ui.looseV.textContent  = ui.loose.value;
-    ui.bounceV.textContent = ui.bounce.value;
-    ui.spaceV.textContent  = ui.space.value;
-    ui.dotV.textContent    = ui.dot.value;
+    ui.looseV.textContent   = ui.loose.value;
+    ui.bounceV.textContent  = ui.bounce.value;
+    ui.spaceV.textContent   = ui.space.value;
+    ui.dotV.textContent     = ui.dot.value;
+    ui.motionSensV.textContent = (Number(ui.motionSens.value)/100).toFixed(2);
+    ui.soundSensV.textContent  = (Number(ui.soundSens.value)/100).toFixed(2);
   }
   ['input','change'].forEach(ev=>{
     ui.loose .addEventListener(ev, syncVals);
     ui.bounce.addEventListener(ev, syncVals);
     ui.space .addEventListener(ev, ()=>{ spacing = Number(ui.space.value); needsLayout = true; syncVals(); });
     ui.dot   .addEventListener(ev, ()=>{ radius  = Number(ui.dot.value);  syncVals(); });
+    ui.motionSens.addEventListener(ev, syncVals);
+    ui.soundSens .addEventListener(ev, syncVals);
   });
   syncVals();
 
   // Physics params — linear and literal
-  const K_MIN = 6,  K_MAX = 160;     // higher = snappier (wider range for spikes)
-  const C_MIN = 0.01, C_MAX = 2.2;   // higher = more damping
+  const K_MIN = 6,  K_MAX = 160;     // higher = snappier
+  const C_MIN = 0.01, C_MAX = 2.2;   // higher = more damping (Bounce slider inverses this)
 
   function params(){
     const L = Number(ui.loose.value);   // 0..100
@@ -138,7 +194,7 @@
       y: (cssY - rect.top)  * dpr,
       t: performance.now()/1000,
       amp,
-      life: 0.35 // seconds — short
+      life: 0.35 // short
     });
   }
   let dragging = false;
@@ -147,7 +203,7 @@
   ['pointerup','pointercancel','pointerleave'].forEach(ev => cvs.addEventListener(ev, ()=> dragging=false));
   cvs.style.touchAction = 'none';
 
-  // Microphone (non-blocking; button triggers permission)
+  // Microphone (permission via CC)
   let audioEnv = 0, micOK = false, audioPeak = 0;
   function enableMic(){
     return new Promise(async (resolve) => {
@@ -158,9 +214,9 @@
         const src = ac.createMediaStreamSource(stream);
         const ana = ac.createAnalyser(); ana.fftSize = 1024; src.connect(ana);
         const buf = new Uint8Array(ana.fftSize);
-        micOK = true; micBtn.classList.remove('err'); micBtn.classList.add('ok'); micBtn.textContent='Mic ✓';
+        micOK = true; ui.micBtn.classList.remove('err'); ui.micBtn.classList.add('ok'); ui.micBtn.textContent='Mic ✓';
 
-        const ATTACK = 0.06, RELEASE = 0.18, THRESH = 0.035, GAIN = 7.5;
+        const ATTACK = 0.06, RELEASE = 0.18, THRESH = 0.035;
         (function tick(){
           ana.getByteTimeDomainData(buf);
           let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
@@ -174,17 +230,17 @@
           audioPeak = Math.max(rms, audioPeak*0.92);
           if (spike > 0.012){
             const cx = cvs.width*0.5, cy = cvs.height*0.5;
-            ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: GAIN * spike, life: 0.28 });
+            ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: 7.5 * spike, life: 0.28 });
           }
           requestAnimationFrame(tick);
         })();
         resolve(true);
-      }catch(e){ micOK=false; micBtn.classList.add('err'); micBtn.textContent='Mic ⚠︎'; resolve(false); }
+      }catch(e){ micOK=false; ui.micBtn.classList.add('err'); ui.micBtn.textContent='Mic ⚠︎'; resolve(false); }
     });
   }
-  micBtn.addEventListener('click', enableMic);
+  ui.micBtn.addEventListener('click', enableMic);
 
-  // Motion (non-blocking; button triggers permission)
+  // Motion (permission via CC)
   let tilt = {x:0,y:0}, motOK=false;
   function enableMotion(){
     return new Promise(async (resolve) => {
@@ -198,15 +254,15 @@
           const g = e.accelerationIncludingGravity || {};
           tilt.x = g.x || 0; tilt.y = -(g.y || 0);
           motOK = true; got = true;
-          motBtn.classList.remove('err'); motBtn.classList.add('ok'); motBtn.textContent='Motion ✓';
+          ui.motionBtn.classList.remove('err'); ui.motionBtn.classList.add('ok'); ui.motionBtn.textContent='Motion ✓';
         }, {passive:true});
-        setTimeout(()=>{ if(!got){ motBtn.classList.add('err'); motBtn.textContent='Motion ⚠︎'; } resolve(got); }, 800);
-      }catch(e){ motOK=false; motBtn.classList.add('err'); motBtn.textContent='Motion ⚠︎'; resolve(false); }
+        setTimeout(()=>{ if(!got){ ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; } resolve(got); }, 800);
+      }catch(e){ motOK=false; ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; resolve(false); }
     });
   }
-  motBtn.addEventListener('click', enableMotion);
+  ui.motionBtn.addEventListener('click', enableMotion);
 
-  // ===== Simulation (spiky, short-lived; fast response) =====
+  // ===== Simulation (unchanged behaviour except sensitivity multipliers) =====
   let lastT = performance.now()/1000;
 
   function step(){
@@ -221,9 +277,12 @@
     const {k, c} = params();
     const s = S();
 
-    // Audio force magnitude — noticeable
-    const audioMag = audioEnv * 1.6 * s;  // boosted
-    const tiltMag  = 0.08 * s;
+    // Sensitivities from CC (0..1). 0 = not used.
+    const motionSens = Number(ui.motionSens.value) / 100; // default 0.50
+    const soundSens  = Number(ui.soundSens.value)  / 100; // default 0.10
+
+    const audioMag = soundSens * (audioEnv * 1.6 * s);  // scaled by slider
+    const tiltMag  = motionSens * (0.08 * s);           // scaled by slider
 
     // Two substeps for stability at high k
     const sub = 2; const h = dt / sub;
@@ -236,26 +295,30 @@
         let fx = -k * (d.x - d.rx) - c * d.vx;
         let fy = -k * (d.y - d.ry) - c * d.vy;
 
-        // Ripples: sharp Gaussian shell
+        // Ripples (sharp shell)
         for (let j=0;j<ripples.length;j++){
           const r = ripples[j];
           const age = now - r.t + ss*h;
           const rr = Math.hypot(d.x - r.x, d.y - r.y) + 1e-6;
-          const travel = (age * (2.4 * s)); // faster
-          const sigma  = 0.42 * s;          // tight
+          const travel = (age * (2.4 * s));
+          const sigma  = 0.42 * s;
           const g = Math.exp(-((rr - travel)*(rr - travel)) / (2 * sigma * sigma)) * r.amp;
           const ux = (d.x - r.x)/rr, uy=(d.y - r.y)/rr;
           fx += ux * g * 2.2 * s;
           fy += uy * g * 2.2 * s;
         }
 
-        // Audio swirl kick
-        fx += Math.sin((d.rx + d.ry + now*900)*0.004) * audioMag;
-        fy += Math.cos((d.rx - d.ry - now*900)*0.004) * audioMag;
+        // Audio swirl kick (scaled)
+        if (soundSens > 0){
+          fx += Math.sin((d.rx + d.ry + now*900)*0.004) * audioMag;
+          fy += Math.cos((d.rx - d.ry - now*900)*0.004) * audioMag;
+        }
 
-        // Tilt
-        fx += tilt.x * tiltMag;
-        fy += tilt.y * tiltMag;
+        // Tilt (scaled)
+        if (motionSens > 0){
+          fx += tilt.x * tiltMag;
+          fy += tilt.y * tiltMag;
+        }
 
         // Integrate
         d.vx += fx * h;
