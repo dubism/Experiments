@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — reliable audio mapping</title>
+<title>RGB String-Dots — mobile CC, precise sliders</title>
 <style>
   :root{ --bg:#000; --ink:#fff; --muted:#a6b0bf; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
@@ -35,12 +35,9 @@
   }
   .btn.ok{ background:rgba(57,217,138,.14); border-color:rgba(57,217,138,.4) }
   .btn.err{ background:rgba(255,107,107,.14); border-color:rgba(255,107,107,.4) }
-
-  /* Audio level bar (visual verification) */
   .meter{ position:relative; height:6px; background:rgba(255,255,255,.08); border-radius:999px; overflow:hidden; grid-column:1 / -1; }
   .meter__fill{ position:absolute; left:0; top:0; bottom:0; width:0%; background:#9bd2ff; }
 
-  /* Collapse */
   .cc[data-collapsed="true"] .cc__body{ display:none; }
   .cc[data-collapsed="true"] .cc__chev{ transform:rotate(180deg); }
 
@@ -59,26 +56,33 @@
       <div class="cc__title">Controls</div><div class="cc__chev" aria-hidden="true">▾</div>
     </div>
     <div class="cc__body">
-      <div class="ctrl"><div class="ctrl__label">Looseness</div><input id="loose" type="range" min="0" max="100" value="45"><div id="looseV" class="ctrl__val">45</div></div>
-      <div class="ctrl"><div class="ctrl__label">Bounce</div>   <input id="bounce" type="range" min="0" max="100" value="35"><div id="bounceV" class="ctrl__val">35</div></div>
-      <div class="ctrl"><div class="ctrl__label">Grid</div>     <input id="space"  type="range" min="12" max="60" value="28"><div id="spaceV"  class="ctrl__val">28</div></div>
-      <div class="ctrl"><div class="ctrl__label">Dot</div>      <input id="dot"    type="range" min="1"  max="8"  value="3"><div  id="dotV"    class="ctrl__val">3</div></div>
+      <!-- Defaults: Looseness 20, Bounce 20, Grid 25, Dot 7 -->
+      <div class="ctrl"><div class="ctrl__label">Looseness</div><input id="loose" type="range" min="0" max="100" value="20"><div id="looseV" class="ctrl__val">20</div></div>
+      <div class="ctrl"><div class="ctrl__label">Bounce</div>   <input id="bounce" type="range" min="0" max="100" value="20"><div id="bounceV" class="ctrl__val">20</div></div>
+      <div class="ctrl"><div class="ctrl__label">Grid</div>     <input id="space"  type="range" min="12" max="60" value="25"><div id="spaceV"  class="ctrl__val">25</div></div>
+      <div class="ctrl"><div class="ctrl__label">Dot</div>      <input id="dot"    type="range" min="1"  max="10" value="7"><div  id="dotV"    class="ctrl__val">7</div></div>
 
+      <!-- Motion sensitivity (default 0.50) + permission -->
       <div class="ctrl ctrl--withbtn span2">
         <div class="ctrl__label">Motion sensitivity</div>
         <input id="motionSens" type="range" min="0" max="100" value="50" step="1">
         <div id="motionSensV" class="ctrl__val">0.50</div>
-        <button class="btn" id="motionBtn" type="button">Enable</button>
+        <button class="btn" id="motionBtn" type="button">Motion</button>
       </div>
 
+      <!-- Sound sensitivity (default 0.35) + permission -->
       <div class="ctrl ctrl--withbtn span2">
         <div class="ctrl__label">Sound sensitivity</div>
-        <input id="soundSens" type="range" min="0" max="100" value="10" step="1">
-        <div id="soundSensV" class="ctrl__val">0.10</div>
-        <button class="btn" id="micBtn" type="button">Enable</button>
+        <input id="soundSens" type="range" min="0" max="100" value="35" step="1">
+        <div id="soundSensV" class="ctrl__val">0.35</div>
+        <button class="btn" id="micBtn" type="button">Mic</button>
       </div>
 
-      <!-- Live mic level meter (0–1) -->
+      <!-- Touch controls -->
+      <div class="ctrl"><div class="ctrl__label">Touch sensitivity</div><input id="touchSens" type="range" min="0" max="100" value="70"><div id="touchSensV" class="ctrl__val">0.70</div></div>
+      <div class="ctrl"><div class="ctrl__label">Touch radius</div><input id="touchRad" type="range" min="10" max="100" value="45"><div id="touchRadV" class="ctrl__val">0.45</div></div>
+
+      <!-- Live mic level meter -->
       <div class="meter span2" aria-hidden="true"><div class="meter__fill" id="meterFill"></div></div>
     </div>
   </section>
@@ -88,11 +92,9 @@
   // ===== Canvas =====
   const cvs = document.getElementById('cv');
   const ctx  = cvs.getContext('2d', { alpha:false });
-
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   let needsLayout = false;
 
-  let needsRebuildDeclared = true; // declared before resize usage
   function resize(){
     const r = cvs.getBoundingClientRect();
     cvs.width  = Math.floor(r.width  * dpr);
@@ -122,6 +124,10 @@
     soundSens:  document.getElementById('soundSens'),
     motionSensV:document.getElementById('motionSensV'),
     soundSensV: document.getElementById('soundSensV'),
+    touchSens:  document.getElementById('touchSens'),
+    touchRad:   document.getElementById('touchRad'),
+    touchSensV: document.getElementById('touchSensV'),
+    touchRadV:  document.getElementById('touchRadV'),
     micBtn:     document.getElementById('micBtn'),
     motionBtn:  document.getElementById('motionBtn'),
     meterFill:  document.getElementById('meterFill'),
@@ -134,6 +140,8 @@
     ui.dotV.textContent     = ui.dot.value;
     ui.motionSensV.textContent = (Number(ui.motionSens.value)/100).toFixed(2);
     ui.soundSensV.textContent  = (Number(ui.soundSens.value)/100).toFixed(2);
+    ui.touchSensV.textContent  = (Number(ui.touchSens.value)/100).toFixed(2);
+    ui.touchRadV.textContent   = (Number(ui.touchRad.value)/100).toFixed(2);
   }
   ['input','change'].forEach(ev=>{
     ui.loose .addEventListener(ev, syncVals);
@@ -142,6 +150,8 @@
     ui.dot   .addEventListener(ev, ()=>{ radius  = Number(ui.dot.value);  syncVals(); });
     ui.motionSens.addEventListener(ev, syncVals);
     ui.soundSens .addEventListener(ev, syncVals);
+    ui.touchSens .addEventListener(ev, syncVals);
+    ui.touchRad  .addEventListener(ev, syncVals);
   });
   syncVals();
 
@@ -183,16 +193,19 @@
   buildTriGrid();
 
   // ===== Inputs =====
-  // Touch → sharp impulses
-  let ripples = []; // {x,y,t,amp,life}
-  function addImpulse(cssX, cssY, amp = 1){
+  // Touch → impulse; slider control
+  let ripples = []; // {x,y,t,amp,life, sigma}
+  function addImpulse(cssX, cssY, baseAmp){
     const rect = cvs.getBoundingClientRect();
+    const sens = Number(ui.touchSens.value)/100;   // 0..1
+    const sigma = (Number(ui.touchRad.value)/100) * S(); // 0..1 of grid spacing
     ripples.push({
       x: (cssX - rect.left) * dpr,
       y: (cssY - rect.top)  * dpr,
       t: performance.now()/1000,
-      amp,
-      life: 0.35
+      amp: baseAmp * (0.5 + 1.5*sens), // 0.5..2.0x
+      life: 0.35,
+      sigma
     });
   }
   let dragging = false;
@@ -201,9 +214,9 @@
   ['pointerup','pointercancel','pointerleave'].forEach(ev => cvs.addEventListener(ev, ()=> dragging=false));
   cvs.style.touchAction = 'none';
 
-  // ===== Microphone (robust pipeline) =====
+  // ===== Microphone (unchanged pipeline) =====
   let micOK = false;
-  let rms = 0, noise = 0.01, env = 0, peak = 0, strength = 0; // strength ~ 0..1+
+  let rms = 0, noise = 0.01, env = 0, peak = 0, strength = 0;
   function enableMic(){
     return new Promise(async (resolve) => {
       try{
@@ -213,45 +226,28 @@
         const src = ac.createMediaStreamSource(stream);
         const ana = ac.createAnalyser(); ana.fftSize = 1024; src.connect(ana);
         const buf = new Uint8Array(ana.fftSize);
-        micOK = true; ui.micBtn.classList.remove('err'); ui.micBtn.classList.add('ok'); ui.micBtn.textContent='Mic ✓';
+        micOK = true; ui.micBtn.classList.add('ok'); ui.micBtn.textContent='Mic ✓';
 
-        // Tunables
         const ATTACK = 0.05, RELEASE = 0.15;
-        const NOISE_TC = 0.995; // noise floor EMA (slow)
-        const GAIN = 22;        // overall gain into strength
-        const RIPPLE_GAIN = 8;  // spike → ripple gain
-        const SPIKE_GATE = 0.006;
+        const NOISE_TC = 0.995, GAIN = 22, RIPPLE_GAIN = 8, SPIKE_GATE = 0.006;
 
         (function tick(){
           ana.getByteTimeDomainData(buf);
-          // True RMS
           let sum=0; for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
           rms = Math.sqrt(sum/buf.length);
-
-          // Track noise floor conservatively
-          noise = (rms < noise) ? (NOISE_TC*noise + (1-NOISE_TC)*rms)
-                                : (0.999*noise + 0.001*rms);
-
-          // Envelope follower
+          noise = (rms < noise) ? (NOISE_TC*noise + (1-NOISE_TC)*rms) : (0.999*noise + 0.001*rms);
           const atk = 1 - Math.exp(-1/(60*ATTACK));
           const rel = 1 - Math.exp(-1/(60*RELEASE));
           env = (rms > env) ? env + (rms - env)*atk : env + (rms - env)*rel;
-
-          // Strength: compressed, relative to noise
           const relAmp = Math.max(0, rms - noise);
-          strength = Math.min(1.5, Math.sqrt(relAmp * GAIN)); // 0..~1.5
-
-          // Transient → short ripple
+          strength = Math.min(1.5, Math.sqrt(relAmp * GAIN));
           const spike = Math.max(0, rms - Math.max(noise*1.2, peak*0.92));
           peak = Math.max(rms, peak*0.92);
           if (spike > SPIKE_GATE){
             const cx = cvs.width*0.5, cy = cvs.height*0.5;
-            ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: RIPPLE_GAIN * spike, life: 0.25 });
+            ripples.push({ x:cx, y:cy, t:performance.now()/1000, amp: RIPPLE_GAIN * spike, life: 0.25, sigma: 0.42*S() });
           }
-
-          // Meter UI (0..1)
           ui.meterFill.style.width = (Math.min(1, (rms - noise)*40) * 100).toFixed(1) + '%';
-
           requestAnimationFrame(tick);
         })();
         resolve(true);
@@ -260,8 +256,8 @@
   }
   ui.micBtn.addEventListener('click', enableMic);
 
-  // ===== Motion (unchanged) =====
-  let tilt = {x:0,y:0}, motOK=false;
+  // ===== Motion: orientation + linear acceleration =====
+  let tilt = {x:0,y:0}, shake = 0, motOK=false;
   function enableMotion(){
     return new Promise(async (resolve) => {
       try{
@@ -270,11 +266,20 @@
           if (res!=='granted') throw new Error('denied');
         }
         let got = false;
+        // High-pass for linear acceleration magnitude (shake)
+        let hp = 0;
         addEventListener('devicemotion', e=>{
           const g = e.accelerationIncludingGravity || {};
-          tilt.x = g.x || 0; tilt.y = -(g.y || 0);
+          tilt.x = g.x || 0; tilt.y = -(g.y || 0);  // orientation vector
+
+          const a = e.acceleration || {};           // gravity-removed (linear)
+          const mag = Math.hypot(a.x||0, a.y||0, a.z||0); // m/s^2
+          // simple high-pass / decay
+          hp = Math.max(0, mag - 0.8) * 0.6 + hp * 0.85;
+          shake = hp; // 0..~several; we’ll scale later
+
           motOK = true; got = true;
-          ui.motionBtn.classList.remove('err'); ui.motionBtn.classList.add('ok'); ui.motionBtn.textContent='Motion ✓';
+          ui.motionBtn.classList.add('ok'); ui.motionBtn.textContent='Motion ✓';
         }, {passive:true});
         setTimeout(()=>{ if(!got){ ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; } resolve(got); }, 800);
       }catch(e){ motOK=false; ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; resolve(false); }
@@ -282,13 +287,12 @@
   }
   ui.motionBtn.addEventListener('click', enableMotion);
 
-  // ===== Simulation (unchanged except audio scaling) =====
+  // ===== Simulation (same dynamics; inputs scaled by sliders) =====
   let lastT = performance.now()/1000;
 
   function step(){
     const now = performance.now()/1000;
     let dt = now - lastT; if (dt > 0.033) dt = 0.033; lastT = now;
-
     if (needsLayout){ buildTriGrid(); needsLayout=false; }
 
     ripples = ripples.filter(r => now - r.t < r.life);
@@ -296,16 +300,15 @@
     const {k, c} = params();
     const s = S();
 
-    // Sensitivities (0..1). 0 = muted.
-    const motionSens = Number(ui.motionSens.value) / 100; // default 0.50
-    const soundSens  = Number(ui.soundSens.value)  / 100; // default 0.10
+    // Slider sensitivities
+    const motionSens = Number(ui.motionSens.value) / 100; // 0..1
+    const soundSens  = Number(ui.soundSens.value)  / 100; // 0..1
 
-    // Convert audio "strength" into a target displacement in grid units,
-    // then apply a matching force F = k * x_target so effect is k-independent.
-    const x_target = soundSens * strength * 0.40 * s; // 0..~0.6s @ max
+    // Audio → target displacement (k-independent)
+    const x_target = soundSens * strength * 0.40 * s;
     const tiltMag  = motionSens * (0.08 * s);
+    const shakeMag = motionSens * (Math.min(1.0, shake / 5) * 0.60 * s); // fast spikes
 
-    // Two substeps for stability at high k
     const sub = 2; const h = dt / sub;
 
     for (let ss=0; ss<sub; ss++){
@@ -315,20 +318,20 @@
         let fx = -k * (d.x - d.rx) - c * d.vx;
         let fy = -k * (d.y - d.ry) - c * d.vy;
 
-        // Ripples (kept)
+        // Touch ripples
         for (let j=0;j<ripples.length;j++){
           const r = ripples[j];
           const age = now - r.t + ss*h;
           const rr = Math.hypot(d.x - r.x, d.y - r.y) + 1e-6;
           const travel = (age * (2.4 * s));
-          const sigma  = 0.42 * s;
+          const sigma  = r.sigma ?? (0.42 * s);
           const g = Math.exp(-((rr - travel)*(rr - travel)) / (2 * sigma * sigma)) * r.amp;
           const ux = (d.x - r.x)/rr, uy=(d.y - r.y)/rr;
           fx += ux * g * 2.2 * s;
           fy += uy * g * 2.2 * s;
         }
 
-        // Audio swirl — force magnitude = k * x_target
+        // Audio swirl (k * x_target)
         if (x_target > 0){
           const sx = Math.sin((d.rx + d.ry + now*900)*0.004);
           const sy = Math.cos((d.rx - d.ry - now*900)*0.004);
@@ -336,10 +339,13 @@
           fy += sy * (k * x_target);
         }
 
-        // Tilt (scaled)
+        // Tilt (orientation) + shake (linear acceleration)
         if (motionSens > 0){
           fx += tilt.x * tiltMag;
           fy += tilt.y * tiltMag;
+          // add brief omnidirectional push from shakes
+          fx += (Math.sin(now*40 + d.rx*0.002) * shakeMag);
+          fy += (Math.cos(now*40 - d.ry*0.002) * shakeMag);
         }
 
         d.vx += fx * h;
