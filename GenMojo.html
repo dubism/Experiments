@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title></title>
+<title>Emoji Mixer — Bowl + Buttons + Bottom Carousel</title>
 <style>
   :root{
     --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
@@ -129,6 +129,7 @@
   }
   .seed .e{font-size:36px}
 
+  /* (TRUNCATED IN ORIGINAL) — completed below */
   .placed{
     position:absolute; width:12vmin; max-width:80px; aspect-ratio:1; border-radius:50%;
     display:grid; place-items:center; cursor:grab; pointer-events:auto;
@@ -136,4 +137,225 @@
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
     transform:translate(-50%,-50%) scale(1);
     transition:transform .25s var(--ease), opacity .25s var(--ease), box-shadow .2s var(--ease);
- 
+  }
+  .placed:active{ cursor:grabbing; transform:translate(-50%,-50%) scale(.98) }
+  .placed .e{ font-size:min(8vmin,56px) }
+
+  /* ---------- BUTTONS ROW ---------- */
+  .controls{
+    display:flex; justify-content:center; gap:16px; padding:6px 0 2px;
+    align-items:center;
+  }
+  .plus,.cancel{ position:relative }
+  .plus::after,.cancel::after{
+    content:""; position:absolute; inset:0; border-radius:50%;
+    box-shadow:inset 0 0 0 1px #00000010;
+    -webkit-mask-image: radial-gradient(white, transparent 65%);
+            mask-image: radial-gradient(white, transparent 65%);
+  }
+  .plus:active,.cancel:active{ transform:translateY(1px) scale(.985) }
+  .plus .e,.cancel .e{ font-size:28px }
+
+  /* ---------- CAROUSEL AT BOTTOM ---------- */
+  .carousel{
+    position:relative;
+    display:grid; align-items:center;
+    overflow-x:auto; overflow-y:hidden; /* prevent vertical drag */
+    touch-action:pan-x;                 /* **surgical**: horizontal only */
+    -webkit-overflow-scrolling:touch;
+    scroll-snap-type:x mandatory;
+    gap:10px; padding:10px 6px;
+    border-radius:16px; background:#ffffff90; backdrop-filter:saturate(1.1) blur(6px);
+    box-shadow:var(--shadow), inset 0 1px 0 #ffffffd0;
+    grid-auto-flow:column; grid-auto-columns:max-content;
+  }
+  .chip{
+    min-width:60px; min-height:60px;
+    scroll-snap-align:center;
+    display:grid; place-items:center;
+    transition:transform .2s var(--ease), box-shadow .2s var(--ease), background .2s var(--ease);
+  }
+  .chip .e{ font-size:32px }
+  .chip.active{
+    transform:scale(1.12);
+    box-shadow:0 6px 20px #0000001f, inset 0 1px 0 #ffffffc8;
+    background:radial-gradient(120% 120% at 30% 30%, #ffffffee, #ffffffb8 60%, #ffffff8a 100%);
+  }
+
+  /* Utility */
+  .sr{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <!-- Bowl -->
+    <div class="centerWrap">
+      <div class="cauldron-wrap" id="bowl">
+        <div class="cauldron" id="cauldron">
+          <div class="brew">
+            <div class="liquid"></div>
+            <div class="beams"></div>
+          </div>
+          <div class="image-wrap">
+            <img id="result" class="result-img" alt=""/>
+          </div>
+          <div class="ring"></div>
+          <div class="overlay" id="overlay"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buttons row (near the bowl) -->
+    <div class="controls">
+      <button class="plus" id="btnPlus" aria-label="Add">
+        <span class="e">➕</span>
+      </button>
+      <button class="cancel" id="btnCancel" aria-label="Clear">
+        <span class="e">✖️</span>
+      </button>
+    </div>
+
+    <!-- Bottom carousel -->
+    <div class="carousel" id="carousel" aria-label="Emoji carousel">
+      <!-- chips are injected -->
+    </div>
+  </div>
+
+  <!-- Seeds floating around the scene -->
+  <div class="seeds" id="seeds"></div>
+
+<script>
+/* ------- Minimal runtime to render UI and keep it functional ------- */
+
+/* Data: sample emojis (no labels, no text). */
+const EMOJIS = [
+  "🌸","🔥","🌊","🌿","⭐️","🪄","💎","🌙","⚡️","🍃","🌀","🌈",
+  "🍊","🌶️","🍫","🧊","☁️","🌰","🪵","🪙","🧪","🎈","🧵","🧩",
+  "🐾","🦋","🐚","🍓","🍋","🍇","🍒","🥝","🌻","🌼","🪷","🍀"
+];
+
+/* Elements */
+const seedsWrap = document.getElementById('seeds');
+const overlay = document.getElementById('overlay');
+const cauldron = document.getElementById('cauldron');
+const carousel = document.getElementById('carousel');
+const btnPlus = document.getElementById('btnPlus');
+const btnCancel = document.getElementById('btnCancel');
+
+/* Create floating seeds around (no room “population” inside the bowl). */
+function spawnFloatingSeeds() {
+  seedsWrap.innerHTML = '';
+  const W = window.innerWidth, H = window.innerHeight;
+  const cx = W/2, cy = H/2;
+  const radius = Math.min(Math.min(W,H)*0.42, 300);
+
+  for (let i=0; i<18; i++){
+    const a = (i/18)*Math.PI*2 + (Math.random()*0.6-0.3);
+    const r = radius + (Math.random()*40-20);
+    const x = cx + Math.cos(a)*r;
+    const y = cy + Math.sin(a)*r;
+
+    const s = document.createElement('div');
+    s.className = 'seed';
+    s.style.left = x+'px';
+    s.style.top  = y+'px';
+    s.style.setProperty('--fx', (Math.random()*8-4)+'px');
+    s.style.setProperty('--fy', (Math.random()*8-4)+'px');
+    s.style.setProperty('--dur', (8+Math.random()*4)+'s');
+    s.style.setProperty('--delay', (Math.random()*-6)+'s');
+    s.innerHTML = `<div class="e">${EMOJIS[(Math.random()*EMOJIS.length)|0]}</div>`;
+    // Tap to bring inside as a placed token
+    s.addEventListener('click', () => placeTokenAtCenter(s.textContent));
+    seedsWrap.appendChild(s);
+  }
+}
+
+/* Place a token inside the bowl (center with slight jitter) */
+function placeTokenAtCenter(emoji){
+  const rect = cauldron.getBoundingClientRect();
+  const x = rect.left + rect.width/2 + (Math.random()*20-10);
+  const y = rect.top + rect.height/2 + (Math.random()*20-10);
+  placeToken(emoji, x, y);
+}
+
+/* Draggable placed token */
+function placeToken(emoji, pageX, pageY){
+  const p = document.createElement('div');
+  p.className = 'placed';
+  p.style.left = pageX+'px';
+  p.style.top  = pageY+'px';
+  p.innerHTML = `<div class="e">${emoji}</div>`;
+  overlay.appendChild(p);
+
+  // drag
+  let dragging=false, ox=0, oy=0;
+  p.addEventListener('pointerdown', (e)=>{
+    dragging = true; p.setPointerCapture(e.pointerId);
+    ox = e.clientX - p.offsetLeft; oy = e.clientY - p.offsetTop;
+  });
+  p.addEventListener('pointermove', (e)=>{
+    if(!dragging) return;
+    p.style.left = (e.clientX - ox)+'px';
+    p.style.top  = (e.clientY - oy)+'px';
+  });
+  p.addEventListener('pointerup', ()=> dragging=false);
+}
+
+/* Build carousel chips and keep selection pronounced */
+function buildCarousel(){
+  carousel.innerHTML = '';
+  EMOJIS.forEach((em,i)=>{
+    const c = document.createElement('button');
+    c.className = 'chip';
+    c.setAttribute('aria-label','');
+    c.innerHTML = `<div class="e">${em}</div>`;
+    c.addEventListener('click', ()=>{
+      document.querySelectorAll('.chip.active').forEach(n=>n.classList.remove('active'));
+      c.classList.add('active');
+      // also drop into bowl center on tap
+      placeTokenAtCenter(em);
+    });
+    if(i===0) c.classList.add('active');
+    carousel.appendChild(c);
+  });
+}
+
+/* Buttons: add (clone active), clear all placed */
+btnPlus.addEventListener('click', ()=>{
+  const active = document.querySelector('.chip.active .e')?.textContent || EMOJIS[0];
+  pulseWait(700);
+  placeTokenAtCenter(active);
+});
+btnCancel.addEventListener('click', ()=>{
+  overlay.innerHTML = '';
+});
+
+/* Waiting pulse for brew visuals */
+function pulseWait(ms=900){
+  document.body.classList.add('waiting');
+  setTimeout(()=>document.body.classList.remove('waiting'), ms);
+}
+
+/* Prevent vertical drag on carousel beyond CSS (older browsers fallback) */
+let touchStartY = null, touchStartX = null;
+carousel.addEventListener('touchstart', (e)=>{
+  if(e.touches.length===1){
+    touchStartY = e.touches[0].clientY;
+    touchStartX = e.touches[0].clientX;
+  }
+}, {passive:true});
+carousel.addEventListener('touchmove', (e)=>{
+  if(touchStartY==null) return;
+  const dy = Math.abs(e.touches[0].clientY - touchStartY);
+  const dx = Math.abs(e.touches[0].clientX - touchStartX);
+  if(dy > dx){ e.preventDefault(); } // block vertical movement
+}, {passive:false});
+carousel.addEventListener('touchend', ()=>{ touchStartY=null; touchStartX=null; });
+
+/* Init */
+buildCarousel();
+spawnFloatingSeeds();
+window.addEventListener('resize', spawnFloatingSeeds);
+</script>
+</body>
+</html>
