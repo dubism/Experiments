@@ -311,8 +311,7 @@ function resetApp(isInitial=false){
 
   initSeeds(); renderSeeds(); renderPlaced(false);
 
-  // ensure no accidental generate on first paint
-  if(!isInitial){ /* keep behavior same for manual resets */ }
+  if(!isInitial){ /* manual reset keeps same behavior, no auto-generate */ }
 }
 
 /* Helpers */
@@ -410,11 +409,9 @@ function pointerUp(ev){
     if(inside){
       placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
-      // remove the original seed (which we hid)
       if(dragging.idx>=0){ seeds.splice(dragging.idx,1); renderSeeds(); }
       scheduleGenerate('seed-add');
     }else{
-      // not dropped inside: simply restore original visibility
       if(dragging.originalEl) dragging.originalEl.style.visibility='';
     }
   }else{ // dragging placed
@@ -422,12 +419,12 @@ function pointerUp(ev){
       placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false);
       scheduleGenerate('move');
     }else{
-      // Convert placed chip back into a floating seed at drop point (stay usable)
+      // Convert placed chip back into a floating seed at drop point (keep usable) + RE-RENDER
       const screenX=ev.clientX, screenY=ev.clientY;
       seeds.push({ id:crypto.randomUUID(), emoji:dragging.emoji, x:screenX, y:screenY });
-      // remove from bowl
       placed.splice(dragging.idx,1);
       renderPlaced(false); renderSeeds();
+      scheduleGenerate('placed-remove'); // trigger new image because bowl set changed
     }
   }
   cleanupDrag();
@@ -435,7 +432,7 @@ function pointerUp(ev){
 function cleanupDrag(){
   removeEventListener('pointermove', pointerMove); removeEventListener('pointerup', pointerUp);
   if(dragging?.ghostEl) dragging.ghostEl.remove();
-  if(dragging?.originalEl) dragging.originalEl.style.visibility=''; // ensure restored
+  if(dragging?.originalEl) dragging.originalEl.style.visibility=''; // restore hidden original
   dragging=null;
 }
 
@@ -507,15 +504,18 @@ function spawnSparks(){
   }
 }
 
-/* Arrange on rim after render */
+/* Arrange on rim after render: snap each chip to the nearest edge point (shortest path) */
 function arrangeOnRim(){
-  const n=placed.length; if(!n) return;
-  const cx=50, cy=50, r=44;
-  placed.forEach((p,i)=>{
-    const ang = -Math.PI/2 + i*(2*Math.PI/n);
-    const tx = cx + Math.cos(ang)*r, ty = cy + Math.sin(ang)*r;
+  if(!placed.length) return;
+  const cx=50, cy=50, r=44; // edge radius in %
+  placed.forEach(p=>{
     const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) return;
     node.classList.remove('waitPulse');
+    let dx=p.x-cx, dy=p.y-cy;
+    let len=Math.hypot(dx,dy);
+    if(len<0.0001){ dx=1; dy=0; len=1; }           // guard center case
+    const ux=dx/len, uy=dy/len;
+    const tx=cx + ux*r, ty=cy + uy*r;              // radial projection to rim (closest edge point)
     node.animate([
       {left:p.x+'%', top:p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1},
       {left:tx+'%', top:ty+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1}
@@ -538,7 +538,7 @@ function kindPrompt(kind,elements){ if(!elements.length){elements=["a caterpilla
     "🤮":`Fuse ${join} into a gooey monster made of slime and confetti. Viscous translucency, specular highlights, playful gross-out humor—colorful and cartoonish, not realistic gore. No text.`,
     "😈":`Portray ${join} as mischievous heist crew mid-escape: dynamic angles, neon city at night, reflections, cheeky grins, motion blur. Stylish, comic-noir energy. No text.`,
     "🤑":`Transform ${join} into a baroque treasure spectacle: gold leaf, jeweled inlays, reflective metals, extravagant composition, luxurious bokeh. No text.`,
-    "💩":`Turn ${join} into slapstick puppets in a messy comedy scene. Over-the-top expressions, splat effects, vibrant props. No text.`,
+    "💩":`Turn ${join} into slapstick puppets in a messy comedy scene. Over-the-top expressions, splat effects. No text.`,
     "🧓":`Illustrate ${join} as folklore icons woven into an embroidered tapestry. Natural dyes, textile grain, warm candlelight. No text.`,
     "🥷":`Depict ${join} as panels of a high-speed ninja chase, compressed into one dramatic poster. Ink brush slashes, moonlit rooftops. No text.`,
     "🧚‍♀️":`Reimagine ${join} in a bioluminescent woodland: tiny fairies, floating spores, iridescent wings, dreamy lens bloom. No text.`,
@@ -580,7 +580,7 @@ async function generateNow(){
     imageEl.onload=()=>{
       if(serial!==latestSerial) return;
       stopWaiting();
-      arrangeOnRim();
+      arrangeOnRim(); // snap each chip to nearest edge point, shortest path
       requestAnimationFrame(()=> imageEl.classList.add('revealed'));
     };
   }catch(e){
