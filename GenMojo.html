@@ -10,8 +10,7 @@
     --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
     --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
     --ease:cubic-bezier(.2,.8,.2,1);
-    --shake-ampl:0;      /* 0→1 while waiting */
-    --blur:0px;          /* 0→3px while waiting */
+    --shake-ampl:0; --blur:0px;
   }
   @property --shake-ampl{syntax:'<number>';initial-value:0;inherits:false}
   @property --blur{syntax:'<length>';initial-value:0px;inherits:false}
@@ -31,19 +30,17 @@
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
-  /* ===== Layout: Bowl → Buttons → Carousel */
   .stage{
     position:fixed; inset:0;
     display:grid; grid-template-rows:1fr auto auto;
     gap:10px; padding:10px 12px calc(env(safe-area-inset-bottom,16px) + 6px);
   }
 
-  /* ---------- BOWL ---------- */
+  /* ---------- Bowl ---------- */
   .centerWrap{ display:grid; place-items:center; min-height:0 }
   .cauldron-wrap{
     position:relative; width:min(64vmin,520px); aspect-ratio:1;
     display:grid; place-items:center;
-    transform:translate(0,0);
   }
   @media (max-height:740px){ .cauldron-wrap{ width:min(56vmin,460px); } }
   @media (max-height:640px){ .cauldron-wrap{ width:min(50vmin,420px); } }
@@ -58,11 +55,10 @@
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
-  /* --- Liquid & inner layer --- */
   .brew{ position:absolute; inset:0; border-radius:50%; overflow:hidden; filter:blur(var(--blur)) saturate(1.06); }
   .liquid, .beams { position:absolute; inset:10%; border-radius:50%; pointer-events:none; }
   .liquid{
-    opacity:.25; /* subdued when idle */
+    opacity:.25;
     background:
       radial-gradient(40% 60% at 30% 30%, #ffffffd0, #ffffff10 70%),
       conic-gradient(from 0deg, #bffbe7 0 40%, #dfe8ff 40% 70%, #ffdff2 70% 100%);
@@ -70,19 +66,19 @@
   }
   .beams{ opacity:0; }
 
-  /* ===== STATES =====
-     IDLE: default – static (no anims)
-     SUSPENSE: ≤500ms pulse (scale), no “timer” feel
-     REQUEST-BLIP: quick rim pulse when sending
+  /* ===== States =====
+     IDLE: default – static
+     FREEZE: any pointer is down anywhere → absolutely no motion
+     SUSPENSE: 500ms pulse after releasing a relevant input
+     REQUEST-BLIP: very short rim pulse at send
      WAITING: stirring + blur + shake + beams
-     FREEZE: while ANY touch/pointer is down anywhere → completely static (overrides others)
   */
 
-  /* SUSPENSE pulse (scale) */
+  /* Suspense pulse (scale) */
   @keyframes suspensePulse { 0%{transform:scale(1)} 50%{transform:scale(1.02)} 100%{transform:scale(1)} }
   .suspense .cauldron{ animation:suspensePulse 500ms ease-in-out infinite; }
 
-  /* REQUEST blip */
+  /* Request blip */
   .cauldron.req-blip::after{
     content:""; position:absolute; inset:5%; border-radius:50%;
     box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset;
@@ -95,7 +91,7 @@
     100%{ box-shadow:0 0 0 18px #00c8ff00, 0 0 0 #00c8ff00 inset; }
   }
 
-  /* WAITING state */
+  /* Waiting */
   @keyframes breatheSpin { 0%{transform:scale(.992) rotate(-.8deg)} 50%{transform:scale(1.008) rotate(.8deg)} 100%{transform:scale(.992) rotate(-.8deg)} }
   .waiting .brew{ animation: breatheSpin 2.4s ease-in-out infinite; }
   @keyframes swirl{to{transform:rotate(360deg)}}
@@ -117,7 +113,7 @@
   }
   .waiting .cauldron-wrap{ animation:shake-linear 700ms linear infinite; }
 
-  /* FREEZE overrides: zero animations, zero beams */
+  /* Freeze: zero animations while touching */
   .freeze .cauldron-wrap,
   .freeze .cauldron,
   .freeze .brew,
@@ -126,7 +122,7 @@
   .freeze .beams{ opacity:0 !important }
   .freeze .cauldron.req-blip::after{ display:none !important }
 
-  /* --- image layer --- */
+  /* Image */
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
   .result-img{
     width:100%; height:100%; object-fit:cover; display:block;
@@ -136,7 +132,8 @@
   }
   .result-img.revealed{ opacity:1; transform:scale(1) }
 
-  .overlay{ position:absolute; inset:0; pointer-events:none; z-index:30; }
+  /* Layers */
+  .overlay{ position:absolute; inset:0; z-index:30; /* must receive pointer events for chips */ }
   .seeds{ position:fixed; inset:0; z-index:25; pointer-events:none; }
 
   .seed,.chip,.plus,.cancel{
@@ -144,6 +141,7 @@
     display:grid; place-items:center; user-select:none;
     background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
+    touch-action:none;
   }
   .seed{ position:absolute; transform:translate(-50%,-50%); pointer-events:auto; animation:float var(--dur,9s) ease-in-out infinite var(--delay,0s); }
   @keyframes float{
@@ -160,13 +158,13 @@
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
     transform:translate(-50%,-50%) scale(1);
     transition:transform .25s var(--ease), opacity .25s var(--ease), box-shadow .2s var(--ease);
+    touch-action:none;
   }
   .placed:active{ transform:translate(-50%,-50%) scale(.95); box-shadow:0 0 0 2px #00c8ff33, var(--shadow) }
   .placed .e{font-size:clamp(34px, 9vmin, 64px)}
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
 
-  /* WAITING chip micro-pulse (kept) */
   .waitPulse{ animation:chipPulse 1.8s ease-in-out infinite; }
   @keyframes chipPulse{
     0%  { transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
@@ -174,7 +172,7 @@
     100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
   }
 
-  /* ---------- Buttons (row 2) ---------- */
+  /* ---------- Buttons ---------- */
   .footer{
     display:flex; gap:14px; align-items:center; justify-content:center;
     padding-top:2px;
@@ -184,7 +182,7 @@
   .plus{ transition:transform .18s var(--ease); }
   .plus:active{ transform:scale(.96) }
 
-  /* ---------- Carousel (row 3) ---------- */
+  /* ---------- Carousel ---------- */
   .kindWrap{ display:grid; place-items:center; }
   .kindShell{
     width:min(92vw, 820px);
@@ -294,68 +292,50 @@ const kindRail=document.getElementById('kindRail');
 /* ---------- State ---------- */
 let seeds=[]; let placed=[]; let dragging=null; let snapTimer=null; let lastActiveKind=null;
 let sparkTimer=null;
-let requestTimer=null;         // fires network after 500ms post-change
-let interactingCount=0;        // ANY pointer/touch down → >0
-let queuedChange=false;        // a relevant change happened during interaction
+let requestTimer=null;               // 500ms post-change
+let interactingCount=0;              // any pointer down
+let queuedChange=false;              // change occurred during interaction
 let genSerial=0, latestSerial=0;
 let currentObjectURL=null;
 
-/* ===== UTIL: global interaction (freeze while touching anywhere) ===== */
+/* ===== Global “freeze while touching” ===== */
 function beginInteraction(){ interactingCount++; if(interactingCount===1){ document.body.classList.add('freeze'); cancelSuspense(); } }
 function endInteraction(){
   if(interactingCount>0){ interactingCount--; }
   if(interactingCount===0){
     document.body.classList.remove('freeze');
-    // If a relevant change occurred while touching, arm suspense+request now
     if(queuedChange){ queuedChange=false; armSuspenseAndRequest(); }
   }
 }
-// Global listeners (capture to catch everything, including picker and carousel)
 addEventListener('pointerdown', beginInteraction, true);
 addEventListener('pointerup',   endInteraction, true);
 addEventListener('pointercancel', endInteraction, true);
 addEventListener('lostpointercapture', endInteraction, true);
 
-/* ===== Suspense/Request control ===== */
+/* ===== Suspense / request ===== */
 function cancelSuspense(){
   if(requestTimer){ clearTimeout(requestTimer); requestTimer=null; }
   document.body.classList.remove('suspense');
-  // Do not touch waiting here.
 }
 function armSuspenseAndRequest(){
-  // Start suspense immediately; schedule request for +500ms
   document.body.classList.add('suspense');
   document.body.classList.remove('waiting');
   cauldron.classList.remove('req-blip');
   cauldron.setAttribute('aria-busy','false');
-
   if(requestTimer) clearTimeout(requestTimer);
   requestTimer=setTimeout(fireRequest, 500);
 }
 function scheduleRelevantChange(){
-  // Called on: drop in bowl, move chip, remove chip, picker add, kind change
-  if(interactingCount>0){
-    queuedChange=true;        // wait until interaction ends
-    // ensure no suspense while touching
-    cancelSuspense();
-    return;
-  }
-  // Not interacting: start/refresh suspense+request window
+  if(interactingCount>0){ queuedChange=true; cancelSuspense(); return; }
   armSuspenseAndRequest();
 }
 function fireRequest(){
   requestTimer=null;
-  // Distinct request blip
   cauldron.classList.add('req-blip');
   setTimeout(()=>cauldron.classList.remove('req-blip'), 340);
-
-  // Enter waiting (animations unless freeze active)
   startWaiting();
-
-  // Clear old visual during fetch
   imageEl.classList.remove('revealed');
   if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
-
   generateNow();
 }
 
@@ -401,7 +381,7 @@ function spawnSparks(){
   }
 }
 
-/* ===== Seed scattering ===== */
+/* ===== Seeds (floating pickables) ===== */
 function rect(el){ const r=el.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}; }
 function initSeeds(){
   const vw=window.innerWidth, vh=window.innerHeight;
@@ -454,32 +434,40 @@ picker.addEventListener('emoji-pick',e=>{
   const emo=e.detail.emoji; const pos=spotInsideBowl();
   placed.push({id:crypto.randomUUID(), emoji:emo, x:pos.x, y:pos.y});
   renderPlaced(true);
-  scheduleRelevantChange();    // picker is image-relevant input
+  scheduleRelevantChange();
 });
 
-/* ===== Dragging ===== */
-function startDragSeed(ev,id){ ev.preventDefault();
+/* ===== Dragging (seeds → bowl; placed inside bowl) ===== */
+function startDragSeed(ev,id){
+  ev.preventDefault();
   const idx=seeds.findIndex(s=>s.id===id); if(idx<0) return;
   const node=[...seedsEl.children].find(n=>n.dataset.id===id);
   if(node) node.style.visibility='hidden';
   const ghost=makeGhost(seeds[idx].emoji);
   dragging={type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost, originalEl:node};
-  pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
+  pointerMove(ev);
+  addEventListener('pointermove', pointerMove);
+  addEventListener('pointerup', pointerUp, {once:true});
 }
-function startDragPlaced(ev,id){ ev.preventDefault();
+function startDragPlaced(ev,id){
+  ev.preventDefault();
   const idx=placed.findIndex(p=>p.id===id); if(idx<0) return;
   const node=overlay.querySelector(`.placed[data-id="${id}"]`);
   if(node) node.style.visibility='hidden';
   const ghost=makeGhost(placed[idx].emoji);
   dragging={type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost, originalEl:node, start:{x:placed[idx].x,y:placed[idx].y}};
-  pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
+  pointerMove(ev);
+  addEventListener('pointermove', pointerMove);
+  addEventListener('pointerup', pointerUp, {once:true});
 }
 function makeGhost(emoji){
   const g=document.createElement('div'); g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
   g.style.transform='translate(-50%,-50%) scale(1.0)'; g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
-  g.innerHTML=`<span class="e" style="font-size:36px">${emoji}</span>`; document.body.appendChild(g); return g;
+  g.innerHTML=`<span class="e" style="font-size:36px">${emoji}</span>`;
+  document.body.appendChild(g); return g;
 }
-function pointerMove(ev){ if(!dragging) return;
+function pointerMove(ev){
+  if(!dragging) return;
   dragging.ghostEl.style.left=ev.clientX+'px'; dragging.ghostEl.style.top=ev.clientY+'px';
   const {inside}=coordsInCauldron(ev.clientX,ev.clientY);
   dragging.ghostEl.style.transform=`translate(-50%,-50%) scale(${inside?1.26:1.04})`;
@@ -494,16 +482,15 @@ function pointerUp(ev){
       placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
       if(dragging.idx>=0){ seeds.splice(dragging.idx,1); renderSeeds(); }
-      scheduleRelevantChange();                  // drop-in is relevant
+      scheduleRelevantChange();
     }else{
       if(dragging.originalEl) dragging.originalEl.style.visibility='';
     }
-  }else{ // dragging placed
+  }else{
     if(inside){
       placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false);
-      scheduleRelevantChange();                  // move is relevant
+      scheduleRelevantChange();
     }else{
-      // out of bowl → becomes seed; removal is relevant
       const screenX=ev.clientX, screenY=ev.clientY;
       seeds.push({ id:crypto.randomUUID(), emoji:dragging.emoji, x:screenX, y:screenY });
       placed.splice(dragging.idx,1);
@@ -514,12 +501,13 @@ function pointerUp(ev){
   cleanupDrag();
 }
 function cleanupDrag(){
-  removeEventListener('pointermove', pointerMove); removeEventListener('pointerup', pointerUp);
+  removeEventListener('pointermove', pointerMove);
   if(dragging?.ghostEl) dragging.ghostEl.remove();
   if(dragging?.originalEl) dragging.originalEl.style.visibility='';
   dragging=null;
 }
 
+/* ===== Placed render ===== */
 function renderPlaced(playDrop=false){
   overlay.innerHTML='';
   for(const p of placed){
@@ -531,7 +519,7 @@ function renderPlaced(playDrop=false){
   }
 }
 
-/* ===== Carousel (kinds) ===== */
+/* ===== Carousel ===== */
 function buildKindRail(){
   KIND_EMOJIS.forEach(k=>{
     const b=document.createElement('button'); b.className='kchip'; b.dataset.kind=k;
@@ -549,7 +537,6 @@ function centerChip(chip){
 function onRailScroll(){
   updateActiveChipVisual();
   if(snapTimer) clearTimeout(snapTimer);
-  // settle after brief idle, then treat as relevant change
   snapTimer=setTimeout(()=>{
     const active=getActiveChip(); if(!active) return;
     const k=active.dataset.kind; activeKind=k;
@@ -578,7 +565,7 @@ function spotInsideBowl(){
   } return {x:50,y:50};
 }
 
-/* ===== Prompt (position-aware, emoji-free; compact here) ===== */
+/* ===== Prompt (compact; emoji-free) ===== */
 function emojiToWords(ch){ return WORDS.get(ch) || "a symbolic motif"; }
 function computeLayout(){
   return placed.map(p=>{
@@ -621,7 +608,6 @@ function assembleSubjects(layout){
 }
 function assembleInterpretation(kind, layout){
   const preset=kindPreset(kind);
-  // find closest pair
   let pair=null, best=1e9;
   for(let i=0;i<layout.length;i++) for(let j=i+1;j<layout.length;j++){
     const dx=layout[i].xPct-layout[j].xPct, dy=layout[i].yPct-layout[j].yPct;
@@ -663,7 +649,7 @@ async function generateNow(){
   const prompt=buildPrompt();
   try{
     const imgURL=await callPollinations(prompt);
-    if(serial!==latestSerial) return; // superseded
+    if(serial!==latestSerial) return;
     if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} }
     currentObjectURL=imgURL;
     imageEl.src=imgURL;
@@ -675,7 +661,7 @@ async function generateNow(){
     };
   }catch(e){
     console.warn(e);
-    stopWaiting(); // allow re-edit and re-trigger silently
+    stopWaiting();
   }
 }
 
@@ -711,7 +697,7 @@ function resetApp(){
 }
 document.getElementById('cancel').addEventListener('click', ()=>resetApp());
 
-/* ===== Bowl helpers ===== */
+/* ===== Helpers ===== */
 function spotInsideBowl(){
   const r=cauldron.getBoundingClientRect(); let tries=0;
   while(tries++<300){ const px=8+Math.random()*84, py=8+Math.random()*84;
@@ -719,23 +705,6 @@ function spotInsideBowl(){
     if(Math.hypot(cx-(r.left+r.width/2),cy-(r.top+r.height/2))<r.width/2-40) return {x:px,y:py};
   } return {x:50,y:50};
 }
-
-/* ===== Placed rendering ===== */
-function renderPlaced(playDrop=false){
-  overlay.innerHTML='';
-  for(const p of placed){
-    const n=document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
-    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
-    if(playDrop) n.classList.add('dropin');
-    n.addEventListener('pointerdown', e=>startDragPlaced(e,p.id));
-    overlay.appendChild(n);
-  }
-}
-
-/* ===== Drag helpers already defined above ===== */
-
-/* ===== Seed dragging attach (after renderSeeds sets up DOM) ===== */
-function startDragSeed(ev,id){ /* defined above */ } // placeholder for editor folding
 </script>
 
 <script>
