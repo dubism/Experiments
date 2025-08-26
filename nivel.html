@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — cam skip+normalize+smooth</title>
+<title>RGB String-Dots — motion vector spread</title>
 <style>
   :root{ --bg:#000; --ink:#fff; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
@@ -266,8 +266,9 @@
   }
   ui.micBtn.addEventListener('click', enableMic);
 
-  /* ---------- Motion ---------- */
-  var tilt = {x:0,y:0}, shake = 0;
+  /* ---------- Motion (vector) ---------- */
+  // Orientation vector (tilt) + linear acceleration vector (gravity removed)
+  var tilt = {x:0, y:0}, acc = {x:0, y:0}; // store components for vector
   function enableMotion(){
     function start(){
       var got=false, hp=0;
@@ -275,9 +276,10 @@
         var g = e.accelerationIncludingGravity || {};
         tilt.x = g.x || 0; tilt.y = -(g.y || 0);
         var a = e.acceleration || {};
-        var mag = Math.hypot(a.x||0, a.y||0, a.z||0);
-        hp = Math.max(0, mag - 0.8) * 0.6 + hp * 0.85;
-        shake = hp; got=true; ui.motionBtn.classList.add('ok'); ui.motionBtn.textContent='Motion ✓';
+        // low-pass linear acceleration for stability
+        acc.x = 0.85*acc.x + 0.15*(a.x || 0);
+        acc.y = 0.85*acc.y + 0.15*(-(a.y || 0));
+        got=true; ui.motionBtn.classList.add('ok'); ui.motionBtn.textContent='Motion ✓';
       }, {passive:true});
       setTimeout(function(){ if(!got){ ui.motionBtn.classList.add('err'); ui.motionBtn.textContent='Motion ⚠︎'; } }, 800);
     }
@@ -287,7 +289,7 @@
   }
   ui.motionBtn.addEventListener('click', enableMotion);
 
-  /* ---------- Camera (skip frames + normalize + smooth) ---------- */
+  /* ---------- Camera (keep previous behavior: skip+normalize+smooth) ---------- */
   var camVideo = document.getElementById('camVideo');
   var camCanvas = document.getElementById('camCanvas');
   var camCtx = camCanvas.getContext('2d');
@@ -298,12 +300,11 @@
     if (camLuma.length !== need){ camLuma = new Array(need); for (var i=0;i<need;i++) camLuma[i]=0.5; }
     if (camNorm.length !== need){ camNorm = new Array(need); for (var j=0;j<need;j++) camNorm[j]=0.5; }
   }
-
   function enableCamera(){
     var constraints = { video:{ facingMode:{ ideal:'environment' }, width:{ ideal:4096 }, height:{ ideal:4096 } }, audio:false };
     navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
       camVideo.srcObject = stream;
-      return camVideo.play().then(function(){
+      camVideo.play().then(function(){
         try{
           var tracks = stream.getVideoTracks();
           if (tracks && tracks[0] && tracks[0].getCapabilities){
@@ -317,8 +318,9 @@
       });
     }).catch(function(){ ui.camBtn.classList.add('err'); ui.camBtn.textContent='Camera ⚠︎'; });
   }
-  ui.camBtn.addEventListener('click', enableCamera);
+  document.getElementById('camBtn').addEventListener('click', enableCamera);
 
+  var frameCount = 0, CAM_SMOOTH = 0.18;
   function sampleCameraToGrid(){
     if (!camOK || gridCols<=0 || gridRows<=0) return;
     if (camVideo.readyState < 2) return;
@@ -340,7 +342,6 @@
     camCtx.drawImage(camVideo, sx, sy, sw, sh, 0, 0, cw, ch);
     var img = camCtx.getImageData(0,0,cw,ch).data;
 
-    // Fill camLuma at grid resolution
     var minV = 1e9, maxV = -1e9, p = 0;
     for (var j=0;j<ch;j++){
       for (var i=0;i<cw;i++){
@@ -352,7 +353,6 @@
         if (y > maxV) maxV = y;
       }
     }
-    // Normalize to 0..1 (edge-stretch). Flat frame -> 0.5
     var span = maxV - minV;
     if (span > 1e-6){
       for (var n=0;n<camLuma.length;n++) camNorm[n] = (camLuma[n] - minV) / span;
@@ -363,8 +363,6 @@
 
   /* ---------- Simulation ---------- */
   var lastT = performance.now()/1000;
-  var frameCount = 0;
-  var CAM_SMOOTH = 0.18;   // smoothing toward camera scale target per frame (0..1)
 
   function step(){
     var now = performance.now()/1000;
@@ -376,31 +374,22 @@
       needsLayout = false;
     }
 
-    // Process camera only every 3rd frame
+    // camera every 3rd frame + smoothing into per-dot camScale
     var camSens = Number(ui.camSens.value)/100;
     if (camOK && camSens > 0 && (frameCount % 3 === 0)) sampleCameraToGrid();
     frameCount++;
-
-    // Update camera target scales (from normalized brightness)
     if (camSens > 0 && camNorm.length === gridCols*gridRows){
       for (var i=0;i<dots.length;i++){
         var d = dots[i];
         var ci = Math.max(0, Math.min(gridCols-1, Math.round(d.ci)));
         var rj = Math.max(0, Math.min(gridRows-1, Math.round(d.rj)));
         var lum = camNorm[rj*gridCols + ci]; if (lum === undefined) lum = 0.5;
-        var target = 1 + camSens * (lum*2 - 1); // 0->0x, .5->1x, 1->2x
-        if (target < 0) target = 0; if (target > 2) target = 2;
+        var target = 1 + camSens * (lum*2 - 1); if (target<0) target=0; if (target>2) target=2;
         d.camTarget = target;
-        // Smooth toward target
         d.camScale += (d.camTarget - d.camScale) * CAM_SMOOTH;
       }
     } else {
-      // Smooth back to nominal when cam off
-      for (var j=0;j<dots.length;j++){
-        var dj = dots[j];
-        dj.camTarget = 1;
-        dj.camScale += (1 - dj.camScale) * CAM_SMOOTH;
-      }
+      for (var j=0;j<dots.length;j++){ var dj = dots[j]; dj.camScale += (1 - dj.camScale) * CAM_SMOOTH; }
     }
 
     // prune ripples
@@ -409,12 +398,14 @@
     var pc = params(), k = pc.k, c = pc.c;
     var s = S();
 
-    var motionSens = Number(ui.motionSens.value)/100;
-    var soundSens  = Number(ui.soundSens.value)/100;
+    // ***** Motion gain: 5× stronger *****
+    var motionSensBase = Number(ui.motionSens.value)/100;
+    var motionGain = motionSensBase * 5;  // boost
 
-    var x_target = soundSens * Math.min(1.5, Math.sqrt(Math.max(0, rms - noise) * 22)) * 0.40 * s;
-    var tiltMag  = motionSens * (0.08 * s);
-    var shakeMag = motionSens * (Math.min(1.0, (shake / 5)) * 0.60 * s);
+    // previous physics (kept), scaled by boosted gain
+    var x_target = (Number(ui.soundSens.value)/100) * Math.min(1.5, Math.sqrt(Math.max(0, rms - noise) * 22)) * 0.40 * s;
+    var tiltMag  = motionGain * (0.08 * s);
+    var shakeMag = motionGain * (0.60 * s) * Math.min(1.0, Math.hypot(acc.x, acc.y) / 5);
 
     var sub = 2, h = dt / sub;
 
@@ -444,7 +435,7 @@
           fy += sy * (k * x_target);
         }
 
-        if (motionSens > 0){
+        if (motionGain > 0){
           fx += tilt.x * tiltMag;
           fy += tilt.y * tiltMag;
           fx += (Math.sin(now*40 + d2.rx*0.002) * shakeMag);
@@ -454,7 +445,17 @@
         d2.vx += fx * h; d2.vy += fy * h; d2.x += d2.vx * h; d2.y += d2.vy * h;
       }
     }
+
+    // cache motion vector for render channel spread
+    // combine tilt (slow) + linear acceleration (fast)
+    var ACCEL_GAIN = 0.6; // weight of acceleration vs tilt
+    motionVec.x = tilt.x + acc.x * ACCEL_GAIN;
+    motionVec.y = tilt.y + acc.y * ACCEL_GAIN;
+    motionVecGain = motionGain;
   }
+
+  /* ---------- Motion vector → RGB spread ---------- */
+  var motionVec = {x:0,y:0}, motionVecGain = 0;
 
   /* ---------- Render ---------- */
   function render(){
@@ -464,27 +465,48 @@
 
     ctx.globalCompositeOperation = 'lighter';
     var rNom = R();
+    var s = S();
+
+    // unit direction from motion vector
+    var mvx = motionVec.x, mvy = motionVec.y;
+    var mmag = Math.hypot(mvx, mvy);
+    var ux = 0, uy = 0;
+    if (mmag > 1e-6){ ux = mvx / mmag; uy = mvy / mmag; }
+
+    // map vector magnitude -> separation length (in grid units), scaled 5×
+    // cap magnitude to keep within visual bounds
+    var sepMotion = motionVecGain * 0.50 * s * Math.min(1.0, mmag / 6); // up to ~0.5s at strong motion
 
     for (var i=0;i<dots.length;i++){
       var d = dots[i];
       var dx = d.x - d.rx, dy = d.y - d.ry;
       var disp = Math.hypot(dx,dy);
       var baseAngle = disp < 1e-6 ? 0 : Math.atan2(dy, dx);
-      var sep = Math.min(disp * 0.70, 0.8 * S());
+      var sep = Math.min(disp * 0.70, 0.8 * s);
 
-      var r = rNom * d.camScale; // smoothed camera scale (0..2×)
+      // camera-scaled radius
+      var r = rNom * d.camScale;
 
+      // per-channel offsets:
+      // 1) original “string angle” displacement-based chroma (sep & baseAngle)
+      // 2) PLUS motion-vector spread along (ux,uy): blue=0, green=0.5, red=1
       var channels = [
-        { ang: baseAngle + 0,            col:'rgb(255,0,0)', scale:1.00 },
-        { ang: baseAngle + 2*Math.PI/3,  col:'rgb(0,255,0)', scale:0.94 },
-        { ang: baseAngle - 2*Math.PI/3,  col:'rgb(0,0,255)', scale:1.06 }
+        { ang: baseAngle + 0,               col:'rgb(255,0,0)', mult:1.00, mvw:1.00 }, // Red max
+        { ang: baseAngle + 2*Math.PI/3,    col:'rgb(0,255,0)', mult:0.94, mvw:0.50 }, // Green mid
+        { ang: baseAngle - 2*Math.PI/3,    col:'rgb(0,0,255)', mult:1.06, mvw:0.00 }  // Blue fixed
       ];
+
       for (var k=0;k<3;k++){
         var a = channels[k];
-        var offx = Math.cos(a.ang) * sep * a.scale;
-        var offy = Math.sin(a.ang) * sep * a.scale;
+        var offx = Math.cos(a.ang) * sep * a.mult;
+        var offy = Math.sin(a.ang) * sep * a.mult;
+
+        // motion spread
+        var mx = ux * sepMotion * a.mvw;
+        var my = uy * sepMotion * a.mvw;
+
         ctx.fillStyle = a.col;
-        ctx.beginPath(); ctx.arc(d.x + offx, d.y + offy, r, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(d.x + offx + mx, d.y + offy + my, r, 0, Math.PI*2); ctx.fill();
       }
 
       if (disp < 0.35 * dpr){
