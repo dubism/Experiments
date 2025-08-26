@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -242,8 +243,17 @@
 <script>
 /* ---------- Data ---------- */
 const START_EMOJIS=["🐛","🐶","🐱","🦊","🐼","🦄","🦋","🐝","🐢","🐙","🌸","🌿","🌈","🌊","⭐","☀️","🌙","⚡","🔥","💧","❤️","😊","😁","😉","🎵","🎨","📷","🧸"];
-const WORDS=new Map(Object.entries({"🐛":"a caterpillar","🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda","🦄":"a unicorn","🦋":"a butterfly","🐝":"a bee","🐢":"a turtle","🐙":"an octopus","🌸":"a cherry blossom","🌿":"green leaves","🌈":"a rainbow","🌊":"ocean waves","⭐":"a starry sky","☀️":"sunlight","🌙":"moonlight","⚡":"lightning","🔥":"flames","💧":"a water droplet","❤️":"a red heart","😊":"a smile","😁":"joy","😉":"a playful wink","🎵":"a music note","🎨":"paint","📷":"a camera","🧸":"a teddy bear","✨":"sparkles"}));
-const KIND_EMOJIS=["🥺","🤯","🤬","😳","🫣","😬","🤮","😈","🤑","💩","🧓","🥷","🧚‍♀️","👾"];
+const WORDS=new Map(Object.entries({
+  "🐛":"a caterpillar","🐶":"a dog","🐱":"a cat","🦊":"a fox","🐼":"a panda",
+  "🦄":"a unicorn","🦋":"a butterfly","🐝":"a bee","🐢":"a turtle","🐙":"an octopus",
+  "🌸":"a cherry blossom","🌿":"green leaves","🌈":"a rainbow","🌊":"ocean waves",
+  "⭐":"a starry sky","☀️":"sunlight","🌙":"moonlight","⚡":"lightning","🔥":"flames",
+  "💧":"a water droplet","❤️":"a red heart","😊":"a smile","😁":"joy","😉":"a playful wink",
+  "🎵":"a music note","🎨":"paint","📷":"a camera","🧸":"a teddy bear","✨":"sparkles"
+}));
+
+/* NEW: final kind set exactly as requested */
+const KIND_EMOJIS=["🥹","🤯","🤬","😳","🫣","🫠","🤮","😈","🤑","💩","👵","🥷","🧚‍♀️","👾"];
 let activeKind=null;
 
 /* ---------- DOM ---------- */
@@ -310,8 +320,6 @@ function resetApp(isInitial=false){
   clearInterval(sparkTimer);
 
   initSeeds(); renderSeeds(); renderPlaced(false);
-
-  if(!isInitial){ /* manual reset keeps same behavior, no auto-generate */ }
 }
 
 /* Helpers */
@@ -524,36 +532,145 @@ function arrangeOnRim(){
   });
 }
 
-/* Prompt */
-function buildElementsList(){ return placed.map(p=>WORDS.get(p.emoji)||`the ${p.emoji} symbol`); }
-function kindPrompt(kind,elements){ if(!elements.length){elements=["a caterpillar","a unicorn","a rainbow"];}
-  const join=elements.join(', ');
-  const T={
-    "🥺":`Render ${join} as soft, oversized plush characters in a toy-box world. Hyper-cute proportions, glossy eyes, pastel lighting, gentle vignetting, cinematic depth of field. No text.`,
-    "🤯":`Explode ${join} into a mind-bending collage of fractured geometry and neon afterimages. Motion trails, prismatic aberrations, impossible perspective, energy bursting outward. Single coherent frame. No text.`,
-    "🤬":`Depict ${join} as a rebellious street mural mid-creation: spray-paint strokes, ripped posters, bold stencils, chaotic drips. Gritty textures, strong contrast, wide-angle drama. No text.`,
-    "😳":`Stage ${join} under a harsh spotlight on an empty stage, caught mid-awkward moment. Blush tones, nervous motion blur, exaggerated expressions; deep shadows and theatrical haze. No text.`,
-    "🫣":`Show ${join} peeking from behind objects in a suspenseful scene. Partial reveals, occlusion, layered depth, film-grain, rim lighting, and reflective surfaces. Single frame; no text.`,
-    "😬":`Create a cringe-comedy claymation still of ${join}. Hand-made textures, fingerprints, slightly off symmetry, stop-motion lighting and comedic timing. No text.`,
-    "🤮":`Fuse ${join} into a gooey monster made of slime and confetti. Viscous translucency, specular highlights, playful gross-out humor—colorful and cartoonish, not realistic gore. No text.`,
-    "😈":`Portray ${join} as mischievous heist crew mid-escape: dynamic angles, neon city at night, reflections, cheeky grins, motion blur. Stylish, comic-noir energy. No text.`,
-    "🤑":`Transform ${join} into a baroque treasure spectacle: gold leaf, jeweled inlays, reflective metals, extravagant composition, luxurious bokeh. No text.`,
-    "💩":`Turn ${join} into slapstick puppets in a messy comedy scene. Over-the-top expressions, splat effects. No text.`,
-    "🧓":`Illustrate ${join} as folklore icons woven into an embroidered tapestry. Natural dyes, textile grain, warm candlelight. No text.`,
-    "🥷":`Depict ${join} as panels of a high-speed ninja chase, compressed into one dramatic poster. Ink brush slashes, moonlit rooftops. No text.`,
-    "🧚‍♀️":`Reimagine ${join} in a bioluminescent woodland: tiny fairies, floating spores, iridescent wings, dreamy lens bloom. No text.`,
-    "👾":`Glitch-meld ${join} into a retro arcade boss: pixel surfaces, CRT bloom, chroma bleed, synthwave palette, vapor haze. No text.`
-  };
-  return T[kind] ?? `Combine ${join} into a story-rich, cinematic composition. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Coherent lighting and depth. No text.`;
+/* ===== Prompt building (position-aware, emoji-free) ===== */
+function emojiToWords(ch){
+  // Use dictionary when possible; otherwise return a neutral fallback (no glyphs).
+  return WORDS.get(ch) || "a symbolic motif";
 }
-function buildPrompt(){
-  const elements=buildElementsList();
-  if(activeKind){ return kindPrompt(activeKind, elements); }
-  return `Combine ${elements.join(', ')} into a story-rich, cinematic composition. Show harmony between them in one dramatic movie frame. Interpret emojis as real objects, scenes, colors, or emotions — not glyphs. Coherent lighting and depth. No text.`;
+function computeLayout(){
+  // Return tokens with rPct(0..50), theta(rad), role(center|inner|rim), hemi:{lr,tb}
+  return placed.map(p=>{
+    const dx=p.x-50, dy=p.y-50;
+    const dist=Math.hypot(dx,dy);           // in percentage points; rim ~ 50
+    const rPct=Math.min(50, dist);
+    const theta=Math.atan2(dy,dx);          // radians
+    const role = rPct<15 ? "center" : (rPct<38 ? "inner" : "rim");
+    const hemiLR = p.x<50 ? "left" : "right";
+    const hemiTB = p.y<50 ? "top" : "bottom";
+    return { id:p.id, emoji:p.emoji, phrase:emojiToWords(p.emoji), xPct:p.x, yPct:p.y, rPct, theta, role, hemiLR, hemiTB };
+  });
+}
+function findClosePair(layout){
+  if(layout.length<2) return null;
+  let best={a:null,b:null,d:1e9};
+  for(let i=0;i<layout.length;i++){
+    for(let j=i+1;j<layout.length;j++){
+      const dx=layout[i].xPct-layout[j].xPct, dy=layout[i].yPct-layout[j].yPct;
+      const d=Math.hypot(dx,dy);
+      if(d<best.d){ best={a:layout[i], b:layout[j], d}; }
+    }
+  }
+  return (best.d<12)? best : null; // threshold ~ 12% of bowl diameter
 }
 
-/* Pollinations (keyless) */
+function kindPreset(kind){
+  switch(kind){
+    case "🥹": return {material:"plush textile, oversized glossy toy eyes", composition:"close macro, gentle vignette", imageType:"photograph-like", emotion:"cuteness overload", interpretation:"literal", palette:"candy pastels", camera:"shallow depth of field", bounds:"kid-safe"};
+    case "🤯": return {material:"fractured geometry, prismatic edges", composition:"explosive collage poster", imageType:"illustration", emotion:"mind-bending surreal", interpretation:"metaphor", palette:"neon primaries", camera:"impossible perspective", bounds:"teen-adult"};
+    case "🤬": return {material:"spray paint, ripped posters, bold stencils", composition:"confrontational street mural triptych", imageType:"poster-like", emotion:"angry confrontation", interpretation:"interaction", palette:"red/black/yellow high contrast", camera:"wide angle, harsh diagonals", bounds:"teen-adult"};
+    case "😳": return {material:"realistic surfaces", composition:"single subject under harsh spotlight", imageType:"photograph-like", emotion:"surprised to camera", interpretation:"literal", palette:"neutral with blush tones", camera:"fixed frontal gaze", bounds:"all-ages"};
+    case "🫣": return {material:"neon glass, blinds/curtains, occlusion layers", composition:"peekaboo framing", imageType:"stylized photo", emotion:"can’t look fully", interpretation:"context", palette:"cool rim-lights", camera:"rim lighting and shadow bands", bounds:"teen-adult"};
+    case "🫠": return {material:"melting, slumping forms", composition:"static tableau", imageType:"illustration or photo-like", emotion:"resigned ‘all fine’", interpretation:"metaphor", palette:"washed, diffuse haze", camera:"calm locked-off shot", bounds:"all-ages"};
+    case "🤮": return {material:"slime-gel, wet speculars", composition:"radial splatter", imageType:"cartoon", emotion:"gross but playful", interpretation:"fusion", palette:"lurid bright greens", camera:"centered", bounds:"kid-safe"};
+    case "😈": return {material:"neon/chrome, reflections", composition:"heist motion poster", imageType:"stylized photo", emotion:"mischief", interpretation:"interaction", palette:"night city palette", camera:"tilted angles, motion blur", bounds:"teen-adult"};
+    case "🤑": return {material:"polished metals, jewel sparkle", composition:"symmetric still life", imageType:"macro photo", emotion:"opulent", interpretation:"context", palette:"gold leaf tones", camera:"macro DOF", bounds:"all-ages"};
+    case "💩": return {material:"plush/rubber props", composition:"slapstick triptych", imageType:"cartoon", emotion:"farcical silly", interpretation:"interaction", palette:"flat bright", camera:"straight-on", bounds:"kid-safe"};
+    case "👵": return {material:"embroidery, tapestry, carved wood", composition:"folklore symmetry", imageType:"illustration", emotion:"grandma fairytale", interpretation:"literal", palette:"warm candle glow", camera:"orthographic calm", bounds:"all-ages"};
+    case "🥷": return {material:"ink-wash and steel", composition:"multi-moment chase compression", imageType:"poster", emotion:"stealth action", interpretation:"interaction", palette:"moonlit blues", camera:"rooftops, long lens", bounds:"all-ages"};
+    case "🧚‍♀️": return {material:"bioluminescent spores, iridescent wings", composition:"enchanted woodland", imageType:"photo-illustration", emotion:"wonder", interpretation:"context", palette:"cool glow", camera:"dreamy lens bloom", bounds:"all-ages"};
+    case "👾": return {material:"CRT bloom, pixel surfaces, chroma bleed", composition:"looming arcade boss", imageType:"retro poster", emotion:"horror amalgam (stylized)", interpretation:"fusion", palette:"limited synthwave", camera:"low, looming", bounds:"teen-adult"};
+    default: return {material:"coherent mixed media", composition:"balanced scene", imageType:"photograph-like", emotion:"story-rich", interpretation:"literal", palette:"natural", camera:"cinematic", bounds:"all-ages"};
+  }
+}
+
+function assembleSubjects(layout){
+  // order: center → inner → rim. Include hemi hints.
+  const roleOrder = {center:0, inner:1, rim:2};
+  const ordered = [...layout].sort((a,b)=>roleOrder[a.role]-roleOrder[b.role]);
+  return ordered.map(t=>{
+    const hemi = `${t.hemiTB}-${t.hemiLR}`; // e.g., "top-left"
+    if(t.role==="center"){
+      return `main subject at center: ${t.phrase}`;
+    }else if(t.role==="inner"){
+      return `supporting subject in the inner ring (${hemi}): ${t.phrase}`;
+    }else{
+      // rim: influence environment
+      return `rim element (${hemi}) shaping the environment: ${t.phrase}`;
+    }
+  });
+}
+function assembleInterpretation(kind, layout, pair){
+  const preset=kindPreset(kind);
+  const mode=preset.interpretation;
+  if(mode==="fusion" && pair){
+    return `Fuse ${pair.a.phrase} with ${pair.b.phrase} into a single coherent form; remaining elements act as context and surface motifs.`;
+  }
+  if(mode==="interaction" && pair){
+    return `Show ${pair.a.phrase} interacting with ${pair.b.phrase} with a clear action relationship; others support the scene.`;
+  }
+  if(mode==="context"){
+    return `Treat rim elements as environmental cues (sky, ground, frames, lighting), keeping central subjects recognizable.`;
+  }
+  if(mode==="metaphor"){
+    return `Use non-central tokens to alter light, texture, or mood as metaphor—avoid showing them as literal objects.`;
+  }
+  // literal
+  return `Render subjects as themselves with natural relations and depth.`;
+}
+function summarizeOverflow(layout){
+  if(layout.length<=6) return null;
+  // Keep 1 center, 2 closest inner, up to 3 rim (by quadrants)
+  const center = layout.filter(t=>t.role==="center").slice(0,1);
+  const inner  = layout.filter(t=>t.role==="inner").sort((a,b)=>a.rPct-b.rPct).slice(0,2);
+  const rim    = layout.filter(t=>t.role==="rim");
+  // sample rim by quadrant
+  const quads=[[],[],[],[]];
+  rim.forEach(r=>{
+    const q=(r.hemiTB==="top"?0:2)+(r.hemiLR==="right"?1:0); // 0 TL,1 TR,2 BL,3 BR
+    quads[q].push(r);
+  });
+  const rimPick = quads.flatMap(arr=>arr.sort((a,b)=>a.rPct-b.rPct).slice(0,1)).slice(0,3);
+  const kept = new Set([...center,...inner,...rimPick].map(t=>t.id));
+  const rest = layout.filter(t=>!kept.has(t.id));
+  return {keptIDs:[...kept], summary:`Include additional subtle motifs around the rim inspired by ${rest.length} extra tokens.`};
+}
+
+function assertNoEmoji(text){
+  // Try Unicode property; fall back to range checks
+  const prop = /[\p{Extended_Pictographic}\uFE0F]/u;
+  if(prop.test(text)) throw new Error("Prompt contains emoji glyphs.");
+  // Loose range guard
+  const range = /[\u2190-\u2BFF\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u;
+  if(range.test(text)) throw new Error("Prompt contains pictographic glyphs.");
+}
+
+function buildPrompt(){
+  const layoutAll=computeLayout();
+  const overflow=summarizeOverflow(layoutAll);
+  const layout = overflow? layoutAll.filter(t=>overflow.keptIDs.includes(t.id)) : layoutAll;
+
+  const preset = kindPreset(activeKind);
+  const pair = findClosePair(layout);
+
+  const header = `${preset.imageType}; ${preset.material}.`;
+  const subjects = assembleSubjects(layout).join(' ');
+  const interaction = assembleInterpretation(activeKind, layout, pair);
+  const aesthetics = `Composition: ${preset.composition}. Emotion: ${preset.emotion}. Lighting & palette: ${preset.palette}. Camera: ${preset.camera}.`;
+  const bounds = `Content bounds: ${preset.bounds}.`;
+  const constraint = `Single coherent frame; no text overlay; interpret emojis as real-world objects, scenes, colors, or emotions — never as glyphs.`;
+
+  const overflowLine = overflow? overflow.summary : null;
+
+  const text = [header, subjects, interaction, aesthetics, bounds, overflowLine, constraint]
+                .filter(Boolean).join(' ');
+
+  assertNoEmoji(text); // hard ban before returning
+  return text;
+}
+
+/* ===== Pollinations (keyless) ===== */
 async function callPollinations(prompt){
+  assertNoEmoji(prompt); // second guard just before network
   const url="https://image.pollinations.ai/prompt/"+encodeURIComponent(prompt)+"?width=768&height=768";
   const res=await fetch(url,{mode:"cors"}); if(!res.ok) throw new Error('Pollinations error');
   const blob=await res.blob(); return URL.createObjectURL(blob);
@@ -585,7 +702,7 @@ async function generateNow(){
     };
   }catch(e){
     console.warn(e);
-    stopWaiting();
+    stopWaiting(); // silent fail; allow user to adjust and re-trigger
   }
 }
 
@@ -637,7 +754,7 @@ customElements.define('emoji-picker', class extends HTMLElement {
     const SKA=0x1F3FB, SKB=0x1F3FF;
     const blocks=[[0x1F600,0x1F64F],[0x1F300,0x1F5FF],[0x1F680,0x1F6FF],[0x1F900,0x1F9FF],[0x1FA70,0x1FAFF],[0x2600,0x26FF],[0x2700,0x27BF]];
     const pict=[]; for(const [a,b] of blocks){ for(let cp=a; cp<=b; cp++){ if(cp>=SKA&&cp<=SKB) continue; const ch=String.fromCodePoint(cp); if(!(/\s/.test(ch))) pict.push(ch);} }
-    const CODES=("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW").split(" ");
+    const CODES=("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW").split(" ");
     const RI=0x1F1E6, flag=cc=>String.fromCodePoint(RI+(cc.charCodeAt(0)-65), RI+(cc.charCodeAt(1)-65));
     const flags=CODES.map(flag);
     return { all:{icon:"🧭",items:pict}, flags:{icon:"🏳️",items:flags} };
