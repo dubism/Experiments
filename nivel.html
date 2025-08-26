@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>RGB String-Dots — motion spread tuned</title>
+<title>RGB String-Dots — FIXED buttons & camera</title>
 <style>
   :root{ --bg:#000; --ink:#fff; --line:rgba(255,255,255,.14); --panel:rgba(16,18,24,.78); }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
   canvas{display:block;width:100vw;height:100vh;touch-action:none}
+
   .cc{position:fixed;left:10px;right:10px;bottom:10px;z-index:3;background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
   .cc__head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;cursor:pointer}
   .cc__title{font-weight:650}
@@ -86,15 +87,32 @@
   var cc = document.getElementById('cc');
   document.getElementById('ccHead').addEventListener('click', function(){ cc.dataset.collapsed = (cc.dataset.collapsed==='true')?'false':'true'; });
 
-  /* UI */
+  /* UI (explicit lookups, no globals) */
   var ui = {
-    loose:loose,bounce:bounce,space:space,dot:dot,
-    looseV:looseV,bounceV:bounceV,spaceV:spaceV,dotV:dotV,
-    motionSens:motionSens,soundSens:soundSens,camSens:camSens,
-    motionSensV:motionSensV,soundSensV:soundSensV,camSensV:camSensV,
-    touchSens:touchSens,touchRad:touchRad,touchSensV:touchSensV,touchRadV:touchRadV,
-    micBtn:micBtn,motionBtn:motionBtn,camBtn:camBtn,meterFill:meterFill
+    loose:  document.getElementById('loose'),
+    bounce: document.getElementById('bounce'),
+    space:  document.getElementById('space'),
+    dot:    document.getElementById('dot'),
+    looseV: document.getElementById('looseV'),
+    bounceV:document.getElementById('bounceV'),
+    spaceV: document.getElementById('spaceV'),
+    dotV:   document.getElementById('dotV'),
+    motionSens: document.getElementById('motionSens'),
+    soundSens:  document.getElementById('soundSens'),
+    camSens:    document.getElementById('camSens'),
+    motionSensV:document.getElementById('motionSensV'),
+    soundSensV: document.getElementById('soundSensV'),
+    camSensV:   document.getElementById('camSensV'),
+    touchSens:  document.getElementById('touchSens'),
+    touchRad:   document.getElementById('touchRad'),
+    touchSensV: document.getElementById('touchSensV'),
+    touchRadV:  document.getElementById('touchRadV'),
+    micBtn:     document.getElementById('micBtn'),
+    motionBtn:  document.getElementById('motionBtn'),
+    camBtn:     document.getElementById('camBtn'),
+    meterFill:  document.getElementById('meterFill')
   };
+
   function syncVals(){
     ui.looseV.textContent=ui.loose.value; ui.bounceV.textContent=ui.bounce.value;
     ui.spaceV.textContent=ui.space.value; ui.dotV.textContent=ui.dot.value;
@@ -118,9 +136,8 @@
     var L = Number(ui.loose.value), B = Number(ui.bounce.value);
     var k = K_MIN + (100 - L)*(K_MAX - K_MIN)/100;   // Looseness↑ → k↓
     var c = C_MIN + (100 - B)*(C_MAX - C_MIN)/100;   // Bounce↑   → c↓
-    // normalized 0..1 where 1 means "more loosy/bouncy"
-    var looseFactor  = 1 - ((k - K_MIN)/(K_MAX - K_MIN)); // loose high → 1
-    var bounceFactor = 1 - ((c - C_MIN)/(C_MAX - C_MIN)); // bounce high → 1
+    var looseFactor  = 1 - ((k - K_MIN)/(K_MAX - K_MIN));
+    var bounceFactor = 1 - ((c - C_MIN)/(C_MAX - C_MIN));
     return { k:k, c:c, looseFactor:looseFactor, bounceFactor:bounceFactor };
   }
 
@@ -176,10 +193,10 @@
       }).catch(function(){ui.micBtn.classList.add('err');ui.micBtn.textContent='Mic ⚠︎';});
     }catch(_){ui.micBtn.classList.add('err');ui.micBtn.textContent='Mic ⚠︎';}
   }
-  micBtn.addEventListener('click', enableMic);
+  ui.micBtn.addEventListener('click', enableMic);
 
-  /* Motion (vector) */
-  var tilt={x:0,y:0}, acc={x:0,y:0};
+  /* Motion (vector spread, sensitivity halved vs previous 5× build -> now 2.5×) */
+  var tilt={x:0,y:0}, acc={x:0,y:0}, motionVec={x:0,y:0}, spreadAdj=1;
   function enableMotion(){
     function start(){
       var got=false;
@@ -194,10 +211,13 @@
       DeviceMotionEvent.requestPermission().then(function(res){ if(res==='granted')start(); else ui.motionBtn.classList.add('err');}).catch(function(){ui.motionBtn.classList.add('err');});
     }else{ start(); }
   }
-  motionBtn.addEventListener('click', enableMotion);
+  ui.motionBtn.addEventListener('click', enableMotion);
 
-  /* Camera (skip+normalize+smooth) — unchanged from last working */
-  var camVideo=camVideo, camCanvas=camCanvas, camCtx=camCanvas.getContext('2d'), camOK=false, camLuma=[], camNorm=[];
+  /* Camera (skip frames + normalize + smooth) */
+  var camVideo = document.getElementById('camVideo');
+  var camCanvas = document.getElementById('camCanvas');
+  var camCtx = camCanvas.getContext('2d');
+  var camOK=false, camLuma=[], camNorm=[], frameCount=0, CAM_SMOOTH=0.18;
   function ensureBuffers(){ var n=gridCols*gridRows; if(camLuma.length!==n){camLuma=new Array(n); for(var i=0;i<n;i++)camLuma[i]=0.5;} if(camNorm.length!==n){camNorm=new Array(n); for(var j=0;j<n;j++)camNorm[j]=0.5;} }
   function enableCamera(){
     var constraints={video:{facingMode:{ideal:'environment'},width:{ideal:4096},height:{ideal:4096}},audio:false};
@@ -208,8 +228,8 @@
       });
     }).catch(function(){ui.camBtn.classList.add('err');ui.camBtn.textContent='Camera ⚠︎';});
   }
-  camBtn.addEventListener('click', enableCamera);
-  var frameCount=0, CAM_SMOOTH=0.18;
+  ui.camBtn.addEventListener('click', enableCamera);
+
   function sampleCameraToGrid(){
     if(!camOK||gridCols<=0||gridRows<=0||camVideo.readyState<2)return;
     ensureBuffers();
@@ -230,6 +250,7 @@
     var now=performance.now()/1000, dt=now-lastT; if(dt>0.033)dt=0.033; lastT=now;
     if(needsLayout){buildTriGrid(); ensureBuffers(); needsLayout=false;}
 
+    /* camera: every 3rd frame */
     var camSens=Number(ui.camSens.value)/100;
     if(camOK && camSens>0 && (frameCount%3===0)) sampleCameraToGrid();
     frameCount++;
@@ -248,13 +269,10 @@
 
     var pr=params(), k=pr.k, c=pr.c, s=S();
 
-    /* motion sensitivity (HALVED compared to previous build) */
+    /* motion sensitivity (HALVED from earlier 5× → 2.5×) */
     var motionGain = (Number(ui.motionSens.value)/100) * 2.5;
 
-    /* sound swirl preserved */
-    var relAmp = Math.max(0, rms - noise);
-    var x_target = (Number(ui.soundSens.value)/100) * Math.min(1.5, Math.sqrt(relAmp*22)) * 0.40 * s;
-
+    /* dynamics */
     var sub=2, h=dt/sub;
     for(var ss=0; ss<sub; ss++){
       for(var q=0;q<dots.length;q++){
@@ -269,27 +287,17 @@
           var ux=(d2.x-rp.x)/rr, uy=(d2.y-rp.y)/rr; fx+= ux*g*2.2*s; fy+= uy*g*2.2*s;
         }
 
-        if (x_target>0){
-          var sx=Math.sin((d2.rx+d2.ry+now*900)*0.004), sy=Math.cos((d2.rx-d2.ry-now*900)*0.004);
-          fx+= sx*(k*x_target); fy+= sy*(k*x_target);
-        }
-
         d2.vx += fx*h; d2.vy += fy*h; d2.x += d2.vx*h; d2.y += d2.vy*h;
       }
     }
 
-    /* cache motion vector (orientation + linear acceleration) */
+    /* motion vector + looseness/bounce spread adjustment */
     motionVec.x = (tilt.x + 0.6*acc.x) * motionGain;
     motionVec.y = (tilt.y + 0.6*acc.y) * motionGain;
-
-    /* also expose current adjustment factors for render */
-    spreadAdj = 0.5 + (pr.looseFactor + pr.bounceFactor)/2; // 0.5..1.5 range
+    spreadAdj = 0.5 + (pr.looseFactor + pr.bounceFactor)/2; // 0.5..1.5
   }
 
-  /* Motion vector → RGB spread (with Looseness/Bounce adjustment) */
-  var motionVec={x:0,y:0}, spreadAdj=1;
-
-  /* Render — NO explicit white pixel anywhere */
+  /* Render — NO explicit white dot */
   function render(){
     ctx.globalCompositeOperation='source-over';
     ctx.fillStyle='#000'; ctx.fillRect(0,0,cvs.width,cvs.height);
@@ -299,8 +307,6 @@
 
     var mvx=motionVec.x, mvy=motionVec.y, mmag=Math.hypot(mvx,mvy);
     var ux=0, uy=0; if(mmag>1e-6){ux=mvx/mmag; uy=mvy/mmag;}
-
-    /* sepMotion scaled by Looseness & Bounce equally */
     var sepMotionBase = 0.50 * s * Math.min(1.0, mmag/6);
     var sepMotion = sepMotionBase * spreadAdj;
 
@@ -311,9 +317,9 @@
       var r = rNom * d.camScale;
 
       var channels = [
-        { ang: baseAngle + 0,               col:'rgb(255,0,0)', mult:1.00, mvw:1.00 }, // Red max
-        { ang: baseAngle + 2*Math.PI/3,     col:'rgb(0,255,0)', mult:0.94, mvw:0.50 }, // Green mid
-        { ang: baseAngle - 2*Math.PI/3,     col:'rgb(0,0,255)', mult:1.06, mvw:0.00 }  // Blue fixed
+        { ang: baseAngle + 0,               col:'rgb(255,0,0)', mult:1.00, mvw:1.00 },
+        { ang: baseAngle + 2*Math.PI/3,     col:'rgb(0,255,0)', mult:0.94, mvw:0.50 },
+        { ang: baseAngle - 2*Math.PI/3,     col:'rgb(0,0,255)', mult:1.06, mvw:0.00 }
       ];
       for(var k=0;k<3;k++){
         var a=channels[k];
@@ -322,7 +328,6 @@
         ctx.fillStyle=a.col;
         ctx.beginPath(); ctx.arc(d.x+offx+mx, d.y+offy+my, r, 0, Math.PI*2); ctx.fill();
       }
-      /* no white center draw */
     }
   }
 
