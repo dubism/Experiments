@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -46,9 +45,11 @@
   .cauldron-wrap{
     position:relative; width:min(64vmin,520px); aspect-ratio:1;
     display:grid; place-items:center;
-    animation:shake-linear 700ms linear infinite;
+    /* IDLE: no animation */
     transform:translate(0,0);
   }
+  /* WAITING: gentle shake only while waiting */
+  .waiting .cauldron-wrap{ animation:shake-linear 700ms linear infinite; }
   @media (max-height:740px){ .cauldron-wrap{ width:min(56vmin,460px); } }
   @media (max-height:640px){ .cauldron-wrap{ width:min(50vmin,420px); } }
 
@@ -74,31 +75,31 @@
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
-  /* Brew: idle animation always on; waiting intensifies blur & shake + adds beams */
+  /* Brew container; IDLE: no stirring */
   .brew{ position:absolute; inset:0; border-radius:50%; overflow:hidden; filter:blur(var(--blur)) saturate(1.06); }
+
+  /* WAITING: stirring */
   @keyframes breatheSpin { 0%{transform:scale(.992) rotate(-.8deg)} 50%{transform:scale(1.008) rotate(.8deg)} 100%{transform:scale(.992) rotate(-.8deg)} }
-  .brew{ animation: breatheSpin 2.4s ease-in-out infinite; } /* idle stirring */
+  .waiting .brew{ animation: breatheSpin 2.4s ease-in-out infinite; }
+
+  /* Blur/Shake ramp only while waiting */
   @keyframes rampVars { from{ --shake-ampl:0; --blur:0px; } to{ --shake-ampl:1; --blur:3px; } }
-  body.waiting{ animation: rampVars 3s ease-in-out forwards; }
+  .waiting{ animation: rampVars 3s ease-in-out forwards; }
 
   .liquid, .beams { position:absolute; inset:10%; border-radius:50%; pointer-events:none; }
   .liquid{
-    opacity:.35; /* visible even when idle */
+    opacity:.25; /* subdued when idle */
     background:
       radial-gradient(40% 60% at 30% 30%, #ffffffd0, #ffffff10 70%),
       conic-gradient(from 0deg, #bffbe7 0 40%, #dfe8ff 40% 70%, #ffdff2 70% 100%);
-    mix-blend-mode:soft-light; filter:saturate(1.1);
-    animation:swirl 6s linear infinite; /* slower when idle */
+    mix-blend-mode:soft-light; filter:saturate(1.05);
   }
-  .waiting .liquid{ opacity:.9; animation-duration:3.6s; } /* stronger while waiting */
   @keyframes swirl{to{transform:rotate(360deg)}}
-  .beams{
-    opacity:0;
-    background: conic-gradient(from 0deg, #ffffff00 0 8%, #ffffff55 10% 12%, #ffffff00 14% 26%, #ffffff55 28% 30%, #ffffff00 32% 44%, #ffffff55 46% 48%, #ffffff00 50% 100%);
-    animation:beams 2.6s linear infinite; filter:blur(6px);
-  }
-  .waiting .beams{ opacity:.8; }
+  .waiting .liquid{ opacity:.9; animation:swirl 3.6s linear infinite; }
+
+  .beams{ opacity:0; }
   @keyframes beams{to{transform:rotate(-360deg)}}
+  .waiting .beams{ opacity:.8; animation:beams 2.6s linear infinite; filter:blur(6px); }
 
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
   .result-img{
@@ -139,6 +140,7 @@
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
 
+  /* WAITING: chip micro pulse */
   .waitPulse{ animation:chipPulse 1.8s ease-in-out infinite; }
   @keyframes chipPulse{
     0%  { transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
@@ -201,6 +203,22 @@
     mix-blend-mode:overlay; animation:shine 4s linear infinite; pointer-events:none;
   }
   @keyframes shine{to{transform:rotate(360deg)}}
+
+  /* ===== Suspense (≤500ms) & Request-blip visuals ===== */
+  @keyframes ringSuspense { 0%{box-shadow:inset 0 0 0 6px #ffffff10} 50%{box-shadow:inset 0 0 0 6px #ffffff28} 100%{box-shadow:inset 0 0 0 6px #ffffff10} }
+  .suspense .ring{ animation:ringSuspense 0.5s linear infinite; }
+
+  .cauldron.req-blip::after{
+    content:""; position:absolute; inset:5%; border-radius:50%;
+    box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset;
+    animation:reqPulse 320ms cubic-bezier(.2,.8,.2,1) both;
+    pointer-events:none;
+  }
+  @keyframes reqPulse {
+    0%{ box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset; }
+    70%{ box-shadow:0 0 0 12px #00c8ff00, 0 0 40px #00c8ff66 inset; }
+    100%{ box-shadow:0 0 0 18px #00c8ff00, 0 0 0 #00c8ff00 inset; }
+  }
 </style>
 </head>
 <body>
@@ -251,8 +269,6 @@ const WORDS=new Map(Object.entries({
   "💧":"a water droplet","❤️":"a red heart","😊":"a smile","😁":"joy","😉":"a playful wink",
   "🎵":"a music note","🎨":"paint","📷":"a camera","🧸":"a teddy bear","✨":"sparkles"
 }));
-
-/* NEW: final kind set exactly as requested */
 const KIND_EMOJIS=["🥹","🤯","🤬","😳","🫣","🫠","🤮","😈","🤑","💩","👵","🥷","🧚‍♀️","👾"];
 let activeKind=null;
 
@@ -267,7 +283,7 @@ const kindRail=document.getElementById('kindRail');
 
 let seeds=[]; let placed=[]; let dragging=null; let snapTimer=null; let lastActiveKind=null;
 let sparkTimer=null;
-let genTimer=null, genSerial=0, latestSerial=0;
+let requestTimer=null, genSerial=0, latestSerial=0;
 let currentObjectURL=null;
 
 window.addEventListener('load',()=>{ buildKindRail(); resetApp(true); });
@@ -293,7 +309,7 @@ function onRailScroll(){
   snapTimer=setTimeout(()=>{
     const active=getActiveChip(); if(!active) return;
     const k=active.dataset.kind; activeKind=k;
-    if(lastActiveKind!==k){ lastActiveKind=k; scheduleGenerate('kind-change'); }
+    if(lastActiveKind!==k){ lastActiveKind=k; scheduleRequest('kind-change'); }
     centerChip(active);
   },180);
 }
@@ -311,12 +327,13 @@ function resetApp(isInitial=false){
   imageEl.removeAttribute('src');
 
   placed=[]; overlay.innerHTML='';
-  document.body.classList.remove('waiting');
+  document.body.classList.remove('waiting','suspense');
+  cauldron.classList.remove('req-blip');
   document.documentElement.style.setProperty('--shake-ampl','0');
   document.documentElement.style.setProperty('--blur','0px');
   cauldron.setAttribute('aria-busy','false');
 
-  if(genTimer){ clearTimeout(genTimer); genTimer=null; }
+  if(requestTimer){ clearTimeout(requestTimer); requestTimer=null; }
   clearInterval(sparkTimer);
 
   initSeeds(); renderSeeds(); renderPlaced(false);
@@ -325,7 +342,7 @@ function resetApp(isInitial=false){
 /* Helpers */
 function rect(el){ const r=el.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}; }
 
-/* Scatter seeds avoiding UI (bowl + buttons + bottom carousel) */
+/* Scatter seeds avoiding UI */
 function initSeeds(){
   const vw=window.innerWidth, vh=window.innerHeight;
   const bowl   = rect(cauldron);
@@ -380,7 +397,7 @@ picker.addEventListener('emoji-pick',e=>{
   const emo=e.detail.emoji; const pos=spotInsideBowl();
   placed.push({id:crypto.randomUUID(), emoji:emo, x:pos.x, y:pos.y});
   renderPlaced(true);
-  scheduleGenerate('picker-add');
+  scheduleRequest('picker-add');
 });
 
 /* Dragging */
@@ -418,21 +435,21 @@ function pointerUp(ev){
       placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py});
       renderPlaced(true);
       if(dragging.idx>=0){ seeds.splice(dragging.idx,1); renderSeeds(); }
-      scheduleGenerate('seed-add');
+      scheduleRequest('seed-add');
     }else{
       if(dragging.originalEl) dragging.originalEl.style.visibility='';
     }
   }else{ // dragging placed
     if(inside){
       placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false);
-      scheduleGenerate('move');
+      scheduleRequest('move');
     }else{
       // Convert placed chip back into a floating seed at drop point (keep usable) + RE-RENDER
       const screenX=ev.clientX, screenY=ev.clientY;
       seeds.push({ id:crypto.randomUUID(), emoji:dragging.emoji, x:screenX, y:screenY });
       placed.splice(dragging.idx,1);
       renderPlaced(false); renderSeeds();
-      scheduleGenerate('placed-remove'); // trigger new image because bowl set changed
+      scheduleRequest('placed-remove');
     }
   }
   cleanupDrag();
@@ -470,26 +487,27 @@ function spotInsideBowl(){
   } return {x:50,y:50};
 }
 
-/* ====== Waiting visuals ====== */
-function ensureWaiting(){
-  if(!document.body.classList.contains('waiting')){
-    document.body.classList.add('waiting');
-    cauldron.setAttribute('aria-busy','true');
+/* ====== State helpers ====== */
+function startWaiting(){
+  if(document.body.classList.contains('waiting')) return;
+  document.body.classList.remove('suspense');
+  document.body.classList.add('waiting');
+  cauldron.setAttribute('aria-busy','true');
 
-    const bowl=cauldron.getBoundingClientRect(); const cx=50, cy=50;
-    for(const p of placed){
-      const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) continue;
-      const dxPct=(cx-p.x)*0.12, dyPct=(cy-p.y)*0.12;
-      const ix=dxPct/100*bowl.width, iy=dyPct/100*bowl.height;
-      node.style.setProperty('--ix', ix.toFixed(2)+'px'); node.style.setProperty('--iy', iy.toFixed(2)+'px');
-      node.classList.add('waitPulse');
-    }
-    clearInterval(sparkTimer);
-    sparkTimer=setInterval(spawnSparks, 260);
+  const bowl=cauldron.getBoundingClientRect(); const cx=50, cy=50;
+  for(const p of placed){
+    const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) continue;
+    const dxPct=(cx-p.x)*0.12, dyPct=(cy-p.y)*0.12;
+    const ix=dxPct/100*bowl.width, iy=dyPct/100*bowl.height;
+    node.style.setProperty('--ix', ix.toFixed(2)+'px'); node.style.setProperty('--iy', iy.toFixed(2)+'px');
+    node.classList.add('waitPulse');
   }
+  clearInterval(sparkTimer);
+  sparkTimer=setInterval(spawnSparks, 260);
 }
 function stopWaiting(){
-  document.body.classList.remove('waiting');
+  document.body.classList.remove('waiting','suspense');
+  cauldron.classList.remove('req-blip');
   cauldron.setAttribute('aria-busy','false');
   clearInterval(sparkTimer);
   document.documentElement.style.setProperty('--shake-ampl','0');
@@ -512,7 +530,7 @@ function spawnSparks(){
   }
 }
 
-/* Arrange on rim after render: snap each chip to the nearest edge point (shortest path) */
+/* Arrange on rim (nearest edge point, shortest path) after reveal */
 function arrangeOnRim(){
   if(!placed.length) return;
   const cx=50, cy=50, r=44; // edge radius in %
@@ -521,9 +539,9 @@ function arrangeOnRim(){
     node.classList.remove('waitPulse');
     let dx=p.x-cx, dy=p.y-cy;
     let len=Math.hypot(dx,dy);
-    if(len<0.0001){ dx=1; dy=0; len=1; }           // guard center case
+    if(len<0.0001){ dx=1; dy=0; len=1; }
     const ux=dx/len, uy=dy/len;
-    const tx=cx + ux*r, ty=cy + uy*r;              // radial projection to rim (closest edge point)
+    const tx=cx + ux*r, ty=cy + uy*r;
     node.animate([
       {left:p.x+'%', top:p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1},
       {left:tx+'%', top:ty+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1}
@@ -532,18 +550,12 @@ function arrangeOnRim(){
   });
 }
 
-/* ===== Prompt building (position-aware, emoji-free) ===== */
-function emojiToWords(ch){
-  // Use dictionary when possible; otherwise return a neutral fallback (no glyphs).
-  return WORDS.get(ch) || "a symbolic motif";
-}
+/* ===== Prompt building (same as before; kept brief here) ===== */
+function emojiToWords(ch){ return WORDS.get(ch) || "a symbolic motif"; }
 function computeLayout(){
-  // Return tokens with rPct(0..50), theta(rad), role(center|inner|rim), hemi:{lr,tb}
   return placed.map(p=>{
-    const dx=p.x-50, dy=p.y-50;
-    const dist=Math.hypot(dx,dy);           // in percentage points; rim ~ 50
-    const rPct=Math.min(50, dist);
-    const theta=Math.atan2(dy,dx);          // radians
+    const dx=p.x-50, dy=p.y-50, dist=Math.hypot(dx,dy);
+    const rPct=Math.min(50, dist), theta=Math.atan2(dy,dx);
     const role = rPct<15 ? "center" : (rPct<38 ? "inner" : "rim");
     const hemiLR = p.x<50 ? "left" : "right";
     const hemiTB = p.y<50 ? "top" : "bottom";
@@ -553,156 +565,124 @@ function computeLayout(){
 function findClosePair(layout){
   if(layout.length<2) return null;
   let best={a:null,b:null,d:1e9};
-  for(let i=0;i<layout.length;i++){
-    for(let j=i+1;j<layout.length;j++){
-      const dx=layout[i].xPct-layout[j].xPct, dy=layout[i].yPct-layout[j].yPct;
-      const d=Math.hypot(dx,dy);
-      if(d<best.d){ best={a:layout[i], b:layout[j], d}; }
-    }
+  for(let i=0;i<layout.length;i++) for(let j=i+1;j<layout.length;j++){
+    const dx=layout[i].xPct-layout[j].xPct, dy=layout[i].yPct-layout[j].yPct;
+    const d=Math.hypot(dx,dy); if(d<best.d) best={a:layout[i],b:layout[j],d};
   }
-  return (best.d<12)? best : null; // threshold ~ 12% of bowl diameter
+  return (best.d<12)? best : null;
 }
-
 function kindPreset(kind){
   switch(kind){
-    case "🥹": return {material:"plush textile, oversized glossy toy eyes", composition:"close macro, gentle vignette", imageType:"photograph-like", emotion:"cuteness overload", interpretation:"literal", palette:"candy pastels", camera:"shallow depth of field", bounds:"kid-safe"};
-    case "🤯": return {material:"fractured geometry, prismatic edges", composition:"explosive collage poster", imageType:"illustration", emotion:"mind-bending surreal", interpretation:"metaphor", palette:"neon primaries", camera:"impossible perspective", bounds:"teen-adult"};
-    case "🤬": return {material:"spray paint, ripped posters, bold stencils", composition:"confrontational street mural triptych", imageType:"poster-like", emotion:"angry confrontation", interpretation:"interaction", palette:"red/black/yellow high contrast", camera:"wide angle, harsh diagonals", bounds:"teen-adult"};
-    case "😳": return {material:"realistic surfaces", composition:"single subject under harsh spotlight", imageType:"photograph-like", emotion:"surprised to camera", interpretation:"literal", palette:"neutral with blush tones", camera:"fixed frontal gaze", bounds:"all-ages"};
-    case "🫣": return {material:"neon glass, blinds/curtains, occlusion layers", composition:"peekaboo framing", imageType:"stylized photo", emotion:"can’t look fully", interpretation:"context", palette:"cool rim-lights", camera:"rim lighting and shadow bands", bounds:"teen-adult"};
-    case "🫠": return {material:"melting, slumping forms", composition:"static tableau", imageType:"illustration or photo-like", emotion:"resigned ‘all fine’", interpretation:"metaphor", palette:"washed, diffuse haze", camera:"calm locked-off shot", bounds:"all-ages"};
-    case "🤮": return {material:"slime-gel, wet speculars", composition:"radial splatter", imageType:"cartoon", emotion:"gross but playful", interpretation:"fusion", palette:"lurid bright greens", camera:"centered", bounds:"kid-safe"};
-    case "😈": return {material:"neon/chrome, reflections", composition:"heist motion poster", imageType:"stylized photo", emotion:"mischief", interpretation:"interaction", palette:"night city palette", camera:"tilted angles, motion blur", bounds:"teen-adult"};
-    case "🤑": return {material:"polished metals, jewel sparkle", composition:"symmetric still life", imageType:"macro photo", emotion:"opulent", interpretation:"context", palette:"gold leaf tones", camera:"macro DOF", bounds:"all-ages"};
-    case "💩": return {material:"plush/rubber props", composition:"slapstick triptych", imageType:"cartoon", emotion:"farcical silly", interpretation:"interaction", palette:"flat bright", camera:"straight-on", bounds:"kid-safe"};
-    case "👵": return {material:"embroidery, tapestry, carved wood", composition:"folklore symmetry", imageType:"illustration", emotion:"grandma fairytale", interpretation:"literal", palette:"warm candle glow", camera:"orthographic calm", bounds:"all-ages"};
-    case "🥷": return {material:"ink-wash and steel", composition:"multi-moment chase compression", imageType:"poster", emotion:"stealth action", interpretation:"interaction", palette:"moonlit blues", camera:"rooftops, long lens", bounds:"all-ages"};
-    case "🧚‍♀️": return {material:"bioluminescent spores, iridescent wings", composition:"enchanted woodland", imageType:"photo-illustration", emotion:"wonder", interpretation:"context", palette:"cool glow", camera:"dreamy lens bloom", bounds:"all-ages"};
-    case "👾": return {material:"CRT bloom, pixel surfaces, chroma bleed", composition:"looming arcade boss", imageType:"retro poster", emotion:"horror amalgam (stylized)", interpretation:"fusion", palette:"limited synthwave", camera:"low, looming", bounds:"teen-adult"};
-    default: return {material:"coherent mixed media", composition:"balanced scene", imageType:"photograph-like", emotion:"story-rich", interpretation:"literal", palette:"natural", camera:"cinematic", bounds:"all-ages"};
+    case "🥹": return {composition:"close macro, gentle vignette", palette:"candy pastels", camera:"shallow DOF", interpretation:"literal", imageType:"photograph-like", material:"plush textile, glossy toy eyes"};
+    case "🤯": return {composition:"explosive collage poster", palette:"neon primaries", camera:"impossible perspective", interpretation:"metaphor", imageType:"illustration", material:"fractured geometry, prismatic edges"};
+    case "🤬": return {composition:"street mural triptych", palette:"red/black/yellow high contrast", camera:"wide harsh diagonals", interpretation:"interaction", imageType:"poster-like", material:"spray paint, ripped posters"};
+    case "😳": return {composition:"harsh spotlight", palette:"neutral with blush", camera:"frontal gaze", interpretation:"literal", imageType:"photo-like", material:"realistic surfaces"};
+    case "🫣": return {composition:"peekaboo framing", palette:"cool rim-lights", camera:"rim lighting, shadow bands", interpretation:"context", imageType:"stylized photo", material:"neon glass, blinds"};
+    case "🫠": return {composition:"static tableau", palette:"washed diffuse", camera:"locked-off", interpretation:"metaphor", imageType:"photo/illustration", material:"melting, slumping"};
+    case "🤮": return {composition:"radial splatter", palette:"bright lurid greens", camera:"centered", interpretation:"fusion", imageType:"cartoon", material:"slime-gel, wet speculars"};
+    case "😈": return {composition:"heist motion poster", palette:"night city", camera:"tilted with motion blur", interpretation:"interaction", imageType:"stylized", material:"neon/chrome"};
+    case "🤑": return {composition:"symmetric still-life", palette:"gold leaf", camera:"macro DOF", interpretation:"context", imageType:"macro", material:"polished metals, jewel sparkle"};
+    case "💩": return {composition:"slapstick triptych", palette:"flat bright", camera:"straight-on", interpretation:"interaction", imageType:"cartoon", material:"plush/rubber props"};
+    case "👵": return {composition:"folklore symmetry", palette:"warm candle glow", camera:"orthographic", interpretation:"literal", imageType:"illustration", material:"embroidery, tapestry, wood"};
+    case "🥷": return {composition:"multi-moment chase", palette:"moonlit blues", camera:"rooftops, long lens", interpretation:"interaction", imageType:"poster", material:"ink-wash and steel"};
+    case "🧚‍♀️": return {composition:"enchanted woodland", palette:"cool glow", camera:"dreamy bloom", interpretation:"context", imageType:"photo-illustration", material:"bioluminescent spores, iridescent wings"};
+    case "👾": return {composition:"looming arcade boss", palette:"limited synthwave", camera:"low, looming", interpretation:"fusion", imageType:"retro poster", material:"CRT bloom, pixels"};
+    default: return {composition:"balanced", palette:"natural", camera:"cinematic", interpretation:"literal", imageType:"photo-like", material:"coherent mixed media"};
   }
 }
-
 function assembleSubjects(layout){
-  // order: center → inner → rim. Include hemi hints.
   const roleOrder = {center:0, inner:1, rim:2};
-  const ordered = [...layout].sort((a,b)=>roleOrder[a.role]-roleOrder[b.role]);
-  return ordered.map(t=>{
-    const hemi = `${t.hemiTB}-${t.hemiLR}`; // e.g., "top-left"
-    if(t.role==="center"){
-      return `main subject at center: ${t.phrase}`;
-    }else if(t.role==="inner"){
-      return `supporting subject in the inner ring (${hemi}): ${t.phrase}`;
-    }else{
-      // rim: influence environment
+  return [...layout].sort((a,b)=>roleOrder[a.role]-roleOrder[b.role])
+    .map(t=>{
+      const hemi = `${t.hemiTB}-${t.hemiLR}`;
+      if(t.role==="center") return `main subject at center: ${t.phrase}`;
+      if(t.role==="inner")  return `supporting subject in the inner ring (${hemi}): ${t.phrase}`;
       return `rim element (${hemi}) shaping the environment: ${t.phrase}`;
-    }
-  });
+    }).join('. ');
 }
-function assembleInterpretation(kind, layout, pair){
+function assembleInterpretation(kind, layout){
   const preset=kindPreset(kind);
-  const mode=preset.interpretation;
-  if(mode==="fusion" && pair){
-    return `Fuse ${pair.a.phrase} with ${pair.b.phrase} into a single coherent form; remaining elements act as context and surface motifs.`;
-  }
-  if(mode==="interaction" && pair){
-    return `Show ${pair.a.phrase} interacting with ${pair.b.phrase} with a clear action relationship; others support the scene.`;
-  }
-  if(mode==="context"){
-    return `Treat rim elements as environmental cues (sky, ground, frames, lighting), keeping central subjects recognizable.`;
-  }
-  if(mode==="metaphor"){
-    return `Use non-central tokens to alter light, texture, or mood as metaphor—avoid showing them as literal objects.`;
-  }
-  // literal
+  const pair=findClosePair(layout);
+  if(preset.interpretation==="fusion" && pair) return `Fuse ${pair.a.phrase} with ${pair.b.phrase} into a single coherent form; remaining elements act as context.`;
+  if(preset.interpretation==="interaction" && pair) return `Show ${pair.a.phrase} interacting with ${pair.b.phrase} with a clear action; others support the scene.`;
+  if(preset.interpretation==="context") return `Treat rim elements as environmental cues (sky, ground, frames, lighting).`;
+  if(preset.interpretation==="metaphor") return `Use non-central tokens to alter light, texture, and mood rather than appear as objects.`;
   return `Render subjects as themselves with natural relations and depth.`;
 }
-function summarizeOverflow(layout){
-  if(layout.length<=6) return null;
-  // Keep 1 center, 2 closest inner, up to 3 rim (by quadrants)
-  const center = layout.filter(t=>t.role==="center").slice(0,1);
-  const inner  = layout.filter(t=>t.role==="inner").sort((a,b)=>a.rPct-b.rPct).slice(0,2);
-  const rim    = layout.filter(t=>t.role==="rim");
-  // sample rim by quadrant
-  const quads=[[],[],[],[]];
-  rim.forEach(r=>{
-    const q=(r.hemiTB==="top"?0:2)+(r.hemiLR==="right"?1:0); // 0 TL,1 TR,2 BL,3 BR
-    quads[q].push(r);
-  });
-  const rimPick = quads.flatMap(arr=>arr.sort((a,b)=>a.rPct-b.rPct).slice(0,1)).slice(0,3);
-  const kept = new Set([...center,...inner,...rimPick].map(t=>t.id));
-  const rest = layout.filter(t=>!kept.has(t.id));
-  return {keptIDs:[...kept], summary:`Include additional subtle motifs around the rim inspired by ${rest.length} extra tokens.`};
-}
-
 function assertNoEmoji(text){
-  // Try Unicode property; fall back to range checks
-  const prop = /[\p{Extended_Pictographic}\uFE0F]/u;
-  if(prop.test(text)) throw new Error("Prompt contains emoji glyphs.");
-  // Loose range guard
-  const range = /[\u2190-\u2BFF\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u;
-  if(range.test(text)) throw new Error("Prompt contains pictographic glyphs.");
+  const prop=/[\p{Extended_Pictographic}\uFE0F]/u;
+  const range=/[\u2190-\u2BFF\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u;
+  if(prop.test(text)||range.test(text)) throw new Error("Prompt contains emoji glyphs.");
 }
-
 function buildPrompt(){
-  const layoutAll=computeLayout();
-  const overflow=summarizeOverflow(layoutAll);
-  const layout = overflow? layoutAll.filter(t=>overflow.keptIDs.includes(t.id)) : layoutAll;
-
-  const preset = kindPreset(activeKind);
-  const pair = findClosePair(layout);
-
+  const layout=computeLayout();
+  const preset=kindPreset(activeKind);
   const header = `${preset.imageType}; ${preset.material}.`;
-  const subjects = assembleSubjects(layout).join(' ');
-  const interaction = assembleInterpretation(activeKind, layout, pair);
-  const aesthetics = `Composition: ${preset.composition}. Emotion: ${preset.emotion}. Lighting & palette: ${preset.palette}. Camera: ${preset.camera}.`;
-  const bounds = `Content bounds: ${preset.bounds}.`;
-  const constraint = `Single coherent frame; no text overlay; interpret emojis as real-world objects, scenes, colors, or emotions — never as glyphs.`;
-
-  const overflowLine = overflow? overflow.summary : null;
-
-  const text = [header, subjects, interaction, aesthetics, bounds, overflowLine, constraint]
-                .filter(Boolean).join(' ');
-
-  assertNoEmoji(text); // hard ban before returning
+  const subjects = assembleSubjects(layout);
+  const interpretation = assembleInterpretation(activeKind, layout);
+  const aesthetics = `Composition: ${preset.composition}. Lighting & palette: ${preset.palette}. Camera: ${preset.camera}.`;
+  const constraint = `Single coherent frame; no text overlay; interpret emojis as real objects, scenes, colors, or emotions — never as glyphs.`;
+  const text=[header,subjects,interpretation,aesthetics,constraint].join(' ');
+  assertNoEmoji(text);
   return text;
 }
 
 /* ===== Pollinations (keyless) ===== */
 async function callPollinations(prompt){
-  assertNoEmoji(prompt); // second guard just before network
+  assertNoEmoji(prompt);
   const url="https://image.pollinations.ai/prompt/"+encodeURIComponent(prompt)+"?width=768&height=768";
   const res=await fetch(url,{mode:"cors"}); if(!res.ok) throw new Error('Pollinations error');
   const blob=await res.blob(); return URL.createObjectURL(blob);
 }
 
-/* ====== Generation control ====== */
-function scheduleGenerate(){
-  ensureWaiting();
-  imageEl.classList.remove('revealed');
-  if(genTimer) clearTimeout(genTimer);
-  genTimer=setTimeout(()=>generateNow(), 420);
+/* ====== Debounced request control (500 ms) ====== */
+function scheduleRequest(){
+  // Enter SUSPENSE immediately; do not mark aria-busy yet
+  document.body.classList.add('suspense');
+  document.body.classList.remove('waiting');
+  cauldron.classList.remove('req-blip');
+  cauldron.setAttribute('aria-busy','false');
+
+  if(requestTimer) clearTimeout(requestTimer);
+  requestTimer=setTimeout(()=>fireRequest(), 500);
 }
+
+function fireRequest(){
+  requestTimer=null;
+
+  // Mark the request instant visually
+  cauldron.classList.add('req-blip');
+  setTimeout(()=>cauldron.classList.remove('req-blip'), 340);
+
+  // Transition to WAITING
+  startWaiting();
+
+  // Clear old image while requesting
+  imageEl.classList.remove('revealed');
+  if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
+
+  generateNow();
+}
+
 async function generateNow(){
-  genTimer=null;
   const serial=++genSerial; latestSerial=serial;
   const prompt=buildPrompt();
 
   try{
     const imgURL=await callPollinations(prompt);
-    if(serial!==latestSerial) return;
+    if(serial!==latestSerial) return; // superseded
     if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} }
     currentObjectURL=imgURL;
     imageEl.src=imgURL;
     imageEl.onload=()=>{
       if(serial!==latestSerial) return;
       stopWaiting();
-      arrangeOnRim(); // snap each chip to nearest edge point, shortest path
+      arrangeOnRim();
       requestAnimationFrame(()=> imageEl.classList.add('revealed'));
     };
   }catch(e){
     console.warn(e);
-    stopWaiting(); // silent fail; allow user to adjust and re-trigger
+    stopWaiting(); // silent; allow re-edit and re-trigger
   }
 }
 
@@ -749,7 +729,7 @@ customElements.define('emoji-picker', class extends HTMLElement {
   open(){ this.r.root.classList.add('show'); }
   close(){ this.r.root.classList.remove('show'); }
   #tabs(){ this.r.tabs.innerHTML=''; for(const [id,cat] of Object.entries(this.#data)){ const b=document.createElement('button'); b.className='t'; b.dataset.id=id; b.innerHTML=`<span style="font-size:20px">${cat.icon}</span>`; b.onclick=()=>this.#set(id); this.r.tabs.appendChild(b);} }
-  #set(id){ this.#cat=id; this.r.grid.innerHTML=''; for(const ch of this.#data[id].items){ const btn=document.createElement('button'); btn.className='cell'; btn.innerHTML=`<span class="emo">${ch}</span>`; btn.onclick=()=>{ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); }; this.r.grid.appendChild(btn);} }
+  #set(id){ this.#cat=id; this.r.grid.innerHTML=''; for(const ch of this.#data[id].items){ const btn=document.createElement('button'); btn.className='cell'; btn.innerHTML=\`<span class="emo">\${ch}</span>\`; btn.onclick=()=>{ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); }; this.r.grid.appendChild(btn);} }
   #catalog(){
     const SKA=0x1F3FB, SKB=0x1F3FF;
     const blocks=[[0x1F600,0x1F64F],[0x1F300,0x1F5FF],[0x1F680,0x1F6FF],[0x1F900,0x1F9FF],[0x1FA70,0x1FAFF],[0x2600,0x26FF],[0x2700,0x27BF]];
