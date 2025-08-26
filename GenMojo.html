@@ -10,10 +10,8 @@
     --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
     --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
     --ease:cubic-bezier(.2,.8,.2,1);
-    --emerald:#9af2d3; --emerald-mid:#48d9ad; --emerald-deep:#0ca678;
-    --ink:#0a0b0d;
-    --shake-ampl:0;   /* 0→1 while waiting */
-    --blur:0px;       /* 0→3px while waiting */
+    --shake-ampl:0;      /* 0→1 while waiting */
+    --blur:0px;          /* 0→3px while waiting */
   }
   @property --shake-ampl{syntax:'<number>';initial-value:0;inherits:false}
   @property --blur{syntax:'<length>';initial-value:0px;inherits:false}
@@ -28,12 +26,12 @@
       conic-gradient(from 0deg at 50% 50%, #e9f3ff, #ffe9f7, #e9fff6, #f7f3ff, #e9f3ff);
     background-attachment:fixed; animation:hue 24s linear infinite alternate;
     overflow:hidden; -webkit-tap-highlight-color:transparent;
-    user-select:none; color:var(--ink);
+    user-select:none; color:#0a0b0d;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
   }
   @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
 
-  /* Layout: Bowl → Buttons → Carousel at bottom */
+  /* ===== Layout: Bowl → Buttons → Carousel */
   .stage{
     position:fixed; inset:0;
     display:grid; grid-template-rows:1fr auto auto;
@@ -45,25 +43,10 @@
   .cauldron-wrap{
     position:relative; width:min(64vmin,520px); aspect-ratio:1;
     display:grid; place-items:center;
-    /* IDLE: no animation */
     transform:translate(0,0);
   }
-  /* WAITING: gentle shake only while waiting */
-  .waiting .cauldron-wrap{ animation:shake-linear 700ms linear infinite; }
   @media (max-height:740px){ .cauldron-wrap{ width:min(56vmin,460px); } }
   @media (max-height:640px){ .cauldron-wrap{ width:min(50vmin,420px); } }
-
-  @keyframes shake-linear{
-    0%  { transform: translate( calc( 0px * var(--shake-ampl)),  calc( 0px * var(--shake-ampl))); }
-    12% { transform: translate( calc( 2px * var(--shake-ampl)),  calc(-2px * var(--shake-ampl))); }
-    25% { transform: translate( calc(-2px * var(--shake-ampl)),  calc( 2px * var(--shake-ampl))); }
-    37% { transform: translate( calc( 2px * var(--shake-ampl)),  calc( 2px * var(--shake-ampl))); }
-    50% { transform: translate( calc(-2px * var(--shake-ampl)),  calc(-2px * var(--shake-ampl))); }
-    62% { transform: translate( calc( 1px * var(--shake-ampl)),  calc(-1px * var(--shake-ampl))); }
-    75% { transform: translate( calc(-1px * var(--shake-ampl)),  calc( 1px * var(--shake-ampl))); }
-    87% { transform: translate( calc( 1px * var(--shake-ampl)),  calc( 1px * var(--shake-ampl))); }
-    100%{ transform: translate( calc( 0px * var(--shake-ampl)),  calc( 0px * var(--shake-ampl))); }
-  }
 
   .cauldron{
     position:relative; width:100%; height:100%; border-radius:50%;
@@ -75,17 +58,8 @@
   .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
   .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
 
-  /* Brew container; IDLE: no stirring */
+  /* --- Liquid & inner layer --- */
   .brew{ position:absolute; inset:0; border-radius:50%; overflow:hidden; filter:blur(var(--blur)) saturate(1.06); }
-
-  /* WAITING: stirring */
-  @keyframes breatheSpin { 0%{transform:scale(.992) rotate(-.8deg)} 50%{transform:scale(1.008) rotate(.8deg)} 100%{transform:scale(.992) rotate(-.8deg)} }
-  .waiting .brew{ animation: breatheSpin 2.4s ease-in-out infinite; }
-
-  /* Blur/Shake ramp only while waiting */
-  @keyframes rampVars { from{ --shake-ampl:0; --blur:0px; } to{ --shake-ampl:1; --blur:3px; } }
-  .waiting{ animation: rampVars 3s ease-in-out forwards; }
-
   .liquid, .beams { position:absolute; inset:10%; border-radius:50%; pointer-events:none; }
   .liquid{
     opacity:.25; /* subdued when idle */
@@ -94,13 +68,65 @@
       conic-gradient(from 0deg, #bffbe7 0 40%, #dfe8ff 40% 70%, #ffdff2 70% 100%);
     mix-blend-mode:soft-light; filter:saturate(1.05);
   }
+  .beams{ opacity:0; }
+
+  /* ===== STATES =====
+     IDLE: default – static (no anims)
+     SUSPENSE: ≤500ms pulse (scale), no “timer” feel
+     REQUEST-BLIP: quick rim pulse when sending
+     WAITING: stirring + blur + shake + beams
+     FREEZE: while ANY touch/pointer is down anywhere → completely static (overrides others)
+  */
+
+  /* SUSPENSE pulse (scale) */
+  @keyframes suspensePulse { 0%{transform:scale(1)} 50%{transform:scale(1.02)} 100%{transform:scale(1)} }
+  .suspense .cauldron{ animation:suspensePulse 500ms ease-in-out infinite; }
+
+  /* REQUEST blip */
+  .cauldron.req-blip::after{
+    content:""; position:absolute; inset:5%; border-radius:50%;
+    box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset;
+    animation:reqPulse 320ms cubic-bezier(.2,.8,.2,1) both;
+    pointer-events:none;
+  }
+  @keyframes reqPulse {
+    0%{ box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset; }
+    70%{ box-shadow:0 0 0 12px #00c8ff00, 0 0 40px #00c8ff66 inset; }
+    100%{ box-shadow:0 0 0 18px #00c8ff00, 0 0 0 #00c8ff00 inset; }
+  }
+
+  /* WAITING state */
+  @keyframes breatheSpin { 0%{transform:scale(.992) rotate(-.8deg)} 50%{transform:scale(1.008) rotate(.8deg)} 100%{transform:scale(.992) rotate(-.8deg)} }
+  .waiting .brew{ animation: breatheSpin 2.4s ease-in-out infinite; }
   @keyframes swirl{to{transform:rotate(360deg)}}
   .waiting .liquid{ opacity:.9; animation:swirl 3.6s linear infinite; }
-
-  .beams{ opacity:0; }
   @keyframes beams{to{transform:rotate(-360deg)}}
   .waiting .beams{ opacity:.8; animation:beams 2.6s linear infinite; filter:blur(6px); }
+  @keyframes rampVars { from{ --shake-ampl:0; --blur:0px; } to{ --shake-ampl:1; --blur:3px; } }
+  .waiting{ animation: rampVars 3s ease-in-out forwards; }
+  @keyframes shake-linear{
+    0%  { transform: translate( calc( 0px * var(--shake-ampl)),  calc( 0px * var(--shake-ampl))); }
+    12% { transform: translate( calc( 2px * var(--shake-ampl)),  calc(-2px * var(--shake-ampl))); }
+    25% { transform: translate( calc(-2px * var(--shake-ampl)),  calc( 2px * var(--shake-ampl))); }
+    37% { transform: translate( calc( 2px * var(--shake-ampl)),  calc( 2px * var(--shake-ampl))); }
+    50% { transform: translate( calc(-2px * var(--shake-ampl)),  calc(-2px * var(--shake-ampl))); }
+    62% { transform: translate( calc( 1px * var(--shake-ampl)),  calc(-1px * var(--shake-ampl))); }
+    75% { transform: translate( calc(-1px * var(--shake-ampl)),  calc( 1px * var(--shake-ampl))); }
+    87% { transform: translate( calc( 1px * var(--shake-ampl)),  calc( 1px * var(--shake-ampl))); }
+    100%{ transform: translate( calc( 0px * var(--shake-ampl)),  calc( 0px * var(--shake-ampl))); }
+  }
+  .waiting .cauldron-wrap{ animation:shake-linear 700ms linear infinite; }
 
+  /* FREEZE overrides: zero animations, zero beams */
+  .freeze .cauldron-wrap,
+  .freeze .cauldron,
+  .freeze .brew,
+  .freeze .liquid,
+  .freeze .beams{ animation:none !important }
+  .freeze .beams{ opacity:0 !important }
+  .freeze .cauldron.req-blip::after{ display:none !important }
+
+  /* --- image layer --- */
   .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
   .result-img{
     width:100%; height:100%; object-fit:cover; display:block;
@@ -140,7 +166,7 @@
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
 
-  /* WAITING: chip micro pulse */
+  /* WAITING chip micro-pulse (kept) */
   .waitPulse{ animation:chipPulse 1.8s ease-in-out infinite; }
   @keyframes chipPulse{
     0%  { transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
@@ -203,22 +229,6 @@
     mix-blend-mode:overlay; animation:shine 4s linear infinite; pointer-events:none;
   }
   @keyframes shine{to{transform:rotate(360deg)}}
-
-  /* ===== Suspense (≤500ms) & Request-blip visuals ===== */
-  @keyframes ringSuspense { 0%{box-shadow:inset 0 0 0 6px #ffffff10} 50%{box-shadow:inset 0 0 0 6px #ffffff28} 100%{box-shadow:inset 0 0 0 6px #ffffff10} }
-  .suspense .ring{ animation:ringSuspense 0.5s linear infinite; }
-
-  .cauldron.req-blip::after{
-    content:""; position:absolute; inset:5%; border-radius:50%;
-    box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset;
-    animation:reqPulse 320ms cubic-bezier(.2,.8,.2,1) both;
-    pointer-events:none;
-  }
-  @keyframes reqPulse {
-    0%{ box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset; }
-    70%{ box-shadow:0 0 0 12px #00c8ff00, 0 0 40px #00c8ff66 inset; }
-    100%{ box-shadow:0 0 0 18px #00c8ff00, 0 0 0 #00c8ff00 inset; }
-  }
 </style>
 </head>
 <body>
@@ -281,215 +291,76 @@ const cancelBtn=document.getElementById('cancel');
 const picker=document.getElementById('picker');
 const kindRail=document.getElementById('kindRail');
 
+/* ---------- State ---------- */
 let seeds=[]; let placed=[]; let dragging=null; let snapTimer=null; let lastActiveKind=null;
 let sparkTimer=null;
-let requestTimer=null, genSerial=0, latestSerial=0;
+let requestTimer=null;         // fires network after 500ms post-change
+let interactingCount=0;        // ANY pointer/touch down → >0
+let queuedChange=false;        // a relevant change happened during interaction
+let genSerial=0, latestSerial=0;
 let currentObjectURL=null;
 
-window.addEventListener('load',()=>{ buildKindRail(); resetApp(true); });
+/* ===== UTIL: global interaction (freeze while touching anywhere) ===== */
+function beginInteraction(){ interactingCount++; if(interactingCount===1){ document.body.classList.add('freeze'); cancelSuspense(); } }
+function endInteraction(){
+  if(interactingCount>0){ interactingCount--; }
+  if(interactingCount===0){
+    document.body.classList.remove('freeze');
+    // If a relevant change occurred while touching, arm suspense+request now
+    if(queuedChange){ queuedChange=false; armSuspenseAndRequest(); }
+  }
+}
+// Global listeners (capture to catch everything, including picker and carousel)
+addEventListener('pointerdown', beginInteraction, true);
+addEventListener('pointerup',   endInteraction, true);
+addEventListener('pointercancel', endInteraction, true);
+addEventListener('lostpointercapture', endInteraction, true);
 
-/* ---------- Carousel ---------- */
-function buildKindRail(){
-  KIND_EMOJIS.forEach(k=>{
-    const b=document.createElement('button'); b.className='kchip'; b.dataset.kind=k;
-    b.innerHTML=`<span class="e">${k}</span>`; b.addEventListener('click',()=>centerChip(b));
-    kindRail.insertBefore(b, kindRail.lastElementChild);
-  });
-  setTimeout(()=>centerChip(kindRail.querySelector('.kchip')),0);
-  kindRail.addEventListener('scroll', onRailScroll, {passive:true});
-  requestAnimationFrame(updateActiveChipVisual);
+/* ===== Suspense/Request control ===== */
+function cancelSuspense(){
+  if(requestTimer){ clearTimeout(requestTimer); requestTimer=null; }
+  document.body.classList.remove('suspense');
+  // Do not touch waiting here.
 }
-function centerChip(chip){
-  const R=kindRail.getBoundingClientRect(), C=chip.getBoundingClientRect();
-  kindRail.scrollBy({left:(C.left+C.width/2)-(R.left+R.width/2), behavior:'smooth'});
-}
-function onRailScroll(){
-  updateActiveChipVisual();
-  if(snapTimer) clearTimeout(snapTimer);
-  snapTimer=setTimeout(()=>{
-    const active=getActiveChip(); if(!active) return;
-    const k=active.dataset.kind; activeKind=k;
-    if(lastActiveKind!==k){ lastActiveKind=k; scheduleRequest('kind-change'); }
-    centerChip(active);
-  },180);
-}
-function getActiveChip(){ const R=kindRail.getBoundingClientRect(), cx=R.left+R.width/2; let best=null, d=1e9;
-  for(const chip of kindRail.querySelectorAll('.kchip')){ const r=chip.getBoundingClientRect(), c=r.left+r.width/2, dd=Math.abs(c-cx); if(dd<d){d=dd; best=chip;} }
-  return best;
-}
-function updateActiveChipVisual(){ const a=getActiveChip(); for(const c of kindRail.querySelectorAll('.kchip')) c.classList.toggle('active', c===a); }
-
-/* ---------- Core ---------- */
-function resetApp(isInitial=false){
-  // clear any displayed image and revoke old blob
-  if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
-  imageEl.classList.remove('revealed');
-  imageEl.removeAttribute('src');
-
-  placed=[]; overlay.innerHTML='';
-  document.body.classList.remove('waiting','suspense');
+function armSuspenseAndRequest(){
+  // Start suspense immediately; schedule request for +500ms
+  document.body.classList.add('suspense');
+  document.body.classList.remove('waiting');
   cauldron.classList.remove('req-blip');
-  document.documentElement.style.setProperty('--shake-ampl','0');
-  document.documentElement.style.setProperty('--blur','0px');
   cauldron.setAttribute('aria-busy','false');
 
-  if(requestTimer){ clearTimeout(requestTimer); requestTimer=null; }
-  clearInterval(sparkTimer);
-
-  initSeeds(); renderSeeds(); renderPlaced(false);
+  if(requestTimer) clearTimeout(requestTimer);
+  requestTimer=setTimeout(fireRequest, 500);
 }
-
-/* Helpers */
-function rect(el){ const r=el.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}; }
-
-/* Scatter seeds avoiding UI */
-function initSeeds(){
-  const vw=window.innerWidth, vh=window.innerHeight;
-  const bowl   = rect(cauldron);
-  const rail   = rect(kindRail);
-  const footer = rect(document.querySelector('.footer'));
-  const avoid = [
-    { left:bowl.left-24,   top:bowl.top-24,   right:bowl.right+24,   bottom:bowl.bottom+24 },
-    { left:footer.left-12, top:footer.top-12, right:footer.right+12, bottom:footer.bottom+12 },
-    { left:rail.left-12,   top:rail.top-12,   right:rail.right+12,   bottom:rail.bottom+12 }
-  ];
-  const CHIP_R = 28, PAD = 16, MIN_D  = CHIP_R*2 + 14;
-
-  function hitsAvoid(x,y){
-    return avoid.some(a => x > a.left-CHIP_R && x < a.right+CHIP_R && y > a.top-CHIP_R && y < a.bottom+CHIP_R);
+function scheduleRelevantChange(){
+  // Called on: drop in bowl, move chip, remove chip, picker add, kind change
+  if(interactingCount>0){
+    queuedChange=true;        // wait until interaction ends
+    // ensure no suspense while touching
+    cancelSuspense();
+    return;
   }
-  function farEnough(x,y){ for(const p of seeds){ if(Math.hypot(x-p.x, y-p.y) < MIN_D) return false; } return true; }
-
-  seeds = []; let i = 0, attempts = 0, maxAttempts = 8000;
-  while (i < START_EMOJIS.length && attempts++ < maxAttempts){
-    const x = PAD + Math.random()*(vw - PAD*2);
-    const y = PAD + Math.random()*(vh - PAD*2);
-    if (hitsAvoid(x,y)) continue; if (!farEnough(x,y)) continue;
-    seeds.push({ id:crypto.randomUUID(), emoji: START_EMOJIS[i++], x, y });
-  }
+  // Not interacting: start/refresh suspense+request window
+  armSuspenseAndRequest();
 }
+function fireRequest(){
+  requestTimer=null;
+  // Distinct request blip
+  cauldron.classList.add('req-blip');
+  setTimeout(()=>cauldron.classList.remove('req-blip'), 340);
 
-/* Re-scatter on resize if empty bowl */
-let resizeT;
-window.addEventListener('resize', () => {
-  clearTimeout(resizeT);
-  resizeT = setTimeout(()=>{ if (placed.length===0){ initSeeds(); renderSeeds(); } }, 120);
-});
+  // Enter waiting (animations unless freeze active)
+  startWaiting();
 
-function renderSeeds(){
-  seedsEl.innerHTML='';
-  for(const s of seeds){
-    const n=document.createElement('button'); n.className='seed';
-    n.style.left=s.x+'px'; n.style.top=s.y+'px';
-    n.style.setProperty('--delay', `${(-Math.random()*6).toFixed(2)}s`);
-    n.style.setProperty('--dur', `${(7+Math.random()*4).toFixed(2)}s`);
-    n.style.setProperty('--fx', `${(Math.random()*14-7).toFixed(1)}px`);
-    n.style.setProperty('--fy', `${(Math.random()*8-4).toFixed(1)}px`);
-    n.dataset.id=s.id; n.innerHTML=`<span class="e">${s.emoji}</span>`;
-    n.addEventListener('pointerdown', e=>startDragSeed(e,s.id));
-    seedsEl.appendChild(n);
-  }
+  // Clear old visual during fetch
+  imageEl.classList.remove('revealed');
+  if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
+
+  generateNow();
 }
 
-/* Picker */
-document.getElementById('openPicker').addEventListener('click',()=>picker.open());
-picker.addEventListener('emoji-pick',e=>{
-  const emo=e.detail.emoji; const pos=spotInsideBowl();
-  placed.push({id:crypto.randomUUID(), emoji:emo, x:pos.x, y:pos.y});
-  renderPlaced(true);
-  scheduleRequest('picker-add');
-});
-
-/* Dragging */
-function startDragSeed(ev,id){ ev.preventDefault();
-  const idx=seeds.findIndex(s=>s.id===id); if(idx<0) return;
-  const node=[...seedsEl.children].find(n=>n.dataset.id===id);
-  if(node) node.style.visibility='hidden';                 // hide original to avoid "copy"
-  const ghost=makeGhost(seeds[idx].emoji);
-  dragging={type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost, originalEl:node};
-  pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
-}
-function startDragPlaced(ev,id){ ev.preventDefault();
-  const idx=placed.findIndex(p=>p.id===id); if(idx<0) return;
-  const node=overlay.querySelector(`.placed[data-id="${id}"]`);
-  if(node) node.style.visibility='hidden';                 // hide original to avoid "copy"
-  const ghost=makeGhost(placed[idx].emoji);
-  dragging={type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost, originalEl:node, start:{x:placed[idx].x,y:placed[idx].y}};
-  pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
-}
-function makeGhost(emoji){ const g=document.createElement('div'); g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
-  g.style.transform='translate(-50%,-50%) scale(1.0)'; g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
-  g.innerHTML=`<span class="e" style="font-size:36px">${emoji}</span>`; document.body.appendChild(g); return g; }
-function pointerMove(ev){ if(!dragging) return;
-  dragging.ghostEl.style.left=ev.clientX+'px'; dragging.ghostEl.style.top=ev.clientY+'px';
-  const {inside}=coordsInCauldron(ev.clientX,ev.clientY);
-  dragging.ghostEl.style.transform=`translate(-50%,-50%) scale(${inside?1.26:1.04})`;
-  cauldron.classList.toggle('over',inside);
-}
-function pointerUp(ev){
-  if(!dragging) return cleanupDrag();
-  const {inside,px,py}=coordsInCauldron(ev.clientX,ev.clientY); cauldron.classList.remove('over');
-
-  if(dragging.type==='seed'){
-    if(inside){
-      placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py});
-      renderPlaced(true);
-      if(dragging.idx>=0){ seeds.splice(dragging.idx,1); renderSeeds(); }
-      scheduleRequest('seed-add');
-    }else{
-      if(dragging.originalEl) dragging.originalEl.style.visibility='';
-    }
-  }else{ // dragging placed
-    if(inside){
-      placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false);
-      scheduleRequest('move');
-    }else{
-      // Convert placed chip back into a floating seed at drop point (keep usable) + RE-RENDER
-      const screenX=ev.clientX, screenY=ev.clientY;
-      seeds.push({ id:crypto.randomUUID(), emoji:dragging.emoji, x:screenX, y:screenY });
-      placed.splice(dragging.idx,1);
-      renderPlaced(false); renderSeeds();
-      scheduleRequest('placed-remove');
-    }
-  }
-  cleanupDrag();
-}
-function cleanupDrag(){
-  removeEventListener('pointermove', pointerMove); removeEventListener('pointerup', pointerUp);
-  if(dragging?.ghostEl) dragging.ghostEl.remove();
-  if(dragging?.originalEl) dragging.originalEl.style.visibility=''; // restore hidden original
-  dragging=null;
-}
-
-function renderPlaced(playDrop=false){
-  overlay.innerHTML='';
-  for(const p of placed){
-    const n=document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
-    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
-    if(playDrop) n.classList.add('dropin');
-    n.addEventListener('pointerdown', e=>startDragPlaced(e,p.id));
-    overlay.appendChild(n);
-  }
-}
-
-/* Geometry */
-function coordsInCauldron(cx,cy){
-  const r=cauldron.getBoundingClientRect(); const mx=cx-(r.left+r.width/2); const my=cy-(r.top+r.height/2);
-  const inside=Math.hypot(mx,my)<=r.width/2;
-  const px=((mx+r.width/2)/r.width)*100; const py=((my+r.height/2)/r.height)*100;
-  return {inside, px:Math.max(6,Math.min(94,px)), py:Math.max(6,Math.min(94,py))};
-}
-function spotInsideBowl(){
-  const r=cauldron.getBoundingClientRect(); let tries=0;
-  while(tries++<300){ const px=8+Math.random()*84, py=8+Math.random()*84;
-    const cx=r.left+px/100*r.width, cy=r.top+py/100*r.height;
-    if(Math.hypot(cx-(r.left+r.width/2),cy-(r.top+r.height/2))<r.width/2-40) return {x:px,y:py};
-  } return {x:50,y:50};
-}
-
-/* ====== State helpers ====== */
+/* ===== Waiting visuals ===== */
 function startWaiting(){
-  if(document.body.classList.contains('waiting')) return;
   document.body.classList.remove('suspense');
   document.body.classList.add('waiting');
   cauldron.setAttribute('aria-busy','true');
@@ -530,54 +401,202 @@ function spawnSparks(){
   }
 }
 
-/* Arrange on rim (nearest edge point, shortest path) after reveal */
-function arrangeOnRim(){
-  if(!placed.length) return;
-  const cx=50, cy=50, r=44; // edge radius in %
-  placed.forEach(p=>{
-    const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) return;
-    node.classList.remove('waitPulse');
-    let dx=p.x-cx, dy=p.y-cy;
-    let len=Math.hypot(dx,dy);
-    if(len<0.0001){ dx=1; dy=0; len=1; }
-    const ux=dx/len, uy=dy/len;
-    const tx=cx + ux*r, ty=cy + uy*r;
-    node.animate([
-      {left:p.x+'%', top:p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1},
-      {left:tx+'%', top:ty+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1}
-    ],{duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
-    p.x=tx; p.y=ty; node.style.left=p.x+'%'; node.style.top=p.y+'%';
-  });
+/* ===== Seed scattering ===== */
+function rect(el){ const r=el.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}; }
+function initSeeds(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const bowl   = rect(cauldron);
+  const rail   = rect(kindRail);
+  const footer = rect(document.querySelector('.footer'));
+  const avoid = [
+    { left:bowl.left-24,   top:bowl.top-24,   right:bowl.right+24,   bottom:bowl.bottom+24 },
+    { left:footer.left-12, top:footer.top-12, right:footer.right+12, bottom:footer.bottom+12 },
+    { left:rail.left-12,   top:rail.top-12,   right:rail.right+12,   bottom:rail.bottom+12 }
+  ];
+  const CHIP_R = 28, PAD = 16, MIN_D  = CHIP_R*2 + 14;
+
+  function hitsAvoid(x,y){
+    return avoid.some(a => x > a.left-CHIP_R && x < a.right+CHIP_R && y > a.top-CHIP_R && y < a.bottom+CHIP_R);
+  }
+  function farEnough(x,y){ for(const p of seeds){ if(Math.hypot(x-p.x, y-p.y) < MIN_D) return false; } return true; }
+
+  seeds = []; let i = 0, attempts = 0, maxAttempts = 8000;
+  while (i < START_EMOJIS.length && attempts++ < maxAttempts){
+    const x = PAD + Math.random()*(vw - PAD*2);
+    const y = PAD + Math.random()*(vh - PAD*2);
+    if (hitsAvoid(x,y)) continue; if (!farEnough(x,y)) continue;
+    seeds.push({ id:crypto.randomUUID(), emoji: START_EMOJIS[i++], x, y });
+  }
+}
+let resizeT;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(()=>{ if (placed.length===0){ initSeeds(); renderSeeds(); } }, 120);
+});
+function renderSeeds(){
+  seedsEl.innerHTML='';
+  for(const s of seeds){
+    const n=document.createElement('button'); n.className='seed';
+    n.style.left=s.x+'px'; n.style.top=s.y+'px';
+    n.style.setProperty('--delay', `${(-Math.random()*6).toFixed(2)}s`);
+    n.style.setProperty('--dur', `${(7+Math.random()*4).toFixed(2)}s`);
+    n.style.setProperty('--fx', `${(Math.random()*14-7).toFixed(1)}px`);
+    n.style.setProperty('--fy', `${(Math.random()*8-4).toFixed(1)}px`);
+    n.dataset.id=s.id; n.innerHTML=`<span class="e">${s.emoji}</span>`;
+    n.addEventListener('pointerdown', e=>startDragSeed(e,s.id));
+    seedsEl.appendChild(n);
+  }
 }
 
-/* ===== Prompt building (same as before; kept brief here) ===== */
+/* ===== Picker ===== */
+document.getElementById('openPicker').addEventListener('click',()=>picker.open());
+picker.addEventListener('emoji-pick',e=>{
+  const emo=e.detail.emoji; const pos=spotInsideBowl();
+  placed.push({id:crypto.randomUUID(), emoji:emo, x:pos.x, y:pos.y});
+  renderPlaced(true);
+  scheduleRelevantChange();    // picker is image-relevant input
+});
+
+/* ===== Dragging ===== */
+function startDragSeed(ev,id){ ev.preventDefault();
+  const idx=seeds.findIndex(s=>s.id===id); if(idx<0) return;
+  const node=[...seedsEl.children].find(n=>n.dataset.id===id);
+  if(node) node.style.visibility='hidden';
+  const ghost=makeGhost(seeds[idx].emoji);
+  dragging={type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost, originalEl:node};
+  pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
+}
+function startDragPlaced(ev,id){ ev.preventDefault();
+  const idx=placed.findIndex(p=>p.id===id); if(idx<0) return;
+  const node=overlay.querySelector(`.placed[data-id="${id}"]`);
+  if(node) node.style.visibility='hidden';
+  const ghost=makeGhost(placed[idx].emoji);
+  dragging={type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost, originalEl:node, start:{x:placed[idx].x,y:placed[idx].y}};
+  pointerMove(ev); addEventListener('pointermove', pointerMove); addEventListener('pointerup', pointerUp);
+}
+function makeGhost(emoji){
+  const g=document.createElement('div'); g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
+  g.style.transform='translate(-50%,-50%) scale(1.0)'; g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
+  g.innerHTML=`<span class="e" style="font-size:36px">${emoji}</span>`; document.body.appendChild(g); return g;
+}
+function pointerMove(ev){ if(!dragging) return;
+  dragging.ghostEl.style.left=ev.clientX+'px'; dragging.ghostEl.style.top=ev.clientY+'px';
+  const {inside}=coordsInCauldron(ev.clientX,ev.clientY);
+  dragging.ghostEl.style.transform=`translate(-50%,-50%) scale(${inside?1.26:1.04})`;
+  cauldron.classList.toggle('over',inside);
+}
+function pointerUp(ev){
+  if(!dragging) return cleanupDrag();
+  const {inside,px,py}=coordsInCauldron(ev.clientX,ev.clientY); cauldron.classList.remove('over');
+
+  if(dragging.type==='seed'){
+    if(inside){
+      placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py});
+      renderPlaced(true);
+      if(dragging.idx>=0){ seeds.splice(dragging.idx,1); renderSeeds(); }
+      scheduleRelevantChange();                  // drop-in is relevant
+    }else{
+      if(dragging.originalEl) dragging.originalEl.style.visibility='';
+    }
+  }else{ // dragging placed
+    if(inside){
+      placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false);
+      scheduleRelevantChange();                  // move is relevant
+    }else{
+      // out of bowl → becomes seed; removal is relevant
+      const screenX=ev.clientX, screenY=ev.clientY;
+      seeds.push({ id:crypto.randomUUID(), emoji:dragging.emoji, x:screenX, y:screenY });
+      placed.splice(dragging.idx,1);
+      renderPlaced(false); renderSeeds();
+      scheduleRelevantChange();
+    }
+  }
+  cleanupDrag();
+}
+function cleanupDrag(){
+  removeEventListener('pointermove', pointerMove); removeEventListener('pointerup', pointerUp);
+  if(dragging?.ghostEl) dragging.ghostEl.remove();
+  if(dragging?.originalEl) dragging.originalEl.style.visibility='';
+  dragging=null;
+}
+
+function renderPlaced(playDrop=false){
+  overlay.innerHTML='';
+  for(const p of placed){
+    const n=document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
+    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
+    if(playDrop) n.classList.add('dropin');
+    n.addEventListener('pointerdown', e=>startDragPlaced(e,p.id));
+    overlay.appendChild(n);
+  }
+}
+
+/* ===== Carousel (kinds) ===== */
+function buildKindRail(){
+  KIND_EMOJIS.forEach(k=>{
+    const b=document.createElement('button'); b.className='kchip'; b.dataset.kind=k;
+    b.innerHTML=`<span class="e">${k}</span>`; b.addEventListener('click',()=>centerChip(b));
+    kindRail.insertBefore(b, kindRail.lastElementChild);
+  });
+  setTimeout(()=>centerChip(kindRail.querySelector('.kchip')),0);
+  kindRail.addEventListener('scroll', onRailScroll, {passive:true});
+  requestAnimationFrame(updateActiveChipVisual);
+}
+function centerChip(chip){
+  const R=kindRail.getBoundingClientRect(), C=chip.getBoundingClientRect();
+  kindRail.scrollBy({left:(C.left+C.width/2)-(R.left+R.width/2), behavior:'smooth'});
+}
+function onRailScroll(){
+  updateActiveChipVisual();
+  if(snapTimer) clearTimeout(snapTimer);
+  // settle after brief idle, then treat as relevant change
+  snapTimer=setTimeout(()=>{
+    const active=getActiveChip(); if(!active) return;
+    const k=active.dataset.kind; activeKind=k;
+    if(lastActiveKind!==k){ lastActiveKind=k; scheduleRelevantChange(); }
+    centerChip(active);
+  },180);
+}
+function getActiveChip(){ const R=kindRail.getBoundingClientRect(), cx=R.left+R.width/2; let best=null, d=1e9;
+  for(const chip of kindRail.querySelectorAll('.kchip')){ const r=chip.getBoundingClientRect(), c=r.left+r.width/2, dd=Math.abs(c-cx); if(dd<d){d=dd; best=chip;} }
+  return best;
+}
+function updateActiveChipVisual(){ const a=getActiveChip(); for(const c of kindRail.querySelectorAll('.kchip')) c.classList.toggle('active', c===a); }
+
+/* ===== Geometry ===== */
+function coordsInCauldron(cx,cy){
+  const r=cauldron.getBoundingClientRect(); const mx=cx-(r.left+r.width/2); const my=cy-(r.top+r.height/2);
+  const inside=Math.hypot(mx,my)<=r.width/2;
+  const px=((mx+r.width/2)/r.width)*100; const py=((my+r.height/2)/r.height)*100;
+  return {inside, px:Math.max(6,Math.min(94,px)), py:Math.max(6,Math.min(94,py))};
+}
+function spotInsideBowl(){
+  const r=cauldron.getBoundingClientRect(); let tries=0;
+  while(tries++<300){ const px=8+Math.random()*84, py=8+Math.random()*84;
+    const cx=r.left+px/100*r.width, cy=r.top+py/100*r.height;
+    if(Math.hypot(cx-(r.left+r.width/2),cy-(r.top+r.height/2))<r.width/2-40) return {x:px,y:py};
+  } return {x:50,y:50};
+}
+
+/* ===== Prompt (position-aware, emoji-free; compact here) ===== */
 function emojiToWords(ch){ return WORDS.get(ch) || "a symbolic motif"; }
 function computeLayout(){
   return placed.map(p=>{
     const dx=p.x-50, dy=p.y-50, dist=Math.hypot(dx,dy);
-    const rPct=Math.min(50, dist), theta=Math.atan2(dy,dx);
+    const rPct=Math.min(50, dist);
     const role = rPct<15 ? "center" : (rPct<38 ? "inner" : "rim");
     const hemiLR = p.x<50 ? "left" : "right";
     const hemiTB = p.y<50 ? "top" : "bottom";
-    return { id:p.id, emoji:p.emoji, phrase:emojiToWords(p.emoji), xPct:p.x, yPct:p.y, rPct, theta, role, hemiLR, hemiTB };
+    return { id:p.id, phrase:emojiToWords(p.emoji), xPct:p.x, yPct:p.y, rPct, role, hemiLR, hemiTB };
   });
-}
-function findClosePair(layout){
-  if(layout.length<2) return null;
-  let best={a:null,b:null,d:1e9};
-  for(let i=0;i<layout.length;i++) for(let j=i+1;j<layout.length;j++){
-    const dx=layout[i].xPct-layout[j].xPct, dy=layout[i].yPct-layout[j].yPct;
-    const d=Math.hypot(dx,dy); if(d<best.d) best={a:layout[i],b:layout[j],d};
-  }
-  return (best.d<12)? best : null;
 }
 function kindPreset(kind){
   switch(kind){
-    case "🥹": return {composition:"close macro, gentle vignette", palette:"candy pastels", camera:"shallow DOF", interpretation:"literal", imageType:"photograph-like", material:"plush textile, glossy toy eyes"};
+    case "🥹": return {composition:"close macro", palette:"candy pastels", camera:"shallow DOF", interpretation:"literal", imageType:"photograph-like", material:"plush textile, glossy toy eyes"};
     case "🤯": return {composition:"explosive collage poster", palette:"neon primaries", camera:"impossible perspective", interpretation:"metaphor", imageType:"illustration", material:"fractured geometry, prismatic edges"};
-    case "🤬": return {composition:"street mural triptych", palette:"red/black/yellow high contrast", camera:"wide harsh diagonals", interpretation:"interaction", imageType:"poster-like", material:"spray paint, ripped posters"};
+    case "🤬": return {composition:"street mural triptych", palette:"red/black/yellow contrast", camera:"wide harsh diagonals", interpretation:"interaction", imageType:"poster-like", material:"spray paint, ripped posters"};
     case "😳": return {composition:"harsh spotlight", palette:"neutral with blush", camera:"frontal gaze", interpretation:"literal", imageType:"photo-like", material:"realistic surfaces"};
-    case "🫣": return {composition:"peekaboo framing", palette:"cool rim-lights", camera:"rim lighting, shadow bands", interpretation:"context", imageType:"stylized photo", material:"neon glass, blinds"};
+    case "🫣": return {composition:"peekaboo framing", palette:"cool rim-lights", camera:"rim lighting", interpretation:"context", imageType:"stylized photo", material:"neon glass, blinds"};
     case "🫠": return {composition:"static tableau", palette:"washed diffuse", camera:"locked-off", interpretation:"metaphor", imageType:"photo/illustration", material:"melting, slumping"};
     case "🤮": return {composition:"radial splatter", palette:"bright lurid greens", camera:"centered", interpretation:"fusion", imageType:"cartoon", material:"slime-gel, wet speculars"};
     case "😈": return {composition:"heist motion poster", palette:"night city", camera:"tilted with motion blur", interpretation:"interaction", imageType:"stylized", material:"neon/chrome"};
@@ -602,9 +621,14 @@ function assembleSubjects(layout){
 }
 function assembleInterpretation(kind, layout){
   const preset=kindPreset(kind);
-  const pair=findClosePair(layout);
-  if(preset.interpretation==="fusion" && pair) return `Fuse ${pair.a.phrase} with ${pair.b.phrase} into a single coherent form; remaining elements act as context.`;
-  if(preset.interpretation==="interaction" && pair) return `Show ${pair.a.phrase} interacting with ${pair.b.phrase} with a clear action; others support the scene.`;
+  // find closest pair
+  let pair=null, best=1e9;
+  for(let i=0;i<layout.length;i++) for(let j=i+1;j<layout.length;j++){
+    const dx=layout[i].xPct-layout[j].xPct, dy=layout[i].yPct-layout[j].yPct;
+    const d=Math.hypot(dx,dy); if(d<best){best=d; pair=[layout[i],layout[j]];}
+  }
+  if(preset.interpretation==="fusion" && pair && best<12) return `Fuse ${pair[0].phrase} with ${pair[1].phrase} into a single coherent form; remaining elements act as context.`;
+  if(preset.interpretation==="interaction" && pair && best<12) return `Show ${pair[0].phrase} interacting with ${pair[1].phrase} with a clear action; others support.`;
   if(preset.interpretation==="context") return `Treat rim elements as environmental cues (sky, ground, frames, lighting).`;
   if(preset.interpretation==="metaphor") return `Use non-central tokens to alter light, texture, and mood rather than appear as objects.`;
   return `Render subjects as themselves with natural relations and depth.`;
@@ -627,47 +651,16 @@ function buildPrompt(){
   return text;
 }
 
-/* ===== Pollinations (keyless) ===== */
+/* ===== Generator ===== */
 async function callPollinations(prompt){
   assertNoEmoji(prompt);
   const url="https://image.pollinations.ai/prompt/"+encodeURIComponent(prompt)+"?width=768&height=768";
   const res=await fetch(url,{mode:"cors"}); if(!res.ok) throw new Error('Pollinations error');
   const blob=await res.blob(); return URL.createObjectURL(blob);
 }
-
-/* ====== Debounced request control (500 ms) ====== */
-function scheduleRequest(){
-  // Enter SUSPENSE immediately; do not mark aria-busy yet
-  document.body.classList.add('suspense');
-  document.body.classList.remove('waiting');
-  cauldron.classList.remove('req-blip');
-  cauldron.setAttribute('aria-busy','false');
-
-  if(requestTimer) clearTimeout(requestTimer);
-  requestTimer=setTimeout(()=>fireRequest(), 500);
-}
-
-function fireRequest(){
-  requestTimer=null;
-
-  // Mark the request instant visually
-  cauldron.classList.add('req-blip');
-  setTimeout(()=>cauldron.classList.remove('req-blip'), 340);
-
-  // Transition to WAITING
-  startWaiting();
-
-  // Clear old image while requesting
-  imageEl.classList.remove('revealed');
-  if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
-
-  generateNow();
-}
-
 async function generateNow(){
   const serial=++genSerial; latestSerial=serial;
   const prompt=buildPrompt();
-
   try{
     const imgURL=await callPollinations(prompt);
     if(serial!==latestSerial) return; // superseded
@@ -682,15 +675,67 @@ async function generateNow(){
     };
   }catch(e){
     console.warn(e);
-    stopWaiting(); // silent; allow re-edit and re-trigger
+    stopWaiting(); // allow re-edit and re-trigger silently
   }
 }
 
-/* Cancel = full reset */
-cancelBtn.addEventListener('click', ()=>resetApp(false));
+/* ===== Arrange on rim after reveal ===== */
+function arrangeOnRim(){
+  if(!placed.length) return;
+  const cx=50, cy=50, r=44;
+  placed.forEach(p=>{
+    const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) return;
+    node.classList.remove('waitPulse');
+    let dx=p.x-cx, dy=p.y-cy, len=Math.hypot(dx,dy); if(len<0.0001){ dx=1; dy=0; len=1; }
+    const ux=dx/len, uy=dy/len, tx=cx + ux*r, ty=cy + uy*r;
+    node.animate([
+      {left:p.x+'%', top:p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1},
+      {left:tx+'%', top:ty+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1}
+    ],{duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
+    p.x=tx; p.y=ty; node.style.left=p.x+'%'; node.style.top=p.y+'%';
+  });
+}
 
-/* iOS zoom guard */
-document.addEventListener('gesturestart', e=>e.preventDefault());
+/* ===== Init & Reset ===== */
+window.addEventListener('load',()=>{ buildKindRail(); resetApp(true); });
+function resetApp(){
+  if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
+  imageEl.classList.remove('revealed'); imageEl.removeAttribute('src');
+  placed=[]; overlay.innerHTML='';
+  document.body.classList.remove('waiting','suspense','freeze');
+  cauldron.classList.remove('req-blip');
+  cauldron.setAttribute('aria-busy','false');
+  if(requestTimer){ clearTimeout(requestTimer); requestTimer=null; }
+  clearInterval(sparkTimer);
+  initSeeds(); renderSeeds(); renderPlaced(false);
+}
+document.getElementById('cancel').addEventListener('click', ()=>resetApp());
+
+/* ===== Bowl helpers ===== */
+function spotInsideBowl(){
+  const r=cauldron.getBoundingClientRect(); let tries=0;
+  while(tries++<300){ const px=8+Math.random()*84, py=8+Math.random()*84;
+    const cx=r.left+px/100*r.width, cy=r.top+py/100*r.height;
+    if(Math.hypot(cx-(r.left+r.width/2),cy-(r.top+r.height/2))<r.width/2-40) return {x:px,y:py};
+  } return {x:50,y:50};
+}
+
+/* ===== Placed rendering ===== */
+function renderPlaced(playDrop=false){
+  overlay.innerHTML='';
+  for(const p of placed){
+    const n=document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
+    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
+    if(playDrop) n.classList.add('dropin');
+    n.addEventListener('pointerdown', e=>startDragPlaced(e,p.id));
+    overlay.appendChild(n);
+  }
+}
+
+/* ===== Drag helpers already defined above ===== */
+
+/* ===== Seed dragging attach (after renderSeeds sets up DOM) ===== */
+function startDragSeed(ev,id){ /* defined above */ } // placeholder for editor folding
 </script>
 
 <script>
@@ -734,7 +779,7 @@ customElements.define('emoji-picker', class extends HTMLElement {
     const SKA=0x1F3FB, SKB=0x1F3FF;
     const blocks=[[0x1F600,0x1F64F],[0x1F300,0x1F5FF],[0x1F680,0x1F6FF],[0x1F900,0x1F9FF],[0x1FA70,0x1FAFF],[0x2600,0x26FF],[0x2700,0x27BF]];
     const pict=[]; for(const [a,b] of blocks){ for(let cp=a; cp<=b; cp++){ if(cp>=SKA&&cp<=SKB) continue; const ch=String.fromCodePoint(cp); if(!(/\s/.test(ch))) pict.push(ch);} }
-    const CODES=("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW").split(" ");
+    const CODES=("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VU WF WS XK YE YT ZA ZM ZW").split(" ");
     const RI=0x1F1E6, flag=cc=>String.fromCodePoint(RI+(cc.charCodeAt(0)-65), RI+(cc.charCodeAt(1)-65));
     const flags=CODES.map(flag);
     return { all:{icon:"🧭",items:pict}, flags:{icon:"🏳️",items:flags} };
