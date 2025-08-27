@@ -1,0 +1,48 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <title>Bouncy Ball Runner</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#0a0b0d">
+    
+  <link rel="stylesheet" href="./src/css/styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="score">Score: <span id="score">0</span> | <span class="red-points">Missed: <span id="redPoints">0</span>/3</span></div>
+        <canvas id="gameCanvas" width="1200" height="300"></canvas>
+        <div class="controls">
+
+            <label for="hardness">💀 Challenge: <span id="hardnessLabel">Gentle</span></label>
+            <input type="range" id="hardness" min="1" max="5" value="1" class="slider hardness-slider">
+            
+
+
+
+        </div>
+        <div class="instructions">
+            Press SPACE or tap to jump • Collect the white dots! • Press P to pause
+        </div>
+        
+        <button id="pauseBtn" class="pause-btn">⏸️ PAUSE</button>
+        <button id="restartBtn" class="pause-btn">🔄 RESTART</button>
+        
+
+
+
+        
+        <div class="game-over" id="gameOver">
+            <h2>Game Over!</h2>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <button id="playAgainBtn">Play Again</button>
+        </div>
+    </div>
+
+    
+
+
+
+
+  <script src="./src/js/main.js"></script>
+</body></html>
