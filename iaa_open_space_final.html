@@ -60,7 +60,23 @@
     .badge.ok { color: #86efac; border-color: #215b3a; background: #0b2016; }
     .badge.warn { color: #fde68a; border-color: #5b4b21; background: #221b0b; }
     .badge.info { color: #93c5fd; border-color: #274c77; background: #0b1422; }
-    .badge.conf { border-color: #3a3f48; color: #c7cfdd; }
+    /* Confidence text styling is separate from badges */
+    .conf-text { margin-left: 4px; color: #a5adba; }
+    /* Combined status and confidence text for each card */
+    .status-conf {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* Add arrow indicator to external link buttons */
+    .btn::after {
+      content: '\2197'; /* North East arrow */
+      margin-left: 6px;
+      font-size: 14px;
+      line-height: 1;
+    }
     details.more { border-top: 1px dashed #222; padding-top: 8px; }
     details.more > summary { cursor: pointer; color: var(--accent2); font-weight: 800; }
     ul.sources { padding-left: 18px; margin: 6px 0; }
@@ -92,11 +108,7 @@
       <div class="subtitle">Explore the Munich city-center venues for IAA MOBILITY 2025 (Sept&nbsp;9–14) with an interactive map and detailed cards for each brand.</div>
       <div class="controls">
         <input id="q" type="search" placeholder="Filter by brand, location, country, status…" aria-label="Filter brands" />
-        <span class="legend">
-          <span class="badge ok">Confirmed/Premiere</span>
-          <span class="badge warn">TBA/Expected</span>
-          <span class="badge info">General</span>
-        </span>
+        <!-- Filter badges removed as requested -->
       </div>
     </div>
   </header>
@@ -140,8 +152,7 @@
           <div class="topic">Open Space brand presence; press “Medien Get‑together” here (Sept&nbsp;8).</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Wittelsbacherplatz,+80333+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge ok">Confirmed</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Confirmed — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -155,8 +166,7 @@
           <div class="topic">World premiere: new BMW iX3 (first Neue Klasse); daily Masterclasses &amp; Panoramic iDrive demos in Open Space.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Max-Joseph-Platz,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge ok">Premiere</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Premiere — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -171,8 +181,7 @@
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Max-Joseph-Platz,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Open Space</a>
             <a class="btn" href="https://www.google.com/maps?q=Lenbachplatz+7a,+80333+M%C3%BCnchen" target="_blank" rel="noopener">MINI Pavilion</a>
-            <span class="badge ok">Premieres</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Premieres — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -186,8 +195,7 @@
           <div class="topic">Open Space media stand tours with AR (press); brand experience in the Residenz area.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Apothekenhof,+Residenz+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge info">Program</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Program — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -201,8 +209,7 @@
           <div class="topic">All-electric lineup on show; #5 BRABUS &amp; Keith Haring art car (summit); city‑center display at Open Space.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Odeonsplatz,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge info">Public display</span>
-            <span class="badge conf">Confidence: Mid–High</span>
+            <span class="status-conf">Public display — Mid–High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -216,9 +223,7 @@
           <div class="topic">Four new models incl. an all-electric ID. show car, new T‑Roc, ID.3 GTX FIRE+ICE, Golf GTI Edition 50.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Marienplatz,+80331+M%C3%BCnchen" target="_blank" rel="noopener">Central map</a>
-            <span class="badge info">Public display</span>
-            <span class="badge warn">Location TBA</span>
-            <span class="badge conf">Confidence: High (content) / Low (exact spot)</span>
+            <span class="status-conf">Public display, Location TBA — High (content) / Low (exact spot) confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -232,8 +237,7 @@
           <div class="topic">Brand showcase expected in Open Space; exact square not confirmed for 2025.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Wittelsbacherplatz,+80333+M%C3%BCnchen" target="_blank" rel="noopener">Historic spot</a>
-            <span class="badge warn">TBA</span>
-            <span class="badge conf">Confidence: Mid (presence) / Low (spot)</span>
+            <span class="status-conf">TBA — Mid (presence) / Low (spot) confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -247,8 +251,7 @@
           <div class="topic">GSe highlights incl. Corsa GSe Vision GT; new Mokka GSe (premiere at Summit). Open Space public booth on Sep&nbsp;9.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Odeonsplatz,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge info">Public display</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Public display — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -258,6 +261,41 @@
         </article>
       </div>
     </details>
+    <!-- 🇪🇺 Volkswagen Group cluster (Cupra & Škoda) -->
+    <details class="cluster" open>
+      <summary>🇪🇺 Volkswagen Group <span class="count">2</span></summary>
+      <div class="grid">
+        <!-- Cupra -->
+        <article class="card" data-brand="Cupra" data-location="Open Space (square TBA)" data-country="Spain (VW Group)" data-status="Premiere">
+          <div class="brandline">Cupra <span class="loc">Open Space (square TBA)</span></div>
+          <div class="topic">Showcar reveal (CUPRA Tindaya) at 7:30 pm on Sept 8; TRIBE editions of Formentor, Leon, Leon Sportstourer &amp; Terramar; camouflaged CUPRA Raval at VW Group media event on Sept 7.</div>
+          <div class="meta">
+            <a class="btn" href="https://www.google.com/maps?q=Marienplatz,+80331+M%C3%BCnchen" target="_blank" rel="noopener">Central map</a>
+            <span class="status-conf">Premiere — High confidence</span>
+          </div>
+          <details class="more"><summary>More info &amp; links</summary>
+            <ul class="sources">
+              <li><a target="_blank" rel="noopener" href="https://www.cupraofficial.com/brand/tribe/cupra-s-vision-for-the-future-at-iaa-mobility-2025">Cupra official: Tindaya reveal &amp; TRIBE editions</a></li>
+            </ul>
+          </details>
+        </article>
+        <!-- Škoda -->
+        <article class="card" data-brand="Škoda" data-location="Open Space (square TBA)" data-country="Czechia (VW Group)" data-status="Expected world premiere">
+          <div class="brandline">Škoda <span class="loc">Open Space (square TBA)</span></div>
+          <div class="topic">Vision O concept world premiere in Munich (early Sept 2025), previewing an electric estate; Open Space stand and additional models (e.g. Epiq compact EV) not yet confirmed.</div>
+          <div class="meta">
+            <a class="btn" href="https://www.google.com/maps?q=Marienplatz,+80331+M%C3%BCnchen" target="_blank" rel="noopener">Central map</a>
+            <span class="status-conf">Expected — Medium confidence</span>
+          </div>
+          <details class="more"><summary>More info &amp; links</summary>
+            <ul class="sources">
+              <li><a target="_blank" rel="noopener" href="https://autocarpro.in/news/skoda-auto-s-vision-o-concept-to-be-revealed-in-early-september-2025-in-munich-58448">AutocarPro: Škoda Vision O concept reveal in Munich</a></li>
+            </ul>
+          </details>
+        </article>
+      </div>
+    </details>
+
     <!-- Asian brands cluster -->
     <details class="cluster" open>
       <summary>🇰🇷🇨🇳 Asian &amp; others <span class="count">9</span></summary>
@@ -268,8 +306,7 @@
           <div class="topic">Global debut of a new concept car; press conference on Ludwigstraße (Open Space) on Sept&nbsp;8.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Ludwigstra%C3%9Fe,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge ok">Debut</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Debut — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -284,8 +321,7 @@
           <div class="topic">German premieres: EV4 &amp; Concept EV2; also EV5, PV5. Test drives: EV3/EV6/EV9.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Ludwigstra%C3%9Fe,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge ok">Premieres</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Premieres — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -299,8 +335,7 @@
           <div class="topic">Polestar 5 performance GT unveiling in Munich; exact square not officially listed.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Ludwigstra%C3%9Fe,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Tentative map</a>
-            <span class="badge warn">Expected</span>
-            <span class="badge conf">Confidence: Mid (premiere) / Low (spot)</span>
+            <span class="status-conf">Expected — Mid (premiere) / Low (spot) confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -316,8 +351,7 @@
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=K%C3%B6nigsplatz,+80333+M%C3%BCnchen" target="_blank" rel="noopener">Königsplatz</a>
             <a class="btn" href="https://www.google.com/maps?q=Odeonsplatz,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Odeonsplatz</a>
-            <span class="badge ok">Confirmed</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Confirmed — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -331,8 +365,7 @@
           <div class="topic">Open Space showcase on Ludwigstraße; test drives on site (codes TD410).</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Ludwigstra%C3%9Fe,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge ok">Confirmed</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Confirmed — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -346,8 +379,7 @@
           <div class="topic">Brand presence confirmed for IAA 2025; Open Space location not yet listed.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Marienplatz,+80331+M%C3%BCnchen" target="_blank" rel="noopener">Central map</a>
-            <span class="badge info">Participation</span>
-            <span class="badge conf">Confidence: Mid (presence) / Low (spot)</span>
+            <span class="status-conf">Participation — Mid (presence) / Low (spot) confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -362,9 +394,7 @@
           <div class="topic">World premiere: T10F; T10X EU market launch. Open Space presence likely; exact spot unlisted.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Marienplatz,+80331+M%C3%BCnchen" target="_blank" rel="noopener">Central map</a>
-            <span class="badge ok">Premiere</span>
-            <span class="badge warn">Location TBA</span>
-            <span class="badge conf">Confidence: High (premiere) / Low (spot)</span>
+            <span class="status-conf">Premiere, Location TBA — High (premiere) / Low (spot) confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -378,8 +408,7 @@
           <div class="topic">Open Space public showcase on Ludwigstraße (address confirmed by Genesis event page).</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Ludwigstra%C3%9Fe+2,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Open in Google Maps</a>
-            <span class="badge ok">Confirmed</span>
-            <span class="badge conf">Confidence: High</span>
+            <span class="status-conf">Confirmed — High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -394,8 +423,7 @@
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Brunnenhof,+Residenz+M%C3%BCnchen" target="_blank" rel="noopener">Brunnenhof</a>
             <a class="btn" href="https://www.google.com/maps?q=Odeonsplatz+2,+80539+M%C3%BCnchen" target="_blank" rel="noopener">Lucid Studio</a>
-            <span class="badge ok">EU launch</span>
-            <span class="badge conf">Confidence: Mid–High</span>
+            <span class="status-conf">EU launch — Mid–High confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -416,8 +444,7 @@
           <div class="topic">Public showcase expected; exact city‑center location not yet listed in public pages.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Marienplatz,+80331+M%C3%BCnchen" target="_blank" rel="noopener">Central map</a>
-            <span class="badge info">Participation</span>
-            <span class="badge conf">Confidence: Mid (presence) / Low (spot)</span>
+            <span class="status-conf">Participation — Mid (presence) / Low (spot) confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
@@ -431,8 +458,7 @@
           <div class="topic">Exeed Exlantix E05 compact SUV with range‑extender tech to be shown; exact square not listed.</div>
           <div class="meta">
             <a class="btn" href="https://www.google.com/maps?q=Marienplatz,+80331+M%C3%BCnchen" target="_blank" rel="noopener">Central map</a>
-            <span class="badge info">Announcement</span>
-            <span class="badge conf">Confidence: Mid (content) / Low (spot)</span>
+            <span class="status-conf">Announcement — Mid (content) / Low (spot) confidence</span>
           </div>
           <details class="more"><summary>More info &amp; links</summary>
             <ul class="sources">
