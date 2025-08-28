@@ -2,33 +2,42 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>IAA Open Space 2025 — Map & Guide</title>
 <style>
   :root{
-    --bg:#0b0c0e;--card:#101217;--muted:#8b95a1;--text:#e6e9ef;--sub:#a5adba;
-    --accent:#9bffd0;--accent-text:#042d22;--ring:#1c1f25;--shadow:0 10px 40px rgba(0,0,0,.35)
+    --bg:#0b0c0e; --card:#101217; --ring:#1c1f25;
+    --text:#e6e9ef; --sub:#a5adba; --muted:#8b95a1;
+    --accent:#9bffd0; --accent-text:#042d22;
+    --shadow:0 10px 40px rgba(0,0,0,.35)
   }
-  *{box-sizing:border-box} html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
   a{color:#9fd5ff;text-decoration:none} a:hover{text-decoration:underline}
   h1{margin:20px 16px 6px;font-size:clamp(28px,6vw,44px);line-height:1.05}
   p.lead{margin:0 16px 16px;color:var(--sub)}
   .wrap{max-width:980px;margin:0 auto;padding:0 12px}
   header{position:static;background:linear-gradient(180deg,rgba(11,12,14,.98),rgba(11,12,14,.6));border-bottom:1px solid var(--ring)}
   .search{display:block;width:100%;margin:12px auto 18px;padding:14px 16px;border-radius:14px;background:#0d0f12;border:1px solid var(--ring);color:var(--text);outline:none}
+
   /* MAP */
   .map-shell{position:relative}
-  .map{position:sticky;top:0;z-index:5;border:1px solid var(--ring);border-radius:18px;overflow:hidden;background:#0e1115;box-shadow:var(--shadow)}
-  .map{height:44vh}
+  .map{position:sticky;top:0;z-index:5;border:1px solid var(--ring);border-radius:18px;overflow:hidden;background:#0e1115;box-shadow:var(--shadow);height:46vh}
   .map.shrink{height:40vh}
-  .map-inner{position:absolute;inset:0;transform:translate(0,0);transition:transform .6s ease}
+  .map-inner{position:absolute;inset:0;transform:translate(0,0);transition:transform .55s cubic-bezier(.2,.7,.2,1)}
   .map img{display:block;width:100%;height:auto}
-  .pin{position:absolute;width:18px;height:18px;border-radius:50%;border:2px solid #fff;background:var(--muted);color:#fff;font-size:11px;line-height:14px;text-align:center;transform:translate(-50%,-50%);opacity:.55;transition:transform .2s ease, opacity .2s ease, background-color .2s ease, box-shadow .2s ease}
-  .pin.active{background:var(--accent);color:var(--accent-text);opacity:1;box-shadow:0 0 0 4px rgba(155,255,208,.25);z-index:3;transform:translate(-50%,-50%) scale(1.15)}
+  /* Pins are absolutely positioned by % relative to the IMAGE; they sit inside .map-inner alongside the img */
+  .pin{position:absolute;width:18px;height:18px;border-radius:50%;border:2px solid #fff;background:var(--muted);color:#fff;font-size:11px;line-height:14px;text-align:center;transform:translate(-50%,-50%);opacity:.55;transition:transform .2s ease,opacity .2s ease,background-color .2s ease,box-shadow .2s ease}
+  .pin.active{background:var(--accent);color:var(--accent-text);opacity:1;box-shadow:0 0 0 4px rgba(155,255,208,.25);z-index:2;transform:translate(-50%,-50%) scale(1.15)}
   .legend{display:flex;flex-wrap:wrap;gap:10px 16px;color:var(--sub);padding:10px 6px 0}
   .legend .b{display:inline-grid;grid-auto-flow:column;align-items:center;gap:6px}
   .legend .dot{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;border:2px solid #fff;background:var(--muted);color:#fff;font-size:10px;line-height:10px}
   .legend .dot.active{background:var(--accent);color:var(--accent-text)}
+
+  /* FOCUS LINE (invisible; toggle .debug-focus on body to show) */
+  .focus-line{position:fixed;left:0;right:0;top:38vh;height:0;pointer-events:none;z-index:9}
+  body.debug-focus .focus-line::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:rgba(155,255,208,.5)}
+
   /* CARDS */
   .cluster{margin:18px 0;border:1px solid var(--ring);border-radius:18px;background:var(--card);overflow:hidden}
   .cluster>summary{cursor:pointer;list-style:none;padding:16px 18px;font-weight:700}
@@ -46,25 +55,26 @@
 </style>
 </head>
 <body>
+<div class="focus-line" aria-hidden="true"></div>
+
 <header class="wrap">
   <h1>IAA Open Space 2025 — Map & Guide</h1>
-  <p class="lead">City venues and brand cards. Map sticks; active card drives map highlight.</p>
+  <p class="lead">City venues and brand cards. Map sticks; the card nearest the focus line controls the highlight.</p>
   <input id="q" class="search" placeholder="Filter by brand, location, country…">
 </header>
 
 <main class="wrap map-shell">
-
-  <!-- Map (static image; pins absolutely positioned by % relative to the image) -->
-  <section id="map" class="map">
-    <div class="map-inner" id="mapInner">
+  <!-- Map -->
+  <section id="map" class="map" aria-label="City map with venue pins">
+    <div id="mapInner" class="map-inner">
       <img id="mapImg" alt="Munich city center map"
            src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Munich_City_Center.svg/1024px-Munich_City_Center.svg.png">
-      <!-- Pins: left/top in % of image (consistent in full & cropped). -->
+      <!-- Pins (left/top = % of image). These do NOT change between full/cropped states -->
       <div class="pin" data-id="1" style="left:8.33%;top:33.64%">1</div>   <!-- Königsplatz -->
       <div class="pin" data-id="2" style="left:18.59%;top:76.73%">2</div>  <!-- Lenbachplatz 7a -->
       <div class="pin" data-id="3" style="left:71.18%;top:59.18%">3</div>  <!-- Wittelsbacherplatz -->
       <div class="pin" data-id="4" style="left:78.00%;top:63.00%">4</div>  <!-- Odeonsplatz -->
-      <div class="pin" data-id="5" style="left:74.00%;top:57.00%">5</div>  <!-- Lucid Studio -->
+      <div class="pin" data-id="5" style="left:74.00%;top:57.00%">5</div>  <!-- Lucid Studio (Odeonsplatz 2) -->
       <div class="pin" data-id="6" style="left:87.49%;top:71.07%">6</div>  <!-- Residenz / Brunnenhof -->
       <div class="pin" data-id="7" style="left:89.68%;top:19.14%">7</div>  <!-- Ludwigstraße -->
       <div class="pin" data-id="8" style="left:80.04%;top:91.67%">8</div>  <!-- Max-Joseph-Platz -->
@@ -83,7 +93,7 @@
     <span class="b"><span class="dot">9</span> Isarpost</span>
   </div>
 
-  <!-- Clusters & cards (minimal sample; add more the same way). Use data-pin="id,id" -->
+  <!-- Cards (sample set). Attach data-pin with one or more IDs -->
   <details class="cluster" open>
     <summary>🇩🇪 German brands</summary>
     <div class="grid" id="cards">
@@ -98,7 +108,7 @@
 
       <article class="card" data-brand="BMW" data-pin="8">
         <div class="brand">BMW</div>
-        <p class="topic">World premiere and program at Max-Joseph-Platz.</p>
+        <p class="topic">World premiere & program.</p>
         <a class="btn" href="https://www.google.com/maps?q=Max-Joseph-Platz,+80539+M%C3%BCnchen" target="_blank" rel="noopener">
           <span class="pin-no">8</span> Max-Joseph-Platz
         </a>
@@ -119,7 +129,7 @@
 
       <article class="card" data-brand="Mercedes-Benz" data-pin="6">
         <div class="brand">Mercedes-Benz</div>
-        <p class="topic">Open Space activity in Residenz courtyards.</p>
+        <p class="topic">Residenz courtyards program.</p>
         <a class="btn" href="https://www.google.com/maps?q=Apothekenhof,+Residenz+M%C3%BCnchen" target="_blank" rel="noopener">
           <span class="pin-no">6</span> Residenz / Apothekenhof
         </a>
@@ -128,7 +138,7 @@
 
       <article class="card" data-brand="smart" data-pin="4">
         <div class="brand">smart</div>
-        <p class="topic">Public display on Odeonsplatz.</p>
+        <p class="topic">Public display.</p>
         <a class="btn" href="https://www.google.com/maps?q=Odeonsplatz,+80539+M%C3%BCnchen" target="_blank" rel="noopener">
           <span class="pin-no">4</span> Odeonsplatz
         </a>
@@ -155,18 +165,16 @@
         </a>
         <small class="meta">Status: Premiere — Confidence: High</small>
       </article>
-
-      <!-- Add more cards following the same pattern... -->
     </div>
   </details>
 </main>
 
 <script>
-/* === Utilities === */
+/* ===== helpers ===== */
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 
-/* === Search filter === */
+/* ===== search ===== */
 const q = $('#q');
 q.addEventListener('input', ()=>{
   const t = q.value.trim().toLowerCase();
@@ -174,119 +182,102 @@ q.addEventListener('input', ()=>{
     const hay = (c.dataset.brand + ' ' + c.textContent).toLowerCase();
     c.style.display = hay.includes(t) ? '' : 'none';
   });
+  // after filtering, recompute focus
+  requestAnimationFrame(syncActiveFromFocus);
 });
 
-/* === Map + focus/highlight system === */
-const map  = $('#map');
+/* ===== map + focus logic ===== */
+const map = $('#map');
 const inner = $('#mapInner');
+const img = $('#mapImg');
 const pins = $$('#map .pin');
+const dots = $$('.legend .dot');
 const cards = $$('#cards .card');
-const legendDots = $$('.legend .dot');
 
-let activeCard = null;
+function getPinEl(id){ return pins.find(p=>p.dataset.id===String(id)); }
 
-/* Get a pin element by numeric id */
-function getPinEl(id){ return pins.find(p => p.dataset.id === String(id)); }
-
-/* Highlight pins (can be multiple) and legend */
 function highlightPins(ids){
   pins.forEach(p=>p.classList.remove('active'));
-  legendDots.forEach(d=>d.classList.remove('active'));
+  dots.forEach(d=>d.classList.remove('active'));
   ids.forEach(id=>{
-    const p = getPinEl(id);
-    if(p){ p.classList.add('active'); }
-    const d = legendDots.find(x=>x.textContent.trim()===String(id));
-    if(d){ d.classList.add('active'); }
+    const p = getPinEl(id); if(p) p.classList.add('active');
+    const d = dots.find(x=>x.textContent.trim()===String(id)); if(d) d.classList.add('active');
   });
 }
 
-/* Center map (translate only) on the centroid of the active pins when shrunk */
 function panMapToPins(ids){
+  // Only pan when cropped; in full-height state keep origin.
   const shrunk = map.classList.contains('shrink');
   if(!shrunk){ inner.style.transform = 'translate(0px,0px)'; return; }
 
-  // compute centroid in px inside the image box
-  const rectMap = inner.getBoundingClientRect(); // current rendered size of image
-  let sumX=0,sumY=0,count=0;
+  // Use the IMAGE rect (not container) so % pin coords remain correct.
+  const rImg = img.getBoundingClientRect();
+  const rView = map.getBoundingClientRect();
+  let sx=0, sy=0, n=0;
   ids.forEach(id=>{
-    const p = getPinEl(id);
-    if(!p) return;
-    const left = parseFloat(p.style.left)/100.0; // percent -> [0..1]
-    const top  = parseFloat(p.style.top)/100.0;
-    sumX += left * rectMap.width;
-    sumY += top  * rectMap.height;
-    count++;
+    const p = getPinEl(id); if(!p) return;
+    const left = parseFloat(p.style.left)/100, top=parseFloat(p.style.top)/100;
+    sx += left * rImg.width; sy += top * rImg.height; n++;
   });
-  if(!count){ inner.style.transform = 'translate(0px,0px)'; return; }
+  if(!n){ inner.style.transform='translate(0px,0px)'; return; }
+  const cx = sx/n, cy = sy/n;
 
-  const cx = sumX / count;
-  const cy = sumY / count;
-  const viewport = map.getBoundingClientRect();
-  let tx = viewport.width/2  - cx;
-  let ty = viewport.height/2 - cy;
+  let tx = rView.width/2  - cx;
+  let ty = rView.height/2 - cy;
 
-  // clamp so we never expose blank area
-  const minX = viewport.width  - rectMap.width;
-  const minY = viewport.height - rectMap.height;
+  // Clamp to image bounds so we never show empty space.
+  const minX = rView.width  - rImg.width;
+  const minY = rView.height - rImg.height;
   tx = Math.min(0, Math.max(minX, tx));
   ty = Math.min(0, Math.max(minY, ty));
-
   inner.style.transform = `translate(${tx}px,${ty}px)`;
 }
 
-/* Pick the card closest to a focus line (38% of viewport) */
-function cardNearestFocus(){
-  const lineY = window.innerHeight * 0.38;
-  let best=null, bestDist=1e9;
-  cards.forEach(c=>{
-    if(c.style.display==='none') return;
-    const r = c.getBoundingClientRect();
-    if(r.bottom <= 0 || r.top >= window.innerHeight) return; // not visible
-    const mid = r.top + r.height/2;
-    const d = Math.abs(mid - lineY);
-    if(d < bestDist){ bestDist=d; best=c; }
-  });
-  return best;
-}
-
-/* Activate a card -> highlight pins and map */
-function activateCard(card){
-  if(!card || card === activeCard) return;
-  if(activeCard) activeCard.classList.remove('active');
-  cards.forEach(c=>c.classList.remove('active'));
-  card.classList.add('active');
+let activeCard = null;
+function activate(card){
+  if(!card || card===activeCard) return;
+  cards.forEach(c=>c.classList.toggle('active', c===card));
   activeCard = card;
-
   const ids = (card.dataset.pin||'').split(',').map(s=>s.trim()).filter(Boolean);
   highlightPins(ids);
   panMapToPins(ids);
 }
 
-/* Throttled scroll handler (focus + sticky shrink) */
-let ticking = false;
-function onScroll(){
-  if(!ticking){
-    window.requestAnimationFrame(()=>{
-      // sticky shrink toggle
-      const r = map.getBoundingClientRect();
-      if(r.top <= 0) map.classList.add('shrunk'); else map.classList.remove('shrunk');
-      // use CSS class 'shrink' (legacy name in styles)
-      if(r.top <= 0) map.classList.add('shrink'); else map.classList.remove('shrink');
-
-      const c = cardNearestFocus();
-      if(c) activateCard(c);
-      ticking = false;
-    });
-    ticking = true;
-  }
+// Pick card nearest to focus line (~38% of viewport)
+function cardNearestFocus(){
+  const focusY = window.innerHeight * 0.38;
+  let best=null, bestDist=1e9;
+  cards.forEach(c=>{
+    if(c.style.display==='none') return;
+    const r = c.getBoundingClientRect();
+    if(r.bottom<=0 || r.top>=window.innerHeight) return;
+    const mid = r.top + r.height/2;
+    const d = Math.abs(mid - focusY);
+    if(d < bestDist){ best=c; bestDist=d; }
+  });
+  return best;
 }
-window.addEventListener('scroll', onScroll, {passive:true});
-window.addEventListener('resize', ()=>{ panMapToPins((activeCard?.dataset.pin||'').split(',').filter(Boolean)); });
 
-/* Init: pick first visible card */
+function syncActiveFromFocus(){
+  // Toggle shrink state
+  const r = map.getBoundingClientRect();
+  map.classList.toggle('shrink', r.top<=0);
+
+  const c = cardNearestFocus();
+  if(c) activate(c);
+}
+
+window.addEventListener('scroll', ()=>requestAnimationFrame(syncActiveFromFocus), {passive:true});
+window.addEventListener('resize', ()=>requestAnimationFrame(()=> {
+  if(activeCard){
+    const ids = (activeCard.dataset.pin||'').split(',').map(s=>s.trim()).filter(Boolean);
+    panMapToPins(ids);
+  }
+}));
+
 window.addEventListener('load', ()=>{
-  const first = cardNearestFocus() || cards.find(c=>c.style.display!=='none') || null;
-  if(first) activateCard(first);
+  // First highlight
+  syncActiveFromFocus();
 });
 </script>
 </body>
