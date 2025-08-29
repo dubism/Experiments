@@ -211,25 +211,20 @@ header {
 }
 
 
-/* LOW ACCURACY watermark */
-.map-container.real-map { position: relative; }
-
+/* LOW ACCURACY watermark — top-right, smaller */
 .map-container.real-map::after{
   content: "LOW ACCURACY";
   position: absolute;
-  top: 6px;        /* down a bit */
-  right: 6px;      /* align to right edge */
-  left: auto;      /* ensure left isn’t constraining */
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-start;
+  top: 12px;          /* tweak offset */
+  right: 12px;        /* tweak offset */
   font-weight: 900;
-  font-size: clamp(28px, 8vw, 12px);
+  font-size: clamp(12px, 2.6vw, 28px); /* smaller */
   color: rgba(255,0,0,0.5);
   letter-spacing: 0.12em;
   pointer-events: none;
   text-transform: uppercase;
 }
+
 
 </style>
 </head>
