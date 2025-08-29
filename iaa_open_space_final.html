@@ -215,8 +215,8 @@ header {
 .map-container.real-map::after{
   content: "LOW ACCURACY";
   position: absolute;
-  top: 12px;          /* tweak offset */
-  right: 12px;        /* tweak offset */
+  top: 10px;          /* tweak offset */
+  right: calc(12px + 36px + 8px);  /* button width + gap */
   font-weight: 900;
   font-size: clamp(12px, 2.6vw, 28px); /* smaller */
   color: rgba(255,0,0,0.5);
@@ -224,6 +224,32 @@ header {
   pointer-events: none;
   text-transform: uppercase;
 }
+
+/* Close button (top-right) */
+.map-container.real-map .map-close{
+  position: absolute;
+  top: 8px;
+  right: 8px;            /* physical anchor */
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: #0a0c0f50;
+  border: 0px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #d7deea;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  z-index: 6;
+  transition: transform .12s ease;
+}
+.map-container.real-map .map-close:hover { transform: translateY(-1px); }
+.map-container.real-map .map-close:active { transform: translateY(0); }
+.map-container.real-map .map-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 
 
 </style>
@@ -277,6 +303,7 @@ header {
   <div class="pin" style="left:47%;top:70%">9</div>
 
   </div><!-- end map-inner -->
+  <button class="map-close" type="button" aria-label="Hide map" title="Hide map">×</button>
 </div>
 <!-- Brand clusters and cards below -->
     <!-- 🇩🇪 German brands cluster -->
@@ -663,6 +690,14 @@ header {
     (function() {
       var mapContainer = document.querySelector('.map-container.real-map');
       if (!mapContainer) return;
+      var closeBtn = mapContainer.querySelector('.map-close');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', function(e){
+            e.preventDefault();
+            mapContainer.style.display = 'none';
+          });
+        }
+
       var pins = mapContainer.querySelectorAll('.pin');
       var mapInner = mapContainer.querySelector('.map-inner');
       // Highlight one or more pins based on an array of IDs (1-based) and reposition the map accordingly
