@@ -5,16 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>SDR→HDR Value-Only Brush (WebGPU)</title>
 <style>
+  /* Fullscreen, zero chrome */
   html, body { margin:0; height:100%; background:#000; }
   body { overflow:hidden; }
-  canvas {
-    width:100vw; height:100vh; display:block;
-    dynamic-range-limit: no-limit;
-    touch-action: none;                 /* hint for Pointer Events */
-    -webkit-touch-callout: none;        /* kill iOS magnifier */
-    -webkit-user-select: none;
-    user-select: none;
+  canvas { width:100vw; height:100vh; display:block;
+    /* Allow HDR headroom on capable Safari 26+ */
+    dynamic-range-limit: no-limit;             /* Safari 26+ */
+    touch-action: none;                         /* capture multi-touch */
   }
+  /* Prefer wide-gamut pipeline */
   :root { color-gamut: p3; }
 </style>
 </head>
@@ -24,234 +23,495 @@
 (async () => {
   const canvas = document.getElementById('c');
 
-  // Hard-stop default gestures (iOS)
-  canvas.style.touchAction = 'none';
-  const stop = e => { e.preventDefault(); };
-  canvas.addEventListener('gesturestart', stop, {passive:false});
-  canvas.addEventListener('gesturechange', stop, {passive:false});
-  canvas.addEventListener('gestureend', stop, {passive:false});
-
-  // --- If WebGPU is missing, show SDR baseline (still eats touches to avoid magnifier) ---
-  const noGPUFallback = () => {
+  // --- Feature detect WebGPU (HDR path) ---
+  const hasWebGPU = 'gpu' in navigator;
+  if (!hasWebGPU) {
+    // Sensible SDR fallback: show the SDR rainbow baseline only (no UI text).
     const ctx = canvas.getContext('2d', { alpha:false });
-    const hsv2rgb = (h,s,v) => {
-      const i = Math.floor(h*6), f = h*6 - i;
-      const p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
-      switch (i%6) { case 0:return [v,t,p]; case 1:return [q,v,p];
-        case 2:return [p,v,t]; case 3:return [p,q,v];
-        case 4:return [t,p,v]; default:return [v,p,q]; }
+    const resize2d = () => {
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+      canvas.height = Math.floor(canvas.clientHeight * dpr);
+      drawBaseline();
     };
-    const resize = () => {
-      const dpr = Math.max(1, window.devicePixelRatio||1);
-      canvas.width = Math.floor(canvas.clientWidth*dpr);
-      canvas.height= Math.floor(canvas.clientHeight*dpr);
-      const w=canvas.width,h=canvas.height, img=ctx.createImageData(w,h);
-      for (let y=0;y<h;y++){
-        const v=y/(h-1), s=Math.max(0,1-v);
-        for (let x=0;x<w;x++){
-          const H=x/(w-1), rgb=hsv2rgb(H,s,v), i=(y*w+x)*4;
-          img.data[i]=rgb[0]*255; img.data[i+1]=rgb[1]*255; img.data[i+2]=rgb[2]*255; img.data[i+3]=255;
+    const drawBaseline = () => {
+      const w = canvas.width, h = canvas.height;
+      const img = ctx.createImageData(w, h);
+      // HSV plane: H = x, V = y, S = 1 - y -> bottom black, mid rainbow, top white
+      for (let y=0; y<h; y++) {
+        const v = y/(h-1);
+        const s = Math.max(0, 1 - v);
+        for (let x=0; x<w; x++) {
+          const hH = x/(w-1);
+          const rgb = hsv2rgb(hH, s, v);
+          const i = (y*w + x)*4;
+          img.data[i  ] = Math.round(rgb[0]*255);
+          img.data[i+1] = Math.round(rgb[1]*255);
+          img.data[i+2] = Math.round(rgb[2]*255);
+          img.data[i+3] = 255;
         }
       }
-      ctx.putImageData(img,0,0);
+      ctx.putImageData(img, 0, 0);
     };
-    window.addEventListener('resize', resize, {passive:true});
-    resize();
+    const hsv2rgb = (h,s,v) => {
+      const i = Math.floor(h*6);
+      const f = h*6 - i;
+      const p = v*(1-s);
+      const q = v*(1-f*s);
+      const t = v*(1-(1-f)*s);
+      switch (i%6) {
+        case 0: return [v,t,p];
+        case 1: return [q,v,p];
+        case 2: return [p,v,t];
+        case 3: return [p,q,v];
+        case 4: return [t,p,v];
+        case 5: return [v,p,q];
+      }
+    };
+    window.addEventListener('resize', resize2d, {passive:true});
+    resize2d();
+    console.warn('WebGPU not available. Showing SDR baseline only.');
+    return;
+  }
 
-    // Eat pointer events so iOS doesn’t show magnifier
-    const eat = e => { e.preventDefault(); };
-    canvas.addEventListener('pointerdown', eat, {passive:false});
-    canvas.addEventListener('pointermove', eat, {passive:false});
-    canvas.addEventListener('pointerup', eat, {passive:false});
-    canvas.addEventListener('pointercancel', eat, {passive:false});
-  };
-
-  if (!('gpu' in navigator)) { noGPUFallback(); return; }
-
-  // --- WebGPU path (same as before, with preventDefault on pointers) ---
-  const adapter = await navigator.gpu.requestAdapter().catch(()=>null);
-  if (!adapter) { noGPUFallback(); return; }
-  const device = await adapter.requestDevice().catch(()=>null);
-  if (!device) { noGPUFallback(); return; }
+  // --- WebGPU HDR path ---
+  const adapter = await navigator.gpu.requestAdapter();
+  const device = await adapter.requestDevice();
 
   const ctx = canvas.getContext('webgpu', { alphaMode:'opaque', colorSpace:'display-p3' });
   const preferredFormat = navigator.gpu.getPreferredCanvasFormat();
-  const configure = () => {
-    const dpr = Math.max(1, window.devicePixelRatio||1);
-    canvas.width = Math.floor(canvas.clientWidth*dpr);
-    canvas.height= Math.floor(canvas.clientHeight*dpr);
-    ctx.configure({ device, format: preferredFormat, alphaMode:'opaque', colorSpace:'display-p3' });
+  function configure() {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+    ctx.configure({
+      device,
+      format: preferredFormat,
+      alphaMode: 'opaque',
+      colorSpace: 'display-p3'     // enable wide gamut + HDR on Safari 26
+    });
     allocateLiftTextures();
-  };
+  }
 
-  const LIFT_SCALE = 0.5;
-  let liftW=0,liftH=0,liftA=null,liftB=null;
-  function allocateLiftTextures(){
-    const w=Math.max(2, Math.floor(canvas.width*LIFT_SCALE));
-    const h=Math.max(2, Math.floor(canvas.height*LIFT_SCALE));
-    if (w===liftW && h===liftH && liftA) return;
-    liftW=w; liftH=h;
-    const desc={ size:[w,h], format:'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.TEXTURE_BINDING };
+  // Lift field at (possibly) reduced res for perf; ping-pong RGBA16F
+  const LIFT_SCALE = 0.5;              // 0.5 = quarter pixels; adjust if needed
+  let liftW = 0, liftH = 0;
+  let liftA = null, liftB = null;      // ping-pong textures storing scalar lift in R
+  function allocateLiftTextures() {
+    const w = Math.max(2, Math.floor(canvas.width  * LIFT_SCALE));
+    const h = Math.max(2, Math.floor(canvas.height * LIFT_SCALE));
+    if (w === liftW && h === liftH && liftA) return;
+    liftW = w; liftH = h;
+    const desc = {
+      size: [liftW, liftH, 1],
+      format: 'rgba16float',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    };
     liftA?.destroy?.(); liftB?.destroy?.();
-    liftA=device.createTexture(desc); liftB=device.createTexture(desc);
-    const enc=device.createCommandEncoder();
-    for (const tex of [liftA,liftB]){
-      const pass=enc.beginRenderPass({colorAttachments:[{view:tex.createView(),loadOp:'clear',storeOp:'store',clearValue:{r:0,g:0,b:0,a:1}}]});
+    liftA = device.createTexture(desc);
+    liftB = device.createTexture(desc);
+    // Clear to 0
+    const clear = device.createCommandEncoder();
+    for (const tex of [liftA, liftB]) {
+      const pass = clear.beginRenderPass({
+        colorAttachments: [{
+          view: tex.createView(),
+          clearValue: {r:0,g:0,b:0,a:1},
+          loadOp: 'clear', storeOp: 'store'
+        }]
+      });
       pass.end();
     }
-    device.queue.submit([enc.finish()]);
+    device.queue.submit([clear.finish()]);
   }
 
-  const MAX_PTR=10;
-  let liftGlobalsBuf, liftPtrsBuf, compGlobalsBuf;
-  const sampler = device.createSampler({ minFilter:'linear', magFilter:'linear' });
-  const liftWGSL=`struct Globals{liftSize:vec2<f32>,canvasSize:vec2<f32>,dt:f32,ramp:f32,decayK:f32,flow:f32,headroom:f32;};
-struct Ptr{x:f32;y:f32;age:f32;flags:f32;};
-@group(0) @binding(0) var samp:sampler;
-@group(0) @binding(1) var liftPrev:texture_2d<f16>;
-@group(0) @binding(2) var<uniform> G:Globals;
-@group(0) @binding(3) var<uniform> P:array<Ptr,${MAX_PTR}>;
-struct V{ @builtin(position) p:vec4<f32>; @location(0) uv:vec2<f32>; };
-@vertex fn vs(@builtin(vertex_index) i:u32)->V{ var q=array<vec2<f32>,6>(vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.)); var o:V; o.p=vec4(q[i],0.,1.); o.uv=q[i]*0.5+vec2(0.5); return o;}
-fn gauss(r:f32,s:f32)->f32{ let s2=s*s; return exp(-0.5*(r*r)/s2); }
-@fragment fn fs(@location(0) uv:vec2<f32>)->@location(0) vec4<f16>{
-  let prev=textureSampleLevel(liftPrev,samp,uv,0.0).r;
-  let decay=exp(-G.decayK*G.dt);
-  var lift=f32(prev)*decay;
-  let px=uv.x*G.liftSize.x; let py=uv.y*G.liftSize.y;
-  for (var i=0u;i<${MAX_PTR}u;i=i+1u){
-    let p=P[i];
-    let active = select(0.0,1.0,(u32(p.flags)&1u)==1u);
-    let rampT = clamp(p.age/max(G.ramp,1e-4),0.0,1.0);
-    let lp = clamp((p.age-0.6)/0.8,0.0,1.0);
-    let gain = 1.0 + lp*0.5;
-    let sigma = (min(G.canvasSize.x,G.canvasSize.y)*${LIFT_SCALE.toFixed(2)}*0.06)*gain;
-    let dx=px-(p.x*G.liftSize.x); let dy=py-(p.y*G.liftSize.y);
-    let r=sqrt(dx*dx+dy*dy);
-    let g=gauss(r,sigma);
-    lift += active * rampT * G.flow * G.dt * g * gain;
-  }
-  return vec4<f16>(f16(lift), f16(0.), f16(0.), f16(1.));
-}`;
-  const compWGSL=`struct G{canvasSize:vec2<f32>;headroom:f32;ditherAmp:f32;};
-@group(0) @binding(0) var samp:sampler;
-@group(0) @binding(1) var L:texture_2d<f16>;
-@group(0) @binding(2) var<uniform> U:G;
-struct V{@builtin(position) p:vec4<f32>; @location(0) uv:vec2<f32>;};
-@vertex fn vs(@builtin(vertex_index) i:u32)->V{ var q=array<vec2<f32>,6>(vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.)); var o:V; o.p=vec4(q[i],0.,1.); o.uv=q[i]*0.5+vec2(0.5); return o;}
-fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{ let six=h*6.0; let i=floor(six); let f=six-i; let p=v*(1.0-s); let q=v*(1.0-f*s); let t=v*(1.0-(1.0-f)*s);
-  switch(i%6.0){ case 0.0:return vec3(v,t,p); case 1.0:return vec3(q,v,p); case 2.0:return vec3(p,v,t); case 3.0:return vec3(p,q,v); case 4.0:return vec3(t,p,v); default:return vec3(v,p,q);} }
-fn hash21(p:vec2<f32>)->f32{ let a=dot(p,vec2(127.1,311.7)); return fract(sin(a)*43758.5453); }
-@fragment fn fs(@location(0) uv:vec2<f32>, @builtin(position) pos:vec4<f32>)->@location(0) vec4<f32>{
-  let H=clamp(uv.x,0.0,1.0);
-  let V0=clamp(uv.y,0.0,1.0);
-  let S=clamp(1.0-uv.y,0.0,1.0);
-  let Lf=f32(textureSampleLevel(L,samp,uv,0.0).r);
-  var V=V0+Lf;
-  V=min(V,U.headroom);
-  let d=(hash21(pos.xy)-0.5)*U.ditherAmp;
-  V=max(0.0,V+d);
-  let rgb=hsv2rgb(H,S,V);
-  return vec4(rgb,1.0);
-}`;
-  const liftModule=device.createShaderModule({code:liftWGSL});
-  const compModule=device.createShaderModule({code:compWGSL});
-  const liftPipeline=device.createRenderPipeline({layout:'auto',vertex:{module:liftModule,entryPoint:'vs'},fragment:{module:liftModule,entryPoint:'fs',targets:[{format:'rgba16float'}]}});
-  const compPipeline=device.createRenderPipeline({layout:'auto',vertex:{module:compModule,entryPoint:'vs'},fragment:{module:compModule,entryPoint:'fs',targets:[{format:preferredFormat}]}});
+  // Uniforms & pointer state
+  const MAX_PTR = 10;
+  const uniformsSize = 4*4 + MAX_PTR*(4*4); // alignments padded below
+  const uniformBuf = device.createBuffer({
+    size:  1024, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
 
-  let bgLiftA,bgLiftB,bgCompFromA,bgCompFromB;
-  function rebuildBindGroups(){
-    liftGlobalsBuf=device.createBuffer({size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-    liftPtrsBuf   =device.createBuffer({size:16*MAX_PTR,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-    compGlobalsBuf=device.createBuffer({size:32,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-    bgLiftA=device.createBindGroup({layout:liftPipeline.getBindGroupLayout(0),entries:[
-      {binding:0,resource:sampler}, {binding:1,resource:liftA.createView()},
-      {binding:2,resource:{buffer:liftGlobalsBuf}}, {binding:3,resource:{buffer:liftPtrsBuf}}
-    ]});
-    bgLiftB=device.createBindGroup({layout:liftPipeline.getBindGroupLayout(0),entries:[
-      {binding:0,resource:sampler}, {binding:1,resource:liftB.createView()},
-      {binding:2,resource:{buffer:liftGlobalsBuf}}, {binding:3,resource:{buffer:liftPtrsBuf}}
-    ]});
-    bgCompFromA=device.createBindGroup({layout:compPipeline.getBindGroupLayout(0),entries:[
-      {binding:0,resource:sampler},{binding:1,resource:liftA.createView()},{binding:2,resource:{buffer:compGlobalsBuf}}
-    ]});
-    bgCompFromB=device.createBindGroup({layout:compPipeline.getBindGroupLayout(0),entries:[
-      {binding:0,resource:sampler},{binding:1,resource:liftB.createView()},{binding:2,resource:{buffer:compGlobalsBuf}}
-    ]});
-  }
+  // Pointer slots
+  const pointers = new Map(); // pointerId -> {x,y,downTime,lastTime,isActive,baseRadius,strength}
+  const state = {
+    time: performance.now() / 1000,
+    lastTime: performance.now() / 1000,
+    ramp: 0.25,             // seconds to reach full flow on touch-down
+    decayHalfLife: 1.2,     // seconds (exponential decay toward baseline)
+    flowPerSecond: 0.7,     // how fast V lifts while held (unit: V/s at brush center)
+    headroom: 3.5,          // HDR headroom (V may exceed 1.0 up to this)
+    longPressT: 0.6,        // seconds to start gentle strengthening
+    longPressGain: 0.5,     // up to +50% radius/strength
+    baseRadiusPx: 120,      // brush sigma in px at 1.0 scale (soft Gaussian)
+    pointerData: new Float32Array(4 + MAX_PTR*4) // packed uniforms
+  };
 
-  const pointers=new Map();
-  const state={ lastTime: performance.now()/1000,
-    ramp:0.25, decayHalfLife:1.2, flowPerSecond:0.7, headroom:3.5 };
-  const toNorm=(cx,cy)=>{ const r=canvas.getBoundingClientRect(); const dpr=Math.max(1,window.devicePixelRatio||1);
-    const x=(cx-r.left)*dpr, y=(cy-r.top)*dpr; return {nx:x/Math.max(1,Math.floor(canvas.width*LIFT_SCALE)), ny:y/Math.max(1,Math.floor(canvas.height*LIFT_SCALE))}; };
-
-  const onDown=e=>{ e.preventDefault();
+  // Pointer handlers
+  const toNorm = (clientX, clientY) => {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const x = (clientX - rect.left) * dpr;
+    const y = (clientY - rect.top)  * dpr;
+    // Positions normalized to lift texture space
+    const nx = x / (liftW || 1);
+    const ny = y / (liftH || 1);
+    return { nx, ny, x, y };
+  };
+  const onDown = (e) => {
     canvas.setPointerCapture(e.pointerId);
-    const t=performance.now()/1000; const {nx,ny}=toNorm(e.clientX,e.clientY);
-    pointers.set(e.pointerId,{nx,ny,downTime:t,isActive:1});
+    const t = performance.now() / 1000;
+    const {nx, ny} = toNorm(e.clientX, e.clientY);
+    pointers.set(e.pointerId, {
+      nx, ny,
+      downTime: t,
+      lastTime: t,
+      isActive: 1,
+      baseRadius: state.baseRadiusPx * (window.devicePixelRatio || 1) * LIFT_SCALE,
+      strength: 1.0
+    });
   };
-  const onMove=e=>{ e.preventDefault();
-    const p=pointers.get(e.pointerId); if(!p) return;
-    const {nx,ny}=toNorm(e.clientX,e.clientY); p.nx=nx; p.ny=ny;
+  const onMove = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    const {nx, ny} = toNorm(e.clientX, e.clientY);
+    const p = pointers.get(e.pointerId);
+    p.nx = nx; p.ny = ny;
+    p.lastTime = performance.now()/1000;
   };
-  const onUp=e=>{ e.preventDefault();
-    const p=pointers.get(e.pointerId); if(p){ p.isActive=0; } canvas.releasePointerCapture?.(e.pointerId);
+  const onUp = (e) => {
+    const p = pointers.get(e.pointerId);
+    if (p) { p.isActive = 0; }
+    canvas.releasePointerCapture?.(e.pointerId);
+    // keep record for decay-only (we'll drop it automatically after some seconds)
   };
 
   canvas.addEventListener('pointerdown', onDown, {passive:false});
   canvas.addEventListener('pointermove', onMove, {passive:false});
-  canvas.addEventListener('pointerup', onUp, {passive:false});
+  canvas.addEventListener('pointerup', onUp,   {passive:false});
   canvas.addEventListener('pointercancel', onUp, {passive:false});
-  window.addEventListener('resize', () => { configure(); rebuildBindGroups(); }, {passive:true});
+  window.addEventListener('resize', configure, {passive:true});
 
-  const writeUniforms=(dt)=>{
-    const decayK=Math.log(2)/Math.max(0.001,state.decayHalfLife);
-    const g=new Float32Array([ Math.floor(canvas.width*LIFT_SCALE), Math.floor(canvas.height*LIFT_SCALE),
-      canvas.width, canvas.height, dt, 0.25, decayK, state.flowPerSecond, state.headroom ]);
-    device.queue.writeBuffer(liftGlobalsBuf,0,g);
+  // --- WGSL Shaders ---
 
-    const now=performance.now()/1000; const P=new Float32Array(4*MAX_PTR); let i=0;
-    for(const [id,p] of pointers){
-      P[i*4+0]=p.nx; P[i*4+1]=p.ny; P[i*4+2]=now-p.downTime; P[i*4+3]=p.isActive?1:0; i++; if(i>=MAX_PTR)break;
-      if(!p.isActive && now-p.downTime>4) pointers.delete(id);
+  // Pass 1: Update lift field with decay + contributions from active pointers
+  const liftWGSL = /* wgsl */`
+struct Globals {
+  liftSize   : vec2<f32>,   // in pixels
+  canvasSize : vec2<f32>,   // in pixels
+  dt         : f32,         // seconds since last frame
+  ramp       : f32,         // ramp seconds
+  decayK     : f32,         // exp decay per second -> multiplier = exp(-decayK*dt)
+  flow       : f32,         // V/sec at brush center
+  headroom   : f32,         // not used here, kept for layout match
+};
+struct Ptr {
+  x          : f32;         // normalized to lift texture space (0..1)
+  y          : f32;
+  age        : f32;         // seconds since down (if active) or since last-up (for LP visuals)
+  flags      : f32;         // bit0: active (1 or 0), bit1..: reserved
+};
+@group(0) @binding(0) var samp     : sampler;
+@group(0) @binding(1) var liftPrev : texture_2d<f16>;
+@group(0) @binding(2) var<uniform> ubGlobals : Globals;
+@group(0) @binding(3) var<uniform> ubPtrs : array<Ptr, ${MAX_PTR}>;
+
+struct VSOut { @builtin(position) pos: vec4<f32>; @location(0) uv: vec2<f32>; };
+@vertex fn vs(@builtin(vertex_index) vid: u32) -> VSOut {
+  var pos = array<vec2<f32>,6>(
+    vec2(-1.,-1.), vec2(1.,-1.), vec2(-1.,1.),
+    vec2(-1.,1.),  vec2(1.,-1.), vec2(1.,1.)
+  );
+  var out: VSOut;
+  out.pos = vec4(pos[vid], 0., 1.);
+  out.uv  = (pos[vid]*0.5 + vec2(0.5));
+  return out;
+}
+
+fn gaussian(r: f32, sigma: f32) -> f32 {
+  let s2 = sigma*sigma;
+  return exp(-0.5 * (r*r) / s2);
+}
+
+@fragment fn fs(@location(0) uv: vec2<f32>) -> @location(0) vec4<f16> {
+  // Read previous lift
+  let prev = textureSampleLevel(liftPrev, samp, uv, 0.0).r;
+
+  // Exponential decay
+  let decayMul = exp(-ubGlobals.decayK * ubGlobals.dt);
+  var lift = f32(prev) * decayMul;
+
+  // Pointer contributions
+  let px = uv.x * ubGlobals.liftSize.x;
+  let py = uv.y * ubGlobals.liftSize.y;
+
+  for (var i=0u; i<${MAX_PTR}u; i=i+1u) {
+    let p = ubPtrs[i];
+    let active = select(0.0, 1.0, (u32(p.flags) & 1u) == 1u);
+
+    // Age-based ramp (0..1)
+    let rampT = clamp(p.age / max(ubGlobals.ramp, 1e-4), 0.0, 1.0);
+
+    // Gentle long-press strengthening (radius & strength)
+    let lpStart = 0.6;
+    let lpGain  = 0.5;
+    let lp = clamp((p.age - lpStart) / 0.8, 0.0, 1.0); // 0..1
+    let strengthGain = 1.0 + lp * lpGain;
+    let radiusGain   = 1.0 + lp * lpGain;
+
+    // Base sigma in pixels (from canvas DPI scaled into lift space)
+    let baseSigma =  ${ ( (typeof devicePixelRatio!=='undefined' ? devicePixelRatio : 1) * LIFT_SCALE * 120 ).toFixed(1) } ; // placeholder constant; actual px baked when filling ub (we keep here for WGSL-only path)
+    // We'll pass effective sigma via p.flags upper bits? Simpler: derive sigma from canvas size; use fixed proportional radius:
+    // Use min dimension as reference for sigma:
+    let sigma = (min(ubGlobals.canvasSize.x, ubGlobals.canvasSize.y) * ${LIFT_SCALE.toFixed(2)} * 0.06) * radiusGain;
+
+    let dx = px - (p.x * ubGlobals.liftSize.x);
+    let dy = py - (p.y * ubGlobals.liftSize.y);
+    let r  = sqrt(dx*dx + dy*dy);
+
+    let g = gaussian(r, sigma);
+    let contrib = active * rampT * ubGlobals.flow * ubGlobals.dt * g * strengthGain;
+
+    lift = lift + contrib;
+  }
+
+  // Store as R channel, keep A at 1
+  return vec4<f16>(f16(lift), f16(0.), f16(0.), f16(1.));
+}
+`;
+
+  // Pass 2: Composite baseline SDR HSV plane + value-only lift; output HDR (>1.0) if present
+  const compWGSL = /* wgsl */`
+struct Globals2 {
+  canvasSize : vec2<f32>,
+  headroom   : f32,    // max V above 1.0 (e.g., 3.5)
+  ditherAmp  : f32     // tiny blue-noise amplitude
+};
+@group(0) @binding(0) var samp : sampler;
+@group(0) @binding(1) var liftTex : texture_2d<f16>;
+@group(0) @binding(2) var<uniform> ub : Globals2;
+
+struct VSOut { @builtin(position) pos: vec4<f32>; @location(0) uv: vec2<f32>; };
+@vertex fn vs(@builtin(vertex_index) vid: u32) -> VSOut {
+  var pos = array<vec2<f32>,6>(
+    vec2(-1.,-1.), vec2(1.,-1.), vec2(-1.,1.),
+    vec2(-1.,1.),  vec2(1.,-1.), vec2(1.,1.)
+  );
+  var out: VSOut;
+  out.pos = vec4(pos[vid], 0., 1.);
+  out.uv  = (pos[vid]*0.5 + vec2(0.5));
+  return out;
+}
+
+fn hsv2rgb(h: f32, s: f32, v: f32) -> vec3<f32> {
+  let sixh = h*6.0;
+  let i = floor(sixh);
+  let f = sixh - i;
+  let p = v*(1.0 - s);
+  let q = v*(1.0 - f*s);
+  let t = v*(1.0 - (1.0 - f)*s);
+  switch(i % 6.0) {
+    case 0.0: return vec3(v,t,p);
+    case 1.0: return vec3(q,v,p);
+    case 2.0: return vec3(p,v,t);
+    case 3.0: return vec3(p,q,v);
+    case 4.0: return vec3(t,p,v);
+    default:  return vec3(v,p,q);
+  }
+}
+
+fn hash21(p: vec2<f32>) -> f32 {
+  // tiny blue-noise-ish hash for dithering
+  let a = dot(p, vec2(127.1, 311.7));
+  return fract(sin(a)*43758.5453);
+}
+
+@fragment fn fs(@location(0) uv: vec2<f32>, @builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+  // Baseline SDR HSV plane:
+  // H = x, V = y, S = 1 - y  => bottom black, mid rainbow, top white
+  let H = clamp(uv.x, 0.0, 1.0);
+  let V0 = clamp(uv.y, 0.0, 1.0);
+  let S  = clamp(1.0 - uv.y, 0.0, 1.0);
+
+  // Lift (scalar) sampled from low-res field, smoothly
+  let L = f32(textureSampleLevel(liftTex, samp, uv, 0.0).r);
+
+  // Value-only lift; preserve hue & saturation exactly
+  var V = V0 + L;
+
+  // Hard cap to headroom (allows >1.0 on HDR)
+  V = min(V, ub.headroom);
+
+  // Very subtle dithering to reduce banding in SDR
+  let d = (hash21(pos.xy) - 0.5) * ub.ditherAmp;
+  V = max(0.0, V + d);
+
+  let rgb = hsv2rgb(H, S, V);
+
+  // Output: If dynamic-range-limit is 'no-limit' on HDR displays, components >1.0 will be shown as HDR peaks.
+  return vec4(rgb, 1.0);
+}
+`;
+
+  // Pipelines
+  const sampler = device.createSampler({ magFilter:'linear', minFilter:'linear' });
+
+  // Lift update pipeline
+  const liftModule = device.createShaderModule({ code: liftWGSL });
+  const liftPipeline = device.createRenderPipeline({
+    layout: 'auto',
+    vertex:   { module: liftModule, entryPoint: 'vs' },
+    fragment: { module: liftModule, entryPoint: 'fs', targets: [{ format:'rgba16float' }] }
+  });
+
+  // Composite pipeline
+  const compModule = device.createShaderModule({ code: compWGSL });
+  const compPipeline = device.createRenderPipeline({
+    layout: 'auto',
+    vertex:   { module: compModule, entryPoint: 'vs' },
+    fragment: { module: compModule, entryPoint: 'fs', targets: [{ format: preferredFormat }] }
+  });
+
+  // Bind groups (rebuilt on resize / ping-pong)
+  let bgLiftA, bgLiftB, bgCompFromA, bgCompFromB;
+  function rebuildBindGroups() {
+    const globalsLift = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const ptrsBuf     = device.createBuffer({ size: 16*MAX_PTR, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // We keep these two buffers external to allow updates each frame:
+    liftGlobalsBuf = globalsLift;
+    liftPtrsBuf    = ptrsBuf;
+
+    bgLiftA = device.createBindGroup({
+      layout: liftPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding:0, resource: sampler },
+        { binding:1, resource: liftA.createView() },
+        { binding:2, resource: { buffer: liftGlobalsBuf }},
+        { binding:3, resource: { buffer: liftPtrsBuf }}
+      ]
+    });
+    bgLiftB = device.createBindGroup({
+      layout: liftPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding:0, resource: sampler },
+        { binding:1, resource: liftB.createView() },
+        { binding:2, resource: { buffer: liftGlobalsBuf }},
+        { binding:3, resource: { buffer: liftPtrsBuf }}
+      ]
+    });
+    // Composite bind groups
+    compGlobalsBuf = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    bgCompFromA = device.createBindGroup({
+      layout: compPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding:0, resource: sampler },
+        { binding:1, resource: liftA.createView() },
+        { binding:2, resource: { buffer: compGlobalsBuf } }
+      ]
+    });
+    bgCompFromB = device.createBindGroup({
+      layout: compPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding:0, resource: sampler },
+        { binding:1, resource: liftB.createView() },
+        { binding:2, resource: { buffer: compGlobalsBuf } }
+      ]
+    });
+  }
+  let liftGlobalsBuf, liftPtrsBuf, compGlobalsBuf;
+
+  // Write uniforms
+  function updateUniforms(dt) {
+    // Lift globals
+    const decayK = Math.log(2) / Math.max(0.001, state.decayHalfLife);
+    const g = new Float32Array([
+      liftW, liftH,
+      canvas.width, canvas.height,
+      dt,
+      state.ramp,
+      decayK,
+      state.flowPerSecond,
+      state.headroom
+    ]);
+    device.queue.writeBuffer(liftGlobalsBuf, 0, g);
+
+    // Pointer packing (x,y,age,flags), max MAX_PTR
+    const now = performance.now()/1000;
+    const arr = new Float32Array(4*MAX_PTR);
+    let i = 0;
+    // Drop stale (released > 3s ago)
+    for (const [id, p] of pointers) {
+      const age = now - p.downTime;
+      const flags = p.isActive ? 1.0 : 0.0;
+      arr[i*4+0] = p.nx;
+      arr[i*4+1] = p.ny;
+      arr[i*4+2] = Math.max(0, age);
+      arr[i*4+3] = flags;
+      i++;
+      // remove if inactive and lift mostly decayed
+      if (!p.isActive && age > state.decayHalfLife*3) pointers.delete(id);
+      if (i >= MAX_PTR) break;
     }
-    device.queue.writeBuffer(liftPtrsBuf,0,P);
+    device.queue.writeBuffer(liftPtrsBuf, 0, arr);
 
-    const comp=new Float32Array([canvas.width,canvas.height,state.headroom,1/1023]);
-    device.queue.writeBuffer(compGlobalsBuf,0,comp);
-  };
+    // Composite globals
+    const comp = new Float32Array([
+      canvas.width, canvas.height,
+      state.headroom,
+      1.0/1023.0   // very small dithering amplitude
+    ]);
+    device.queue.writeBuffer(compGlobalsBuf, 0, comp);
+  }
 
-  let useA=true;
-  const frame=()=>{
-    const t=performance.now()/1000;
-    const dt=Math.min(0.05, Math.max(0.0005, t - state.lastTime));
-    state.lastTime=t;
-    writeUniforms(dt);
+  // Render loop
+  let useAasPrev = true;
+  function frame() {
+    const t  = performance.now()/1000;
+    const dt = Math.min(0.050, Math.max(0.0005, t - state.lastTime));
+    state.lastTime = t;
 
-    const enc=device.createCommandEncoder();
+    // Update uniforms
+    updateUniforms(dt);
 
-    // update lift (ping-pong)
-    const pass1=enc.beginRenderPass({colorAttachments:[{view:(useA?liftB:liftA).createView(),loadOp:'clear',storeOp:'store',clearValue:{r:0,g:0,b:0,a:1}}]});
-    pass1.setPipeline(liftPipeline);
-    pass1.setBindGroup(0, useA?bgLiftA:bgLiftB);
-    pass1.draw(6);
-    pass1.end();
+    // 1) Update lift: prev -> next (ping-pong)
+    const encoder = device.createCommandEncoder();
 
-    // composite
-    const view=ctx.getCurrentTexture().createView();
-    const pass2=enc.beginRenderPass({colorAttachments:[{view,loadOp:'clear',storeOp:'store',clearValue:{r:0,g:0,b:0,a:1}}]});
-    pass2.setPipeline(compPipeline);
-    pass2.setBindGroup(0, useA?bgCompFromA:bgCompFromB);
-    pass2.draw(6);
-    pass2.end();
+    const liftPass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: (useAasPrev ? liftB : liftA).createView(), // write into opposite
+        clearValue: {r:0,g:0,b:0,a:1},
+        loadOp: 'clear',
+        storeOp: 'store'
+      }]
+    });
+    liftPass.setPipeline(liftPipeline);
+    liftPass.setBindGroup(0, useAasPrev ? bgLiftA : bgLiftB); // sample from prev
+    liftPass.draw(6);
+    liftPass.end();
 
-    device.queue.submit([enc.finish()]);
-    useA=!useA;
+    // 2) Composite to the swapchain
+    const colorTex = ctx.getCurrentTexture();
+    const compPass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: colorTex.createView(),
+        loadOp:'clear', clearValue: {r:0,g:0,b:0,a:1}, storeOp:'store'
+      }]
+    });
+    compPass.setPipeline(compPipeline);
+    compPass.setBindGroup(0, useAasPrev ? bgCompFromA : bgCompFromB);
+    compPass.draw(6);
+    compPass.end();
+
+    device.queue.submit([encoder.finish()]);
+
+    useAasPrev = !useAasPrev;
     requestAnimationFrame(frame);
-  };
+  }
 
-  configure(); rebuildBindGroups(); requestAnimationFrame(frame);
+  // Initial configure + bind groups
+  configure();
+  rebuildBindGroups();
+  requestAnimationFrame(frame);
+
 })();
 </script>
 </body>
