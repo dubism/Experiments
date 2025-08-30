@@ -2,255 +2,256 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>HDR Image — Live SDR Tone + HDR Toggle (iOS 26)</title>
-<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>SDR→HDR Value-Only Brush (WebGPU)</title>
 <style>
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    margin:0; font:14px/1.5 -apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-    background:#0b0b0d; color:#e9ecf1; display:flex; flex-direction:column;
+  html, body { margin:0; height:100%; background:#000; }
+  body { overflow:hidden; }
+  canvas {
+    width:100vw; height:100vh; display:block;
+    dynamic-range-limit: no-limit;
+    touch-action: none;                 /* hint for Pointer Events */
+    -webkit-touch-callout: none;        /* kill iOS magnifier */
+    -webkit-user-select: none;
+    user-select: none;
   }
-
-  /* Controls */
-  .controls{
-    position:sticky; top:0; z-index:10; padding:12px 16px; gap:10px; display:grid;
-    background:rgba(12,12,14,.72); backdrop-filter:blur(10px) saturate(120%);
-    border-bottom:1px solid rgba(255,255,255,.12);
-  }
-  .row{display:flex; flex-wrap:wrap; gap:14px 18px; align-items:center}
-  .label{display:inline-flex; gap:8px; align-items:center; white-space:nowrap; font-variant-numeric:tabular-nums}
-  input[type="range"]{inline-size:200px; accent-color:#62c1ff}
-  .tag{font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06)}
-  .warn{color:#ffd8a8} .muted{color:#b7bcc7}
-
-  /* Stage */
-  .stage{flex:1; display:grid; place-items:center; padding:20px 16px 40px}
-  .frame{
-    position:relative;
-    width:min(92vw,1200px); height:56.25vw; /* temporary 16:9 until first image loads */
-    max-width:1200px; max-height:80vh;
-    background:#0f1013; border:1px solid rgba(255,255,255,.08);
-    border-radius:12px; overflow:hidden;
-    transition:width .12s ease, height .12s ease;
-  }
-
-  /* SDR base: canvas renderer */
-  .base{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-  }
-  canvas{display:block; width:100%; height:100%;}
-
-  /* HDR overlay: identical image element, no filters */
-  .hdr{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    pointer-events:none; z-index:2;
-    dynamic-range-limit:no-limit; /* iOS 26+ */
-  }
-  .hdr img{
-    display:block; width:auto; height:auto; max-width:100%; max-height:100%;
-    object-fit:contain; background:#0a0b0e;
-  }
-
-  .hdr-off .hdrBadge{display:none}
-  .hdr-off .fallback{display:inline}
-
-  .tips{max-width:920px; margin:12px auto 24px; padding:0 16px; color:#bfc4cf}
+  :root { color-gamut: p3; }
 </style>
 </head>
 <body>
-
-<!-- Controls -->
-<div class="controls">
-  <div class="row">
-    <input id="file" type="file" accept="image/heic,image/heif,image/avif,image/jpeg,image/png,image/webp,image/*" />
-    <label class="label"><input id="toggleHdr" type="checkbox" checked /> Show HDR overlay</label>
-    <span class="tag hdrBadge">HDR overlay: <strong>no-limit</strong></span>
-    <span class="tag fallback" style="display:none">⚠️ <span class="warn">No <code>dynamic-range-limit</code>. Showing SDR only.</span></span>
-    <span class="muted">For visible HDR “pop”, upload an iPhone HEIC (Smart HDR).</span>
-  </div>
-  <div class="row">
-    <label class="label"><input id="enableTone" type="checkbox" checked /> Apply SDR tone-curve</label>
-    <span class="label">Black
-      <input id="black" type="range" min="0" max="0.20" step="0.002" value="0.02" />
-      <span id="blackVal" class="tag">0.020</span>
-    </span>
-    <span class="label">Mid (γ)
-      <input id="gamma" type="range" min="0.40" max="2.50" step="0.02" value="1.00" />
-      <span id="gammaVal" class="tag">1.00</span>
-    </span>
-    <span class="label">White
-      <input id="white" type="range" min="0.80" max="1.20" step="0.01" value="1.00" />
-      <span id="whiteVal" class="tag">1.00</span>
-    </span>
-  </div>
-</div>
-
-<div class="tips">
-  Toggle <strong>Show HDR overlay</strong> to compare HDR vs SDR. Sliders update **live** in the SDR canvas underneath.
-</div>
-
-<!-- Stage -->
-<div class="stage">
-  <div class="frame" id="frame">
-    <div class="base"><canvas id="canvasBase"></canvas></div>
-    <div class="hdr" id="hdrLayer">
-      <img id="imgHdr"
-        src="https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1600&q=100"
-        alt="HDR overlay">
-    </div>
-  </div>
-</div>
-
+<canvas id="c"></canvas>
 <script>
-(() => {
-  const supportsHDR = CSS.supports('dynamic-range-limit: no-limit');
-  if (!supportsHDR) {
-    document.body.classList.add('hdr-off');
-    document.querySelector('.fallback').style.display = 'inline';
-  }
+(async () => {
+  const canvas = document.getElementById('c');
 
-  const frame     = document.getElementById('frame');
-  const canvas    = document.getElementById('canvasBase');
-  const ctx       = canvas.getContext('2d', { willReadFrequently: true });
-  const hdrLayer  = document.getElementById('hdrLayer');
-  const imgHdr    = document.getElementById('imgHdr');
-  const fileInput = document.getElementById('file');
+  // Hard-stop default gestures (iOS)
+  canvas.style.touchAction = 'none';
+  const stop = e => { e.preventDefault(); };
+  canvas.addEventListener('gesturestart', stop, {passive:false});
+  canvas.addEventListener('gesturechange', stop, {passive:false});
+  canvas.addEventListener('gestureend', stop, {passive:false});
 
-  // Controls
-  const toggleHdr = document.getElementById('toggleHdr');
-  const enableTone = document.getElementById('enableTone');
-  const black = document.getElementById('black');
-  const white = document.getElementById('white');
-  const gamma = document.getElementById('gamma');
-  const blackVal = document.getElementById('blackVal');
-  const whiteVal = document.getElementById('whiteVal');
-  const gammaVal = document.getElementById('gammaVal');
+  // --- If WebGPU is missing, show SDR baseline (still eats touches to avoid magnifier) ---
+  const noGPUFallback = () => {
+    const ctx = canvas.getContext('2d', { alpha:false });
+    const hsv2rgb = (h,s,v) => {
+      const i = Math.floor(h*6), f = h*6 - i;
+      const p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
+      switch (i%6) { case 0:return [v,t,p]; case 1:return [q,v,p];
+        case 2:return [p,v,t]; case 3:return [p,q,v];
+        case 4:return [t,p,v]; default:return [v,p,q]; }
+    };
+    const resize = () => {
+      const dpr = Math.max(1, window.devicePixelRatio||1);
+      canvas.width = Math.floor(canvas.clientWidth*dpr);
+      canvas.height= Math.floor(canvas.clientHeight*dpr);
+      const w=canvas.width,h=canvas.height, img=ctx.createImageData(w,h);
+      for (let y=0;y<h;y++){
+        const v=y/(h-1), s=Math.max(0,1-v);
+        for (let x=0;x<w;x++){
+          const H=x/(w-1), rgb=hsv2rgb(H,s,v), i=(y*w+x)*4;
+          img.data[i]=rgb[0]*255; img.data[i+1]=rgb[1]*255; img.data[i+2]=rgb[2]*255; img.data[i+3]=255;
+        }
+      }
+      ctx.putImageData(img,0,0);
+    };
+    window.addEventListener('resize', resize, {passive:true});
+    resize();
 
-  // Source image object for SDR canvas (separate from <img> to keep full control)
-  const imgBase = new Image();
-  imgBase.crossOrigin = 'anonymous'; // fine for local blobs; required for some remote images
-
-  // Layout state for drawing
-  let naturalW = 1600, naturalH = 900;
-  let drawRect = { dx: 0, dy: 0, dw: 0, dh: 0 };
-
-  // --- Fit frame to image; compute draw rect for contain-fit ---
-  function fitFrameToImage(nw, nh){
-    naturalW = nw; naturalH = nh;
-    const maxW = Math.min(window.innerWidth * 0.92, 1200);
-    const maxH = window.innerHeight * 0.80;
-    const scale = Math.min(maxW / nw, maxH / nh);
-    const w = Math.max(1, Math.floor(nw * scale));
-    const h = Math.max(1, Math.floor(nh * scale));
-    frame.style.width  = w + 'px';
-    frame.style.height = h + 'px';
-
-    // Canvas pixel size matches CSS box for crisp drawing
-    canvas.width  = w;
-    canvas.height = h;
-
-    const dw = Math.floor(nw * scale);
-    const dh = Math.floor(nh * scale);
-    const dx = (w - dw) >> 1;
-    const dy = (h - dh) >> 1;
-    drawRect = { dx, dy, dw, dh };
-  }
-
-  // --- Live SDR rendering on Canvas ---
-  // Compute LUT once per slider change for speed (0..255 → adjusted 0..255)
-  function buildLUT(b, g, w){
-    const lut = new Uint8ClampedArray(256);
-    const denom = Math.max(0.001, w - b);
-    const A = 1 / denom;
-    const O = -b / denom;
-    for (let i=0;i<256;i++){
-      let x = i / 255;
-      x = Math.pow(x, g);         // gamma
-      x = A * x + O;              // black/white mapping
-      lut[i] = Math.max(0, Math.min(255, Math.round(x * 255)));
-    }
-    return lut;
-  }
-
-  function drawSDR(){
-    if (!imgBase || !imgBase.complete || !drawRect.dw || !drawRect.dh) return;
-
-    const {dx, dy, dw, dh} = drawRect;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(imgBase, dx, dy, dw, dh);
-
-    if (!enableTone.checked) return; // unmodified SDR
-
-    // Read back the drawn region and apply LUT in-place
-    const imgData = ctx.getImageData(dx, dy, dw, dh);
-    const p = imgData.data;
-    const b = parseFloat(black.value);
-    const w = parseFloat(white.value);
-    const g = parseFloat(gamma.value);
-
-    const lut = buildLUT(b, g, w);
-    for (let i=0;i<p.length;i+=4){
-      p[i  ] = lut[p[i  ]]; // R
-      p[i+1] = lut[p[i+1]]; // G
-      p[i+2] = lut[p[i+2]]; // B
-      // p[i+3] alpha unchanged
-    }
-    ctx.putImageData(imgData, dx, dy);
-
-    // UI readouts
-    blackVal.textContent = b.toFixed(3);
-    whiteVal.textContent = w.toFixed(3);
-    gammaVal.textContent = g.toFixed(2);
-  }
-
-  // rAF throttling for slider input
-  let needsRedraw = false;
-  function scheduleRedraw(){
-    if (needsRedraw) return;
-    needsRedraw = true;
-    requestAnimationFrame(() => {
-      needsRedraw = false;
-      drawSDR();
-    });
-  }
-
-  // --- Event wiring ---
-  [enableTone, black, white, gamma].forEach(el => el.addEventListener('input', scheduleRedraw, {passive:true}));
-
-  toggleHdr.addEventListener('input', () => {
-    hdrLayer.style.display = toggleHdr.checked ? '' : 'none';
-  }, {passive:true});
-
-  // File upload → same blob for HDR <img> and SDR Image()
-  fileInput.addEventListener('change', () => {
-    const f = fileInput.files && fileInput.files[0]; if (!f) return;
-    const url = URL.createObjectURL(f);
-    imgHdr.src  = url;       // HDR overlay
-    imgBase.src = url;       // SDR canvas source
-  });
-
-  // When either image loads, size frame & redraw
-  imgBase.onload = () => {
-    fitFrameToImage(imgBase.naturalWidth || 1600, imgBase.naturalHeight || 900);
-    scheduleRedraw();
-  };
-  imgHdr.onload = () => {
-    // Prefer sizing from the real image aspect as well
-    fitFrameToImage(imgHdr.naturalWidth || imgBase.naturalWidth || 1600,
-                    imgHdr.naturalHeight || imgBase.naturalHeight || 900);
-    scheduleRedraw();
+    // Eat pointer events so iOS doesn’t show magnifier
+    const eat = e => { e.preventDefault(); };
+    canvas.addEventListener('pointerdown', eat, {passive:false});
+    canvas.addEventListener('pointermove', eat, {passive:false});
+    canvas.addEventListener('pointerup', eat, {passive:false});
+    canvas.addEventListener('pointercancel', eat, {passive:false});
   };
 
-  // Initial demo image (SDR-ish) to avoid empty box
-  imgBase.src = "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1600&q=85";
+  if (!('gpu' in navigator)) { noGPUFallback(); return; }
 
-  // Resize handling
-  window.addEventListener('resize', () => {
-    fitFrameToImage(naturalW, naturalH);
-    scheduleRedraw();
-  }, {passive:true});
+  // --- WebGPU path (same as before, with preventDefault on pointers) ---
+  const adapter = await navigator.gpu.requestAdapter().catch(()=>null);
+  if (!adapter) { noGPUFallback(); return; }
+  const device = await adapter.requestDevice().catch(()=>null);
+  if (!device) { noGPUFallback(); return; }
+
+  const ctx = canvas.getContext('webgpu', { alphaMode:'opaque', colorSpace:'display-p3' });
+  const preferredFormat = navigator.gpu.getPreferredCanvasFormat();
+  const configure = () => {
+    const dpr = Math.max(1, window.devicePixelRatio||1);
+    canvas.width = Math.floor(canvas.clientWidth*dpr);
+    canvas.height= Math.floor(canvas.clientHeight*dpr);
+    ctx.configure({ device, format: preferredFormat, alphaMode:'opaque', colorSpace:'display-p3' });
+    allocateLiftTextures();
+  };
+
+  const LIFT_SCALE = 0.5;
+  let liftW=0,liftH=0,liftA=null,liftB=null;
+  function allocateLiftTextures(){
+    const w=Math.max(2, Math.floor(canvas.width*LIFT_SCALE));
+    const h=Math.max(2, Math.floor(canvas.height*LIFT_SCALE));
+    if (w===liftW && h===liftH && liftA) return;
+    liftW=w; liftH=h;
+    const desc={ size:[w,h], format:'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.TEXTURE_BINDING };
+    liftA?.destroy?.(); liftB?.destroy?.();
+    liftA=device.createTexture(desc); liftB=device.createTexture(desc);
+    const enc=device.createCommandEncoder();
+    for (const tex of [liftA,liftB]){
+      const pass=enc.beginRenderPass({colorAttachments:[{view:tex.createView(),loadOp:'clear',storeOp:'store',clearValue:{r:0,g:0,b:0,a:1}}]});
+      pass.end();
+    }
+    device.queue.submit([enc.finish()]);
+  }
+
+  const MAX_PTR=10;
+  let liftGlobalsBuf, liftPtrsBuf, compGlobalsBuf;
+  const sampler = device.createSampler({ minFilter:'linear', magFilter:'linear' });
+  const liftWGSL=`struct Globals{liftSize:vec2<f32>,canvasSize:vec2<f32>,dt:f32,ramp:f32,decayK:f32,flow:f32,headroom:f32;};
+struct Ptr{x:f32;y:f32;age:f32;flags:f32;};
+@group(0) @binding(0) var samp:sampler;
+@group(0) @binding(1) var liftPrev:texture_2d<f16>;
+@group(0) @binding(2) var<uniform> G:Globals;
+@group(0) @binding(3) var<uniform> P:array<Ptr,${MAX_PTR}>;
+struct V{ @builtin(position) p:vec4<f32>; @location(0) uv:vec2<f32>; };
+@vertex fn vs(@builtin(vertex_index) i:u32)->V{ var q=array<vec2<f32>,6>(vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.)); var o:V; o.p=vec4(q[i],0.,1.); o.uv=q[i]*0.5+vec2(0.5); return o;}
+fn gauss(r:f32,s:f32)->f32{ let s2=s*s; return exp(-0.5*(r*r)/s2); }
+@fragment fn fs(@location(0) uv:vec2<f32>)->@location(0) vec4<f16>{
+  let prev=textureSampleLevel(liftPrev,samp,uv,0.0).r;
+  let decay=exp(-G.decayK*G.dt);
+  var lift=f32(prev)*decay;
+  let px=uv.x*G.liftSize.x; let py=uv.y*G.liftSize.y;
+  for (var i=0u;i<${MAX_PTR}u;i=i+1u){
+    let p=P[i];
+    let active = select(0.0,1.0,(u32(p.flags)&1u)==1u);
+    let rampT = clamp(p.age/max(G.ramp,1e-4),0.0,1.0);
+    let lp = clamp((p.age-0.6)/0.8,0.0,1.0);
+    let gain = 1.0 + lp*0.5;
+    let sigma = (min(G.canvasSize.x,G.canvasSize.y)*${LIFT_SCALE.toFixed(2)}*0.06)*gain;
+    let dx=px-(p.x*G.liftSize.x); let dy=py-(p.y*G.liftSize.y);
+    let r=sqrt(dx*dx+dy*dy);
+    let g=gauss(r,sigma);
+    lift += active * rampT * G.flow * G.dt * g * gain;
+  }
+  return vec4<f16>(f16(lift), f16(0.), f16(0.), f16(1.));
+}`;
+  const compWGSL=`struct G{canvasSize:vec2<f32>;headroom:f32;ditherAmp:f32;};
+@group(0) @binding(0) var samp:sampler;
+@group(0) @binding(1) var L:texture_2d<f16>;
+@group(0) @binding(2) var<uniform> U:G;
+struct V{@builtin(position) p:vec4<f32>; @location(0) uv:vec2<f32>;};
+@vertex fn vs(@builtin(vertex_index) i:u32)->V{ var q=array<vec2<f32>,6>(vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.)); var o:V; o.p=vec4(q[i],0.,1.); o.uv=q[i]*0.5+vec2(0.5); return o;}
+fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{ let six=h*6.0; let i=floor(six); let f=six-i; let p=v*(1.0-s); let q=v*(1.0-f*s); let t=v*(1.0-(1.0-f)*s);
+  switch(i%6.0){ case 0.0:return vec3(v,t,p); case 1.0:return vec3(q,v,p); case 2.0:return vec3(p,v,t); case 3.0:return vec3(p,q,v); case 4.0:return vec3(t,p,v); default:return vec3(v,p,q);} }
+fn hash21(p:vec2<f32>)->f32{ let a=dot(p,vec2(127.1,311.7)); return fract(sin(a)*43758.5453); }
+@fragment fn fs(@location(0) uv:vec2<f32>, @builtin(position) pos:vec4<f32>)->@location(0) vec4<f32>{
+  let H=clamp(uv.x,0.0,1.0);
+  let V0=clamp(uv.y,0.0,1.0);
+  let S=clamp(1.0-uv.y,0.0,1.0);
+  let Lf=f32(textureSampleLevel(L,samp,uv,0.0).r);
+  var V=V0+Lf;
+  V=min(V,U.headroom);
+  let d=(hash21(pos.xy)-0.5)*U.ditherAmp;
+  V=max(0.0,V+d);
+  let rgb=hsv2rgb(H,S,V);
+  return vec4(rgb,1.0);
+}`;
+  const liftModule=device.createShaderModule({code:liftWGSL});
+  const compModule=device.createShaderModule({code:compWGSL});
+  const liftPipeline=device.createRenderPipeline({layout:'auto',vertex:{module:liftModule,entryPoint:'vs'},fragment:{module:liftModule,entryPoint:'fs',targets:[{format:'rgba16float'}]}});
+  const compPipeline=device.createRenderPipeline({layout:'auto',vertex:{module:compModule,entryPoint:'vs'},fragment:{module:compModule,entryPoint:'fs',targets:[{format:preferredFormat}]}});
+
+  let bgLiftA,bgLiftB,bgCompFromA,bgCompFromB;
+  function rebuildBindGroups(){
+    liftGlobalsBuf=device.createBuffer({size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    liftPtrsBuf   =device.createBuffer({size:16*MAX_PTR,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    compGlobalsBuf=device.createBuffer({size:32,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    bgLiftA=device.createBindGroup({layout:liftPipeline.getBindGroupLayout(0),entries:[
+      {binding:0,resource:sampler}, {binding:1,resource:liftA.createView()},
+      {binding:2,resource:{buffer:liftGlobalsBuf}}, {binding:3,resource:{buffer:liftPtrsBuf}}
+    ]});
+    bgLiftB=device.createBindGroup({layout:liftPipeline.getBindGroupLayout(0),entries:[
+      {binding:0,resource:sampler}, {binding:1,resource:liftB.createView()},
+      {binding:2,resource:{buffer:liftGlobalsBuf}}, {binding:3,resource:{buffer:liftPtrsBuf}}
+    ]});
+    bgCompFromA=device.createBindGroup({layout:compPipeline.getBindGroupLayout(0),entries:[
+      {binding:0,resource:sampler},{binding:1,resource:liftA.createView()},{binding:2,resource:{buffer:compGlobalsBuf}}
+    ]});
+    bgCompFromB=device.createBindGroup({layout:compPipeline.getBindGroupLayout(0),entries:[
+      {binding:0,resource:sampler},{binding:1,resource:liftB.createView()},{binding:2,resource:{buffer:compGlobalsBuf}}
+    ]});
+  }
+
+  const pointers=new Map();
+  const state={ lastTime: performance.now()/1000,
+    ramp:0.25, decayHalfLife:1.2, flowPerSecond:0.7, headroom:3.5 };
+  const toNorm=(cx,cy)=>{ const r=canvas.getBoundingClientRect(); const dpr=Math.max(1,window.devicePixelRatio||1);
+    const x=(cx-r.left)*dpr, y=(cy-r.top)*dpr; return {nx:x/Math.max(1,Math.floor(canvas.width*LIFT_SCALE)), ny:y/Math.max(1,Math.floor(canvas.height*LIFT_SCALE))}; };
+
+  const onDown=e=>{ e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    const t=performance.now()/1000; const {nx,ny}=toNorm(e.clientX,e.clientY);
+    pointers.set(e.pointerId,{nx,ny,downTime:t,isActive:1});
+  };
+  const onMove=e=>{ e.preventDefault();
+    const p=pointers.get(e.pointerId); if(!p) return;
+    const {nx,ny}=toNorm(e.clientX,e.clientY); p.nx=nx; p.ny=ny;
+  };
+  const onUp=e=>{ e.preventDefault();
+    const p=pointers.get(e.pointerId); if(p){ p.isActive=0; } canvas.releasePointerCapture?.(e.pointerId);
+  };
+
+  canvas.addEventListener('pointerdown', onDown, {passive:false});
+  canvas.addEventListener('pointermove', onMove, {passive:false});
+  canvas.addEventListener('pointerup', onUp, {passive:false});
+  canvas.addEventListener('pointercancel', onUp, {passive:false});
+  window.addEventListener('resize', () => { configure(); rebuildBindGroups(); }, {passive:true});
+
+  const writeUniforms=(dt)=>{
+    const decayK=Math.log(2)/Math.max(0.001,state.decayHalfLife);
+    const g=new Float32Array([ Math.floor(canvas.width*LIFT_SCALE), Math.floor(canvas.height*LIFT_SCALE),
+      canvas.width, canvas.height, dt, 0.25, decayK, state.flowPerSecond, state.headroom ]);
+    device.queue.writeBuffer(liftGlobalsBuf,0,g);
+
+    const now=performance.now()/1000; const P=new Float32Array(4*MAX_PTR); let i=0;
+    for(const [id,p] of pointers){
+      P[i*4+0]=p.nx; P[i*4+1]=p.ny; P[i*4+2]=now-p.downTime; P[i*4+3]=p.isActive?1:0; i++; if(i>=MAX_PTR)break;
+      if(!p.isActive && now-p.downTime>4) pointers.delete(id);
+    }
+    device.queue.writeBuffer(liftPtrsBuf,0,P);
+
+    const comp=new Float32Array([canvas.width,canvas.height,state.headroom,1/1023]);
+    device.queue.writeBuffer(compGlobalsBuf,0,comp);
+  };
+
+  let useA=true;
+  const frame=()=>{
+    const t=performance.now()/1000;
+    const dt=Math.min(0.05, Math.max(0.0005, t - state.lastTime));
+    state.lastTime=t;
+    writeUniforms(dt);
+
+    const enc=device.createCommandEncoder();
+
+    // update lift (ping-pong)
+    const pass1=enc.beginRenderPass({colorAttachments:[{view:(useA?liftB:liftA).createView(),loadOp:'clear',storeOp:'store',clearValue:{r:0,g:0,b:0,a:1}}]});
+    pass1.setPipeline(liftPipeline);
+    pass1.setBindGroup(0, useA?bgLiftA:bgLiftB);
+    pass1.draw(6);
+    pass1.end();
+
+    // composite
+    const view=ctx.getCurrentTexture().createView();
+    const pass2=enc.beginRenderPass({colorAttachments:[{view,loadOp:'clear',storeOp:'store',clearValue:{r:0,g:0,b:0,a:1}}]});
+    pass2.setPipeline(compPipeline);
+    pass2.setBindGroup(0, useA?bgCompFromA:bgCompFromB);
+    pass2.draw(6);
+    pass2.end();
+
+    device.queue.submit([enc.finish()]);
+    useA=!useA;
+    requestAnimationFrame(frame);
+  };
+
+  configure(); rebuildBindGroups(); requestAnimationFrame(frame);
 })();
 </script>
 </body>
