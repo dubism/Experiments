@@ -2,19 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>SDR→HDR Value-Only Brush (Robust)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>SDR→HDR Value-Only Brush (Safe 2D)</title>
 <style>
-  html, body { margin:0; height:100%; background:#000; }
+  html, body { margin:0; height:100dvh; background:#000; }
   body { overflow:hidden; }
   canvas {
-    display:block; width:100vw; height:100vh;
-    dynamic-range-limit: no-limit;   /* iOS 26+ */
-    touch-action: none;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none; user-select: none;
+    display:block; width:100vw; height:100dvh;
+    touch-action:none; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
   }
-  :root { color-gamut: p3; }
 </style>
 </head>
 <body>
@@ -22,396 +18,136 @@
 <script>
 (() => {
   const canvas = document.getElementById('cv');
+  const ctx = canvas.getContext('2d', { alpha:false });
   canvas.style.touchAction = 'none';
 
-  // Kill iOS gestures/magnifier
-  const stop = e => { e.preventDefault(); };
-  for (const evt of ['gesturestart','gesturechange','gestureend','touchstart','touchmove','touchend']) {
+  // eat iOS gestures to prevent loupe/zoom
+  const stop = e => e.preventDefault();
+  for (const evt of ['gesturestart','gesturechange','gestureend','touchstart','touchmove','touchend'])
     canvas.addEventListener(evt, stop, {passive:false});
-  }
 
-  // Common pointer tracking
-  const MAX_PTR = 12;
-  const pointers = new Map(); // id -> {x,y,downTime,upTime,isActive}
-  const nowSec = () => performance.now()/1000;
-
-  function normPos(clientX, clientY) {
-    const r = canvas.getBoundingClientRect();
+  // robust sizing (handles WKWebView / iOS 100vh bugs)
+  function fitCanvas(force=false){
     const dpr = Math.max(1, window.devicePixelRatio||1);
-    const x = (clientX - r.left) * dpr;
-    const y = (clientY - r.top)  * dpr;
-    return { x, y };
-  }
-  canvas.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    canvas.setPointerCapture(e.pointerId);
-    const t = nowSec(); const p = normPos(e.clientX, e.clientY);
-    pointers.set(e.pointerId, { x:p.x, y:p.y, downTime:t, upTime:t, isActive:1 });
-  }, {passive:false});
-  canvas.addEventListener('pointermove', e => {
-    e.preventDefault();
-    const p = pointers.get(e.pointerId); if (!p) return;
-    const q = normPos(e.clientX, e.clientY); p.x=q.x; p.y=q.y;
-  }, {passive:false});
-  function endPtr(e){ e.preventDefault(); const p = pointers.get(e.pointerId); if (p) { p.isActive=0; p.upTime=nowSec(); } }
-  canvas.addEventListener('pointerup', endPtr, {passive:false});
-  canvas.addEventListener('pointercancel', endPtr, {passive:false});
-
-  // Resize utility
-  function fitCanvas() {
-    const dpr = Math.max(1, window.devicePixelRatio||1);
-    const w = Math.max(2, Math.floor(canvas.clientWidth * dpr));
-    const h = Math.max(2, Math.floor(canvas.clientHeight* dpr));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w; canvas.height = h;
-      return true;
-    }
+    const w = Math.max(2, Math.floor(canvas.clientWidth  * dpr));
+    const h = Math.max(2, Math.floor(canvas.clientHeight * dpr));
+    if (force || canvas.width!==w || canvas.height!==h){ canvas.width=w; canvas.height=h; return true; }
     return false;
   }
-  window.addEventListener('resize', fitCanvas, {passive:true});
-  fitCanvas();
+  const ensureSize = () => { fitCanvas(true); drawBaseline(); };
+  window.addEventListener('resize', () => { if (fitCanvas(true)) drawBaseline(); }, {passive:true});
+  // run after layout & one micro-delay to avoid 0×0
+  window.addEventListener('DOMContentLoaded', ensureSize);
+  setTimeout(ensureSize, 0);
 
-  // Brush parameters
+  // HSV baseline: H=x, V=y, S=1-y (bottom black → top white), tiny dither to avoid banding
+  function hsv2rgb(h,s,v){
+    const i=Math.floor(h*6), f=h*6-i, p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
+    switch(i%6){case 0:return[v,t,p];case 1:return[q,v,p];case 2:return[p,v,t];
+      case 3:return[p,q,v];case 4:return[t,p,v];default:return[v,p,q];}
+  }
+  function drawBaseline(){
+    const w=canvas.width, h=canvas.height;
+    const img = ctx.createImageData(w,h);
+    const dAmp = 1/1023;
+    for(let y=0;y<h;y++){
+      const V=y/(h-1), S=Math.max(0,1-V);
+      for(let x=0;x<w;x++){
+        const H=x/(w-1);
+        const d = ((Math.sin((x*127.1 + y*311.7))*43758.5453)%1)-0.5; // tiny blue-noise-ish dither
+        const rgb = hsv2rgb(H,S,Math.max(0,V + d*dAmp));
+        const i=(y*w+x)*4;
+        img.data[i  ]=rgb[0]*255; img.data[i+1]=rgb[1]*255; img.data[i+2]=rgb[2]*255; img.data[i+3]=255;
+      }
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  // Brush: value-only lift with soft Gaussian, ramp/decay, long-press gentle gain
   const params = {
-    ramp: 0.25,          // s to full flow
-    decayHalfLife: 1.2,  // s
-    flowPerSec: 0.7,     // V/s at center
-    headroom: 3.5,       // max V (HDR)
-    baseSigma: 130,      // px @ 1x DPR
-    longPressT: 0.6,
-    longPressGain: 0.5
+    ramp:0.25, decayHalf:1.2, flow:0.7, baseSigma:130, longT:0.6, longGain:0.5
   };
+  const pointers = new Map();
+  const now = () => performance.now()/1000;
 
-  // --- BACKEND 1: WebGPU (preferred; HDR headroom) ---
-  async function runWebGPU() {
-    if (!('gpu' in navigator)) throw new Error('no-webgpu');
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) throw new Error('no-adapter');
-    const device = await adapter.requestDevice();
-    const ctx = canvas.getContext('webgpu', { alphaMode:'opaque', colorSpace:'display-p3' });
-    const format = navigator.gpu.getPreferredCanvasFormat();
-    const configure = () => {
-      fitCanvas();
-      ctx.configure({ device, format, alphaMode:'opaque', colorSpace:'display-p3' });
-    };
-    configure();
-
-    const wgsl = /* wgsl */`
-struct P { x:f32; y:f32; downTime:f32; upTime:f32; active:f32; pad:f32; }
-struct U {
-  time:f32;
-  canvasW:f32; canvasH:f32; headroom:f32;
-  ramp:f32; decayK:f32; flow:f32; sigma:f32;
-  longT:f32; longGain:f32; ditherAmp:f32; _pad:f32;
-  count:u32;
-};
-@group(0) @binding(0) var<uniform> u:U;
-@group(0) @binding(1) var<uniform> pts:array<P, ${MAX_PTR}>;
-struct V { @builtin(position) pos:vec4<f32>; @location(0) uv:vec2<f32>; }
-@vertex fn vs(@builtin(vertex_index) i:u32)->V{
-  var q=array<vec2<f32>,6>(vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.));
-  var o:V; o.pos=vec4(q[i],0.,1.); o.uv=q[i]*0.5+vec2(0.5); return o;
-}
-fn gauss(r:f32, s:f32)->f32 { return exp(-0.5*(r*r)/(s*s)); }
-fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
-  let six=h*6.0; let i=floor(six); let f=six-i;
-  let p=v*(1.0-s); let q=v*(1.0-f*s); let t=v*(1.0-(1.0-f)*s);
-  switch(i%6.0){ case 0.0: return vec3(v,t,p);
-    case 1.0: return vec3(q,v,p);
-    case 2.0: return vec3(p,v,t);
-    case 3.0: return vec3(p,q,v);
-    case 4.0: return vec3(t,p,v);
-    default:  return vec3(v,p,q); }
-}
-fn hash21(p:vec2<f32>)->f32{ let a=dot(p, vec2(127.1,311.7)); return fract(sin(a)*43758.5453); }
-
-@fragment fn fs(@location(0) uv:vec2<f32>, @builtin(position) pos:vec4<f32>) -> @location(0) vec4<f32> {
-  let H = clamp(uv.x,0.0,1.0);
-  let V0= clamp(uv.y,0.0,1.0);
-  let S = clamp(1.0-uv.y,0.0,1.0);
-
-  let x = uv.x * u.canvasW;
-  let y = uv.y * u.canvasH;
-
-  var lift = 0.0;
-  for (var i:u32=0u; i<u.count; i=i+1u) {
-    let p = pts[i];
-    let dx = x - p.x;
-    let dy = y - p.y;
-    let r  = sqrt(dx*dx + dy*dy);
-
-    let age = u.time - p.downTime;
-    let lp  = clamp((age - u.longT)/0.8, 0.0, 1.0);
-    let gain = 1.0 + lp * u.longGain;
-    let sigma = u.sigma * gain;
-
-    let rampT = clamp(age / max(u.ramp,1e-4), 0.0, 1.0);
-    let held  = p.active;
-    let tSinceUp = max(0.0, u.time - p.upTime);
-    let decayMul = exp(-u.decayK * tSinceUp);
-
-    let center = u.flow * (held * rampT + (1.0 - held) * rampT * decayMul);
-    lift += center * gauss(r, sigma) * gain;
+  function normPos(clientX,clientY){
+    const r=canvas.getBoundingClientRect(); const dpr=Math.max(1,window.devicePixelRatio||1);
+    return { x:(clientX-r.left)*dpr, y:(clientY-r.top)*dpr };
   }
+  canvas.addEventListener('pointerdown', e=>{
+    e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+    const t=now(), p=normPos(e.clientX,e.clientY);
+    pointers.set(e.pointerId,{x:p.x,y:p.y,down:t,up:t,active:1});
+  }, {passive:false});
+  canvas.addEventListener('pointermove', e=>{
+    e.preventDefault();
+    const P=pointers.get(e.pointerId); if(!P) return;
+    const q=normPos(e.clientX,e.clientY); P.x=q.x; P.y=q.y;
+  }, {passive:false});
+  function end(e){ e.preventDefault(); const P=pointers.get(e.pointerId); if(P){ P.active=0; P.up=now(); } }
+  canvas.addEventListener('pointerup', end, {passive:false});
+  canvas.addEventListener('pointercancel', end, {passive:false});
 
-  var V = min(V0 + lift, u.headroom);
-  let d = (hash21(pos.xy) - 0.5) * u.ditherAmp;
-  V = max(0.0, V + d);
-  let rgb = hsv2rgb(H, S, V);
-  return vec4(rgb, 1.0);
-}
-`;
-    const module = device.createShaderModule({ code: wgsl });
-    const pipeline = device.createRenderPipeline({
-      layout:'auto',
-      vertex:{ module, entryPoint:'vs' },
-      fragment:{ module, entryPoint:'fs', targets:[{ format }] }
-    });
-
-    const uSize = 4*16;
-    const pSize = (4*6) * MAX_PTR;
-    const uBuf = device.createBuffer({ size:uSize, usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST });
-    const pBuf = device.createBuffer({ size:pSize, usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST });
-
-    const bind = device.createBindGroup({
-      layout: pipeline.getBindGroupLayout(0),
-      entries: [
-        { binding:0, resource:{ buffer: uBuf } },
-        { binding:1, resource:{ buffer: pBuf } }
-      ]
-    });
-
-    function writeUniforms() {
-      const dpr = Math.max(1, window.devicePixelRatio||1);
-      const decayK = Math.log(2)/Math.max(0.001, params.decayHalfLife);
-      const sigma = params.baseSigma * dpr;
-      const U = new Float32Array([
-        nowSec(), canvas.width, canvas.height, params.headroom,
-        params.ramp, decayK, params.flowPerSec, sigma,
-        params.longPressT, params.longPressGain, 1/1023, 0,
-        Math.min(MAX_PTR, pointers.size)
-      ]);
-      device.queue.writeBuffer(uBuf, 0, U.buffer);
-
-      const P = new Float32Array(6*MAX_PTR);
-      let i=0;
-      for (const [,pt] of pointers) {
-        P[i*6+0]=pt.x; P[i*6+1]=pt.y; P[i*6+2]=pt.downTime;
-        P[i*6+3]=pt.upTime; P[i*6+4]=pt.isActive?1:0; P[i*6+5]=0;
-        i++; if (i>=MAX_PTR) break;
-      }
-      device.queue.writeBuffer(pBuf, 0, P.buffer);
-    }
-
-    function frame() {
-      const t = nowSec();
-      for (const [id,pt] of pointers) {
-        if (!pt.isActive && (t - pt.upTime) > params.decayHalfLife*3) pointers.delete(id);
-      }
-      writeUniforms();
-
-      const encoder = device.createCommandEncoder();
-      const view = ctx.getCurrentTexture().createView();
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [{ view, loadOp:'clear', clearValue:{r:0,g:0,b:0,a:1}, storeOp:'store' }]
-      });
-      pass.setPipeline(pipeline);
-      pass.setBindGroup(0, bind);
-      pass.draw(6);
-      pass.end();
-      device.queue.submit([encoder.finish()]);
-      requestAnimationFrame(frame);
-    }
-    window.addEventListener('resize', configure, {passive:true});
+  // Real-time painter: compute lift analytically and paint only a tight region for speed
+  function frame(){
+    // draw baseline once, then only paint deltas on top (fast path)
+    // For simplicity & clarity, we repaint whole frame; if slow, could optimize region-of-interest.
+    drawFrame();
+    // prune old pointers
+    const t=now();
+    for(const [id,P] of pointers)
+      if(!P.active && (t-P.up) > params.decayHalf*3) pointers.delete(id);
     requestAnimationFrame(frame);
   }
 
-  // --- BACKEND 2: WebGL2 (SDR fallback; value-only brush) ---
-  function runWebGL2() {
-    const gl = canvas.getContext('webgl2', { alpha:false, antialias:false, desynchronized:true });
-    if (!gl) throw new Error('no-webgl2');
-    fitCanvas();
+  function drawFrame(){
+    const w=canvas.width, h=canvas.height;
+    const img = ctx.getImageData(0,0,w,h); // start from baseline already drawn
+    const data = img.data;
+    const dAmp = 1/2047;
 
-    const vs = `#version 300 es
-    layout(location=0) in vec2 a;
-    out vec2 vUV;
-    void main(){ vUV = a*0.5+0.5; gl_Position=vec4(a,0.0,1.0); }`;
-    const fs = `#version 300 es
-    precision highp float;
-    in vec2 vUV; out vec4 frag;
-    uniform vec4 U0; // time, W, H, headroom (unused in SDR)
-    uniform vec4 U1; // ramp, decayK, flow, sigma
-    uniform vec4 U2; // longT, longGain, ditherAmp, count
-    const int MAX_PTR = ${MAX_PTR};
-    uniform vec4 PTR[${MAX_PTR*2}];
+    // Precompute constants
+    const decayK = Math.log(2)/Math.max(0.001, params.decayHalf);
+    const dpr = Math.max(1, window.devicePixelRatio||1);
+    const T = now();
 
-    float gauss(float r, float s){ return exp(-0.5*(r*r)/(s*s)); }
-    vec3 hsv2rgb(float h, float s, float v){
-      float six=h*6.0; float i=floor(six); float f=six-i;
-      float p=v*(1.0-s), q=v*(1.0-f*s), t=v*(1.0-(1.0-f)*s);
-      if (mod(i,6.0)==0.0) return vec3(v,t,p);
-      if (mod(i,6.0)==1.0) return vec3(q,v,p);
-      if (mod(i,6.0)==2.0) return vec3(p,v,t);
-      if (mod(i,6.0)==3.0) return vec3(p,q,v);
-      if (mod(i,6.0)==4.0) return vec3(t,p,v);
-      return vec3(v,p,q);
-    }
-    float hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-
-    void main(){
-      float time = U0.x, W = U0.y, H = U0.z;
-      float ramp = U1.x, decayK = U1.y, flow = U1.z, sigma = U1.w;
-      float longT = U2.x, longGain = U2.y, ditherAmp = U2.z;
-      float count = U2.w;
-
-      float Hh = clamp(vUV.x,0.0,1.0);
-      float V0 = clamp(vUV.y,0.0,1.0);
-      float Ss = clamp(1.0 - vUV.y, 0.0, 1.0);
-
-      float x = vUV.x * W;
-      float y = vUV.y * H;
-
-      float lift = 0.0;
-      for (int i=0;i<MAX_PTR;i++){
-        if (float(i) >= count) break;
-        vec4 a = PTR[i*2+0];
-        vec4 b = PTR[i*2+1];
-        float px=a.x, py=a.y, downT=a.z, upT=a.w;
-        float active=b.x;
-
-        float dx=x-px, dy=y-py;
-        float r = sqrt(dx*dx + dy*dy);
-
-        float age = time - downT;
-        float lp  = clamp((age - longT)/0.8, 0.0, 1.0);
-        float gain = 1.0 + lp * longGain;
-        float sig  = sigma * gain;
-
-        float rampT = clamp(age / max(ramp, 1e-4), 0.0, 1.0);
-        float tSinceUp = max(0.0, time - upT);
-        float decayMul = exp(-decayK * tSinceUp);
-
-        float center = flow * (active * rampT + (1.0 - active) * rampT * decayMul);
-        lift += center * gauss(r, sig) * gain;
-      }
-
-      float V = max(0.0, V0 + lift);
-      float d = (hash21(gl_FragCoord.xy)-0.5)*ditherAmp;
-      V = max(0.0, V + d);
-      vec3 rgb = hsv2rgb(Hh, Ss, V);
-      frag = vec4(rgb, 1.0);
-    }`;
-
-    function compile(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
-      if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
-    const prog = gl.createProgram();
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-    gl.useProgram(prog);
-
-    const vb = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vb);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-
-    const U0 = gl.getUniformLocation(prog, 'U0');
-    const U1 = gl.getUniformLocation(prog, 'U1');
-    const U2 = gl.getUniformLocation(prog, 'U2');
-    const PTR = Array.from({length: MAX_PTR*2}, (_,i)=> gl.getUniformLocation(prog, `PTR[${i}]`));
-
-    function uploadUniforms() {
-      const dpr = Math.max(1, window.devicePixelRatio||1);
-      gl.viewport(0,0,canvas.width,canvas.height);
-      const decayK = Math.log(2)/Math.max(0.001, params.decayHalfLife);
-      const sigma  = params.baseSigma * dpr;
-      gl.uniform4f(U0, nowSec(), canvas.width, canvas.height, params.headroom);
-      gl.uniform4f(U1, params.ramp, decayK, params.flowPerSec, sigma);
-      gl.uniform4f(U2, params.longPressT, params.longPressGain, 1/1023, Math.min(MAX_PTR, pointers.size));
-
-      let i=0;
-      for (const [,pt] of pointers) {
-        gl.uniform4f(PTR[i*2+0], pt.x, pt.y, pt.downTime, pt.upTime);
-        gl.uniform4f(PTR[i*2+1], pt.isActive?1:0, 0, 0, 0);
-        i++; if (i>=MAX_PTR) break;
-      }
-    }
-
-    function frame(){
-      const t = nowSec();
-      for (const [id,pt] of pointers) if (!pt.isActive && (t-pt.upTime) > params.decayHalfLife*3) pointers.delete(id);
-      uploadUniforms();
-      gl.disable(gl.BLEND);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      requestAnimationFrame(frame);
-    }
-    window.addEventListener('resize', () => { if (fitCanvas()) gl.viewport(0,0,canvas.width,canvas.height); }, {passive:true});
-    requestAnimationFrame(frame);
-  }
-
-  // --- BACKEND 3: Canvas 2D (last resort; still paints) ---
-  function run2D() {
-    const ctx = canvas.getContext('2d', { alpha:false });
-    function draw() {
-      const w=canvas.width, h=canvas.height;
-      const img = ctx.createImageData(w, h);
-      const dithAmp = 1/1023;
-      for (let y=0; y<h; y++) {
-        const V0 = y/(h-1); const S = Math.max(0, 1 - V0);
-        for (let x=0; x<w; x++) {
-          const H = x/(w-1);
-          let lift = 0;
-          const t = nowSec();
-          for (const [,pt] of pointers) {
-            const dx = x - pt.x, dy = y - pt.y;
-            const r = Math.hypot(dx,dy);
-            const age = t - pt.downTime;
-            const lp = Math.max(0, Math.min(1, (age - params.longPressT)/0.8));
-            const gain = 1 + lp*params.longPressGain;
-            const sig = params.baseSigma * (window.devicePixelRatio||1) * gain;
-            const rampT = Math.max(0, Math.min(1, age / Math.max(0.001, params.ramp)));
-            const tSinceUp = Math.max(0, t - pt.upTime);
-            const decayMul = Math.exp(-(Math.log(2)/params.decayHalfLife) * tSinceUp);
-            const center = params.flowPerSec * ( (pt.isActive?1:0)*rampT + (1-(pt.isActive?1:0))*rampT*decayMul );
-            lift += center * Math.exp(-0.5*(r*r)/(sig*sig)) * gain;
-          }
-          let V = Math.max(0, V0 + lift);
-          const d = ((Math.sin((x*127.1 + y*311.7)) * 43758.5453) % 1) - 0.5;
-          V = Math.max(0, V + d*dithAmp);
-          const rgb = (h,s,v) => {
-            const i = Math.floor(h*6), f=h*6-i;
-            const p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
-            switch (i%6) { case 0: return [v,t,p]; case 1: return [q,v,p];
-              case 2: return [p,v,t]; case 3: return [p,q,v];
-              case 4: return [t,p,v]; default: return [v,p,q]; }
-          };
-          const c = rgb(H,S,V);
-          const idx = (y*w + x)*4;
-          img.data[idx  ] = Math.max(0, Math.min(255, c[0]*255));
-          img.data[idx+1] = Math.max(0, Math.min(255, c[1]*255));
-          img.data[idx+2] = Math.max(0, Math.min(255, c[2]*255));
-          img.data[idx+3] = 255;
+    // For each pixel: baseline V plus lifts from pointers
+    for(let y=0;y<h;y++){
+      const V0=y/(h-1), S=Math.max(0,1-V0);
+      for(let x=0;x<w;x++){
+        let lift=0;
+        for(const [,P] of pointers){
+          const dx=x-P.x, dy=y-P.y, r=Math.hypot(dx,dy);
+          const age=T-P.down;
+          const lp=Math.max(0, Math.min(1,(age-params.longT)/0.8));
+          const gain=1+lp*params.longGain;
+          const sigma=params.baseSigma*dpr*gain;
+          const rampT=Math.max(0, Math.min(1, age/Math.max(0.001, params.ramp)));
+          const tUp=Math.max(0, T-P.up);
+          const decay=Math.exp(-decayK*tUp);
+          const center=params.flow*((P.active?1:0)*rampT + (1-(P.active?1:0))*rampT*decay);
+          lift += center * Math.exp(-0.5*(r*r)/(sigma*sigma)) * gain;
         }
+        let V = Math.max(0, V0 + lift);
+        const H = x/(w-1);
+        const d = ((Math.sin((x*127.1 + y*311.7))*43758.5453)%1)-0.5;
+        V = Math.max(0, V + d*dAmp);
+        const rgb = hsv2rgb(H,S,V);
+        const i=(y*w+x)*4;
+        data[i  ] = Math.min(255, rgb[0]*255);
+        data[i+1] = Math.min(255, rgb[1]*255);
+        data[i+2] = Math.min(255, rgb[2]*255);
+        // alpha already 255
       }
-      ctx.putImageData(img, 0, 0);
-
-      const t = nowSec();
-      for (const [id,pt] of pointers) if (!pt.isActive && (t-pt.upTime) > params.decayHalfLife*3) pointers.delete(id);
-      requestAnimationFrame(draw);
     }
-    window.addEventListener('resize', fitCanvas, {passive:true});
-    requestAnimationFrame(draw);
+    ctx.putImageData(img,0,0);
   }
 
-  // Orchestrate backends
-  (async () => {
-    try { await runWebGPU(); return; } catch (e) {}
-    try { runWebGL2(); return; } catch (e) {}
-    run2D();
-  })();
-
+  // Draw once, then animate
+  drawBaseline();
+  // second pass after a tick in case initial layout was 0×0
+  setTimeout(() => { if (fitCanvas()) drawBaseline(); }, 30);
+  requestAnimationFrame(frame);
 })();
 </script>
 </body>
