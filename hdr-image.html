@@ -25,32 +25,45 @@
   const cvs=document.getElementById('cv');
   const logEl=document.getElementById('log');
   const log=(...a)=>{logEl.textContent+=a.join(' ')+'\n';console.log(...a);};
+
+  // Kill iOS magnifier/gestures that steal pointer stream
   const stop=e=>e.preventDefault();
   for(const ev of['touchstart','touchmove','touchend','gesturestart','gesturechange','gestureend'])
     addEventListener(ev,stop,{passive:false});
-  function size(){const w=cvs.clientWidth|0,h=cvs.clientHeight|0;
-    if(cvs.width!==w||cvs.height!==h){cvs.width=w;cvs.height=h;return true;}return false;}
-  addEventListener('resize',()=>{if(size())configure();});
+
+  function size(){
+    const w=cvs.clientWidth|0, h=cvs.clientHeight|0;
+    if(cvs.width!==w||cvs.height!==h){cvs.width=w;cvs.height=h;return true;}
+    return false;
+  }
+  addEventListener('resize',()=>{if(size())configure();},{passive:true});
   size();
 
   const adapter=await navigator.gpu.requestAdapter(); if(!adapter){log('no adapter');return;}
-  const device=await adapter.requestDevice(); const ctx=cvs.getContext('webgpu',{alphaMode:'opaque'});
+  const device=await adapter.requestDevice();
+  const ctx=cvs.getContext('webgpu',{alphaMode:'opaque'}); if(!ctx){log('no ctx');return;}
   const format=navigator.gpu.getPreferredCanvasFormat();
   function configure(){ctx.configure({device,format,alphaMode:'opaque'});}
-  configure();
+  configure(); log('configured', {w:cvs.width,h:cvs.height,format});
 
   const wgsl=`
 @group(0) @binding(0) var<uniform> Upos : vec4<f32>; // x,y,active,radius
 @group(0) @binding(1) var<uniform> Upar : vec4<f32>; // gain,headroom,_,_
 
-struct VSOut{ @builtin(position) pos: vec4<f32>; @location(0) uv: vec2<f32>; };
+struct VSOut{
+  @builtin(position) pos: vec4<f32>;
+  @location(0) uv: vec2<f32>;
+}
 
 @vertex fn vs(@builtin(vertex_index)i:u32)->VSOut{
-  let q=array<vec2<f32>,6>(
+  let q:array<vec2<f32>,6>=array<vec2<f32>,6>(
     vec2<f32>(-1.0,-1.0), vec2<f32>( 1.0,-1.0), vec2<f32>(-1.0, 1.0),
     vec2<f32>(-1.0, 1.0), vec2<f32>( 1.0,-1.0), vec2<f32>( 1.0, 1.0)
   );
-  var o:VSOut; o.pos=vec4<f32>(q[i],0,1); o.uv=q[i]*0.5+vec2<f32>(0.5,0.5); return o;
+  var o:VSOut;
+  o.pos=vec4<f32>(q[i],0.0,1.0);
+  o.uv=q[i]*0.5+vec2<f32>(0.5,0.5);
+  return o;
 }
 
 fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
@@ -69,9 +82,12 @@ fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
 }
 
 @fragment fn fs(@location(0)uv:vec2<f32>,@builtin(position)pos:vec4<f32>)->@location(0)vec4<f32>{
+  // Rainbow baseline: H=x, V=y, S=1-y
   let H=clamp(uv.x,0.0,1.0);
   let V0=clamp(uv.y,0.0,1.0);
   let S=clamp(1.0-uv.y,0.0,1.0);
+
+  // Value-only lift around touch
   var V=V0;
   if(Upos.z>0.5){
     let d=distance(pos.xy,Upos.xy);
@@ -85,7 +101,7 @@ fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
 `;
   const module=device.createShaderModule({code:wgsl});
   const info=await module.getCompilationInfo();
-  if(info.messages.length)info.messages.forEach(m=>log(m.type,m.lineNum,m.linePos,m.message));
+  if(info.messages.length) info.messages.forEach(m=>log(m.type,m.lineNum,m.linePos,m.message));
 
   const pipeline=device.createRenderPipeline({
     layout:'auto',
@@ -93,29 +109,36 @@ fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
     fragment:{module,entryPoint:'fs',targets:[{format}]}
   });
 
+  // two 256B uniform buffers (simple + alignment-safe)
   const bufA=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
   const bufB=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[
-    {binding:0,resource:{buffer:bufA}},{binding:1,resource:{buffer:bufB}}
-  ]});
+  const bind=device.createBindGroup({
+    layout:pipeline.getBindGroupLayout(0),
+    entries:[
+      {binding:0,resource:{buffer:bufA}},
+      {binding:1,resource:{buffer:bufB}}
+    ]
+  });
 
+  // touch state + writers
   const st={x:0,y:0,active:0,radius:84,gain:0.9,headroom:3.5};
   function writeU(){
     device.queue.writeBuffer(bufA,0,new Float32Array([st.x,st.y,st.active,st.radius]));
     device.queue.writeBuffer(bufB,0,new Float32Array([st.gain,st.headroom,0,0]));
   }
-  function pt(e){const r=cvs.getBoundingClientRect(),k=Math.max(1,devicePixelRatio||1);
-    return{x:(e.clientX-r.left)*k,y:(e.clientY-r.top)*k};}
-  cvs.addEventListener('pointerdown',e=>{const p=pt(e);st.x=p.x;st.y=p.y;st.active=1;writeU();});
-  cvs.addEventListener('pointermove',e=>{if(!st.active)return;const p=pt(e);st.x=p.x;st.y=p.y;writeU();});
-  cvs.addEventListener('pointerup',()=>{st.active=0;writeU();});
-  cvs.addEventListener('pointercancel',()=>{st.active=0;writeU();});
+  function pt(e){const r=cvs.getBoundingClientRect(); const k=Math.max(1,devicePixelRatio||1);
+    return {x:(e.clientX-r.left)*k, y:(e.clientY-r.top)*k};}
+  cvs.addEventListener('pointerdown',e=>{const p=pt(e); st.x=p.x; st.y=p.y; st.active=1; writeU();});
+  cvs.addEventListener('pointermove',e=>{if(!st.active)return; const p=pt(e); st.x=p.x; st.y=p.y; writeU();});
+  cvs.addEventListener('pointerup',()=>{st.active=0; writeU();});
+  cvs.addEventListener('pointercancel',()=>{st.active=0; writeU();});
   writeU();
 
   function frame(){
     const enc=device.createCommandEncoder();
     const pass=enc.beginRenderPass({colorAttachments:[{
-      view:ctx.getCurrentTexture().createView(), loadOp:'clear', clearValue:{r:0,g:0,b:0,a:1}, storeOp:'store'
+      view:ctx.getCurrentTexture().createView(),
+      loadOp:'clear', clearValue:{r:0,g:0,b:0,a:1}, storeOp:'store'
     }]});
     pass.setPipeline(pipeline);
     pass.setBindGroup(0,bind);
