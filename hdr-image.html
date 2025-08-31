@@ -8,7 +8,7 @@
   html,body{margin:0;background:#000;height:100dvh;overflow:hidden}
   canvas{
     display:block;width:100vw;height:100dvh;
-    /* Safari 26: allow HDR peaks to exceed SDR white */
+    /* Safari 26+: allow HDR peaks to exceed SDR white */
     dynamic-range-limit: no-limit;
     touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
   }
@@ -18,18 +18,16 @@
 <canvas id="cv"></canvas>
 <script>
 (async () => {
-  // --- REQUIREMENTS ---
-  // • iOS 26 Safari, HTTPS, WebGPU enabled.
-  // • Safari 26 adds HDR in WebGPU canvas + dynamic-range-limit. [citations]
-
   const cvs = document.getElementById('cv');
+
+  // Block gestures that steal the pointer stream
   const stop = e => e.preventDefault();
   for (const ev of ['gesturestart','gesturechange','gestureend','touchstart','touchmove','touchend'])
     cvs.addEventListener(ev, stop, {passive:false});
 
-  // Pointer state (multi-touch)
+  // Pointer state
   const MAX_PTR = 12;
-  const ptrs = new Map(); // id -> {x,y,down,up,active}
+  const ptrs = new Map();
   const now = () => performance.now()/1000;
 
   function fit() {
@@ -39,140 +37,119 @@
     if (cvs.width !== w || cvs.height !== h) { cvs.width = w; cvs.height = h; return true; }
     return false;
   }
-  addEventListener('resize', () => fit(), {passive:true});
+  addEventListener('resize', () => { if (fit()) configure(); }, {passive:true});
   fit();
 
   // Brush feel
   const P = {
-    ramp: 0.25,            // s to full flow
-    decayHalf: 1.2,        // s half-life
-    flow: 0.70,            // V/s at center
-    sigmaPx: 130,          // base Gaussian sigma (px @ 1x)
-    longT: 0.6,            // s to start long-press gain
-    longGain: 0.5,         // up to +50% radius/strength
-    headroom: 3.5          // V cap (HDR > 1.0)
+    ramp: 0.25,
+    decayHalf: 1.2,
+    flow: 0.70,
+    sigmaPx: 130,
+    longT: 0.6,
+    longGain: 0.5,
+    headroom: 3.5
   };
 
-  // WebGPU init (Safari 26)
   if (!('gpu' in navigator)) { console.error('WebGPU unavailable'); return; }
   const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) { console.error('No GPU adapter'); return; }
   const device  = await adapter.requestDevice();
-  const ctx     = cvs.getContext('webgpu', { alphaMode:'opaque', colorSpace:'display-p3' });
+  const ctx     = cvs.getContext('webgpu', { alphaMode:'opaque' });
   const format  = navigator.gpu.getPreferredCanvasFormat();
 
   function configure() {
-    fit();
-    const cfg = { device, format, alphaMode:'opaque', colorSpace:'display-p3' };
-    // Safari may ignore unknown keys; we don’t set Chrome’s toneMapping here.
-    ctx.configure(cfg);
+    // configure ONLY when size/format changes
+    ctx.configure({ device, format, alphaMode:'opaque' });
   }
   configure();
 
-  // WGSL (single pass): baseline + analytic lift from pointers
+  // --- WGSL (explicit types; packed uniforms) ---
   const wgsl = /* wgsl */`
-struct U0 { // tightly packed into vec4s to avoid alignment surprises
-  time    : f32,   // seconds
-  W       : f32,   // canvas width (px)
-  H       : f32,   // canvas height (px)
-  headroom: f32,   // V cap (e.g., 3.5)
-  ramp    : f32,
-  decayK  : f32,
-  flow    : f32,
-  sigma   : f32,
-  longT   : f32,
-  longG   : f32,
-  ditherA : f32,
-  _pad    : f32,
+const MAX_PTR : u32 = ${MAX_PTR}u;
+
+struct U0 {
+  a : vec4<f32>; // time, W, H, headroom
+  b : vec4<f32>; // ramp, decayK, flow, sigma
+  c : vec4<f32>; // longT, longG, ditherA, pad
 };
+
 struct PRec {
-  x    : f32;  // px
-  y    : f32;  // px
-  down : f32;  // s
-  up   : f32;  // s
-  active: f32; // 1/0
-  _p1  : f32;
-  _p2  : f32;
-  _p3  : f32;
+  x : f32; y : f32; down : f32; up : f32;
+  active : f32; _p1 : f32; _p2 : f32; _p3 : f32;
 };
 
 @group(0) @binding(0) var<uniform> U : U0;
-@group(0) @binding(1) var<uniform> P : array<PRec, ${MAX_PTR}>;
+@group(0) @binding(1) var<uniform> P : array<PRec, MAX_PTR>;
 
 struct VSOut { @builtin(position) pos: vec4<f32>; @location(0) uv: vec2<f32>; };
 
 @vertex fn vs(@builtin(vertex_index) i: u32) -> VSOut {
-  var q = array<vec2<f32>,6>(
-    vec2(-1.0,-1.0), vec2( 1.0,-1.0), vec2(-1.0, 1.0),
-    vec2(-1.0, 1.0), vec2( 1.0,-1.0), vec2( 1.0, 1.0)
+  let q : array<vec2<f32>,6> = array<vec2<f32>,6>(
+    vec2<f32>(-1.0,-1.0), vec2<f32>( 1.0,-1.0), vec2<f32>(-1.0, 1.0),
+    vec2<f32>(-1.0, 1.0), vec2<f32>( 1.0,-1.0), vec2<f32>( 1.0, 1.0)
   );
   var o: VSOut;
-  o.pos = vec4(q[i], 0.0, 1.0);
-  o.uv  = q[i]*0.5 + vec2(0.5);
+  o.pos = vec4<f32>(q[i], 0.0, 1.0);
+  o.uv  = q[i]*0.5 + vec2<f32>(0.5,0.5);
   return o;
 }
 
 fn gauss(r:f32, s:f32) -> f32 { return exp(-0.5 * (r*r) / (s*s)); }
 
 fn hsv2rgb(h:f32, s:f32, v:f32) -> vec3<f32> {
-  let six = h*6.0;
-  let k = vec4(0.0, 4.0, 2.0, 1.0);
-  let t = fract(vec4(k.x, k.y, k.z, k.w) + six);
-  let p = abs(t*6.0 - 3.0) - 1.0;
-  let rgb = clamp(vec3(p.x,p.y,p.z), vec3(0.0), vec3(1.0));
-  return v * mix(vec3(1.0), rgb, s);
+  let six = h * 6.0;
+  let k   = vec4<f32>(0.0, 4.0, 2.0, 1.0);
+  let t   = fract(vec4<f32>(k.x + six, k.y + six, k.z + six, k.w + six));
+  let p   = abs(t * 6.0 - 3.0) - 1.0;
+  let rgb = clamp(vec3<f32>(p.x,p.y,p.z), vec3<f32>(0.0,0.0,0.0), vec3<f32>(1.0,1.0,1.0));
+  return v * mix(vec3<f32>(1.0,1.0,1.0), rgb, s);
 }
 
 fn hash21(p: vec2<f32>) -> f32 {
-  // tiny blue-noise-ish hash
-  let a = dot(p, vec2(127.1, 311.7));
+  let a = dot(p, vec2<f32>(127.1, 311.7));
   return fract(sin(a) * 43758.5453);
 }
 
 @fragment fn fs(@location(0) uv: vec2<f32>, @builtin(position) pos: vec4<f32>)
   -> @location(0) vec4<f32> {
-  // SDR baseline: H=x, V=y, S=1-y (bottom black ➜ top white)
+  // SDR baseline: H=x, V=y, S=1-y
   let Hh = clamp(uv.x, 0.0, 1.0);
   let V0 = clamp(uv.y, 0.0, 1.0);
   let Ss = clamp(1.0 - uv.y, 0.0, 1.0);
 
-  let x = uv.x * U.W;
-  let y = uv.y * U.H;
+  let x = uv.x * U.a.y; // W
+  let y = uv.y * U.a.z; // H
 
-  // Sum value-only lift from pointers
   var lift = 0.0;
-  for (var i:u32 = 0u; i < ${MAX_PTR}u; i = i + 1u) {
+  for (var i:u32 = 0u; i < MAX_PTR; i = i + 1u) {
     let pr = P[i];
-    // Skip empty slots quickly (x==0 && y==0 && active==0)
     if (pr.active == 0.0 && pr.down == 0.0 && pr.up == 0.0) { continue; }
-
     let dx = x - pr.x;
     let dy = y - pr.y;
     let r  = sqrt(dx*dx + dy*dy);
 
-    let age = max(0.0, U.time - pr.down);
+    let age   = max(0.0, U.a.x - pr.down);
+    let lp    = clamp((age - U.c.x)/0.8, 0.0, 1.0); // longT
+    let gain  = 1.0 + lp * U.c.y;                   // longG
+    let sig   = U.b.w * gain;                       // sigma
 
-    // Long-press gentle gain for radius/strength
-    let lp   = clamp((age - U.longT)/0.8, 0.0, 1.0);
-    let gain = 1.0 + lp * U.longG;
-    let sig  = U.sigma * gain;
+    let rampT = clamp(age / max(U.b.x, 1e-4), 0.0, 1.0); // ramp
+    let tUp   = max(0.0, U.a.x - pr.up);
+    let decay = exp(-U.b.y * tUp);                        // decayK
 
-    let rampT = clamp(age / max(U.ramp, 1e-4), 0.0, 1.0);
-    let tUp   = max(0.0, U.time - pr.up);
-    let decay = exp(-U.decayK * tUp);
-
-    let center = U.flow * (pr.active * rampT + (1.0 - pr.active) * rampT * decay);
+    let center = U.b.z * (pr.active * rampT + (1.0 - pr.active) * rampT * decay); // flow
     lift += center * gauss(r, sig) * gain;
   }
 
-  var V = min(V0 + lift, U.headroom);  // allow >1.0 for HDR
-  V = max(0.0, V + (hash21(pos.xy) - 0.5) * U.ditherA); // subtle SDR dither
+  var V = min(V0 + lift, U.a.w);                  // headroom
+  V = max(0.0, V + (hash21(pos.xy) - 0.5) * U.c.z); // ditherA
 
   let rgb = hsv2rgb(Hh, Ss, V);
-  return vec4(rgb, 1.0);
+  return vec4<f32>(rgb, 1.0);
 }
 `;
 
-  // Pipeline
   const module   = device.createShaderModule({ code: wgsl });
   const pipeline = device.createRenderPipeline({
     layout: 'auto',
@@ -180,9 +157,9 @@ fn hash21(p: vec2<f32>) -> f32 {
     fragment: { module, entryPoint: 'fs', targets: [{ format }] }
   });
 
-  // Uniform buffers (256B aligned sizes are safe on WebGPU)
+  // Uniform buffers
   const U_BUF_SIZE = 256;
-  const P_BUF_SIZE = 256 * Math.ceil((MAX_PTR * 32) / 256); // each PRec = 32 bytes
+  const P_BUF_SIZE = 256 * Math.ceil((MAX_PTR * 32) / 256); // 12*32=384 -> 512 aligned
   const uBuf = device.createBuffer({ size: U_BUF_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const pBuf = device.createBuffer({ size: P_BUF_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
@@ -193,15 +170,6 @@ fn hash21(p: vec2<f32>) -> f32 {
       { binding: 1, resource: { buffer: pBuf } }
     ]
   });
-
-  // Fullscreen tri
-  const vbuf = device.createBuffer({
-    size: 6 * 2 * 4,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    mappedAtCreation: true
-  });
-  new Float32Array(vbuf.getMappedRange()).set([-1,-1, 1,-1, -1,1,  -1,1, 1,-1, 1,1]);
-  vbuf.unmap();
 
   // Pointer events
   function canvasPos(e){
@@ -226,44 +194,41 @@ fn hash21(p: vec2<f32>) -> f32 {
   function writeUniforms() {
     const dpr = Math.max(1, devicePixelRatio||1);
     const decayK = Math.log(2) / Math.max(0.001, P.decayHalf);
+    // Pack into 3 vec4s
     const U = new Float32Array([
       now(), cvs.width, cvs.height, P.headroom,
       P.ramp, decayK, P.flow, P.sigmaPx * dpr,
       P.longT, P.longGain, 1/1023, 0
     ]);
-    device.queue.writeBuffer(uBuf, 0, U.buffer);
+    device.queue.writeBuffer(uBuf, 0, U);
 
-    // Pack pointers (MAX_PTR)
-    const Pck = new Float32Array(MAX_PTR * 8); // 2 vec4 per pointer
-    let i=0;
-    for (const [,pt] of ptrs) {
+    const Pck = new Float32Array(MAX_PTR * 8);
+    let i=0; for (const [,pt] of ptrs) {
       Pck[i*8+0]=pt.x; Pck[i*8+1]=pt.y; Pck[i*8+2]=pt.down; Pck[i*8+3]=pt.up;
       Pck[i*8+4]=pt.active?1:0; Pck[i*8+5]=0; Pck[i*8+6]=0; Pck[i*8+7]=0;
       i++; if (i>=MAX_PTR) break;
     }
-    device.queue.writeBuffer(pBuf, 0, Pck.buffer);
+    device.queue.writeBuffer(pBuf, 0, Pck);
   }
 
-  // Render loop
   function frame(){
-    configure(); // keeps swapchain in sync with DPR/size
-    // prune fully faded pointers
+    // prune faded pointers
     const t = now();
     for (const [id,pt] of [...ptrs]) if (!pt.active && (t - pt.up) > P.decayHalf*3) ptrs.delete(id);
 
     writeUniforms();
 
     const enc  = device.createCommandEncoder();
+    const tex  = ctx.getCurrentTexture();
     const pass = enc.beginRenderPass({
       colorAttachments: [{
-        view: ctx.getCurrentTexture().createView(),
+        view: tex.createView(),
         loadOp: 'clear',
         clearValue: {r:0,g:0,b:0,a:1},
         storeOp: 'store'
       }]
     });
     pass.setPipeline(pipeline);
-    pass.setVertexBuffer(0, vbuf);
     pass.setBindGroup(0, bind);
     pass.draw(6);
     pass.end();
