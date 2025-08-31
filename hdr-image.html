@@ -1,96 +1,102 @@
 <!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>WebGPU Present Sanity — iOS 26 Safari</title>
+<title>HDR Brush Minimal</title>
 <style>
-  html,body{margin:0;height:100vh;background:#222;overflow:hidden}
-  /* Disable iOS selection/magnifier/tap highlight */
+  html,body{margin:0;height:100vh;overflow:hidden;background:#000}
   html,body,canvas{
     -webkit-user-select:none; user-select:none;
     -webkit-touch-callout:none; -webkit-tap-highlight-color: rgba(0,0,0,0);
     touch-action:none;
   }
-  #wrap{position:fixed;inset:0}
-  #wgpu{position:absolute;inset:0;display:block;width:100vw;height:100vh;z-index:1}
-  #log{
-    position:fixed;left:0;right:0;bottom:0;
-    font:12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    background:rgba(0,0,0,.7); color:#fff; padding:8px 10px; max-height:40vh; overflow:auto; z-index:2
-  }
+  canvas{display:block;width:100vw;height:100vh;dynamic-range-limit:no-limit}
 </style>
-<div id="wrap">
-  <canvas id="wgpu"></canvas>
-</div>
-<pre id="log"></pre>
+<canvas id="cv"></canvas>
 <script>
-(function(){
-  const logEl = document.getElementById('log');
-  const log = (...a)=>{ const s=a.map(v=> typeof v==='string'? v: JSON.stringify(v)).join(' ');
-                        logEl.textContent += s+'\n'; console.log(...a); };
-
-  // Kill magnifier by preventing default on all touch/gesture events
-  const stop = e => { e.preventDefault(); };
-  for (const ev of ['touchstart','touchmove','touchend','gesturestart','gesturechange','gestureend'])
-    addEventListener(ev, stop, {passive:false});
-
-  const cv = document.getElementById('wgpu');
-
+(async()=>{
+  const cvs=document.getElementById('cv');
   function size(){
-    // Use layout size, then set backing size; reconfigure only when backing changes
-    const w = Math.max(2, cv.clientWidth|0);
-    const h = Math.max(2, cv.clientHeight|0);
-    const changed = (cv.width!==w || cv.height!==h);
-    if (changed){ cv.width=w; cv.height=h; }
-    return changed;
+    const w=Math.max(2,cvs.clientWidth|0);
+    const h=Math.max(2,cvs.clientHeight|0);
+    if(cvs.width!==w||cvs.height!==h){cvs.width=w;cvs.height=h;return true;}
+    return false;
+  }
+  addEventListener('resize',()=>{if(size())configure();});
+  size();
+
+  const adapter=await navigator.gpu.requestAdapter(); if(!adapter) return;
+  const device=await adapter.requestDevice();
+  const ctx=cvs.getContext('webgpu',{alphaMode:'opaque'});
+  const format=navigator.gpu.getPreferredCanvasFormat();
+  function configure(){ctx.configure({device,format,alphaMode:'opaque'});}
+  configure();
+
+  // WGSL: rainbow + simple touch lift
+  const wgsl=`
+struct Touch{pos:vec2<f32>,active:f32,pad:f32};
+@group(0) @binding(0) var<uniform> T:Touch;
+
+struct VSOut{@builtin(position)pos:vec4<f32>;@location(0)uv:vec2<f32>;};
+@vertex fn vs(@builtin(vertex_index)i:u32)->VSOut{
+  let q=array<vec2<f32>,6>(
+    vec2<f32>(-1,-1),vec2<f32>(1,-1),vec2<f32>(-1,1),
+    vec2<f32>(-1,1),vec2<f32>(1,-1),vec2<f32>(1,1)
+  );
+  var o:VSOut; o.pos=vec4<f32>(q[i],0,1); o.uv=q[i]*0.5+vec2<f32>(0.5,0.5); return o;
+}
+fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
+  let k=vec4<f32>(0,4,2,1);
+  let t=fract(vec4<f32>(k.x+h*6.0,k.y+h*6.0,k.z+h*6.0,k.w+h*6.0));
+  let p=abs(t*6.0-3.0)-1.0;
+  let rgb=clamp(vec3<f32>(p.x,p.y,p.z),vec3<f32>(0),vec3<f32>(1));
+  return v*mix(vec3<f32>(1),rgb,s);
+}
+@fragment fn fs(@location(0)uv:vec2<f32>,@builtin(position)pos:vec4<f32>)->@location(0)vec4<f32>{
+  // rainbow baseline
+  let h=uv.x;
+  let v=uv.y;
+  let s=1.0-uv.y;
+  var val=v;
+
+  // brightness lift near touch
+  if(T.active>0.5){
+    let d=distance(pos.xy,T.pos);
+    val+=exp(-0.5*(d/80.0)*(d/80.0))*0.8;
   }
 
-  let device, ctx, format;
-  async function init(){
-    size();
-    addEventListener('resize', () => { if (size()) configure(); }, {passive:true});
+  let rgb=hsv2rgb(h,s,val);
+  return vec4<f32>(rgb,1);
+}`;
+  const module=device.createShaderModule({code:wgsl});
+  const pipeline=device.createRenderPipeline({
+    layout:'auto',
+    vertex:{module,entryPoint:'vs'},
+    fragment:{module,entryPoint:'fs',targets:[{format}]}
+  });
 
-    if (!('gpu' in navigator)){ log('ERR: navigator.gpu missing'); return; }
-    const adapter = await navigator.gpu.requestAdapter().catch(e=>{log('ERR adapter', e);});
-    if (!adapter){ log('ERR: requestAdapter() returned null'); return; }
-    device = await adapter.requestDevice().catch(e=>{log('ERR device', e);});
-    if (!device){ log('ERR: requestDevice failed'); return; }
+  const tBuf=device.createBuffer({size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),
+    entries:[{binding:0,resource:{buffer:tBuf}}]});
 
-    ctx = cv.getContext('webgpu', {alphaMode:'opaque'});
-    if (!ctx){ log('ERR: getContext("webgpu") failed'); return; }
-    format = navigator.gpu.getPreferredCanvasFormat();
-    configure();
-    frame();
-  }
-
-  function configure(){
-    try{
-      ctx.configure({ device, format, alphaMode:'opaque' });
-      log('configured', {w:cv.width,h:cv.height,format});
-    }catch(e){ log('ERR configure', e); }
-  }
+  // pointer handling
+  let touch={x:0,y:0,active:0};
+  cvs.addEventListener('pointerdown',e=>{const r=cvs.getBoundingClientRect();
+    touch={x:(e.clientX-r.left)*devicePixelRatio,y:(e.clientY-r.top)*devicePixelRatio,active:1};});
+  cvs.addEventListener('pointermove',e=>{if(!touch.active)return;const r=cvs.getBoundingClientRect();
+    touch.x=(e.clientX-r.left)*devicePixelRatio;touch.y=(e.clientY-r.top)*devicePixelRatio;});
+  cvs.addEventListener('pointerup',()=>{touch.active=0;});
+  cvs.addEventListener('pointercancel',()=>{touch.active=0;});
 
   function frame(){
-    // If Safari invalidated the swapchain due to a relayout, reconfigure
-    try{
-      const tex = ctx.getCurrentTexture();
-      const enc = device.createCommandEncoder();
-      const pass = enc.beginRenderPass({
-        colorAttachments: [{
-          view: tex.createView(),
-          loadOp: 'clear',
-          clearValue: {r:1,g:0,b:1,a:1}, // MAGENTA
-          storeOp: 'store'
-        }]
-      });
-      pass.end();
-      device.queue.submit([enc.finish()]);
-    }catch(e){
-      log('ERR frame; reconfiguring:', e);
-      configure();
-    }
+    device.queue.writeBuffer(tBuf,0,new Float32Array([touch.x,touch.y,touch.active,0]));
+    const enc=device.createCommandEncoder();
+    const pass=enc.beginRenderPass({
+      colorAttachments:[{view:ctx.getCurrentTexture().createView(),loadOp:'clear',
+        clearValue:{r:0,g:0,b:0,a:1},storeOp:'store'}]});
+    pass.setPipeline(pipeline);pass.setBindGroup(0,bind);pass.draw(6);pass.end();
+    device.queue.submit([enc.finish()]);
     requestAnimationFrame(frame);
   }
-
-  init();
+  requestAnimationFrame(frame);
 })();
 </script>
