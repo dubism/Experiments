@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>HDR Value Brush — Safari 26</title>
+<title>HDR Value Brush — Safari 26 (no-struct uniforms)</title>
 <style>
   html,body{margin:0;height:100vh;overflow:hidden;background:#000}
   html,body,canvas{
@@ -26,48 +26,48 @@
 (async()=>{
   const cvs=document.getElementById('cv');
   const logEl=document.getElementById('log');
-  const log=(...a)=>{logEl.textContent+=a.join(' ')+'\n';console.log(...a);};
+  const log=(...a)=>{logEl.textContent+=a.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ')+'\n';};
 
+  // Kill gestures/magnifier
   const stop=e=>e.preventDefault();
   for(const ev of['touchstart','touchmove','touchend','gesturestart','gesturechange','gestureend'])
     addEventListener(ev,stop,{passive:false});
 
   function size(){
-    const w=Math.max(2,cvs.clientWidth|0);
-    const h=Math.max(2,cvs.clientHeight|0);
+    const w=Math.max(2,cvs.clientWidth|0), h=Math.max(2,cvs.clientHeight|0);
     if(cvs.width!==w||cvs.height!==h){cvs.width=w;cvs.height=h;return true;}
     return false;
   }
-  addEventListener('resize',()=>{if(size())configure();},{passive:true});
+  addEventListener('resize',()=>{ if(size()) configure(); },{passive:true});
   size();
 
-  if(!('gpu'in navigator)){log('ERR: navigator.gpu missing');return;}
-  const adapter=await navigator.gpu.requestAdapter();if(!adapter){log('ERR adapter');return;}
-  const device=await adapter.requestDevice();if(!device){log('ERR device');return;}
-  const ctx=cvs.getContext('webgpu',{alphaMode:'opaque'});if(!ctx){log('ERR getContext');return;}
+  if(!('gpu' in navigator)){log('ERR navigator.gpu missing');return;}
+  const adapter=await navigator.gpu.requestAdapter(); if(!adapter){log('ERR adapter null');return;}
+  const device=await adapter.requestDevice(); if(!device){log('ERR device null');return;}
+  const ctx=cvs.getContext('webgpu',{alphaMode:'opaque'}); if(!ctx){log('ERR getContext');return;}
   const format=navigator.gpu.getPreferredCanvasFormat();
 
-  function configure(){ctx.configure({device,format,alphaMode:'opaque'});}
-  configure();log('configured',{w:cvs.width,h:cvs.height,format});
+  function configure(){ try{ ctx.configure({device,format,alphaMode:'opaque'}); }catch(e){ log('ERR configure',e); } }
+  configure(); log('configured', {w:cvs.width,h:cvs.height,format});
 
+  // ---- WGSL: two vec4 uniforms (no struct) ----
   const wgsl=`
-struct U0 {
-  a : vec4<f32>; // posx, posy, active, radiusPx
-  b : vec4<f32>; // gain, headroom, pad, pad
-}
-@group(0) @binding(0) var<uniform> U : U0;
+@group(0) @binding(0) var<uniform> Upos : vec4<f32>; // x,y,active,radiusPx
+@group(0) @binding(1) var<uniform> Upar : vec4<f32>; // gain,headroom,_,_
 
-struct VSOut{@builtin(position)pos:vec4<f32>;@location(0)uv:vec2<f32>;};
+struct VSOut{ @builtin(position) pos: vec4<f32>; @location(0) uv: vec2<f32>; };
+
 @vertex fn vs(@builtin(vertex_index)i:u32)->VSOut{
-  let q=array<vec2<f32>,6>(
-    vec2<f32>(-1,-1),vec2<f32>(1,-1),vec2<f32>(-1,1),
-    vec2<f32>(-1,1),vec2<f32>(1,-1),vec2<f32>(1,1)
+  let q:array<vec2<f32>,6>=array<vec2<f32>,6>(
+    vec2<f32>(-1.0,-1.0), vec2<f32>( 1.0,-1.0), vec2<f32>(-1.0, 1.0),
+    vec2<f32>(-1.0, 1.0), vec2<f32>( 1.0,-1.0), vec2<f32>( 1.0, 1.0)
   );
   var o:VSOut;
-  o.pos=vec4<f32>(q[i],0,1);
+  o.pos=vec4<f32>(q[i],0.0,1.0);
   o.uv=q[i]*0.5+vec2<f32>(0.5,0.5);
   return o;
 }
+
 fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
   let hh=h*6.0;
   let i=u32(floor(hh))%6u;
@@ -76,33 +76,39 @@ fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
   let q=v*(1.0-f*s);
   let t=v*(1.0-(1.0-f)*s);
   switch i {
-    case 0u{return vec3<f32>(v,t,p);}
-    case 1u{return vec3<f32>(q,v,p);}
-    case 2u{return vec3<f32>(p,v,t);}
-    case 3u{return vec3<f32>(p,q,v);}
-    case 4u{return vec3<f32>(t,p,v);}
-    default{return vec3<f32>(v,p,q);}
+    case 0u { return vec3<f32>(v,t,p); }
+    case 1u { return vec3<f32>(q,v,p); }
+    case 2u { return vec3<f32>(p,v,t); }
+    case 3u { return vec3<f32>(p,q,v); }
+    case 4u { return vec3<f32>(t,p,v); }
+    default { return vec3<f32>(v,p,q); }
   }
 }
-@fragment fn fs(@location(0)uv:vec2<f32>,@builtin(position)pos:vec4<f32>)->@location(0)vec4<f32>{
-  let H=clamp(uv.x,0.0,1.0);
-  let V0=clamp(uv.y,0.0,1.0);
-  let S=clamp(1.0-uv.y,0.0,1.0);
-  var V=V0;
-  if(U.a.z>0.5){
-    let d=distance(pos.xy,U.a.xy);
-    let r=max(1.0,U.a.w);
-    let lift=exp(-0.5*(d/r)*(d/r))*U.b.x;
-    V=min(V0+lift,U.b.y);
+
+@fragment fn fs(@location(0)uv:vec2<f32>, @builtin(position) pos:vec4<f32>) -> @location(0) vec4<f32>{
+  let H = clamp(uv.x, 0.0, 1.0);
+  let V0 = clamp(uv.y, 0.0, 1.0);
+  let S = clamp(1.0 - uv.y, 0.0, 1.0);
+
+  var V = V0;
+  if (Upos.z > 0.5) {
+    let d = distance(pos.xy, Upos.xy);
+    let r = max(1.0, Upos.w);
+    let lift = exp(-0.5 * (d/r) * (d/r)) * Upar.x; // gain
+    V = min(V0 + lift, Upar.y); // headroom
   }
-  let rgb=hsv2rgb(H,S,V);
-  return vec4<f32>(rgb,1);
-}`;
+
+  let rgb = hsv2rgb(H, S, V);
+  return vec4<f32>(rgb,1.0);
+}
+`;
+
   const module=device.createShaderModule({code:wgsl});
   if(module.getCompilationInfo){
     const info=await module.getCompilationInfo();
-    if(info.messages.length)info.messages.forEach(m=>log(m.type,m.message));
+    if(info.messages?.length){ info.messages.forEach(m=>log(`${m.type} ${m.lineNum}:${m.linePos} ${m.message}`)); }
   }
+
   let pipeline;
   try{
     pipeline=device.createRenderPipeline({
@@ -110,37 +116,52 @@ fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
       vertex:{module,entryPoint:'vs'},
       fragment:{module,entryPoint:'fs',targets:[{format}]}
     });
-  }catch(e){log('ERR pipeline',e);return;}
+  }catch(e){ log('ERR pipeline', e); return; }
 
-  const uBuf=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uBuf}}]});
+  // two tiny uniform buffers (each vec4 = 16 bytes); pad to 256 for safety
+  const bufA=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const bufB=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const bind=device.createBindGroup({
+    layout:pipeline.getBindGroupLayout(0),
+    entries:[
+      {binding:0,resource:{buffer:bufA}},
+      {binding:1,resource:{buffer:bufB}}
+    ]
+  });
 
-  const state={x:0,y:0,active:0,radius:84,gain:0.9,headroom:3.5};
-  function writeUniforms(){
-    const U=new Float32Array([state.x,state.y,state.active,state.radius,state.gain,state.headroom,0,0]);
-    device.queue.writeBuffer(uBuf,0,U);
+  // touch state
+  const st={x:0,y:0,active:0,radius:84,gain:0.9,headroom:3.5};
+  function writeU(){
+    device.queue.writeBuffer(bufA,0,new Float32Array([st.x,st.y,st.active,st.radius]));
+    device.queue.writeBuffer(bufB,0,new Float32Array([st.gain,st.headroom,0,0]));
   }
-  function pt(e){const r=cvs.getBoundingClientRect();const dpr=Math.max(1,devicePixelRatio||1);
-    return{x:(e.clientX-r.left)*dpr,y:(e.clientY-r.top)*dpr};}
+  const dpr=()=>Math.max(1,devicePixelRatio||1);
+  function pt(e){const r=cvs.getBoundingClientRect();const k=dpr();
+    return{x:(e.clientX-r.left)*k,y:(e.clientY-r.top)*k};}
   cvs.addEventListener('pointerdown',e=>{e.preventDefault();cvs.setPointerCapture(e.pointerId);
-    const p=pt(e);state.x=p.x;state.y=p.y;state.active=1;writeUniforms();},{passive:false});
+    const p=pt(e); st.x=p.x; st.y=p.y; st.active=1; writeU();},{passive:false});
   cvs.addEventListener('pointermove',e=>{e.preventDefault();
-    if(!state.active)return;const p=pt(e);state.x=p.x;state.y=p.y;writeUniforms();},{passive:false});
-  const end=e=>{e.preventDefault();state.active=0;writeUniforms();};
+    if(!st.active)return; const p=pt(e); st.x=p.x; st.y=p.y; writeU();},{passive:false});
+  const end=e=>{e.preventDefault(); st.active=0; writeU();};
   cvs.addEventListener('pointerup',end,{passive:false});
   cvs.addEventListener('pointercancel',end,{passive:false});
-  writeUniforms();
+  writeU();
 
   function frame(){
     try{
       const enc=device.createCommandEncoder();
-      const pass=enc.beginRenderPass({colorAttachments:[{view:ctx.getCurrentTexture().createView(),loadOp:'clear',clearValue:{r:0,g:0,b:0,a:1},storeOp:'store'}]});
+      const pass=enc.beginRenderPass({
+        colorAttachments:[{
+          view:ctx.getCurrentTexture().createView(),
+          loadOp:'clear', clearValue:{r:0,g:0,b:0,a:1}, storeOp:'store'
+        }]
+      });
       pass.setPipeline(pipeline);
       pass.setBindGroup(0,bind);
       pass.draw(6);
       pass.end();
       device.queue.submit([enc.finish()]);
-    }catch(e){log('ERR frame',e);configure();}
+    }catch(e){ log('ERR frame',e); configure(); }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
