@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>HDR Brush Minimal — Input Debug</title>
+<title>HDR Brush — DPR-aligned</title>
 <style>
   html,body{margin:0;height:100vh;overflow:hidden;background:#000}
   html,body,canvas{
     -webkit-user-select:none; user-select:none;
     -webkit-touch-callout:none; -webkit-tap-highlight-color: rgba(0,0,0,0);
-    touch-action:none; /* disable native panning/zoom so events reach canvas */
+    touch-action:none;
   }
   canvas{display:block;width:100vw;height:100vh;dynamic-range-limit:no-limit}
   #log{
@@ -28,15 +28,18 @@
   const logEl=document.getElementById('log');
   const log=(...a)=>{logEl.textContent+=a.join(' ')+'\n'; logEl.scrollTop=logEl.scrollHeight;};
 
-  // Only block gesture events globally
+  // Block only pinch/rotate
   const stop=e=>e.preventDefault();
   for(const ev of ['gesturestart','gesturechange','gestureend'])
     addEventListener(ev, stop, {passive:false});
 
-  // Size + configure
+  // --- DPR-aware sizing ---
+  function dpr(){ return Math.max(1, window.devicePixelRatio||1); }
   function size(){
-    const w=cvs.clientWidth|0, h=cvs.clientHeight|0;
-    if(cvs.width!==w||cvs.height!==h){cvs.width=w;cvs.height=h;return true;}
+    const k=dpr();
+    const w=Math.max(2, Math.round(cvs.clientWidth  * k));
+    const h=Math.max(2, Math.round(cvs.clientHeight * k));
+    if (cvs.width!==w || cvs.height!==h){ cvs.width=w; cvs.height=h; return true; }
     return false;
   }
   addEventListener('resize', ()=>{ if(size()) configure(); }, {passive:true});
@@ -50,146 +53,44 @@
   function configure(){ try{ ctx.configure({device, format, alphaMode:'opaque'}); }catch(e){ log('ERR configure', e); } }
   configure(); log('configured', JSON.stringify({w:cvs.width,h:cvs.height,format}));
 
-  // ===== WGSL (no structs/varyings) =====
+  // ---- WGSL (no structs/varyings) ----
   const wgsl=`
-@group(0) @binding(0) var<uniform> Upos : vec4<f32>; // x,y,active,radius
-@group(0) @binding(1) var<uniform> Upar : vec4<f32>; // gain,headroom,width,height
+@group(0) @binding(0) var<uniform> Upos : vec4<f32>; // x,y,active,radius (device px)
+@group(0) @binding(1) var<uniform> Upar : vec4<f32>; // gain,headroom,width,height (device px)
 
 @vertex
 fn vs(@builtin(vertex_index) i:u32) -> @builtin(position) vec4<f32> {
-  let q:array<vec2<f32>,6> = array<vec2<f32>,6>(
+  let q:array<vec2<f32>,6>=array<vec2<f32>,6>(
     vec2<f32>(-1.0,-1.0), vec2<f32>( 1.0,-1.0), vec2<f32>(-1.0, 1.0),
     vec2<f32>(-1.0, 1.0), vec2<f32>( 1.0,-1.0), vec2<f32>( 1.0, 1.0)
   );
-  return vec4<f32>(q[i], 0.0, 1.0);
+  return vec4<f32>(q[i],0.0,1.0);
 }
 
-fn hsv2rgb(h:f32, s:f32, v:f32) -> vec3<f32> {
-  let hh = h * 6.0;
-  let i  = u32(floor(hh));
-  let f  = fract(hh);
-  let p  = v * (1.0 - s);
-  let q  = v * (1.0 - f*s);
-  let t  = v * (1.0 - (1.0 - f)*s);
-  if (i == 0u) { return vec3<f32>(v, t, p); }
-  else if (i == 1u) { return vec3<f32>(q, v, p); }
-  else if (i == 2u) { return vec3<f32>(p, v, t); }
-  else if (i == 3u) { return vec3<f32>(p, q, v); }
-  else if (i == 4u) { return vec3<f32>(t, p, v); }
-  else { return vec3<f32>(v, p, q); }
+fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
+  let hh=h*6.0; let i=u32(floor(hh)); let f=fract(hh);
+  let p=v*(1.0-s); let q=v*(1.0-f*s); let t=v*(1.0-(1.0-f)*s);
+  if(i==0u){ return vec3<f32>(v,t,p); }
+  else if(i==1u){ return vec3<f32>(q,v,p); }
+  else if(i==2u){ return vec3<f32>(p,v,t); }
+  else if(i==3u){ return vec3<f32>(p,q,v); }
+  else if(i==4u){ return vec3<f32>(t,p,v); }
+  else{ return vec3<f32>(v,p,q); }
 }
 
 @fragment
-fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
-  let res = vec2<f32>(Upar.z, Upar.w);
+fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32>{
+  let res = vec2<f32>(Upar.z, Upar.w);      // device px
   let uv  = pos.xy / res;
 
-  // rainbow baseline
-  let H  = clamp(uv.x, 0.0, 1.0);
-  let V0 = clamp(uv.y, 0.0, 1.0);
-  let S  = clamp(1.0 - uv.y, 0.0, 1.0);
+  // baseline rainbow
+  let H=clamp(uv.x,0.0,1.0);
+  let V0=clamp(uv.y,0.0,1.0);
+  let S=clamp(1.0-uv.y,0.0,1.0);
 
-  // brightness lift
-  var V = V0;
-  if (Upos.z > 0.5) {
-    let d = distance(pos.xy, Upos.xy);
-    let r = max(1.0, Upos.w);
-    let lift = exp(-0.5 * (d/r) * (d/r)) * Upar.x;
-    V = min(V0 + lift, Upar.y);
-  }
-  let rgb = hsv2rgb(H, S, V);
-  return vec4<f32>(rgb, 1.0);
-}
-`;
-  const module=device.createShaderModule({code:wgsl});
-  const info=await module.getCompilationInfo();
-  if(info.messages?.length) info.messages.forEach(m=>log(`${m.type} ${m.lineNum}:${m.linePos} ${m.message}`));
-
-  const pipeline=device.createRenderPipeline({
-    layout:'auto',
-    vertex:{module,entryPoint:'vs'},
-    fragment:{module,entryPoint:'fs',targets:[{format}]}
-  });
-
-  const bufA=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  const bufB=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-  const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[
-    {binding:0,resource:{buffer:bufA}},
-    {binding:1,resource:{buffer:bufB}}
-  ]});
-
-  const st={x:0,y:0,active:0,radius:90,gain:0.9,headroom:3.5};
-  function writeU(){
-    device.queue.writeBuffer(bufA,0,new Float32Array([st.x,st.y,st.active,st.radius]));
-    device.queue.writeBuffer(bufB,0,new Float32Array([st.gain,st.headroom,cvs.width,cvs.height]));
-  }
-  writeU();
-
-  const dpr=()=>Math.max(1,devicePixelRatio||1);
-  function ptFromClient(cx,cy){
-    const r=cvs.getBoundingClientRect(), k=dpr();
-    return {x:(cx-r.left)*k, y:(cy-r.top)*k};
-  }
-
-  // --- Pointer path ---
-  cvs.addEventListener('pointerdown', e=>{
-    e.preventDefault(); cvs.setPointerCapture?.(e.pointerId);
-    const p=ptFromClient(e.clientX,e.clientY);
-    st.x=p.x; st.y=p.y; st.active=1; writeU();
-    log('pd', e.pointerType, Math.round(p.x), Math.round(p.y));
-  }, {passive:false});
-
-  cvs.addEventListener('pointermove', e=>{
-    if(!st.active) return;
-    e.preventDefault();
-    const p=ptFromClient(e.clientX,e.clientY);
-    st.x=p.x; st.y=p.y; writeU();
-  }, {passive:false});
-
-  const pend=e=>{
-    e.preventDefault(); st.active=0; writeU(); log('pu');
-  };
-  cvs.addEventListener('pointerup', pend, {passive:false});
-  cvs.addEventListener('pointercancel', pend, {passive:false});
-
-  // --- Touch fallback (in case pointer events don't fire) ---
-  cvs.addEventListener('touchstart', e=>{
-    e.preventDefault();
-    const t=e.touches[0]; if(!t) return;
-    const p=ptFromClient(t.clientX,t.clientY);
-    st.x=p.x; st.y=p.y; st.active=1; writeU();
-    log('ts', Math.round(p.x), Math.round(p.y));
-  }, {passive:false});
-
-  cvs.addEventListener('touchmove', e=>{
-    e.preventDefault();
-    if(!st.active) return;
-    const t=e.touches[0]; if(!t) return;
-    const p=ptFromClient(t.clientX,t.clientY);
-    st.x=p.x; st.y=p.y; writeU();
-  }, {passive:false});
-
-  cvs.addEventListener('touchend', e=>{ e.preventDefault(); st.active=0; writeU(); log('te'); }, {passive:false});
-  cvs.addEventListener('touchcancel', e=>{ e.preventDefault(); st.active=0; writeU(); log('tc'); }, {passive:false});
-
-  // Render
-  function frame(){
-    try{
-      const enc=device.createCommandEncoder();
-      const pass=enc.beginRenderPass({colorAttachments:[{
-        view:ctx.getCurrentTexture().createView(),
-        loadOp:'clear', clearValue:{r:0,g:0,b:0,a:1}, storeOp:'store'
-      }]});
-      pass.setPipeline(pipeline);
-      pass.setBindGroup(0,bind);
-      pass.draw(6);
-      pass.end();
-      device.queue.submit([enc.finish()]);
-    }catch(e){ log('ERR frame reconfigure', e); configure(); }
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-})();
-</script>
-</body>
-</html>
+  // value lift
+  var V=V0;
+  if(Upos.z>0.5){
+    let d=distance(pos.xy, Upos.xy);        // both in device px
+    let r=max(1.0,Upos.w);
+    let lift=exp(-0.5*(d
