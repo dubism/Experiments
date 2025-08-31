@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>HDR Brush — Safari 26 (vivid baseline + HDR lift)</title>
+<title>HDR Brush — Safari 26 (sat gradient + HDR lift)</title>
 <style>
   html,body{margin:0;height:100vh;overflow:hidden;background:#000}
   html,body,canvas{
@@ -21,7 +21,7 @@
     position:fixed;top:10px;right:10px;z-index:20;display:flex;gap:8px
   }
   #ui button{
-    font:12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    font:12px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     padding:6px 8px;border-radius:8px;border:0;cursor:pointer;
     background:#222;color:#fff;opacity:.85
   }
@@ -36,92 +36,90 @@
 <pre id="log"></pre>
 <script>
 (async()=>{
-  const cvs = document.getElementById('cv');
-  const logEl = document.getElementById('log');
-  const btnSDR = document.getElementById('sdr');
-  const log = (...a)=>{ logEl.textContent += a.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ')+'\n';
-                        logEl.scrollTop = logEl.scrollHeight; console.log(...a); };
+  const cvs=document.getElementById('cv');
+  const logEl=document.getElementById('log');
+  const btnSDR=document.getElementById('sdr');
+  const log=(...a)=>{logEl.textContent+=a.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ')+'\n';
+                     logEl.scrollTop=logEl.scrollHeight;};
 
-  // Block only pinch/rotate globally (not touchstart/move/end)
-  const stop = e => e.preventDefault();
-  for (const ev of ['gesturestart','gesturechange','gestureend'])
+  // Only block pinch/rotate gestures
+  const stop=e=>e.preventDefault();
+  for(const ev of ['gesturestart','gesturechange','gestureend'])
     addEventListener(ev, stop, {passive:false});
 
-  // ---------- DPR-aware sizing ----------
-  const dpr = ()=> Math.max(1, devicePixelRatio||1);
+  // DPR-aware sizing
+  const dpr=()=>Math.max(1, devicePixelRatio||1);
   function size(){
-    const k = dpr();
-    const w = Math.max(2, Math.round(cvs.clientWidth  * k));
-    const h = Math.max(2, Math.round(cvs.clientHeight * k));
-    const changed = (cvs.width!==w || cvs.height!==h);
-    if (changed){ cvs.width = w; cvs.height = h; }
+    const k=dpr();
+    const w=Math.max(2, Math.round(cvs.clientWidth*k));
+    const h=Math.max(2, Math.round(cvs.clientHeight*k));
+    const changed=(cvs.width!==w||cvs.height!==h);
+    if(changed){cvs.width=w;cvs.height=h;}
     return changed;
   }
   addEventListener('resize', ()=>{ if(size()) configure(); }, {passive:true});
   size();
 
-  // ---------- WebGPU setup ----------
-  if (!('gpu' in navigator)) { log('ERR: navigator.gpu missing'); return; }
-  const adapter = await navigator.gpu.requestAdapter().catch(e=>log('adapter err',e));
-  if (!adapter) { log('ERR: requestAdapter() returned null'); return; }
-  const device  = await adapter.requestDevice().catch(e=>log('device err',e));
-  if (!device)  { log('ERR: requestDevice failed'); return; }
-
-  // Request P3; Safari will ignore if unsupported
-  const ctx = cvs.getContext('webgpu', { alphaMode:'opaque', colorSpace:'display-p3' });
-  if (!ctx) { log('ERR: getContext("webgpu") failed'); return; }
-  const format = navigator.gpu.getPreferredCanvasFormat();
+  // WebGPU
+  if(!('gpu'in navigator)){log('ERR: navigator.gpu missing');return;}
+  const adapter=await navigator.gpu.requestAdapter().catch(e=>log('adapter err',e));
+  if(!adapter){log('ERR: adapter null');return;}
+  const device=await adapter.requestDevice().catch(e=>log('device err',e));
+  if(!device){log('ERR: device null');return;}
+  const ctx=cvs.getContext('webgpu',{alphaMode:'opaque',colorSpace:'display-p3'});
+  if(!ctx){log('ERR: getContext failed');return;}
+  const format=navigator.gpu.getPreferredCanvasFormat();
 
   function configure(){
     try{
-      ctx.configure({ device, format, alphaMode:'opaque', colorSpace:'display-p3' });
-      log('configured', {w:cvs.width, h:cvs.height, format});
-      writeU(); // refresh size-dependent uniforms
-    }catch(e){ log('ERR configure', e||{}); }
+      ctx.configure({device,format,alphaMode:'opaque',colorSpace:'display-p3'});
+      log('configured', {w:cvs.width,h:cvs.height,format});
+      writeU();
+    }catch(e){log('ERR configure', e||{});}
   }
   configure();
 
-  // ---------- WGSL (no structs/varyings) ----------
-  const wgsl = `
+  // WGSL (saturation gradient bottom→top)
+  const wgsl=`
 @group(0) @binding(0) var<uniform> Upos : vec4<f32>; // x,y,active,radius  (device px)
 @group(0) @binding(1) var<uniform> Upar : vec4<f32>; // gain,headroom,width,height (device px)
-@group(0) @binding(2) var<uniform> Uopt : vec4<f32>; // x: sdrAid (0/1), y: baselineScale, z,w: unused
+@group(0) @binding(2) var<uniform> Uopt : vec4<f32>; // x: sdrAid(0/1), y: baselineScale, z,w: unused
 
 @vertex
 fn vs(@builtin(vertex_index) i:u32) -> @builtin(position) vec4<f32> {
-  let q:array<vec2<f32>,6> = array<vec2<f32>,6>(
+  let q:array<vec2<f32>,6>=array<vec2<f32>,6>(
     vec2<f32>(-1.0,-1.0), vec2<f32>( 1.0,-1.0), vec2<f32>(-1.0, 1.0),
     vec2<f32>(-1.0, 1.0), vec2<f32>( 1.0,-1.0), vec2<f32>( 1.0, 1.0)
   );
-  return vec4<f32>(q[i], 0.0, 1.0);
+  return vec4<f32>(q[i],0.0,1.0);
 }
 
-fn hsv2rgb(h:f32, s:f32, v:f32) -> vec3<f32> {
-  let hh = h * 6.0;
-  let i  = u32(floor(hh));
-  let f  = fract(hh);
-  let p  = v * (1.0 - s);
-  let q  = v * (1.0 - f*s);
-  let t  = v * (1.0 - (1.0 - f)*s);
-  if (i == 0u) { return vec3<f32>(v, t, p); }
-  else if (i == 1u) { return vec3<f32>(q, v, p); }
-  else if (i == 2u) { return vec3<f32>(p, v, t); }
-  else if (i == 3u) { return vec3<f32>(p, q, v); }
-  else if (i == 4u) { return vec3<f32>(t, p, v); }
-  else { return vec3<f32>(v, p, q); }
+fn hsv2rgb(h:f32,s:f32,v:f32)->vec3<f32>{
+  let hh=h*6.0;
+  let i=u32(floor(hh));
+  let f=fract(hh);
+  let p=v*(1.0-s);
+  let q=v*(1.0-f*s);
+  let t=v*(1.0-(1.0-f)*s);
+  if(i==0u){ return vec3<f32>(v,t,p); }
+  else if(i==1u){ return vec3<f32>(q,v,p); }
+  else if(i==2u){ return vec3<f32>(p,v,t); }
+  else if(i==3u){ return vec3<f32>(p,q,v); }
+  else if(i==4u){ return vec3<f32>(t,p,v); }
+  else{ return vec3<f32>(v,p,q); }
 }
 
 @fragment
 fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
-  // Reconstruct uv from framebuffer position (device px)
   let res = vec2<f32>(Upar.z, Upar.w);
   let uv  = pos.xy / res;
 
-  // FULL-COLOR baseline: S=1, V=1 (optionally scaled if SDR aid is on)
-  let base0 = hsv2rgb(clamp(uv.x,0.0,1.0), 1.0, 1.0);
-  let base  = mix(base0, base0 * Uopt.y, Uopt.x); // if sdrAid=1, scale baseline by baselineScale (<1)
+  // NEW baseline: hue across X, saturation bottom→top, value=1
+  let sat = clamp(uv.y, 0.0, 1.0);
+  let base0 = hsv2rgb(clamp(uv.x,0.0,1.0), sat, 1.0);
+  let base  = mix(base0, base0 * Uopt.y, Uopt.x); // optional SDR test dim
 
-  // Value-only lift under finger (same hue/sat, brighter)
+  // Value-only multiplicative lift under finger (same hue/sat)
   var factor = 1.0;
   if (Upos.z > 0.5) {
     let r = max(1.0, Upos.w);
@@ -130,105 +128,95 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     factor += lift;
   }
 
-  // Clamp only to HDR headroom (not to 1.0)
-  let rgb = min(base * factor, vec3<f32>(Upar.y, Upar.y, Upar.y));
+  let rgb = min(base * factor, vec3<f32>(Upar.y, Upar.y, Upar.y)); // HDR headroom clamp
   return vec4<f32>(rgb, 1.0);
 }
 `;
-  const module = device.createShaderModule({code: wgsl});
-  const info = await module.getCompilationInfo?.();
-  if (info?.messages?.length) info.messages.forEach(m=>log(`${m.type} ${m.lineNum}:${m.linePos} ${m.message}`));
+  const module=device.createShaderModule({code:wgsl});
+  const info=await module.getCompilationInfo?.();
+  if(info?.messages?.length) info.messages.forEach(m=>log(`${m.type} ${m.lineNum}:${m.linePos} ${m.message}`));
 
   let pipeline;
   try{
-    pipeline = device.createRenderPipeline({
+    pipeline=device.createRenderPipeline({
       layout:'auto',
-      vertex:{module, entryPoint:'vs'},
-      fragment:{module, entryPoint:'fs', targets:[{format}]}
+      vertex:{module,entryPoint:'vs'},
+      fragment:{module,entryPoint:'fs',targets:[{format}]}
     });
-  }catch(e){ log('ERR createRenderPipeline', e); return; }
+  }catch(e){log('ERR createRenderPipeline',e);return;}
 
-  // ---------- Uniforms ----------
-  const bufA = device.createBuffer({size:256, usage:GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); // Upos
-  const bufB = device.createBuffer({size:256, usage:GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); // Upar
-  const bufC = device.createBuffer({size:256, usage:GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); // Uopt
-  const bind = device.createBindGroup({
-    layout: pipeline.getBindGroupLayout(0),
-    entries: [
-      {binding:0, resource:{buffer:bufA}},
-      {binding:1, resource:{buffer:bufB}},
-      {binding:2, resource:{buffer:bufC}},
+  // Uniforms
+  const bufA=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const bufB=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const bufC=device.createBuffer({size:256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+  const bind=device.createBindGroup({
+    layout:pipeline.getBindGroupLayout(0),
+    entries:[
+      {binding:0,resource:{buffer:bufA}},
+      {binding:1,resource:{buffer:bufB}},
+      {binding:2,resource:{buffer:bufC}},
     ]
   });
 
-  // State + writers
-  const st = {
-    x:0, y:0, active:0,
-    radius:140,         // px @ device pixels
-    gain:0.9,           // brightness lift strength
-    headroom:3.5,       // HDR cap (>1.0)
-    sdrAid:false,       // when true, slightly dims baseline so effect is visible in SDR
-    baselineScale:0.85  // baseline multiplier when sdrAid is ON
+  // State
+  const st={
+    x:0,y:0,active:0,
+    radius:140,
+    gain:0.9,
+    headroom:3.5,
+    sdrAid:false,
+    baselineScale:0.85
   };
 
   function writeU(){
-    device.queue.writeBuffer(bufA, 0, new Float32Array([st.x, st.y, st.active, st.radius]));
-    device.queue.writeBuffer(bufB, 0, new Float32Array([st.gain, st.headroom, cvs.width, cvs.height]));
-    device.queue.writeBuffer(bufC, 0, new Float32Array([st.sdrAid?1:0, st.baselineScale, 0, 0]));
+    device.queue.writeBuffer(bufA,0,new Float32Array([st.x,st.y,st.active,st.radius]));
+    device.queue.writeBuffer(bufB,0,new Float32Array([st.gain,st.headroom,cvs.width,cvs.height]));
+    device.queue.writeBuffer(bufC,0,new Float32Array([st.sdrAid?1:0, st.baselineScale, 0, 0]));
   }
   writeU();
 
-  // UI toggle for SDR test
+  // SDR test toggle
   function refreshBtn(){
-    btnSDR.textContent = `SDR test: ${st.sdrAid?'ON':'OFF'}`;
+    btnSDR.textContent=`SDR test: ${st.sdrAid?'ON':'OFF'}`;
     btnSDR.classList.toggle('active', st.sdrAid);
   }
-  btnSDR.addEventListener('click', ()=>{
-    st.sdrAid = !st.sdrAid; refreshBtn(); writeU();
-  });
+  btnSDR.addEventListener('click', ()=>{ st.sdrAid=!st.sdrAid; refreshBtn(); writeU(); });
   refreshBtn();
 
-  // ---------- Pointer input (DPR-aligned) ----------
+  // Input (DPR-aligned)
   function pt(e){
-    const r = cvs.getBoundingClientRect(), k = dpr();
-    const x = (e.clientX - r.left) * k, y = (e.clientY - r.top) * k;
-    return { x: Math.min(Math.max(0,x), cvs.width-1), y: Math.min(Math.max(0,y), cvs.height-1) };
+    const r=cvs.getBoundingClientRect(), k=dpr();
+    const x=(e.clientX-r.left)*k, y=(e.clientY-r.top)*k;
+    return {x:Math.min(Math.max(0,x),cvs.width-1), y:Math.min(Math.max(0,y),cvs.height-1)};
   }
-
   cvs.addEventListener('pointerdown', e=>{
     e.preventDefault(); cvs.setPointerCapture?.(e.pointerId);
-    const p = pt(e); st.x=p.x; st.y=p.y; st.active=1; writeU();
+    const p=pt(e); st.x=p.x; st.y=p.y; st.active=1; writeU();
   }, {passive:false});
-
   cvs.addEventListener('pointermove', e=>{
-    if(!st.active) return;
-    e.preventDefault();
-    const p = pt(e); st.x=p.x; st.y=p.y; writeU();
+    if(!st.active) return; e.preventDefault();
+    const p=pt(e); st.x=p.x; st.y=p.y; writeU();
   }, {passive:false});
-
-  const pend = e=>{ e.preventDefault(); st.active=0; writeU(); };
+  const pend=e=>{ e.preventDefault(); st.active=0; writeU(); };
   cvs.addEventListener('pointerup', pend, {passive:false});
   cvs.addEventListener('pointercancel', pend, {passive:false});
 
-  // ---------- Render loop with swapchain guard ----------
+  // Render loop with guard
   function frame(){
     try{
-      const enc = device.createCommandEncoder();
-      const pass = enc.beginRenderPass({
+      const enc=device.createCommandEncoder();
+      const pass=enc.beginRenderPass({
         colorAttachments:[{
-          view: ctx.getCurrentTexture().createView(),
+          view:ctx.getCurrentTexture().createView(),
           loadOp:'clear', clearValue:{r:0,g:0,b:0,a:1}, storeOp:'store'
         }]
       });
       pass.setPipeline(pipeline);
-      pass.setBindGroup(0, bind);
+      pass.setBindGroup(0,bind);
       pass.draw(6);
       pass.end();
       device.queue.submit([enc.finish()]);
-    }catch(e){
-      log('ERR frame, reconfiguring', e||{});
-      configure();
-    }
+    }catch(e){log('ERR frame, reconfiguring', e||{}); configure();}
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
