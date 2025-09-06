@@ -3,44 +3,31 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"/>
-  <title>Pendulum Physics — iPhone Gravity (1–3 segments)</title>
+  <title>Pendulum Physics — iPhone Gravity (1–3 segments, pivot accel)</title>
   <style>
-    :root{
-      --bg:#0b0f12; --fg:#eaf2ff; --muted:#8ea0bb; --accent:#51F093;
-      --panel:rgba(18,23,30,.66); --outline:rgba(255,255,255,.08);
-    }
+    :root{ --bg:#0b0f12; --fg:#eaf2ff; --muted:#8ea0bb; --accent:#51F093; --panel:rgba(18,23,30,.66); --outline:rgba(255,255,255,.08); }
     html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg);
       font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
-      -webkit-text-size-adjust:100%; touch-action:none; overscroll-behavior:none;
-    }
+      -webkit-text-size-adjust:100%; touch-action:none; overscroll-behavior:none; }
     canvas{ position:fixed; inset:0; display:block; }
-    .pivot{ position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
-      background:var(--accent); border-radius:50%; box-shadow:0 0 14px rgba(81,240,147,.65); pointer-events:none; }
-    .hud{ position:fixed; left:12px; bottom:12px; padding:10px 12px; border-radius:12px;
-      background:var(--panel); border:1px solid var(--outline); color:var(--muted);
-      user-select:none; -webkit-user-select:none; }
+    .pivot{ position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; background:var(--accent); border-radius:50%;
+      box-shadow:0 0 14px rgba(81,240,147,.65); pointer-events:none; }
+    .hud{ position:fixed; left:12px; bottom:12px; padding:10px 12px; border-radius:12px; background:var(--panel); border:1px solid var(--outline); color:var(--muted); }
     .hud strong{ color:var(--fg); }
     .ui{ position:fixed; right:12px; top:12px; z-index:10; display:grid; gap:8px; width:min(360px,92vw); }
     .card{ background:var(--panel); border:1px solid var(--outline); border-radius:14px; padding:10px 12px; }
     .row{ display:flex; align-items:center; gap:8px; }
-    .row > label{ min-width:112px; color:var(--muted); }
+    .row>label{ min-width:132px; color:var(--muted); }
     input[type="range"]{ width:100%; }
     .seg{ display:flex; gap:6px; }
-    .seg button{
-      appearance:none; -webkit-appearance:none; cursor:pointer;
-      background:#1a232e; color:var(--fg); border:1px solid rgba(255,255,255,.12);
-      padding:8px 10px; border-radius:10px; font-weight:600; min-width:44px;
-    }
+    .seg button{ appearance:none; background:#1a232e; color:var(--fg); border:1px solid rgba(255,255,255,.12); padding:8px 10px; border-radius:10px; font-weight:600; min-width:44px; }
     .seg button[aria-pressed="true"]{ background:#223144; border-color:#385372; }
     .row .right{ margin-left:auto; color:var(--muted); }
     .gate{ position:fixed; inset:0; display:grid; place-items:center; background:linear-gradient(180deg,rgba(0,0,0,.85),rgba(0,0,0,.6)); z-index:20; }
-    .panel{ width:min(520px,90vw); padding:16px 18px; border-radius:14px; background:var(--panel); border:1px solid var(--outline);
-      text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.25); }
-    h1{ margin:0 0 10px; font:600 18px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; }
-    p{ margin:.4em 0; color:var(--muted); }
+    .panel{ width:min(520px,90vw); padding:16px 18px; border-radius:14px; background:var(--panel); border:1px solid var(--outline); text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    h1{ margin:0 0 10px; font:600 18px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; } p{ margin:.4em 0; color:var(--muted); }
     .rowBtns{ display:flex; gap:10px; justify-content:center; margin-top:12px; }
-    button.primary{ background:#1a232e; border:1px solid rgba(255,255,255,.12); padding:10px 14px; border-radius:10px;
-      color:var(--fg); font-weight:700; }
+    button.primary{ background:#1a232e; border:1px solid rgba(255,255,255,.12); padding:10px 14px; border-radius:10px; color:var(--fg); font-weight:700; }
     button.secondary{ background:#111820; border:1px solid rgba(255,255,255,.1); padding:10px 14px; border-radius:10px; color:var(--fg); }
     .note{ font-size:12px; color:#9fb0ca; }
   </style>
@@ -65,12 +52,12 @@
         <span class="right" id="lenVal">40%</span>
       </div>
       <div class="row">
-        <label for="damp">Damping</label>
+        <label for="damp">Damping (vel. decay)</label>
         <input id="damp" type="range" min="0" max="0.06" step="0.001" value="0.010"/>
         <span class="right" id="dampVal">0.010</span>
       </div>
       <div class="row">
-        <label for="iter">Iterations</label>
+        <label for="iter">Iterations (stiffness)</label>
         <input id="iter" type="range" min="4" max="28" step="1" value="14"/>
         <span class="right" id="iterVal">14</span>
       </div>
@@ -94,12 +81,12 @@
   <div class="gate" id="gate">
     <div class="panel">
       <h1>Enable Motion Sensors</h1>
-      <p>Uses your iPhone’s motion data to set the gravity direction.</p>
+      <p>Uses your iPhone’s motion data to set gravity and base acceleration.</p>
       <div class="rowBtns">
         <button id="gateMotion" class="primary">Enable motion</button>
         <button id="gateDemo" class="secondary">Demo mode</button>
       </div>
-      <p class="note">iOS: requires a tap, HTTPS, and “Motion &amp; Orientation Access” enabled.</p>
+      <p class="note">iOS: tap to allow, use HTTPS, enable “Motion &amp; Orientation Access”.</p>
     </div>
   </div>
 
@@ -111,80 +98,63 @@
   const hud = document.getElementById('hud');
   const fpsEl = document.getElementById('fps');
 
-  // UI
   const segButtons = document.getElementById('segButtons');
   const btns = [...segButtons.querySelectorAll('button')];
   const R = (id)=>document.getElementById(id);
-  const sliders = {
-    len: R('len'), damp: R('damp'), iter: R('iter'), smooth: R('smooth')
-  };
-  const labels = {
-    lenVal: R('lenVal'), dampVal: R('dampVal'), iterVal: R('iterVal'), smoothVal: R('smoothVal')
-  };
-  const btnReset = R('btnReset');
-  const btnMotion = R('btnMotion');
-  const btnDemo = R('btnDemo');
-  const gateMotion = R('gateMotion');
-  const gateDemo = R('gateDemo');
+  const sliders = { len:R('len'), damp:R('damp'), iter:R('iter'), smooth:R('smooth') };
+  const labels  = { lenVal:R('lenVal'), dampVal:R('dampVal'), iterVal:R('iterVal'), smoothVal:R('smoothVal') };
+  const btnReset = R('btnReset'); const btnMotion = R('btnMotion'); const btnDemo = R('btnDemo');
+  const gateMotion = R('gateMotion'); const gateDemo = R('gateDemo');
 
-  // State
   const state = {
-    dpr: Math.max(1, Math.min(3, window.devicePixelRatio || 1)),
-    w: 0, h: 0, cx: 0, cy: 0,
-    pxPerMeter: 400, // scale; tuned to feel natural
-    gVec: {x:0, y:1}, // unit "down" in screen plane
-    gMag: 9.81, // m/s^2
+    dpr: Math.max(1, Math.min(3, devicePixelRatio||1)),
+    w:0,h:0,cx:0,cy:0,
+    pxPerMeter: 400,
+    // Gravity and base acceleration (screen plane, m/s^2)
+    gVec:{x:0,y:1}, gMag:9.81, base:{x:0,y:0},
+    // Low-pass gravity (device coords) for linear-accel fallback
+    gLP3:{x:0,y:0,z:0},
     smooth: parseFloat(sliders.smooth.value),
-    enabled: false, demo:false,
-    // Chain (Verlet)
-    N: 1,
-    totalLenPx: 0, segLen: [],
-    points: [], // [{x,y,px,py}]
-    iters: parseInt(sliders.iter.value,10),
-    damp: parseFloat(sliders.damp.value), // per-second vel decay
-    lastT: performance.now(),
-    fps: 0, _fpsAcc:0, _fpsCount:0, _fpsLast:performance.now(),
-    motionSeen:false
+    motionSeen:false, enabled:false, demo:false,
+    // Chain
+    N:1, totalLenPx:0, segLen:[], points:[],
+    iters: sliders.iter.value|0, damp: parseFloat(sliders.damp.value),
+    lastT: performance.now(), fps:0, _fpsCount:0, _fpsLast:performance.now()
   };
 
   function resize(){
-    const dpr = state.dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const dpr = state.dpr = Math.max(1, Math.min(3, devicePixelRatio||1));
     canvas.width  = Math.floor(innerWidth * dpr);
     canvas.height = Math.floor(innerHeight * dpr);
-    canvas.style.width = innerWidth + 'px';
-    canvas.style.height = innerHeight + 'px';
+    canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px';
     state.w = canvas.width; state.h = canvas.height;
-    state.cx = Math.floor(state.w * 0.5);
-    state.cy = Math.floor(state.h * 0.5);
-    // scale mapping: aim ~ 380 px per meter on phones
+    state.cx = (state.w>>1); state.cy = (state.h>>1);
     state.pxPerMeter = Math.min(state.w, state.h) / 2.8;
     rebuildChain();
   }
-  addEventListener('resize', resize, {passive:true});
-  resize();
+  addEventListener('resize', resize, {passive:true}); resize();
 
-  // UI handlers
   function setSegments(n){
     state.N = n|0;
-    btns.forEach(b => b.setAttribute('aria-pressed', String((b.dataset.n|0)===n)));
+    btns.forEach(b=>b.setAttribute('aria-pressed', String((b.dataset.n|0)===n)));
     rebuildChain();
   }
-  segButtons.addEventListener('click', (e)=>{
+  segButtons.addEventListener('click', e=>{
     const b = e.target.closest('button'); if(!b) return;
     setSegments(b.dataset.n|0);
   });
 
   function updateLabels(){
-    labels.lenVal.textContent = Math.round(sliders.len.value*100) + '%';
-    labels.dampVal.textContent = parseFloat(sliders.damp.value).toFixed(3);
-    labels.iterVal.textContent = sliders.iter.value;
-    labels.smoothVal.textContent = parseFloat(sliders.smooth.value).toFixed(2);
+    labels.lenVal.textContent   = Math.round(sliders.len.value*100)+'%';
+    labels.dampVal.textContent  = parseFloat(sliders.damp.value).toFixed(3);
+    labels.iterVal.textContent  = sliders.iter.value;
+    labels.smoothVal.textContent= parseFloat(sliders.smooth.value).toFixed(2);
   }
   Object.values(sliders).forEach(s=>{
     s.addEventListener('input', ()=>{
-      state.damp = parseFloat(sliders.damp.value);
+      state.damp  = parseFloat(sliders.damp.value);
       state.iters = sliders.iter.value|0;
-      state.smooth = parseFloat(sliders.smooth.value);
+      state.smooth= parseFloat(sliders.smooth.value);
       state.totalLenPx = Math.min(state.w, state.h) * parseFloat(sliders.len.value);
       const per = state.totalLenPx / state.N;
       state.segLen = Array.from({length:state.N}, _=> per);
@@ -193,237 +163,149 @@
   });
   updateLabels();
 
-  btnReset.addEventListener('click', ()=>{ rebuildChain(true); });
+  btnReset.addEventListener('click', ()=>rebuildChain(true));
   btnMotion.addEventListener('click', enableMotion);
   btnDemo.addEventListener('click', enableDemo);
   gateMotion.addEventListener('click', enableMotion);
   gateDemo.addEventListener('click', enableDemo);
 
   function rebuildChain(){
-    state.totalLenPx = Math.min(state.w, state.h) * parseFloat(sliders.len.value);
+    state.totalLenPx = Math.min(state.w,state.h) * parseFloat(sliders.len.value);
     const per = state.totalLenPx / state.N;
     state.segLen = Array.from({length:state.N}, _=> per);
-    // Build points: 0 is pivot (fixed virtual), 1..N are masses
-    const pts = [];
-    // start along current down direction
-    const dx = state.gVec.x, dy = state.gVec.y;
-    let x = state.cx, y = state.cy;
-    for(let i=1;i<=state.N;i++){
-      x += dx * per; y += dy * per;
-      pts[i] = { x, y, px:x, py:y };
-    }
+    const pts=[]; let x=state.cx, y=state.cy, dx=state.gVec.x, dy=state.gVec.y;
+    for(let i=1;i<=state.N;i++){ x+=dx*per; y+=dy*per; pts[i]={x,y,px:x,py:y}; }
     state.points = pts;
   }
 
-  // Motion / gravity
   function screenAngleRad(){
-    const ang = (screen.orientation && typeof screen.orientation.angle === 'number')
-      ? screen.orientation.angle
-      : (typeof window.orientation === 'number' ? window.orientation : 0);
-    return (ang||0) * Math.PI/180;
+    const ang = (screen.orientation && typeof screen.orientation.angle==='number') ? screen.orientation.angle :
+                (typeof window.orientation==='number' ? window.orientation : 0);
+    return (ang||0)*Math.PI/180;
   }
-  function rotate2D(x, y, ang){
-    const c = Math.cos(ang), s = Math.sin(ang);
-    return { x: x*c - y*s, y: x*s + y*c };
-  }
+  function rotate2D(x,y,a){ const c=Math.cos(a), s=Math.sin(a); return {x:x*c - y*s, y:x*s + y*c}; }
+
+  const LP = 0.90; // gravity low-pass (for linear fallback)
   function onMotion(e){
     state.motionSeen = true;
-    const a = e.accelerationIncludingGravity; if(!a) return;
-    let ax = a.x||0, ay = a.y||0, az = a.z||0;
-    // Project to screen plane and rotate so +y is "down" visually
-    let gx = ax, gy = -ay;
-    const r = rotate2D(gx, gy, -screenAngleRad());
-    gx = r.x; gy = r.y;
-    const m = Math.hypot(gx, gy) || 1e-6;
-    const dirx = gx/m, diry = gy/m;
-    const SMOOTH = state.smooth;
-    state.gVec.x = state.gVec.x*(1-SMOOTH) + dirx*SMOOTH;
-    state.gVec.y = state.gVec.y*(1-SMOOTH) + diry*SMOOTH;
-    // Gravity magnitude from sensor (fallback to 9.81 if weird)
-    const g3 = Math.hypot(ax, ay, az);
-    state.gMag = (g3>5 && g3<15) ? (state.gMag*0.9 + g3*0.1) : 9.81;
+    const inc = e.accelerationIncludingGravity || {x:0,y:0,z:0};
+    // Low-pass gravity in device coords
+    state.gLP3.x = LP*state.gLP3.x + (1-LP)*(inc.x||0);
+    state.gLP3.y = LP*state.gLP3.y + (1-LP)*(inc.y||0);
+    state.gLP3.z = LP*state.gLP3.z + (1-LP)*(inc.z||0);
+
+    // Gravity direction from low-passed gravity
+    let gx = state.gLP3.x, gy = -state.gLP3.y;
+    const rg = rotate2D(gx, gy, -screenAngleRad()); gx = rg.x; gy = rg.y;
+    const gm = Math.hypot(gx,gy) || 1e-6;
+    const dirx = gx/gm, diry = gy/gm;
+    const S = state.smooth;
+    state.gVec.x = state.gVec.x*(1-S) + dirx*S;
+    state.gVec.y = state.gVec.y*(1-S) + diry*S;
+    state.gMag   = Math.hypot(state.gLP3.x, state.gLP3.y, state.gLP3.z) || 9.81;
+
+    // Linear acceleration (device accel without gravity)
+    let lin = e.acceleration && (e.acceleration.x!=null) ? e.acceleration : {
+      x:(inc.x||0)-state.gLP3.x, y:(inc.y||0)-state.gLP3.y, z:(inc.z||0)-state.gLP3.z
+    };
+    let bx = (lin.x||0), by = -(lin.y||0);
+    const rb = rotate2D(bx, by, -screenAngleRad()); bx = rb.x; by = rb.y;
+    state.base.x = state.base.x*(1-S) + bx*S;
+    state.base.y = state.base.y*(1-S) + by*S;
+
     updateHUD();
   }
   function onOrientation(e){
     if(state.motionSeen) return;
-    const beta = (e.beta||0) * Math.PI/180;
-    const gamma = (e.gamma||0) * Math.PI/180;
-    let gx = Math.sin(gamma);
-    let gy = Math.sin(beta);
-    const r = rotate2D(gx, gy, -screenAngleRad());
-    const m = Math.hypot(r.x, r.y) || 1e-6;
-    const dirx = r.x/m, diry = r.y/m;
-    const SMOOTH = state.smooth;
-    state.gVec.x = state.gVec.x*(1-SMOOTH) + dirx*SMOOTH;
-    state.gVec.y = state.gVec.y*(1-SMOOTH) + diry*SMOOTH;
-    state.gMag = 9.81;
+    const beta=(e.beta||0)*Math.PI/180, gamma=(e.gamma||0)*Math.PI/180;
+    let gx=Math.sin(gamma), gy=Math.sin(beta);
+    const r=rotate2D(gx,gy,-screenAngleRad()); const m=Math.hypot(r.x,r.y)||1e-6;
+    const S = state.smooth;
+    state.gVec.x = state.gVec.x*(1-S) + (r.x/m)*S;
+    state.gVec.y = state.gVec.y*(1-S) + (r.y/m)*S;
+    state.gMag = 9.81; state.base.x = 0; state.base.y = 0;
     updateHUD();
   }
   function updateHUD(){
-    hud.innerHTML = `g≈ <strong>${state.gMag.toFixed(2)}</strong> m/s² · segments <strong>${state.N}</strong>`;
+    hud.innerHTML = `g≈ <strong>${state.gMag.toFixed(2)}</strong> m/s² · accel≈ <strong>${Math.hypot(state.base.x,state.base.y).toFixed(2)}</strong> m/s² · seg <strong>${state.N}</strong>`;
   }
 
   async function enableMotion(){
     try{
-      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
-        const r = await DeviceMotionEvent.requestPermission();
-        if (r !== 'granted') throw new Error('Permission denied');
+      if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
+        const r = await DeviceMotionEvent.requestPermission(); if(r!=='granted') throw new Error('Permission denied');
       }
       addEventListener('devicemotion', onMotion, {passive:true});
       addEventListener('deviceorientation', onOrientation, {passive:true});
-      state.enabled = true; state.demo = false;
-      gate.style.display = 'none';
-      updateHUD();
+      state.enabled=true; state.demo=false; gate.style.display='none'; updateHUD();
     }catch(err){
-      alert('Motion access failed: ' + err.message + '\nTip: Use Safari on iPhone, HTTPS, and allow Motion & Orientation Access in Settings.');
+      alert('Motion access failed: '+err.message+'\nTip: Safari on iPhone, HTTPS, Motion & Orientation Access enabled.');
     }
   }
-  function enableDemo(){
-    state.enabled = false; state.demo = true; gate.style.display = 'none';
-    updateHUD();
-  }
+  function enableDemo(){ state.enabled=false; state.demo=true; gate.style.display='none'; updateHUD(); }
 
-  // Physics — Verlet integration with distance constraints
+  // Verlet + constraints
   function step(dt){
-    const pts = state.points;
-    if(!pts.length) return;
-    // Acceleration from gravity in pixels/s^2
-    const gpx = state.gVec.x * state.gMag * state.pxPerMeter;
-    const gpy = state.gVec.y * state.gMag * state.pxPerMeter;
+    const pts = state.points; if(!pts.length) return;
+    // Total acceleration in px/s^2 = gravity + inertial(-base)
+    const ax = (state.gVec.x*state.gMag - state.base.x) * state.pxPerMeter;
+    const ay = (state.gVec.y*state.gMag - state.base.y) * state.pxPerMeter;
     const damp = state.damp;
-    // Integration
+
+    // Integrate
     for(let i=1;i<=state.N;i++){
-      const p = pts[i];
-      const vx = (p.x - p.px);
-      const vy = (p.y - p.py);
-      const decay = Math.exp(-damp * dt); // per-second decay
-      const nx = p.x + vx*decay + gpx * dt*dt;
-      const ny = p.y + vy*decay + gpy * dt*dt;
-      p.px = p.x; p.py = p.y;
-      p.x = nx; p.y = ny;
+      const p=pts[i], vx=(p.x-p.px), vy=(p.y-p.py), decay=Math.exp(-damp*dt);
+      const nx = p.x + vx*decay + ax*dt*dt;
+      const ny = p.y + vy*decay + ay*dt*dt;
+      p.px=p.x; p.py=p.y; p.x=nx; p.y=ny;
     }
-    // Constraints iterations
-    const per = state.segLen;
-    const iters = state.iters|0;
+    // Enforce lengths
+    const per = state.segLen, iters=state.iters|0, px0=state.cx, py0=state.cy;
     for(let k=0;k<iters;k++){
-      // Keep first point attached to pivot
-      const pivotX = state.cx, pivotY = state.cy;
-      // Constrain 1st segment to pivot
-      {
-        const p1 = pts[1];
-        const dx = p1.x - pivotX, dy = p1.y - pivotY;
-        const dist = Math.hypot(dx,dy) || 1e-6;
-        const need = per[0];
-        const diff = (dist - need)/dist;
-        p1.x -= dx*diff; p1.y -= dy*diff;
-      }
-      // Constrain subsequent links
+      // pivot->first
+      { const p1=pts[1]; const dx=p1.x-px0, dy=p1.y-py0; const d=Math.hypot(dx,dy)||1e-6;
+        const diff=(d-per[0])/d; p1.x -= dx*diff; p1.y -= dy*diff; }
+      // links
       for(let i=2;i<=state.N;i++){
-        const pa = pts[i-1], pb = pts[i];
-        const dx = pb.x - pa.x, dy = pb.y - pa.y;
-        const dist = Math.hypot(dx,dy) || 1e-6;
-        const need = per[i-1];
-        const diff = (dist - need)/dist;
-        // split correction
-        const corrX = dx*diff*0.5, corrY = dy*diff*0.5;
-        pa.x += corrX; pa.y += corrY;
-        pb.x -= corrX; pb.y -= corrY;
+        const a=pts[i-1], b=pts[i]; const dx=b.x-a.x, dy=b.y-a.y; const d=Math.hypot(dx,dy)||1e-6;
+        const diff=(d-per[i-1])/d; const cx=dx*diff*0.5, cy=dy*diff*0.5; a.x+=cx; a.y+=cy; b.x-=cx; b.y-=cy;
       }
     }
   }
 
-  // Render
   function draw(){
-    const w = state.w, h = state.h;
-    ctx.fillStyle = '#0b0f12';
-    ctx.fillRect(0,0,w,h);
-
-    // Rods
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#a9b6cc';
-    ctx.lineWidth = Math.max(1.5, 2.0 * state.dpr);
-
-    let x0 = state.cx, y0 = state.cy;
-    for(let i=1;i<=state.N;i++){
-      const p = state.points[i];
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-      x0 = p.x; y0 = p.y;
+    const w=state.w,h=state.h; ctx.fillStyle='#0b0f12'; ctx.fillRect(0,0,w,h);
+    ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#a9b6cc'; ctx.lineWidth=Math.max(1.5,2.0*state.dpr);
+    let x0=state.cx, y0=state.cy;
+    for(let i=1;i<=state.N;i++){ const p=state.points[i]; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(p.x,p.y); ctx.stroke(); x0=p.x; y0=p.y; }
+    for(let i=1;i<=state.N;i++){ const p=state.points[i]; const r=Math.max(8,12*state.dpr)*(i===state.N?1.1:0.9);
+      ctx.beginPath(); ctx.arc(p.x,p.y,r*1.8,0,Math.PI*2); ctx.fillStyle='rgba(81,240,147,0.09)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+      const g=ctx.createRadialGradient(p.x-r*0.4,p.y-r*0.4,r*0.2,p.x,p.y,r); g.addColorStop(0,'#c4ffd9'); g.addColorStop(1,'#2a3645');
+      ctx.fillStyle=g; ctx.fill();
     }
-
-    // Bob(s)
-    for(let i=1;i<=state.N;i++){
-      const p = state.points[i];
-      const r = Math.max(8, 12 * state.dpr) * (i===state.N?1.1:0.9);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r*1.8, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(81,240,147,0.09)';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI*2);
-      const grd = ctx.createRadialGradient(p.x - r*0.4, p.y - r*0.4, r*0.2, p.x, p.y, r);
-      grd.addColorStop(0, '#c4ffd9');
-      grd.addColorStop(1, '#2a3645');
-      ctx.fillStyle = grd;
-      ctx.fill();
-    }
-
-    // FPS
-    const now = performance.now();
-    if(now - state._fpsLast > 500){
-      state.fps = (state._fpsCount * 1000) / (now - state._fpsLast);
-      state._fpsCount = 0; state._fpsLast = now;
-      fpsEl.textContent = (state.fps|0) + ' fps';
-    }else{
-      state._fpsCount++;
-    }
+    const now=performance.now(); if(now-state._fpsLast>500){ state.fps=(state._fpsCount*1000)/(now-state._fpsLast); state._fpsCount=0; state._fpsLast=now; fpsEl.textContent=(state.fps|0)+' fps'; } else state._fpsCount++;
   }
 
-  // Main loop with fixed substeps for stability
-  const MAX_DT = 0.05; // clamp (s)
-  const STEP = 1/120;  // physics timestep
-  let acc = 0;
+  const MAX_DT=0.05, STEP=1/120; let acc=0;
   function loop(t){
     requestAnimationFrame(loop);
-    let dt = Math.min(MAX_DT, (t - state.lastT)/1000); if(dt<0) dt = 0; state.lastT = t;
-    acc += dt;
-    while(acc >= STEP){
-      // For demo mode, rotate gravity slowly
-      if(state.demo){
-        const spd = 0.6; // rad/s
-        const ang = t/1000 * spd;
-        state.gVec.x = Math.cos(ang);
-        state.gVec.y = Math.sin(ang);
-        state.gMag = 9.81;
-      }
-      step(STEP);
-      acc -= STEP;
+    let dt=Math.min(MAX_DT,(t-state.lastT)/1000); if(dt<0) dt=0; state.lastT=t; acc+=dt;
+    while(acc>=STEP){
+      if(state.demo){ const ang=t/1000*0.6; state.gVec.x=Math.cos(ang); state.gVec.y=Math.sin(ang); state.gMag=9.81; state.base.x=0; state.base.y=0; }
+      step(STEP); acc-=STEP;
     }
     draw();
   }
   requestAnimationFrame(loop);
 
-  // Defaults
-  setSegments(1);
-  updateHUD();
+  setSegments(1); updateHUD();
 
-  // Auto-enable motion when possible (non-iOS)
-  (async ()=>{
-    try{
-      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission !== 'function'){
-        await enableMotion();
-      }
-    }catch{ /* show gate */ }
-  })();
+  (async()=>{ try{
+    if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission!=='function'){ await enableMotion(); }
+  }catch{} })();
 
-  document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState !== 'visible') return;
-    // Gentle reinit to avoid jumps after tab switch
-    state.points.forEach(p=>{ p.px = p.x; p.py = p.y; });
-  });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState!=='visible') return; state.points.forEach(p=>{p.px=p.x; p.py=p.y;}); });
 })();
 </script>
 </body>
