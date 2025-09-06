@@ -1,307 +1,430 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
-  <title>Pendulum — iPhone Gravity (DeviceMotion)</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"/>
+  <title>Pendulum Physics — iPhone Gravity (1–3 segments)</title>
   <style>
     :root{
-      --bg:#0b0f12; --fg:#eaf2ff; --muted:#7d8aa3; --accent:#51F093;
+      --bg:#0b0f12; --fg:#eaf2ff; --muted:#8ea0bb; --accent:#51F093;
+      --panel:rgba(18,23,30,.66); --outline:rgba(255,255,255,.08);
     }
     html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg);
       font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
       -webkit-text-size-adjust:100%; touch-action:none; overscroll-behavior:none;
     }
-    #c{ position:fixed; inset:0; display:block; }
-    .hud{
-      position:fixed; left:12px; bottom:12px; padding:10px 12px;
-      background:rgba(10,14,18,.5); backdrop-filter:blur(8px);
-      border:1px solid rgba(255,255,255,.08); border-radius:10px;
-      color:var(--muted); user-select:none; -webkit-user-select:none;
-    }
-    .hud strong{ color:var(--fg); font-weight:600; }
-    .centerDot{
-      position:fixed; left:50%; top:50%; width:6px; height:6px;
-      margin:-3px 0 0 -3px; border-radius:50%; background:var(--accent);
-      box-shadow:0 0 14px rgba(81,240,147,.65);
-      pointer-events:none;
-    }
-    .gate{
-      position:fixed; inset:0; display:grid; place-items:center;
-      background:linear-gradient(180deg,rgba(0,0,0,.85),rgba(0,0,0,.6));
-      color:var(--fg); z-index:10;
-    }
-    .panel{
-      width:min(520px,90vw); padding:16px 18px; border-radius:14px;
-      background:rgba(15,20,26,.7); border:1px solid rgba(255,255,255,.08);
-      box-shadow:0 10px 30px rgba(0,0,0,.25);
-      text-align:center;
-    }
-    .panel h1{ margin:0 0 10px; font:600 18px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; }
-    .panel p{ margin:.4em 0; color:var(--muted); }
-    .row{ display:flex; gap:10px; justify-content:center; margin-top:12px; }
-    button{
+    canvas{ position:fixed; inset:0; display:block; }
+    .pivot{ position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
+      background:var(--accent); border-radius:50%; box-shadow:0 0 14px rgba(81,240,147,.65); pointer-events:none; }
+    .hud{ position:fixed; left:12px; bottom:12px; padding:10px 12px; border-radius:12px;
+      background:var(--panel); border:1px solid var(--outline); color:var(--muted);
+      user-select:none; -webkit-user-select:none; }
+    .hud strong{ color:var(--fg); }
+    .ui{ position:fixed; right:12px; top:12px; z-index:10; display:grid; gap:8px; width:min(360px,92vw); }
+    .card{ background:var(--panel); border:1px solid var(--outline); border-radius:14px; padding:10px 12px; }
+    .row{ display:flex; align-items:center; gap:8px; }
+    .row > label{ min-width:112px; color:var(--muted); }
+    input[type="range"]{ width:100%; }
+    .seg{ display:flex; gap:6px; }
+    .seg button{
       appearance:none; -webkit-appearance:none; cursor:pointer;
-      background:#1a232e; color:var(--fg); border:1px solid rgba(255,255,255,.1);
-      padding:10px 14px; border-radius:10px; font-weight:600;
-      transition:transform .02s ease, background .2s ease, border-color .2s ease;
+      background:#1a232e; color:var(--fg); border:1px solid rgba(255,255,255,.12);
+      padding:8px 10px; border-radius:10px; font-weight:600; min-width:44px;
     }
-    button:hover{ background:#213042; }
-    button:active{ transform:translateY(1px); }
-    .small{ font-size:12px; color:#9fb0ca; margin-top:8px; }
-    .warn{ color:#ffb686; }
-    a{ color:#9fd5ff; text-decoration:none; border-bottom:1px dotted rgba(159,213,255,.5); }
-    a:hover{ border-bottom-color:transparent; }
+    .seg button[aria-pressed="true"]{ background:#223144; border-color:#385372; }
+    .row .right{ margin-left:auto; color:var(--muted); }
+    .gate{ position:fixed; inset:0; display:grid; place-items:center; background:linear-gradient(180deg,rgba(0,0,0,.85),rgba(0,0,0,.6)); z-index:20; }
+    .panel{ width:min(520px,90vw); padding:16px 18px; border-radius:14px; background:var(--panel); border:1px solid var(--outline);
+      text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    h1{ margin:0 0 10px; font:600 18px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; }
+    p{ margin:.4em 0; color:var(--muted); }
+    .rowBtns{ display:flex; gap:10px; justify-content:center; margin-top:12px; }
+    button.primary{ background:#1a232e; border:1px solid rgba(255,255,255,.12); padding:10px 14px; border-radius:10px;
+      color:var(--fg); font-weight:700; }
+    button.secondary{ background:#111820; border:1px solid rgba(255,255,255,.1); padding:10px 14px; border-radius:10px; color:var(--fg); }
+    .note{ font-size:12px; color:#9fb0ca; }
   </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div class="centerDot" aria-hidden="true"></div>
-  <div class="hud" id="hud">status: <strong>idle</strong></div>
+  <div class="pivot" aria-hidden="true"></div>
 
-  <!-- Permission gate (required on iOS Safari) -->
-  <div class="gate" id="gate">
-    <div class="panel">
-      <h1>Enable Motion Sensors</h1>
-      <p>This pendulum uses your iPhone’s motion data to align with gravity.</p>
-      <div class="row">
-        <button id="btnMotion">Enable motion</button>
-        <button id="btnDemo" title="Run without sensors">Demo mode</button>
+  <div class="ui">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <div class="seg" id="segButtons" role="group" aria-label="Segments">
+          <button data-n="1" aria-pressed="true">1</button>
+          <button data-n="2" aria-pressed="false">2</button>
+          <button data-n="3" aria-pressed="false">3</button>
+        </div>
+        <div class="right" id="fps">— fps</div>
       </div>
-      <p class="small">On iOS Safari, access requires a tap. Keep the page in the foreground.</p>
+      <div class="row">
+        <label for="len">Total length</label>
+        <input id="len" type="range" min="0.2" max="0.7" step="0.01" value="0.40"/>
+        <span class="right" id="lenVal">40%</span>
+      </div>
+      <div class="row">
+        <label for="damp">Damping</label>
+        <input id="damp" type="range" min="0" max="0.06" step="0.001" value="0.010"/>
+        <span class="right" id="dampVal">0.010</span>
+      </div>
+      <div class="row">
+        <label for="iter">Iterations</label>
+        <input id="iter" type="range" min="4" max="28" step="1" value="14"/>
+        <span class="right" id="iterVal">14</span>
+      </div>
+      <div class="row">
+        <label for="smooth">Sensor smoothing</label>
+        <input id="smooth" type="range" min="0" max="0.5" step="0.01" value="0.15"/>
+        <span class="right" id="smoothVal">0.15</span>
+      </div>
+      <div class="row" style="justify-content:space-between; margin-top:6px;">
+        <button id="btnReset" class="secondary">Reset</button>
+        <div style="display:flex; gap:8px;">
+          <button id="btnMotion" class="primary">Enable motion</button>
+          <button id="btnDemo" class="secondary" title="Run without sensors">Demo</button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script>
-  (()=>{
-    const canvas = document.getElementById('c');
-    const hud = document.getElementById('hud');
-    const gate = document.getElementById('gate');
-    const btnMotion = document.getElementById('btnMotion');
-    const btnDemo = document.getElementById('btnDemo');
+  <div class="hud" id="hud">g: <strong>—</strong></div>
 
-    // HiDPI canvas setup
-    const state = {
-      dpr: Math.max(1, Math.min(3, window.devicePixelRatio || 1)),
-      w: 0, h: 0, cx: 0, cy: 0,
-      // Gravity estimate (m/s^2) in device/screen axes
-      g: {x:0, y:0, z:0, mag:0},
-      // Smoothed 2D screen "down" vector (normalized), and bob position
-      down2D: {x:0, y:1, mag:1}, // points where gravity pulls in screen plane
-      bob: {x:0, y:0},
-      enabled: false,
-      demo: false,
-      lastTS: 0,
-    };
+  <div class="gate" id="gate">
+    <div class="panel">
+      <h1>Enable Motion Sensors</h1>
+      <p>Uses your iPhone’s motion data to set the gravity direction.</p>
+      <div class="rowBtns">
+        <button id="gateMotion" class="primary">Enable motion</button>
+        <button id="gateDemo" class="secondary">Demo mode</button>
+      </div>
+      <p class="note">iOS: requires a tap, HTTPS, and “Motion &amp; Orientation Access” enabled.</p>
+    </div>
+  </div>
 
-    function resize(){
-      state.w = canvas.width = Math.floor(innerWidth * state.dpr);
-      state.h = canvas.height = Math.floor(innerHeight * state.dpr);
-      canvas.style.width = innerWidth + 'px';
-      canvas.style.height = innerHeight + 'px';
-      state.cx = Math.floor(state.w * 0.5);
-      state.cy = Math.floor(state.h * 0.5);
+<script>
+(()=>{
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha:false, desynchronized:true });
+  const gate = document.getElementById('gate');
+  const hud = document.getElementById('hud');
+  const fpsEl = document.getElementById('fps');
+
+  // UI
+  const segButtons = document.getElementById('segButtons');
+  const btns = [...segButtons.querySelectorAll('button')];
+  const R = (id)=>document.getElementById(id);
+  const sliders = {
+    len: R('len'), damp: R('damp'), iter: R('iter'), smooth: R('smooth')
+  };
+  const labels = {
+    lenVal: R('lenVal'), dampVal: R('dampVal'), iterVal: R('iterVal'), smoothVal: R('smoothVal')
+  };
+  const btnReset = R('btnReset');
+  const btnMotion = R('btnMotion');
+  const btnDemo = R('btnDemo');
+  const gateMotion = R('gateMotion');
+  const gateDemo = R('gateDemo');
+
+  // State
+  const state = {
+    dpr: Math.max(1, Math.min(3, window.devicePixelRatio || 1)),
+    w: 0, h: 0, cx: 0, cy: 0,
+    pxPerMeter: 400, // scale; tuned to feel natural
+    gVec: {x:0, y:1}, // unit "down" in screen plane
+    gMag: 9.81, // m/s^2
+    smooth: parseFloat(sliders.smooth.value),
+    enabled: false, demo:false,
+    // Chain (Verlet)
+    N: 1,
+    totalLenPx: 0, segLen: [],
+    points: [], // [{x,y,px,py}]
+    iters: parseInt(sliders.iter.value,10),
+    damp: parseFloat(sliders.damp.value), // per-second vel decay
+    lastT: performance.now(),
+    fps: 0, _fpsAcc:0, _fpsCount:0, _fpsLast:performance.now(),
+    motionSeen:false
+  };
+
+  function resize(){
+    const dpr = state.dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    canvas.width  = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+    state.w = canvas.width; state.h = canvas.height;
+    state.cx = Math.floor(state.w * 0.5);
+    state.cy = Math.floor(state.h * 0.5);
+    // scale mapping: aim ~ 380 px per meter on phones
+    state.pxPerMeter = Math.min(state.w, state.h) / 2.8;
+    rebuildChain();
+  }
+  addEventListener('resize', resize, {passive:true});
+  resize();
+
+  // UI handlers
+  function setSegments(n){
+    state.N = n|0;
+    btns.forEach(b => b.setAttribute('aria-pressed', String((b.dataset.n|0)===n)));
+    rebuildChain();
+  }
+  segButtons.addEventListener('click', (e)=>{
+    const b = e.target.closest('button'); if(!b) return;
+    setSegments(b.dataset.n|0);
+  });
+
+  function updateLabels(){
+    labels.lenVal.textContent = Math.round(sliders.len.value*100) + '%';
+    labels.dampVal.textContent = parseFloat(sliders.damp.value).toFixed(3);
+    labels.iterVal.textContent = sliders.iter.value;
+    labels.smoothVal.textContent = parseFloat(sliders.smooth.value).toFixed(2);
+  }
+  Object.values(sliders).forEach(s=>{
+    s.addEventListener('input', ()=>{
+      state.damp = parseFloat(sliders.damp.value);
+      state.iters = sliders.iter.value|0;
+      state.smooth = parseFloat(sliders.smooth.value);
+      state.totalLenPx = Math.min(state.w, state.h) * parseFloat(sliders.len.value);
+      const per = state.totalLenPx / state.N;
+      state.segLen = Array.from({length:state.N}, _=> per);
+      updateLabels();
+    });
+  });
+  updateLabels();
+
+  btnReset.addEventListener('click', ()=>{ rebuildChain(true); });
+  btnMotion.addEventListener('click', enableMotion);
+  btnDemo.addEventListener('click', enableDemo);
+  gateMotion.addEventListener('click', enableMotion);
+  gateDemo.addEventListener('click', enableDemo);
+
+  function rebuildChain(){
+    state.totalLenPx = Math.min(state.w, state.h) * parseFloat(sliders.len.value);
+    const per = state.totalLenPx / state.N;
+    state.segLen = Array.from({length:state.N}, _=> per);
+    // Build points: 0 is pivot (fixed virtual), 1..N are masses
+    const pts = [];
+    // start along current down direction
+    const dx = state.gVec.x, dy = state.gVec.y;
+    let x = state.cx, y = state.cy;
+    for(let i=1;i<=state.N;i++){
+      x += dx * per; y += dy * per;
+      pts[i] = { x, y, px:x, py:y };
     }
-    addEventListener('resize', resize, {passive:true});
-    resize();
+    state.points = pts;
+  }
 
-    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+  // Motion / gravity
+  function screenAngleRad(){
+    const ang = (screen.orientation && typeof screen.orientation.angle === 'number')
+      ? screen.orientation.angle
+      : (typeof window.orientation === 'number' ? window.orientation : 0);
+    return (ang||0) * Math.PI/180;
+  }
+  function rotate2D(x, y, ang){
+    const c = Math.cos(ang), s = Math.sin(ang);
+    return { x: x*c - y*s, y: x*s + y*c };
+  }
+  function onMotion(e){
+    state.motionSeen = true;
+    const a = e.accelerationIncludingGravity; if(!a) return;
+    let ax = a.x||0, ay = a.y||0, az = a.z||0;
+    // Project to screen plane and rotate so +y is "down" visually
+    let gx = ax, gy = -ay;
+    const r = rotate2D(gx, gy, -screenAngleRad());
+    gx = r.x; gy = r.y;
+    const m = Math.hypot(gx, gy) || 1e-6;
+    const dirx = gx/m, diry = gy/m;
+    const SMOOTH = state.smooth;
+    state.gVec.x = state.gVec.x*(1-SMOOTH) + dirx*SMOOTH;
+    state.gVec.y = state.gVec.y*(1-SMOOTH) + diry*SMOOTH;
+    // Gravity magnitude from sensor (fallback to 9.81 if weird)
+    const g3 = Math.hypot(ax, ay, az);
+    state.gMag = (g3>5 && g3<15) ? (state.gMag*0.9 + g3*0.1) : 9.81;
+    updateHUD();
+  }
+  function onOrientation(e){
+    if(state.motionSeen) return;
+    const beta = (e.beta||0) * Math.PI/180;
+    const gamma = (e.gamma||0) * Math.PI/180;
+    let gx = Math.sin(gamma);
+    let gy = Math.sin(beta);
+    const r = rotate2D(gx, gy, -screenAngleRad());
+    const m = Math.hypot(r.x, r.y) || 1e-6;
+    const dirx = r.x/m, diry = r.y/m;
+    const SMOOTH = state.smooth;
+    state.gVec.x = state.gVec.x*(1-SMOOTH) + dirx*SMOOTH;
+    state.gVec.y = state.gVec.y*(1-SMOOTH) + diry*SMOOTH;
+    state.gMag = 9.81;
+    updateHUD();
+  }
+  function updateHUD(){
+    hud.innerHTML = `g≈ <strong>${state.gMag.toFixed(2)}</strong> m/s² · segments <strong>${state.N}</strong>`;
+  }
 
-    // Low-pass filter to estimate gravity from accelerationIncludingGravity
-    const LP_ALPHA = 0.92; // heavier smoothing: closer to 1 = smoother
-
-    // Smooth follow for bob
-    const FOLLOW = 0.15;
-
-    // Map screen orientation (portrait/landscape) so "down" stays visually correct
-    function screenAngleRad(){
-      const ang = (screen.orientation && typeof screen.orientation.angle === 'number')
-        ? screen.orientation.angle
-        : (typeof window.orientation === 'number' ? window.orientation : 0);
-      return (ang||0) * Math.PI/180;
-    }
-    function rotate2D(x, y, ang){
-      const c = Math.cos(ang), s = Math.sin(ang);
-      return { x: x*c - y*s, y: x*s + y*c };
-    }
-
-    // Motion handlers
-    let motionSeen = false;
-    function onMotion(e){
-      motionSeen = true;
-      const a = e.accelerationIncludingGravity;
-      if(!a) return;
-      // Some browsers provide null components; guard
-      const ax = (a.x||0), ay = (a.y||0), az = (a.z||0);
-
-      // Low-pass to estimate gravity vector (in m/s^2, ~9.81 magnitude)
-      state.g.x = LP_ALPHA*state.g.x + (1-LP_ALPHA)*ax;
-      state.g.y = LP_ALPHA*state.g.y + (1-LP_ALPHA)*ay;
-      state.g.z = LP_ALPHA*state.g.z + (1-LP_ALPHA)*az;
-      state.g.mag = Math.hypot(state.g.x, state.g.y, state.g.z);
-
-      // Project gravity into screen plane (x,y). Adjust for CSS Y-down.
-      let gx = state.g.x;
-      let gy = -state.g.y; // invert so +Y is visually down
-      // Rotate to keep "down" consistent if user rotates the phone
-      const r = rotate2D(gx, gy, -screenAngleRad());
-      gx = r.x; gy = r.y;
-
-      const m = Math.hypot(gx, gy) || 1e-6;
-      // Normalize to get screen-plane direction of gravity
-      const dirx = gx / m;
-      const diry = gy / m;
-
-      // Exponential smoothing for visual stability
-      const SMOOTH = 0.25;
-      state.down2D.x = state.down2D.x*(1-SMOOTH) + dirx*SMOOTH;
-      state.down2D.y = state.down2D.y*(1-SMOOTH) + diry*SMOOTH;
-      const dmag = Math.min(1, m / Math.max(1, state.g.mag)); // 0..1 strength of tilt
-      state.down2D.mag = dmag;
-
+  async function enableMotion(){
+    try{
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+        const r = await DeviceMotionEvent.requestPermission();
+        if (r !== 'granted') throw new Error('Permission denied');
+      }
+      addEventListener('devicemotion', onMotion, {passive:true});
+      addEventListener('deviceorientation', onOrientation, {passive:true});
+      state.enabled = true; state.demo = false;
+      gate.style.display = 'none';
       updateHUD();
+    }catch(err){
+      alert('Motion access failed: ' + err.message + '\nTip: Use Safari on iPhone, HTTPS, and allow Motion & Orientation Access in Settings.');
     }
+  }
+  function enableDemo(){
+    state.enabled = false; state.demo = true; gate.style.display = 'none';
+    updateHUD();
+  }
 
-    // Optional: deviceorientation as an alternate/backup for direction
-    function onOrientation(e){
-      // Use gamma (left-right) and beta (front-back) to form a 2D "down" proxy
-      if(motionSeen) return; // prefer devicemotion when available
-      const beta = (e.beta || 0) * Math.PI/180;
-      const gamma = (e.gamma || 0) * Math.PI/180;
-      let gx = Math.sin(gamma);
-      let gy = Math.sin(beta);
-      // CSS Y-down
-      gy = Math.max(-1, Math.min(1, gy));
-      gy = Math.sign(gy) * Math.abs(gy);
-
-      const r = rotate2D(gx, gy, -screenAngleRad());
-      const m = Math.hypot(r.x, r.y) || 1e-6;
-      const dirx = r.x / m, diry = r.y / m;
-
-      const SMOOTH = 0.2;
-      state.down2D.x = state.down2D.x*(1-SMOOTH) + dirx*SMOOTH;
-      state.down2D.y = state.down2D.y*(1-SMOOTH) + diry*SMOOTH;
-      state.down2D.mag = Math.min(1, m);
-      updateHUD();
+  // Physics — Verlet integration with distance constraints
+  function step(dt){
+    const pts = state.points;
+    if(!pts.length) return;
+    // Acceleration from gravity in pixels/s^2
+    const gpx = state.gVec.x * state.gMag * state.pxPerMeter;
+    const gpy = state.gVec.y * state.gMag * state.pxPerMeter;
+    const damp = state.damp;
+    // Integration
+    for(let i=1;i<=state.N;i++){
+      const p = pts[i];
+      const vx = (p.x - p.px);
+      const vy = (p.y - p.py);
+      const decay = Math.exp(-damp * dt); // per-second decay
+      const nx = p.x + vx*decay + gpx * dt*dt;
+      const ny = p.y + vy*decay + gpy * dt*dt;
+      p.px = p.x; p.py = p.y;
+      p.x = nx; p.y = ny;
     }
-
-    function updateHUD(){
-      const g = state.g;
-      const tiltPct = Math.round(state.down2D.mag*100);
-      hud.innerHTML = `g≈ <strong>${g.mag ? g.mag.toFixed(2) : '—'}</strong> m/s² · tilt <strong>${tiltPct}%</strong>
-        <br/><span class="warn">${state.enabled ? 'sensors: on' : (state.demo ? 'demo mode' : 'sensors: off')}</span>`;
+    // Constraints iterations
+    const per = state.segLen;
+    const iters = state.iters|0;
+    for(let k=0;k<iters;k++){
+      // Keep first point attached to pivot
+      const pivotX = state.cx, pivotY = state.cy;
+      // Constrain 1st segment to pivot
+      {
+        const p1 = pts[1];
+        const dx = p1.x - pivotX, dy = p1.y - pivotY;
+        const dist = Math.hypot(dx,dy) || 1e-6;
+        const need = per[0];
+        const diff = (dist - need)/dist;
+        p1.x -= dx*diff; p1.y -= dy*diff;
+      }
+      // Constrain subsequent links
+      for(let i=2;i<=state.N;i++){
+        const pa = pts[i-1], pb = pts[i];
+        const dx = pb.x - pa.x, dy = pb.y - pa.y;
+        const dist = Math.hypot(dx,dy) || 1e-6;
+        const need = per[i-1];
+        const diff = (dist - need)/dist;
+        // split correction
+        const corrX = dx*diff*0.5, corrY = dy*diff*0.5;
+        pa.x += corrX; pa.y += corrY;
+        pb.x -= corrX; pb.y -= corrY;
+      }
     }
+  }
 
-    // Render loop
-    function draw(ts){
-      requestAnimationFrame(draw);
-      const {w,h,cx,cy,dpr} = state;
-      // Fade background slightly for trail (nice motion feel) or clear hard
-      ctx.fillStyle = '#0b0f12';
-      ctx.fillRect(0,0,w,h);
+  // Render
+  function draw(){
+    const w = state.w, h = state.h;
+    ctx.fillStyle = '#0b0f12';
+    ctx.fillRect(0,0,w,h);
 
-      // Target bob pos = center + direction * length * strength
-      const L = Math.min(w, h) * 0.38; // nominal length
-      const strength = Math.max(0.1, state.down2D.mag); // avoid zero length
-      const target = {
-        x: cx + state.down2D.x * L * strength,
-        y: cy + state.down2D.y * L * strength
-      };
-      // Smooth follow
-      state.bob.x += (target.x - state.bob.x) * 0.15;
-      state.bob.y += (target.y - state.bob.y) * 0.15;
+    // Rods
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#a9b6cc';
+    ctx.lineWidth = Math.max(1.5, 2.0 * state.dpr);
 
-      // Line (rod)
-      ctx.lineWidth = Math.max(1.5, 2.0 * state.dpr);
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#a9b6cc';
+    let x0 = state.cx, y0 = state.cy;
+    for(let i=1;i<=state.N;i++){
+      const p = state.points[i];
       ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(state.bob.x, state.bob.y);
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(p.x, p.y);
       ctx.stroke();
+      x0 = p.x; y0 = p.y;
+    }
 
-      // Bob
-      const bobR = Math.max(8, 14 * state.dpr);
-      // subtle glow
+    // Bob(s)
+    for(let i=1;i<=state.N;i++){
+      const p = state.points[i];
+      const r = Math.max(8, 12 * state.dpr) * (i===state.N?1.1:0.9);
       ctx.beginPath();
-      ctx.arc(state.bob.x, state.bob.y, bobR*1.9, 0, Math.PI*2);
+      ctx.arc(p.x, p.y, r*1.8, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(81,240,147,0.09)';
       ctx.fill();
-
       ctx.beginPath();
-      ctx.arc(state.bob.x, state.bob.y, bobR, 0, Math.PI*2);
-      const grd = ctx.createRadialGradient(state.bob.x - bobR*0.4, state.bob.y - bobR*0.4, bobR*0.2, state.bob.x, state.bob.y, bobR);
+      ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+      const grd = ctx.createRadialGradient(p.x - r*0.4, p.y - r*0.4, r*0.2, p.x, p.y, r);
       grd.addColorStop(0, '#c4ffd9');
       grd.addColorStop(1, '#2a3645');
       ctx.fillStyle = grd;
       ctx.fill();
-
-      // pivot ring
-      ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(2.5, 3.5*state.dpr), 0, Math.PI*2);
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-      ctx.lineWidth = Math.max(1, 1.5*state.dpr);
-      ctx.stroke();
     }
-    requestAnimationFrame(draw);
 
-    // Permissions / wiring
-    async function enableMotion(){
-      try{
-        // iOS 13+ requires explicit permission
-        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
-          const r = await DeviceMotionEvent.requestPermission();
-          if (r !== 'granted') throw new Error('Permission denied');
-        }
-        window.addEventListener('devicemotion', onMotion, {passive:true});
-        window.addEventListener('deviceorientation', onOrientation, {passive:true});
-        state.enabled = true;
-        state.demo = false;
-        gate.style.display = 'none';
-        updateHUD();
-      }catch(err){
-        alert('Motion access failed: ' + err.message + '\nTip: Use Safari on iPhone, HTTPS, and allow Motion & Orientation Access in Settings.');
+    // FPS
+    const now = performance.now();
+    if(now - state._fpsLast > 500){
+      state.fps = (state._fpsCount * 1000) / (now - state._fpsLast);
+      state._fpsCount = 0; state._fpsLast = now;
+      fpsEl.textContent = (state.fps|0) + ' fps';
+    }else{
+      state._fpsCount++;
+    }
+  }
+
+  // Main loop with fixed substeps for stability
+  const MAX_DT = 0.05; // clamp (s)
+  const STEP = 1/120;  // physics timestep
+  let acc = 0;
+  function loop(t){
+    requestAnimationFrame(loop);
+    let dt = Math.min(MAX_DT, (t - state.lastT)/1000); if(dt<0) dt = 0; state.lastT = t;
+    acc += dt;
+    while(acc >= STEP){
+      // For demo mode, rotate gravity slowly
+      if(state.demo){
+        const spd = 0.6; // rad/s
+        const ang = t/1000 * spd;
+        state.gVec.x = Math.cos(ang);
+        state.gVec.y = Math.sin(ang);
+        state.gMag = 9.81;
       }
+      step(STEP);
+      acc -= STEP;
     }
+    draw();
+  }
+  requestAnimationFrame(loop);
 
-    function enableDemo(){
-      state.enabled = false;
-      state.demo = true;
-      gate.style.display = 'none';
-      updateHUD();
-      // simple circular demo force
-      let t = 0;
-      const demoTick = ()=>{
-        if(!state.demo) return;
-        t += 0.015;
-        state.down2D.x = Math.cos(t);
-        state.down2D.y = Math.sin(t);
-        state.down2D.mag = 1;
-        requestAnimationFrame(demoTick);
-      };
-      demoTick();
-    }
+  // Defaults
+  setSegments(1);
+  updateHUD();
 
-    btnMotion.addEventListener('click', enableMotion);
-    btnDemo.addEventListener('click', enableDemo);
-
-    // Auto-hide gate if permission already allowed on some browsers
-    (async ()=>{
-      // Try enabling silently; if it throws, gate stays
-      try{
-        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission !== 'function'){
-          // Non-iOS: no permission prompt required
-          await enableMotion();
-        }
-      }catch{ /* keep gate */ }
-    })();
-
-    document.addEventListener('visibilitychange', ()=>{
-      if(document.visibilityState !== 'visible') return;
-      // reset smoothing to avoid jump
-      state.g = {x:0,y:0,z:0,mag:0};
-    });
+  // Auto-enable motion when possible (non-iOS)
+  (async ()=>{
+    try{
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission !== 'function'){
+        await enableMotion();
+      }
+    }catch{ /* show gate */ }
   })();
-  </script>
+
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState !== 'visible') return;
+    // Gentle reinit to avoid jumps after tab switch
+    state.points.forEach(p=>{ p.px = p.x; p.py = p.y; });
+  });
+})();
+</script>
 </body>
 </html>
