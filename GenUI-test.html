@@ -5,41 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Pollinations — Prompt → Canvas / Interactive UI</title>
 <style>
-  :root { --bg:#0b0e13; --fg:#e9eef7; --muted:#93a1b4; --accent:#7bd7ff; --ok:#38d39f; --err:#ff6b6b; --wait:#ffd166; --send:#7bb7ff; --render:#b388ff; }
-  html,body { height:100%; margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; }
-  header { padding:12px 16px; border-bottom:1px solid #1b2330; position:sticky; top:0; background:#0b0e13; }
-  header h1 { font-size:14px; margin:0; color:#cfe7ff; letter-spacing:.2px; }
-  main { display:grid; grid-template-columns: 360px 1fr; gap:16px; height:calc(100% - 54px) }
-  aside { padding:12px 16px; border-right:1px solid #1b2330; overflow:auto }
-  #work { position:relative; overflow:auto }
-  textarea { width:100%; min-height:120px; resize:vertical; background:#0f141d; color:var(--fg); border:1px solid #1b2330; border-radius:8px; padding:10px }
-  fieldset { border:1px solid #1b2330; border-radius:8px; padding:10px; margin:12px 0 }
-  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
-  .seg { display:flex; gap:8px }
-  .chip { display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #1b2330; border-radius:999px; cursor:pointer; }
-  input[type="radio"] { accent-color:#7bd7ff }
-  input[type="number"], input[type="text"] { width:96px; background:#0f141d; color:var(--fg); border:1px solid #1b2330; border-radius:6px; padding:6px 8px }
-  button { background:#152033; color:var(--fg); border:1px solid #223149; border-radius:8px; padding:9px 12px; cursor:pointer }
-  button:hover { outline:1px solid #29466e }
-  button[disabled] { opacity:.6; cursor:not-allowed }
-  small { color:var(--muted) }
-  #stage { position:relative; height:100%; min-height:320px }
-  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; background:#0a0a0a }
-  #imgLayer { position:absolute; inset:0; object-fit:contain; display:none }
-  #codeOut { position:absolute; inset:16px; border:1px solid #233247; border-radius:10px; background:#0c121b; display:none }
+  :root{ --bg:#0b0e13; --fg:#e9eef7; --muted:#93a1b4; --accent:#7bd7ff; --ok:#38d39f; --err:#ff6b6b; --wait:#ffd166; --send:#7bb7ff; --render:#b388ff; }
+  html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; overflow-x:hidden; }
+  header{ padding:12px 16px; border-bottom:1px solid #1b2330; position:sticky; top:0; background:#0b0e13; }
+  header h1{ font-size:14px; margin:0; color:#cfe7ff; letter-spacing:.2px; }
+  main{ display:grid; grid-template-columns:360px 1fr; gap:16px; height:calc(100% - 54px); }
+  aside{ padding:12px 16px; border-right:1px solid #1b2330; overflow:auto; }
+  #work{ position:relative; overflow:hidden; }
+  textarea{ width:100%; min-height:120px; resize:vertical; background:#0f141d; color:var(--fg); border:1px solid #1b2330; border-radius:8px; padding:10px; }
+  fieldset{ border:1px solid #1b2330; border-radius:8px; padding:10px; margin:12px 0; }
+  .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .chip{ display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #1b2330; border-radius:999px; cursor:pointer; user-select:none; }
+  input[type="radio"]{ accent-color:#7bd7ff; }
+  input[type="number"],input[type="text"]{ width:96px; background:#0f141d; color:var(--fg); border:1px solid #1b2330; border-radius:6px; padding:6px 8px; }
+  button{ background:#152033; color:var(--fg); border:1px solid #223149; border-radius:8px; padding:9px 12px; cursor:pointer; }
+  button:hover{ outline:1px solid #29466e; }
+  button[disabled]{ opacity:.6; cursor:not-allowed; }
+  small{ color:var(--muted); }
+  /* Stage */
+  #stage{ position:relative; height:100%; min-height:320px; }
+  canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; background:#0a0a0a; }
+  #imgLayer{ position:absolute; inset:0; object-fit:contain; display:none; }
+  #codeOut{ position:absolute; inset:16px; border:1px solid #233247; border-radius:10px; background:#0c121b; display:none; }
   /* Status bar */
-  #statusBar { position:fixed; left:12px; bottom:12px; display:flex; gap:10px; align-items:center; background:#0f141d; border:1px solid #1b2330; border-radius:10px; padding:7px 10px; z-index:10; }
-  #dot { width:10px; height:10px; border-radius:50%; background:#5b6474 }
-  .pulse { animation:pulse 1s infinite }
-  @keyframes pulse { 0%{ box-shadow:0 0 0 0 rgba(123,215,255,0.6)} 70%{ box-shadow:0 0 0 8px rgba(123,215,255,0)} 100%{ box-shadow:0 0 0 0 rgba(123,215,255,0)} }
-  #phase { min-width:110px; font-weight:600 }
-  #elapsed { min-width:56px; text-align:right; color:#b7c6da }
-  #progress { width:120px; height:8px; appearance:none; background:#141c28; border:1px solid #223149; border-radius:999px; overflow:hidden }
-  #progress::-webkit-progress-value { background:var(--accent) }
-  #cancel { margin-left:6px }
-  #feed { position:fixed; right:12px; bottom:12px; max-width:38ch; max-height:35vh; overflow:auto; list-style:none; margin:0; padding:8px 10px; background:#0f141d; border:1px solid #1b2330; border-radius:10px; color:#b7c6da; }
-  #feed li { margin:2px 0; white-space:nowrap; text-overflow:ellipsis; overflow:hidden }
-  #offline { position:fixed; top:8px; left:50%; transform:translateX(-50%); background:#2a1111; color:#ffdede; border:1px solid #542323; padding:6px 10px; border-radius:8px; display:none; z-index:11 }
+  #statusBar{ position:fixed; left:12px; right:12px;
+    bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+    display:flex; gap:10px; align-items:center; background:#0f141d;
+    border:1px solid #1b2330; border-radius:10px; padding:7px 10px; z-index:10; flex-wrap:wrap; }
+  #dot{ width:10px; height:10px; border-radius:50%; background:#5b6474; }
+  .pulse{ animation:pulse 1s infinite; }
+  @keyframes pulse{ 0%{ box-shadow:0 0 0 0 rgba(123,215,255,.6)} 70%{ box-shadow:0 0 0 8px rgba(123,215,255,0)} 100%{ box-shadow:0 0 0 0 rgba(123,215,255,0)} }
+  #phase{ min-width:110px; font-weight:600; }
+  #elapsed{ min-width:56px; text-align:right; color:#b7c6da; }
+  #progress{ width:140px; height:8px; appearance:none; background:#141c28; border:1px solid #223149; border-radius:999px; overflow:hidden; }
+  #progress::-webkit-progress-value{ background:var(--accent); }
+  #cancel{ margin-left:auto; }
+  #feed{ position:fixed; right:12px; bottom:calc(env(safe-area-inset-bottom,0px) + 12px); max-width:42ch; max-height:35vh; overflow:auto; list-style:none; margin:0; padding:8px 10px; background:#0f141d; border:1px solid #1b2330; border-radius:10px; color:#b7c6da; }
+  #feed li{ margin:2px 0; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+  #offline{ position:fixed; top:8px; left:50%; transform:translateX(-50%); background:#2a1111; color:#ffdede; border:1px solid #542323; padding:6px 10px; border-radius:8px; display:none; z-index:11; }
+  /* Mobile: stack, no sideways scroll, big stage */
+  @media (max-width: 820px){
+    main{ grid-template-columns:1fr; height:auto; }
+    aside{ border-right:0; border-bottom:1px solid #1b2330; }
+    #stage{ min-height:calc(100vh - 320px); }
+    #codeOut{ inset:0; border-radius:0; }
+  }
 </style>
 </head>
 <body>
@@ -48,43 +58,43 @@
 <main>
   <aside>
     <label>Raw idea (creative core)</label>
-    <textarea id="raw" placeholder="Describe what you want… e.g., Simple game of traffic lights"></textarea>
+    <textarea id="raw" placeholder="e.g., Simple traffic-light game with score"></textarea>
 
     <div class="row" style="margin-top:8px">
       <button id="run">Run</button>
-      <small id="hint">⌘/Ctrl+Enter runs. Shift+Enter = new line.</small>
+      <small>⌘/Ctrl+Enter runs. Shift+Enter = new line.</small>
     </div>
 
     <fieldset>
       <legend>Mode</legend>
-      <div class="seg" id="mode">
-        <label class="chip"><input type="radio" name="ptype" value="artdir" /> Art-Directed Photo</label>
-        <label class="chip"><input type="radio" name="ptype" value="flatillus" /> Flat Illustration</label>
-        <label class="chip"><input type="radio" name="ptype" value="uicode" checked/> UI Code (text)</label>
+      <div class="row" id="mode">
+        <label class="chip"><input type="radio" name="ptype" value="artdir"> Art-Directed Photo</label>
+        <label class="chip"><input type="radio" name="ptype" value="flatillus"> Flat Illustration</label>
+        <label class="chip"><input type="radio" name="ptype" value="uicode" checked> UI Code (text)</label>
       </div>
     </fieldset>
 
     <fieldset>
       <legend>Image options</legend>
       <div class="row">
-        <label>Seed <input id="seed" type="number" value="42"/></label>
-        <label>Model <input id="model" type="text" placeholder="flux or turbo" value="flux"/></label>
-        <label class="chip"><input id="nologo" type="checkbox" checked/> nologo</label>
-        <label class="chip"><input id="enhance" type="checkbox"/> enhance</label>
+        <label>Seed <input id="seed" type="number" value="42"></label>
+        <label>Model <input id="model" type="text" placeholder="flux or turbo" value="flux"></label>
+        <label class="chip"><input id="nologo" type="checkbox" checked> nologo</label>
+        <label class="chip"><input id="enhance" type="checkbox"> enhance</label>
       </div>
       <small>Canvas size & DPR are sent as width/height.</small>
     </fieldset>
 
     <fieldset>
       <legend>Preview prompt</legend>
-      <pre id="preview" style="white-space:pre-wrap; background:#0f141d; border:1px solid #1b2330; border-radius:8px; padding:10px; min-height:96px;"></pre>
+      <pre id="preview" style="white-space:pre-wrap;background:#0f141d;border:1px solid #1b2330;border-radius:8px;padding:10px;min-height:96px;"></pre>
     </fieldset>
   </aside>
 
   <section id="work">
     <div id="stage">
       <canvas id="cnv"></canvas>
-      <img id="imgLayer" alt="Pollinations output"/>
+      <img id="imgLayer" alt="Pollinations output">
       <iframe id="codeOut" sandbox="allow-scripts" title="Generated UI"></iframe>
     </div>
   </section>
@@ -103,7 +113,7 @@
 <script type="module">
 const $ = s => document.querySelector(s);
 
-// Elements
+// UI refs
 const raw = $('#raw'), runBtn = $('#run'), preview = $('#preview');
 const seedEl = $('#seed'), modelEl = $('#model'), nologoEl = $('#nologo'), enhanceEl = $('#enhance');
 const cnv = $('#cnv'), imgLayer = $('#imgLayer'), codeOut = $('#codeOut');
@@ -112,29 +122,35 @@ const feed = $('#feed'), offline = $('#offline');
 
 const state = { id:0, ctrl:null, timer:null, start:0, running:false };
 
-// —— Robust mode reader (Safari-safe) ——
+// —— Mode (Safari-safe)
 function currentType(){
-  const sel = document.querySelector('input[name="ptype"]:checked');
-  return sel ? sel.value : 'artdir';
+  return (document.querySelector('input[name="ptype"]:checked') || { value:'artdir' }).value;
 }
 
-// —— Canvas sizing ——
+// —— Stage-aware canvas sizing (clamped)
 function sizeCanvas(){
-  const rect = cnv.getBoundingClientRect();
-  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  cnv.width = Math.floor(rect.width * dpr);
-  cnv.height = Math.floor(rect.height * dpr);
+  const host = document.getElementById('stage');
+  const rect = host.getBoundingClientRect();
+  const cssW = Math.max(240, Math.floor(rect.width));
+  const cssH = Math.max(240, Math.floor(rect.height));
+  const dpr  = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+
+  cnv.style.width  = cssW + 'px';
+  cnv.style.height = cssH + 'px';
+  cnv.width  = Math.floor(cssW * dpr);
+  cnv.height = Math.floor(cssH * dpr);
+
   const ctx = cnv.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,rect.width,rect.height);
-  return { w: rect.width|0, h: rect.height|0, dpr };
+  ctx.clearRect(0,0,cssW,cssH);
+  return { w: cssW, h: cssH, dpr };
 }
 addEventListener('resize', sizeCanvas, { passive:true }); sizeCanvas();
 
-// —— Prompt builders ——
+// —— Prompt builders
 function composePrompt(type,W,H){
   const core = (raw.value || 'an evocative scene').trim();
-  if (type==='artdir') return `${core}. cinematic, pro lighting, natural color, depth of field, shot on 50mm, aspect ${W}x${H}.`;
+  if (type==='artdir')  return `${core}. cinematic, pro lighting, natural color, depth of field, shot on 50mm, aspect ${W}x${H}.`;
   if (type==='flatillus') return `${core}. minimal flat vector illustration, clean geometry, soft shadows, aspect ${W}x${H}.`;
   const uiSpec = [
     'Return a COMPLETE single-file HTML with inline CSS and vanilla JS.',
@@ -148,15 +164,12 @@ function composePrompt(type,W,H){
   ].join('\n');
   return `Build an interactive UI for: "${core}".\n${uiSpec}`;
 }
-function updatePreview(){
-  const {w,h} = sizeCanvas(); const t = currentType();
-  preview.textContent = composePrompt(t,w,h);
-}
+function updatePreview(){ const {w,h}=sizeCanvas(); preview.textContent = composePrompt(currentType(), w, h); }
 raw.addEventListener('input', updatePreview);
 document.querySelectorAll('input[name="ptype"]').forEach(r=>r.addEventListener('change', updatePreview));
 updatePreview();
 
-// —— Status helpers ——
+// —— Status + logs
 function feedLine(t){ const li=document.createElement('li'); li.textContent=t; feed.appendChild(li); while(feed.children.length>12) feed.removeChild(feed.firstChild); feed.scrollTop=feed.scrollHeight; }
 function setDot(color,pulse=false){ dot.style.background=color; dot.classList.toggle('pulse', pulse); }
 function setPhase(text,color,pulse=false){ phase.textContent=text; setDot(color,pulse); }
@@ -165,19 +178,16 @@ function startTimer(){ state.start=performance.now(); state.timer=setInterval(()
 function stopTimer(){ clearInterval(state.timer); state.timer=null; }
 function disableControls(disabled){
   [runBtn, ...document.querySelectorAll('input, textarea')].forEach(el=>{
-    if (el===raw) return; // allow typing while running
-    if (el!==cancelBtn) el.disabled = disabled;
+    if (el===raw) return; if (el!==cancelBtn) el.disabled = disabled;
   });
 }
-addEventListener('online',()=>offline.style.display='none');
+addEventListener('online', ()=>offline.style.display='none');
 addEventListener('offline',()=>offline.style.display='block');
 offline.style.display = navigator.onLine ? 'none' : 'block';
 
-// —— Begin/End phases ——
 function begin(kind){
-  state.id++; state.ctrl = new AbortController();
-  cancelBtn.hidden = false; state.running = true;
-  disableControls(true); prog.value = 0; setElapsed(0); startTimer();
+  state.id++; state.ctrl = new AbortController(); state.running = true;
+  cancelBtn.hidden = false; disableControls(true); prog.value = 0; setElapsed(0); startTimer();
   setPhase('Composing','#5b6474'); feedLine(`▶ #${state.id} ${kind} — composing`);
 }
 function sending(){ setPhase('Sending','var(--send)',true); feedLine('↗ sent; awaiting response…'); }
@@ -187,45 +197,38 @@ function rendering(){ setPhase('Rendering','var(--render)',true); feedLine('⚙ 
 function done(msg='Done'){ setPhase('Done','var(--ok)'); prog.value=1; stopTimer(); cancelBtn.hidden=true; disableControls(false); state.running=false; feedLine(`✔ ${msg}`); }
 function failed(msg){ setPhase('Error','var(--err)'); stopTimer(); cancelBtn.hidden=true; disableControls(false); state.running=false; feedLine(`✖ ${msg}`); }
 
-// Cancel
-cancelBtn.addEventListener('click',()=>{ if(state.ctrl) state.ctrl.abort(); failed('Canceled'); });
+cancelBtn.addEventListener('click', ()=>{ if(state.ctrl) state.ctrl.abort(); failed('Canceled'); });
 
-// —— Image path ——
+// —— Image path
 async function generateImage(){
   const {w,h} = sizeCanvas(); begin('image');
-  const prompt = composePrompt(currentType(),w,h);
+  const prompt = composePrompt(currentType(), w, h);
   const qp = new URLSearchParams({
     width:String(Math.max(32,Math.floor(w))),
     height:String(Math.max(32,Math.floor(h))),
     seed:seedEl.value||'42', model:modelEl.value||'flux',
-    nologo:String(!!nologoEl.checked), enhance:String(!!enhanceEl.checked), _t:String(Date.now())
+    nologo:String(!!nologoEl.checked), enhance:String(!!enhanceEl.checked),
+    _t:String(Date.now())
   });
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${qp.toString()}`;
   sending();
   try{
-    const rsp = await fetch(url,{ signal:state.ctrl.signal, cache:'no-store' });
-    waiting();
-    if (!rsp.ok) throw new Error(`HTTP ${rsp.status}`);
-    // Try stream-progress
+    const rsp = await fetch(url, { signal:state.ctrl.signal, cache:'no-store' });
+    waiting(); if(!rsp.ok) throw new Error(`HTTP ${rsp.status}`);
     if (rsp.body){
-      const reader = rsp.body.getReader(); const chunks=[]; let rec=0;
-      while(true){
-        const {done,value} = await reader.read(); if(done) break;
-        chunks.push(value); rec += value.length; receiving(Math.min(0.9, rec/200000)); // heuristic
-      }
-      const blob = new Blob(chunks,{type:'image/png'}); const o = URL.createObjectURL(blob);
+      const reader=rsp.body.getReader(); const chunks=[]; let rec=0;
+      while(true){ const {done,value}=await reader.read(); if(done) break; chunks.push(value); rec+=value.length; receiving(Math.min(0.9,rec/200000)); }
+      const blob=new Blob(chunks,{type:'image/png'}); const o=URL.createObjectURL(blob);
       rendering();
       await new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>{ 
         const ctx=cnv.getContext('2d'); const r=cnv.getBoundingClientRect();
         ctx.clearRect(0,0,r.width,r.height); ctx.drawImage(img,0,0,r.width,r.height);
         URL.revokeObjectURL(o); imgLayer.style.display='none'; codeOut.style.display='none'; res();
       }; img.onerror=rej; img.src=o; });
-      done('Image drawn');
-      return;
+      done('Image drawn'); return;
     }
     throw new Error('No body stream');
-  } catch(e){
-    // Fallback <img>
+  }catch(e){
     waiting();
     const img=new Image(); img.crossOrigin='anonymous';
     const loaded=new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; });
@@ -235,50 +238,73 @@ async function generateImage(){
       const ctx=cnv.getContext('2d'); const r=cnv.getBoundingClientRect();
       ctx.clearRect(0,0,r.width,r.height); ctx.drawImage(img,0,0,r.width,r.height);
       imgLayer.style.display='none'; codeOut.style.display='none'; done('Image drawn (fallback)');
-    } catch(err){ failed('Image load failed'); }
+    }catch(err){ failed('Image load failed'); }
   }
 }
 
-// —— Code path ——
+// —— Code path (+ clear handling for “picture” / non-HTML)
 async function generateCode(){
   const {w,h} = sizeCanvas(); begin('ui-code');
-  const prompt = composePrompt('uicode',w,h);
+  const prompt = composePrompt('uicode', w, h);
   const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=qwen-coder`;
   sending();
   let text='';
   try{
-    const rsp = await fetch(url,{ signal:state.ctrl.signal, cache:'no-store' });
+    const rsp = await fetch(url, { signal:state.ctrl.signal, cache:'no-store' });
     waiting(); if(!rsp.ok) throw new Error(`HTTP ${rsp.status}`);
-    if (rsp.body){ // stream to feel alive
+    if (rsp.body){
       const reader=rsp.body.getReader(); const dec=new TextDecoder(); let buf='';
-      while(true){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true}); receiving(Math.min(0.9, buf.length/150000)); }
+      while(true){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true}); receiving(Math.min(0.9,buf.length/150000)); }
       text = buf + new TextDecoder().decode();
-    } else {
-      text = await rsp.text();
-    }
+    } else { text = await rsp.text(); }
   } catch(e){ failed('Network/text fetch failed'); return; }
+
   text = text.replace(/^\s*```(?:html)?/i,'').replace(/```$/,'').trim();
   rendering();
-  if (!/\<html/i.test(text)){
-    const esc = s=>s.replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    codeOut.srcdoc = `<!doctype html><meta charset="utf-8"><pre style="color:#eaeef7;background:#0b0e13;padding:16px;white-space:pre-wrap">${esc(text)}</pre>`;
-    codeOut.style.display='block'; const ctx=cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height);
-    done('Received text (not full HTML)');
-  } else {
-    codeOut.srcdoc = text; codeOut.style.display='block';
+
+  const looksHTML = /<html/i.test(text);
+  const oneWord   = /^[a-z]+$/i.test(text) && text.length<=12;
+
+  if (!looksHTML){
+    // Auto-fallback if the model replied with a single word like “picture”
+    if (oneWord){
+      feedLine(`ℹ Non-HTML reply “${text}”. Falling back to image…`);
+      // switch mode to artdir image temporarily
+      const prev = document.querySelector('input[name="ptype"]:checked');
+      const art = document.querySelector('input[name="ptype"][value="artdir"]');
+      if (art && prev) art.checked = true;
+      done('Switching to image');   // close this run cleanly
+      return generateImage();       // start a new run
+    }
+    // Otherwise, show the text so it’s obvious what happened
+    const esc=s=>s.replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    codeOut.srcdoc = `<!doctype html><meta charset="utf-8">
+    <body style="margin:0;background:#0b0e13;color:#eaeef7;font:14px system-ui">
+      <div style="padding:16px;border:1px solid #233247;border-radius:10px;margin:16px">
+        <b>Provider returned non-HTML.</b><br>
+        <div style="opacity:.9;margin-top:6px">Preview: “${esc(text.slice(0,180)).replace(/\s+/g,' ')}${text.length>180?'…':''}”</div>
+        <div style="margin-top:10px">Try again or switch to <b>Image</b> mode.</div>
+      </div>
+    </body>`;
+    codeOut.style.display='block';
     const ctx=cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height);
-    done('Interactive UI embedded');
+    done('Non-HTML from provider'); return;
   }
+
+  codeOut.srcdoc = text;
+  codeOut.style.display='block';
+  const ctx=cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height);
+  done('Interactive UI embedded');
 }
 
-// —— Run control ——
-function runCurrent(){ const t=currentType(); return t==='uicode' ? generateCode() : generateImage(); }
+// —— Run control
+function runCurrent(){ return currentType()==='uicode' ? generateCode() : generateImage(); }
 runBtn.addEventListener('click', runCurrent);
 raw.addEventListener('keydown', e => { const meta=e.metaKey||e.ctrlKey; if(meta && e.key==='Enter'){ e.preventDefault(); runCurrent(); } });
 
-// —— Error surfacing ——
-window.addEventListener('error', (e)=>{ feedLine(`⚠ JS error: ${e.message}`); });
-window.addEventListener('unhandledrejection', (e)=>{ feedLine(`⚠ Promise: ${e.reason}`); });
+// —— Surface JS errors
+addEventListener('error', e => feedLine(`⚠ JS error: ${e.message}`));
+addEventListener('unhandledrejection', e => feedLine(`⚠ Promise: ${e.reason}`));
 </script>
 </body>
 </html>
