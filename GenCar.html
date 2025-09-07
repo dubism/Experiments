@@ -20,8 +20,9 @@
     overflow-x:hidden;
   }
   .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  /* Nudge the image slightly above dead center */
-  .stage{width:min(92vw,1000px); transform:translateY(-5vh); display:flex; justify-content:center; align-items:center; position:relative}
+
+  /* Stage: image slightly above center */
+  .stage{width:min(92vw,1000px); transform:translateY(-5vh); display:flex; justify-content:center; align-items:center}
   .frame{
     position:relative; width:100%; aspect-ratio:16/10; border-radius:14px; overflow:hidden;
     box-shadow:0 12px 32px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111
@@ -31,23 +32,29 @@
     object-fit:contain; image-rendering:auto; filter:contrast(1.02) saturate(1.02)
   }
   .loading{position:absolute; inset:auto 0 10px 0; text-align:center; font-size:12px; color:var(--muted)}
+
+  /* Prompt panel OUTSIDE the image, just below it */
+  .promptPanel{
+    width:min(92vw,1000px);
+    margin-top:10px; transform:translateY(-4vh);
+  }
   .promptBox{
-    position:absolute; top:10px; right:10px; z-index:5;
     background:rgba(20,20,20,.7); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
-    border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:0; min-width:220px;
+    border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:0; overflow:hidden;
   }
   .promptBox summary{
-    list-style:none; cursor:pointer; padding:8px 12px; font-weight:600; letter-spacing:.2px;
+    list-style:none; cursor:pointer; padding:10px 12px; font-weight:600; letter-spacing:.2px;
   }
-  .promptBox[open]{background:rgba(15,15,15,.85)}
   .promptBody{padding:8px 12px 12px}
   .promptBody pre{white-space:pre-wrap; word-break:break-word; margin:0 0 8px 0; font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; color:#dfe6ef}
   .promptActions{display:flex; gap:8px}
   .btn{
     appearance:none; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px;
-    background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer;
+    background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer; text-decoration:none;
   }
-  .controls{width:min(92vw,860px); margin-top:16px; transform:translateY(-3vh)}
+
+  /* Controls */
+  .controls{width:min(92vw,860px); margin-top:14px; transform:translateY(-2vh)}
   .row{display:grid; grid-template-columns:110px 1fr 90px; gap:12px; align-items:center; padding:10px 12px}
   .label{font-weight:600; letter-spacing:.2px}
   .val{font-variant-numeric:tabular-nums; text-align:right; color:var(--muted)}
@@ -58,6 +65,8 @@
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.5); margin-top:-6px}
   input[type="range"]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.5)}
   .hint{opacity:.75; font-size:11px; text-align:center; margin-top:8px; color:var(--muted)}
+
+  /* Error bar */
   .errbar{
     position:fixed; left:12px; right:12px; bottom:12px; padding:10px 12px; border-radius:10px;
     background:#2b1212; color:#ffd6d6; border:1px solid #913c3c; font-size:12px; display:none; z-index:9999
@@ -68,19 +77,23 @@
   <div class="wrap">
     <div class="stage">
       <div class="frame" id="frame">
-        <details class="promptBox" id="promptBox">
-          <summary>Prompt ▾</summary>
-          <div class="promptBody">
-            <pre id="promptText">—</pre>
-            <div class="promptActions">
-              <button class="btn" id="copyBtn">Copy prompt</button>
-              <a class="btn" id="openBtn" target="_blank" rel="noopener">Open image</a>
-            </div>
-          </div>
-        </details>
         <img id="img" alt="Generated scene" crossorigin="anonymous" referrerpolicy="no-referrer" decoding="async" fetchpriority="high">
         <div class="loading" id="loading" aria-live="polite">Loading…</div>
       </div>
+    </div>
+
+    <!-- Prompt dropdown moved OUTSIDE the image -->
+    <div class="promptPanel">
+      <details class="promptBox" id="promptBox">
+        <summary>Prompt ▾</summary>
+        <div class="promptBody">
+          <pre id="promptText">—</pre>
+          <div class="promptActions">
+            <button class="btn" id="copyBtn">Copy prompt</button>
+            <a class="btn" id="openBtn" target="_blank" rel="noopener">Open image</a>
+          </div>
+        </div>
+      </details>
     </div>
 
     <div class="controls">
@@ -108,7 +121,7 @@
 <script>
 'use strict';
 (() => {
-  // ======= Global error hardening =======
+  // ======= Error bar =======
   const errbar = document.getElementById('errbar');
   function showError(msg){
     errbar.textContent = msg;
@@ -117,38 +130,22 @@
     showError._t = setTimeout(()=>{ errbar.style.display='none'; }, 6000);
   }
   window.addEventListener('error', e => { showError(`Script error: ${e.message}`); });
-  window.addEventListener('unhandledrejection', e => { showError(`Promise error: ${e.reason && e.reason.message || e.reason}`); });
+  window.addEventListener('unhandledrejection', e => { showError(`Promise error: ${e.reason?.message || e.reason}`); });
 
   // ======= DOM =======
   const $ = s => document.querySelector(s);
   const img = $('#img'), loading = $('#loading');
-  const promptBox = $('#promptBox'), promptText = $('#promptText'), copyBtn = $('#copyBtn'), openBtn = $('#openBtn');
+  const promptText = $('#promptText'), copyBtn = $('#copyBtn'), openBtn = $('#openBtn');
 
   const habitats = [
-    "alpine tundra",
-    "boreal coniferous forest",
-    "mixed temperate forest",
-    "deciduous woodland",
-    "grassland steppe",
-    "farmland and orchards",
-    "Mediterranean scrubland",
-    "savanna",
-    "semi-desert badlands",
-    "sandy desert dunes"
+    "alpine tundra","boreal coniferous forest","mixed temperate forest","deciduous woodland",
+    "grassland steppe","farmland and orchards","Mediterranean scrubland","savanna",
+    "semi-desert badlands","sandy desert dunes"
   ];
   const cars = [
-    "microcar (A-segment)",
-    "city hatchback (B-segment)",
-    "compact sedan (C-segment)",
-    "midsize sedan",
-    "estate wagon",
-    "compact SUV",
-    "midsize SUV",
-    "large SUV",
-    "pickup truck",
-    "minibus / van"
+    "microcar (A-segment)","city hatchback (B-segment)","compact sedan (C-segment)","midsize sedan",
+    "estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"
   ];
-
   const timeEl = $('#time'), envEl = $('#env'), carEl = $('#car');
   const timeVal = $('#timeVal'), envVal = $('#envVal'), carVal = $('#carVal');
 
@@ -170,80 +167,90 @@
   function buildPrompt(){
     const h = +timeEl.value, e = +envEl.value, c = +carEl.value;
     const hour = String(h).padStart(2,'0')+":00";
-    // Keep it short for speed.
     return `A realistic photo of a ${cars[c]} in ${habitats[e]} at ${hour}. Natural light, detailed, no text`;
   }
-  function pollinationsURL(prompt){
-    const w = 640, h = 384; // small & quick; adjust if you want
-    const seed = Math.floor(Math.random()*1e9);
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=turbo&width=${w}&height=${h}&enhance=false&seed=${seed}`;
+  function buildURL(prompt, model='turbo'){
+    // Small, quick; add n=1, jittered seed, and cache-buster
+    const w = 640, h = 384;
+    const seed = (Math.random()*1e9|0);
+    const t = Date.now() % 1e7;
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=${model}&n=1&width=${w}&height=${h}&enhance=false&seed=${seed}&t=${t}`;
+  }
+  function proxyURL(url){
+    // Final fallback via images CDN proxy (bypasses some TLS/CORS hiccups)
+    return `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
   }
   function updatePromptUI(prompt, url){
     promptText.textContent = prompt;
     openBtn.href = url;
   }
 
-  // ======= Render flow (hardened) =======
-  let lastURL = null;
+  // ======= Render flow with fallbacks =======
+  let lastAttempt = 0;
+  const tryModels = ['turbo','flux']; // order of preference
   const generate = rafDebounce(() => {
-    try{
-      const prompt = buildPrompt();
-      const url = pollinationsURL(prompt);
-      lastURL = url;
-      updatePromptUI(prompt, url);
-      loading.textContent = "Loading…";
-      img.style.opacity = .25;
-
-      // Handlers (re-attached safely)
-      img.onload = () => {
-        // If another request happened after we set src, ignore stale onload
-        if (img.src.indexOf(url) === -1) return;
-        img.style.opacity = 1;
-        loading.textContent = "";
-        try { extractPaletteToBackground(img); }
-        catch(e){ fallbackPaletteToBackground(url); }
-      };
-      img.onerror = () => {
-        loading.textContent = "Load error — retrying…";
-        // retry once with fresh seed; if still fails, fall back
-        const retry = pollinationsURL(prompt) + `&t=${Date.now()}`;
-        setTimeout(()=>{ img.src = retry; updatePromptUI(prompt, retry); }, 150);
-      };
-
-      // Bust caches & start
-      img.src = url + `&t=${Date.now()}`;
-    }catch(e){
-      showError(`Generate failed: ${e.message||e}`);
-    }
+    const prompt = buildPrompt();
+    const model = tryModels[0];
+    loadImageWithFallbacks(prompt, model, 0);
   });
 
-  // ======= Palette extraction (k-means, CORS-safe fallback) =======
+  function loadImageWithFallbacks(prompt, model, attempt){
+    const baseURL = buildURL(prompt, model);
+    const sequence = [
+      baseURL,                                  // 0: preferred model
+      buildURL(prompt, tryModels[1]||'flux'),   // 1: alternate model
+      proxyURL(baseURL)                         // 2: CDN proxy of #0
+    ];
+    const url = sequence[attempt] || sequence[sequence.length-1];
+
+    lastAttempt = attempt;
+    updatePromptUI(prompt, url);
+    loading.textContent = `Loading…${attempt?` (retry ${attempt})`:''}`;
+    img.style.opacity = .25;
+
+    img.onload = () => {
+      // Ignore stale loads
+      img.style.opacity = 1;
+      loading.textContent = "";
+      try { extractPaletteToBackground(img); }
+      catch(e){ fallbackPaletteToBackground(url); }
+    };
+    img.onerror = () => {
+      if (attempt < sequence.length - 1) {
+        setTimeout(()=>loadImageWithFallbacks(prompt, model, attempt+1), 150);
+      } else {
+        loading.textContent = "Load failed";
+        showError("Image load failed repeatedly (rate-limit or backend error). Try tweaking sliders or waiting a moment.");
+        // keep gradient at least deterministic
+        fallbackPaletteToBackground(url);
+      }
+    };
+
+    img.src = url;
+  }
+
+  // ======= Palette extraction (k-means with CORS-safe fallback) =======
   function extractPaletteToBackground(imageEl){
-    // If CORS blocks canvas, getImageData will throw—wrapped below.
     const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d', {willReadFrequently:true});
-    const S = 64;
-    cvs.width = S; cvs.height = S;
+    const S = 64; cvs.width = S; cvs.height = S;
     ctx.drawImage(imageEl, 0, 0, S, S);
     let data;
     try { data = ctx.getImageData(0,0,S,S).data; }
     catch(e){ fallbackPaletteToBackground(imageEl.src); return; }
 
-    // Build points
     const pts = [];
     for (let i=0;i<data.length;i+=4){
-      const a = data[i+3]; if (a<16) continue;
-      pts.push([data[i], data[i+1], data[i+2]]);
+      if (data[i+3]<16) continue;
+      pts.push([data[i],data[i+1],data[i+2]]);
     }
     if (!pts.length){ fallbackPaletteToBackground(imageEl.src); return; }
 
-    const centers = kmeansRGB(pts, 4, 7); // [{r,g,b,count}, ...]
+    const centers = kmeansRGB(pts, 4, 7);
     centers.sort((A,B)=>B.count-A.count);
     const cols = centers.map(c=>rgbToHex(c.r,c.g,c.b));
     applyGradient(cols);
   }
-
   function kmeansRGB(points, k=4, iters=6){
-    // init with random seeds
     const centers = Array.from({length:k}, _=>{
       const p = points[(Math.random()*points.length)|0];
       return {r:p[0], g:p[1], b:p[2], count:1};
@@ -265,9 +272,8 @@
         if (A.n>0){ centers[j].r=A.r/A.n; centers[j].g=A.g/A.n; centers[j].b=A.b/A.n; centers[j].count=A.n; }
       }
     }
-    return centers.map(c=>({r: c.r|0, g: c.g|0, b: c.b|0, count: c.count||1}));
+    return centers.map(c=>({r:c.r|0,g:c.g|0,b:c.b|0,count:c.count||1}));
   }
-
   function rgbToHex(r,g,b){ return "#"+[r,g,b].map(v=>clamp(v|0,0,255).toString(16).padStart(2,'0')).join(''); }
   function applyGradient(cols){
     const [c1="#222",c2="#111",c3="#191919",c4="#101010"] = cols;
@@ -283,7 +289,6 @@
     });
     applyGradient(cols);
   }
-  // Tiny PRNGs
   function xmur3(str){ for(var h=1779033703^str.length,i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19;} return function(){h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return (h^h>>>16)>>>0;};}
   function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}}
 
@@ -296,20 +301,17 @@
   [timeEl, envEl, carEl].forEach(el => el.addEventListener('input', () => { reflectLabels(); generate(); }));
 
   copyBtn.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(promptText.textContent); copyBtn.textContent='Copied'; setTimeout(()=>copyBtn.textContent='Copy prompt', 1000); }
-    catch(e){ showError('Clipboard blocked'); }
+    try { await navigator.clipboard.writeText(promptText.textContent);
+      copyBtn.textContent='Copied'; setTimeout(()=>copyBtn.textContent='Copy prompt', 900);
+    } catch { showError('Clipboard blocked'); }
   });
 
-  // ======= Init (random defaults + immediate first render) =======
-  try{
-    timeEl.value = (Math.random()*24)|0;
-    envEl.value  = (Math.random()*habitats.length)|0;
-    carEl.value  = (Math.random()*cars.length)|0;
-    reflectLabels();
-    generate();
-  }catch(e){
-    showError(`Init failed: ${e.message||e}`);
-  }
+  // ======= Init =======
+  timeEl.value = (Math.random()*24)|0;
+  envEl.value  = (Math.random()*habitats.length)|0;
+  carEl.value  = (Math.random()*cars.length)|0;
+  reflectLabels();
+  generate();
 })();
 </script>
 </body>
