@@ -3,17 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Pollinations — Time × Environment × Car × Era</title>
-
-<!-- Connect early -->
+<title>Pollinations — Time × Environment × Car × Era × Direction</title>
 <link rel="preconnect" href="https://image.pollinations.ai" crossorigin>
 <link rel="dns-prefetch" href="//image.pollinations.ai">
 <link rel="dns-prefetch" href="//images.weserv.nl">
-
 <style>
   :root{
     --fg:#e8eef5; --muted:#a6b0bd;
-    --c1:#222; --c2:#111; --c3:#191919; --c4:#101010; /* will be updated */
+    --c1:#1a1a1a; --c2:#121212; --c3:#151515; --c4:#0f0f0f; /* grayscale waiting palette */
   }
   *{box-sizing:border-box}
   html,body{
@@ -21,7 +18,7 @@
       radial-gradient(at 0% 0%, var(--c1), transparent 60%),
       radial-gradient(at 100% 0%, var(--c2), transparent 60%),
       radial-gradient(at 0% 100%, var(--c3), transparent 60%),
-      radial-gradient(at 100% 100%, var(--c4), transparent 60%), #0a0a0a;
+      radial-gradient(at 100% 100%, var(--c4), transparent 60%), #0b0b0b;
     color:var(--fg); font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
     overflow-x:hidden;
   }
@@ -29,17 +26,17 @@
   .stage{width:min(92vw,1000px); transform:translateY(-5vh); display:flex; justify-content:center; align-items:center}
   .frame{
     position:relative; width:100%; aspect-ratio:16/10; border-radius:14px; overflow:hidden;
-    box-shadow:0 12px 32px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111
+    box-shadow:0 12px 32px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111;
   }
   .frame img{
     position:absolute; inset:0; margin:auto; max-width:100%; max-height:100%;
-    object-fit:contain; image-rendering:auto; filter:contrast(1.02) saturate(1.02)
+    object-fit:contain; image-rendering:auto; filter:contrast(1.02) saturate(1.02);
   }
   .loading{
     position:absolute; inset:auto 0 10px 0; text-align:center; font-size:12px; color:var(--muted);
-    transition:opacity .2s ease; opacity:1;
+    transition:opacity .2s ease; opacity:0; pointer-events:none;
   }
-  .loading.hidden{opacity:0; pointer-events:none}
+  .loading.show{opacity:1}
 
   /* Panels below the image */
   .panel{width:min(92vw,1000px); margin-top:10px; transform:translateY(-4vh)}
@@ -58,7 +55,7 @@
 
   /* Controls */
   .controls{width:min(92vw,860px); margin-top:14px; transform:translateY(-2vh)}
-  .row{display:grid; grid-template-columns:110px 1fr 128px; gap:12px; align-items:center; padding:10px 12px}
+  .row{display:grid; grid-template-columns:110px 1fr 148px; gap:12px; align-items:center; padding:10px 12px}
   .label{font-weight:600; letter-spacing:.2px}
   .val{font-variant-numeric:tabular-nums; text-align:right; color:var(--muted)}
   input[type="range"]{width:100%; -webkit-appearance:none; appearance:none; height:28px; background:transparent}
@@ -80,7 +77,7 @@
   <div class="wrap">
     <div class="stage">
       <div class="frame">
-        <!-- NOTE: no opacity games; keep always at 1 -->
+        <!-- Keeps showing the previous image; we swap only after preload finishes -->
         <img id="img" alt="Generated scene" crossorigin="anonymous" referrerpolicy="no-referrer" decoding="async" loading="eager" fetchpriority="high">
         <div class="loading" id="loading" aria-live="polite">Loading…</div>
       </div>
@@ -136,7 +133,12 @@
         <input id="era" type="range" min="0" max="11" step="1">
         <div class="val" id="eraVal"></div>
       </div>
-      <div class="hint">Updates on every change · Background adapts to image colors (4-point gradient)</div>
+      <div class="row">
+        <div class="label">Direction</div>
+        <input id="dir" type="range" min="0" max="7" step="1">
+        <div class="val" id="dirVal"></div>
+      </div>
+      <div class="hint">Updates after 200 ms pause · Background adapts to image colors (4-point gradient)</div>
     </div>
   </div>
 
@@ -174,13 +176,23 @@
   const eras = [
     "1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","2030s","2050s"
   ];
+  // Ordered, typical exterior views
+  const directions = [
+    "front three-quarter view",
+    "rear three-quarter view",
+    "side profile view",
+    "front head-on view",
+    "rear head-on view",
+    "low-angle front three-quarter view",
+    "high-angle front three-quarter view",
+    "aerial three-quarter view"
+  ];
 
-  const timeEl = $('#time'), envEl = $('#env'), carEl = $('#car'), eraEl = $('#era');
-  const timeVal = $('#timeVal'), envVal = $('#envVal'), carVal = $('#carVal'), eraVal = $('#eraVal');
+  const timeEl = $('#time'), envEl = $('#env'), carEl = $('#car'), eraEl = $('#era'), dirEl = $('#dir');
+  const timeVal = $('#timeVal'), envVal = $('#envVal'), carVal = $('#carVal'), eraVal = $('#eraVal'), dirVal = $('#dirVal');
 
   /* ===== Utils ===== */
   const clamp = (v,min,max)=>Math.min(max,Math.max(min,v));
-  const rafDebounce = (fn) => { let req=0; return (...a)=>{ cancelAnimationFrame(req); req=requestAnimationFrame(()=>fn(...a)); }; };
   const log = (m) => { debugText.textContent = `[${(new Date).toLocaleTimeString()}] ${m}\n` + debugText.textContent; };
   function labelHour(h){
     const hh = String(h).padStart(2,'0')+":00";
@@ -199,11 +211,12 @@
     envVal.textContent  = habitats[+envEl.value];
     carVal.textContent  = cars[+carEl.value];
     eraVal.textContent  = eras[+eraEl.value];
+    dirVal.textContent  = directions[+dirEl.value];
   }
 
   function buildPrompt(){
     const hour = String(+timeEl.value).padStart(2,'0')+":00";
-    return `A realistic ${eras[+eraEl.value]} style photo of a ${cars[+carEl.value]} in ${habitats[+envEl.value]} at ${hour}. Natural light, detailed, no text`;
+    return `A realistic ${eras[+eraEl.value]} style photo, ${directions[+dirEl.value]}, of a ${cars[+carEl.value]} in ${habitats[+envEl.value]} at ${hour}. Natural light, detailed, no text`;
   }
 
   /* ===== URL builders + fallbacks ===== */
@@ -217,46 +230,66 @@
   const uPlain = p => uBase(p,null,640,384);
   const uSmall = p => uBase(p,'turbo',512,512);
   const uProxy = url => `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
-
   function candidates(p){
-    const a = uTurbo(p);
-    const b = uFlux(p);
-    const c = uPlain(p);
-    const d = uSmall(p);
-    return [a, b, c, d, uProxy(a), uProxy(b)];
+    const a = uTurbo(p), b = uFlux(p), c = uPlain(p), d = uSmall(p);
+    return [a,b,c,d,uProxy(a),uProxy(b)];
   }
 
-  /* ===== Strong load-complete detection =====
-     - remove opacity gating entirely
-     - hide the loading label when we KNOW the bitmap is available:
-       1) img.decode() resolves, OR
-       2) 'load' fires, OR
-       3) img.complete && naturalWidth>0 (Safari cache case)
-  */
-  let genToken = 0; // ignore stale completions
-  function setLoading(on){
-    loading.classList.toggle('hidden', !on);
-    loading.textContent = on ? 'Loading…' : '';
+  /* ===== Loader state ===== */
+  function setLoading(on, attemptText=''){
+    loading.classList.toggle('show', !!on);
+    loading.textContent = on ? `Loading…${attemptText}` : '';
   }
 
-  function startLoad(url, token){
-    img.src = url + `&t=${Date.now()%1e7}`; // cache-buster
-    // Pre-hide issues if Safari cached it
-    if (img.complete && img.naturalWidth > 0) {
-      onLoaded(token);
-      return;
+  /* ===== Keep-previous-image: preload → swap ===== */
+  let genToken = 0;
+  function loadSequence(prompt){
+    const seq = candidates(prompt);
+    let i = 0;
+    const token = ++genToken;
+
+    // apply neutral grayscale while waiting
+    setWaitingGradient(prompt);
+
+    setLoading(true, ` (attempt ${i+1}/${seq.length})`);
+    tryOne(seq[i]);
+
+    function tryOne(url){
+      if (token !== genToken) return; // stale
+      const pre = new Image();
+      pre.crossOrigin = 'anonymous';
+      pre.referrerPolicy = 'no-referrer';
+      const start = performance.now();
+
+      pre.onload = () => {
+        if (token !== genToken) return;
+        // swap only now — old image stays visible until this moment
+        img.src = pre.src;
+        setLoading(false);
+        log(`Loaded OK in ${Math.round(performance.now()-start)}ms via ${url.includes('weserv.nl')?'proxy':'direct'}`);
+        // palette from the loaded bitmap
+        try { extractPaletteToBackground(pre); } catch { setWaitingGradient(url); }
+      };
+      pre.onerror = () => {
+        if (token !== genToken) return;
+        if (++i < seq.length){
+          setLoading(true, ` (attempt ${i+1}/${seq.length})`);
+          tryOne(seq[i]);
+        } else {
+          setLoading(false);
+          showError('Image load failed repeatedly.');
+          log('All attempts failed.');
+        }
+      };
+
+      // decode() gives early readiness on Safari/iOS too
+      pre.src = url + `&t=${Date.now()%1e7}`;
+      if (typeof pre.decode === 'function'){
+        pre.decode().catch(()=>{/* ignore, onload will still fire when ready */});
+      }
+      // update prompt UI every attempt
+      updatePromptUI(prompt, url);
     }
-    // decode() gives us a reliable promise on modern Safari
-    if (typeof img.decode === 'function'){
-      img.decode().then(()=>{ onLoaded(token); }).catch(()=>{/* fallback to load event */});
-    }
-  }
-
-  function onLoaded(token){
-    if (token !== genToken) { log('Stale decode/load ignored'); return; }
-    setLoading(false);
-    try { extractPaletteToBackground(img); }
-    catch(e){ fallbackPaletteToBackground(img.currentSrc || img.src); }
   }
 
   function updatePromptUI(prompt, url){
@@ -270,43 +303,16 @@
     };
   }
 
-  const generate = rafDebounce(() => {
-    const prompt = buildPrompt();
-    const seq = candidates(prompt);
-    let attempt = 0;
-    genToken++; // new generation
-    const myToken = genToken;
-
-    // Immediate background so UI never looks static, even if k-means later fails
-    fallbackPaletteToBackground(seq[0]);
-
-    setLoading(true);
-    img.onload = () => onLoaded(myToken);
-    img.onerror = () => {
-      if (++attempt < seq.length){
-        log(`onerror → retry ${attempt+1}/${seq.length}`);
-        updatePromptUI(prompt, seq[attempt]);
-        startLoad(seq[attempt], myToken);
-      } else {
-        setLoading(false);
-        showError("Image load failed repeatedly (likely rate-limit/backend).");
-      }
-    };
-
-    updatePromptUI(prompt, seq[0]);
-    startLoad(seq[0], myToken);
-  });
-
-  /* ===== Palette (k-means) + safe fallback ===== */
+  /* ===== Palette: k-means + grayscale waiting ===== */
   function extractPaletteToBackground(imageEl){
     const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d',{willReadFrequently:true});
     const S = 64; cvs.width=S; cvs.height=S; ctx.drawImage(imageEl,0,0,S,S);
     let data;
     try { data = ctx.getImageData(0,0,S,S).data; }
-    catch(e){ fallbackPaletteToBackground(imageEl.currentSrc || imageEl.src); return; }
+    catch { setWaitingGradient(imageEl.currentSrc || imageEl.src); return; }
     const pts = [];
     for (let i=0;i<data.length;i+=4){ if (data[i+3]>=16) pts.push([data[i],data[i+1],data[i+2]]); }
-    if (!pts.length){ fallbackPaletteToBackground(imageEl.currentSrc || imageEl.src); return; }
+    if (!pts.length){ setWaitingGradient(imageEl.currentSrc || imageEl.src); return; }
     const centers = kmeansRGB(pts,4,7).sort((A,B)=>B.count-A.count);
     const cols = centers.map(c=>rgbToHex(c.r,c.g,c.b));
     applyGradient(cols);
@@ -328,31 +334,39 @@
   }
   function rgbToHex(r,g,b){ return "#"+[r,g,b].map(v=>clamp(v|0,0,255).toString(16).padStart(2,'0')).join(''); }
   function applyGradient(cols){
-    const [c1="#222",c2="#111",c3="#191919",c4="#101010"] = cols;
+    const [c1="#1a1a1a",c2="#121212",c3="#151515",c4="#0f0f0f"] = cols;
     const root = document.documentElement.style;
     root.setProperty('--c1', c1); root.setProperty('--c2', c2);
     root.setProperty('--c3', c3); root.setProperty('--c4', c4);
   }
-  // Always gives *something* immediately; also used as CORS fallback
-  function fallbackPaletteToBackground(str){
-    const h = xmur3(str), rnd=mulberry32(h());
-    const cols = Array.from({length:4}, _=>{
-      const r = 32 + (rnd()*192|0), g = 32 + (rnd()*192|0), b = 32 + (rnd()*192|0);
-      return rgbToHex(r,g,b);
-    });
-    applyGradient(cols);
+  // Waiting gradient: 4 shades of gray (seeded but neutral)
+  function setWaitingGradient(seedStr){
+    const seed = xmur3(seedStr||'seed')();
+    const rnd = mulberry32(seed);
+    const g = n => {
+      const v = 24 + ((rnd()*180)|0); return `#${[v,v,v].map(x=>x.toString(16).padStart(2,'0')).join('')}`;
+    };
+    applyGradient([g(),g(),g(),g()]);
   }
   function xmur3(str){ for(var h=1779033703^str.length,i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19;} return function(){h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return (h^h>>>16)>>>0;};}
   function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}}
 
-  /* ===== Self-test ===== */
+  /* ===== Debounced generate (200 ms after last input) ===== */
+  let debounceT = 0;
+  function scheduleGenerate(){
+    clearTimeout(debounceT);
+    debounceT = setTimeout(()=> {
+      const prompt = buildPrompt();
+      loadSequence(prompt);
+    }, 200);
+  }
+
+  retryBtn.onclick = () => scheduleGenerate();
   selfTestBtn.onclick = async () => {
     log(`UA: ${navigator.userAgent}`);
     log(`online: ${navigator.onLine}`);
     await probe('https://picsum.photos/3');
-    const t = uPlain('test');
-    await probe(t);
-    await probe(uProxy(t));
+    const t = uPlain('test'); await probe(t); await probe(uProxy(t));
   };
   function probe(url){
     return new Promise(res=>{
@@ -366,16 +380,15 @@
     });
   }
 
-  retryBtn.onclick = () => generate();
-
   /* ===== Wire sliders & init ===== */
-  [timeEl, envEl, carEl, eraEl].forEach(el => el.addEventListener('input', ()=>{ reflectLabels(); generate(); }));
+  [timeEl, envEl, carEl, eraEl, dirEl].forEach(el => el.addEventListener('input', ()=>{ reflectLabels(); scheduleGenerate(); }));
   timeEl.value = (Math.random()*24)|0;
   envEl.value  = (Math.random()*habitats.length)|0;
   carEl.value  = (Math.random()*cars.length)|0;
   eraEl.value  = (Math.random()*eras.length)|0;
+  dirEl.value  = (Math.random()*directions.length)|0;
   reflectLabels();
-  generate();
+  scheduleGenerate(); // initial generate (debounced)
 })();
 </script>
 </body>
