@@ -28,7 +28,6 @@
 
   .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start; gap:8px}
 
-  /* Stage: no negative translate so nothing goes off-screen */
   .stage{width:min(96vw, 900px); display:flex; justify-content:center; align-items:center}
   .frame{
     position:relative; width:100%; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
@@ -44,7 +43,6 @@
   }
   .loading.show{opacity:1}
 
-  /* Panels directly under the image, compact */
   .panel{width:min(96vw, 900px); margin-top:2px}
   .box{
     background:rgba(20,20,20,.7); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
@@ -59,7 +57,6 @@
     background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer; text-decoration:none;
   }
 
-  /* Controls: longer sliders, value ABOVE; compact vertically */
   .controls{width:min(96vw, 900px); margin-top:4px}
   .row{padding:6px 4px}
   .top{display:flex; justify-content:space-between; align-items:baseline; margin:0 2px 4px}
@@ -73,7 +70,6 @@
   input[type="range"]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.5)}
   .hint{opacity:.75; font-size:11px; text-align:center; margin:6px 0 10px; color:var(--muted)}
 
-  /* Error bar */
   .errbar{
     position:fixed; left:12px; right:12px; bottom:12px; padding:10px 12px; border-radius:10px;
     background:#2b1212; color:#ffd6d6; border:1px solid #913c3c; font-size:12px; display:none; z-index:9999
@@ -84,13 +80,11 @@
   <div class="wrap">
     <div class="stage">
       <div class="frame">
-        <!-- Keep previous image; swap only after preload finishes -->
         <img id="img" alt="Generated scene" crossorigin="anonymous" referrerpolicy="no-referrer" decoding="async" loading="eager" fetchpriority="high">
         <div class="loading" id="loading" aria-live="polite">Loading…</div>
       </div>
     </div>
 
-    <!-- Prompt panel -->
     <div class="panel">
       <details class="box" id="promptBox">
         <summary>Prompt ▾</summary>
@@ -104,7 +98,6 @@
       </details>
     </div>
 
-    <!-- Debug panel -->
     <div class="panel">
       <details class="box" id="debugBox">
         <summary>Debug ▾</summary>
@@ -119,33 +112,27 @@
       </details>
     </div>
 
-    <!-- Controls -->
     <div class="controls">
       <div class="row">
         <div class="top"><div class="label">Time</div><div class="val" id="timeVal"></div></div>
         <input id="time" type="range" min="0" max="23" step="1">
       </div>
-
       <div class="row">
         <div class="top"><div class="label">Environment</div><div class="val" id="envVal"></div></div>
         <input id="env" type="range" min="0" max="9" step="1">
       </div>
-
       <div class="row">
         <div class="top"><div class="label">Car type</div><div class="val" id="carVal"></div></div>
         <input id="car" type="range" min="0" max="9" step="1">
       </div>
-
       <div class="row">
         <div class="top"><div class="label">Era</div><div class="val" id="eraVal"></div></div>
         <input id="era" type="range" min="0" max="11" step="1">
       </div>
-
       <div class="row">
         <div class="top"><div class="label">Direction</div><div class="val" id="dirVal"></div></div>
         <input id="dir" type="range" min="0" max="7" step="1">
       </div>
-
       <div class="hint">Updates after 200 ms pause · Background adapts to image colors (4-point gradient)</div>
     </div>
   </div>
@@ -169,16 +156,24 @@
 
   const habitats = ["alpine tundra","boreal coniferous forest","mixed temperate forest","deciduous woodland","grassland steppe","farmland and orchards","Mediterranean scrubland","savanna","semi-desert badlands","sandy desert dunes"];
   const cars = ["microcar (A-segment)","city hatchback (B-segment)","compact sedan (C-segment)","midsize sedan","estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"];
-  const eras = ["1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","2030s","2050s"];
+
+  // ERA list updated as requested
+  const eras = [
+    "1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s",
+    "futuristic",
+    "unbelievably mesmerizingly sci-fi"
+  ];
+
+  // Strong, unmistakable direction phrasings
   const directions = [
-    "front three-quarter view",
-    "rear three-quarter view",
-    "side profile view",
-    "front head-on view",
-    "rear head-on view",
-    "low-angle front three-quarter view",
-    "high-angle front three-quarter view",
-    "aerial three-quarter view"
+    "front three-quarter HERO shot — camera at headlight height",
+    "rear three-quarter HERO shot — camera at taillight height",
+    "perfect side profile — orthographic 90°, no perspective",
+    "dead-on front view — grille perfectly square to camera",
+    "dead-on rear view — bumper perfectly square to camera",
+    "dramatic LOW-ANGLE front three-quarter — ground-level",
+    "HIGH-ANGLE front three-quarter — from above",
+    "TRUE OVERHEAD top-down — car centered"
   ];
 
   const timeEl = $('#time'), envEl = $('#env'), carEl = $('#car'), eraEl = $('#era'), dirEl = $('#dir');
@@ -198,7 +193,8 @@
 
   function buildPrompt(){
     const hour = String(+timeEl.value).padStart(2,'0')+":00";
-    return `A realistic ${eras[+eraEl.value]} style photo, ${directions[+dirEl.value]}, of a ${cars[+carEl.value]} in ${habitats[+envEl.value]} at ${hour}. Natural light, detailed, no text`;
+    // Stronger wording + explicit "camera angle:"
+    return `A realistic ${eras[+eraEl.value]} style photo of a ${cars[+carEl.value]} in ${habitats[+envEl.value]} at ${hour}. Camera angle: ${directions[+dirEl.value]}. Natural light, detailed, no text`;
   }
 
   /* ===== URLs + fallbacks ===== */
@@ -210,7 +206,6 @@
   const uProxy=url=>`https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
   const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p); return [a,b,c,d,uProxy(a),uProxy(b)];};
 
-  /* ===== Loading state ===== */
   const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
 
   /* ===== Keep-previous: preload -> swap ===== */
