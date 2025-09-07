@@ -42,27 +42,12 @@
   }
   .loading.show{opacity:1}
 
-  .panel{width:min(96vw, 900px); margin-top:2px}
-  .box{
-    background:rgba(20,20,20,.7); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
-    border:1px solid rgba(255,255,255,.08); border-radius:10px; overflow:hidden;
-  }
-  .box summary{list-style:none; cursor:pointer; padding:8px 10px; font-weight:600; letter-spacing:.2px}
-  .body{padding:8px 10px 10px}
-  .body pre{white-space:pre-wrap; word-break:break-word; margin:0 0 6px 0; font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; color:#dfe6ef}
-  .actions{display:flex; gap:8px; flex-wrap:wrap}
-  .btn{
-    appearance:none; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px;
-    background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer; text-decoration:none;
-  }
-
+  /* Controls */
   .controls{width:min(96vw, 900px); margin-top:4px}
   .row{padding:6px 4px}
   .top{display:flex; justify-content:space-between; align-items:baseline; margin:0 2px 4px}
   .label{font-weight:600; letter-spacing:.2px}
   .val{font-variant-numeric:tabular-nums; color:var(--muted); font-size:12px}
-
-  /* Long sliders + clear disabled state */
   input[type="range"]{width:100%; -webkit-appearance:none; appearance:none; height:28px; background:transparent}
   input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
   input[type="range"]::-moz-range-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
@@ -72,12 +57,46 @@
   input[type="range"]:disabled{opacity:.55; cursor:not-allowed}
   input[type="range"]:disabled::-webkit-slider-thumb{background:#c9c9c9; box-shadow:none}
   input[type="range"]:disabled::-moz-range-thumb{background:#c9c9c9; box-shadow:none}
-
   .hint{opacity:.75; font-size:11px; text-align:center; margin:6px 0 10px; color:var(--muted)}
 
   .errbar{
     position:fixed; left:12px; right:12px; bottom:12px; padding:10px 12px; border-radius:10px;
-    background:#2b1212; color:#ffd6d6; border:1px solid #913c3c; font-size:12px; display:none; z-index:9999
+    background:#2b1212; color:#ffd6d6; border:1px solid #913c3c; font-size:12px; display:none; z-index:9998
+  }
+
+  /* Overlay: prompt + debug combined, toggled by chevron */
+  .peek{
+    position:fixed; right:12px; bottom:12px; z-index:9999;
+    width:36px; height:36px; border-radius:50%;
+    display:grid; place-items:center;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18);
+    color:#fff; cursor:pointer;
+    backdrop-filter: blur(8px);
+    transform:rotate(0deg); transition:transform .2s ease;
+  }
+  .peek[aria-expanded="true"]{ transform:rotate(180deg); }
+
+  .overlay{
+    position:fixed; inset:12px; z-index:9997; display:none;
+    background:rgba(10,10,10,.88); border:1px solid rgba(255,255,255,.1); border-radius:12px;
+    backdrop-filter: blur(10px);
+  }
+  .overlay.show{ display:block; }
+  .overlay .inner{ height:100%; display:flex; flex-direction:column; }
+  .overlay header{
+    display:flex; align-items:center; justify-content:space-between; padding:10px 12px;
+    border-bottom:1px solid rgba(255,255,255,.08); font-weight:600;
+  }
+  .overlay main{ flex:1; overflow:auto; padding:10px 12px; display:grid; grid-template-columns:1fr; gap:12px; }
+  .card{
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px;
+  }
+  .card h3{ margin:0 0 6px 0; font-size:13px; color:#dfe6ef; }
+  pre{white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; color:#dfe6ef}
+  .actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .btn{
+    appearance:none; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px;
+    background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer; text-decoration:none;
   }
 </style>
 </head>
@@ -90,33 +109,7 @@
       </div>
     </div>
 
-    <div class="panel">
-      <details class="box" id="promptBox">
-        <summary>Prompt ▾</summary>
-        <div class="body">
-          <pre id="promptText">—</pre>
-          <div class="actions">
-            <button class="btn" id="copyPrompt">Copy prompt</button>
-            <a class="btn" id="openImg" target="_blank" rel="noopener">Open image</a>
-          </div>
-        </div>
-      </details>
-    </div>
-
-    <div class="panel">
-      <details class="box" id="debugBox">
-        <summary>Debug ▾</summary>
-        <div class="body">
-          <pre id="debugText">—</pre>
-          <div class="actions">
-            <button class="btn" id="selfTest">Self-test</button>
-            <button class="btn" id="retry">Retry</button>
-            <button class="btn" id="copyURL">Copy image URL</button>
-          </div>
-        </div>
-      </details>
-    </div>
-
+    <!-- Controls -->
     <div class="controls">
       <div class="row">
         <div class="top"><div class="label">Time</div><div class="val" id="timeVal"></div></div>
@@ -142,26 +135,61 @@
     </div>
   </div>
 
+  <!-- Chevron + Overlay -->
+  <button id="peek" class="peek" aria-expanded="false" title="Show prompt & debug">⌄</button>
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="inner">
+      <header>
+        <span>Prompt & Debug</span>
+        <div class="actions">
+          <button class="btn" id="copyPrompt">Copy prompt</button>
+          <button class="btn" id="copyURL">Copy image URL</button>
+          <button class="btn" id="retry">Retry</button>
+          <button class="btn" id="selfTest">Self-test</button>
+          <a class="btn" id="openImg" target="_blank" rel="noopener">Open image</a>
+        </div>
+      </header>
+      <main>
+        <div class="card">
+          <h3>Current Prompt</h3>
+          <pre id="promptText">—</pre>
+        </div>
+        <div class="card">
+          <h3>Debug log</h3>
+          <pre id="debugText">—</pre>
+        </div>
+      </main>
+    </div>
+  </div>
+
   <div id="errbar" class="errbar"></div>
 
 <script>
 'use strict';
 (() => {
-  const WAIT_MS = 500; // ← 500 ms debounce
+  const WAIT_MS = 500;
 
+  /* Error bar */
   const errbar = document.getElementById('errbar');
   const showError = (msg)=>{ errbar.textContent = msg; errbar.style.display='block'; clearTimeout(showError._t); showError._t=setTimeout(()=>errbar.style.display='none',7000); };
   window.addEventListener('error', e => showError(`Script error: ${e.message}`));
   window.addEventListener('unhandledrejection', e => showError(`Promise error: ${e.reason?.message || e.reason}`));
 
+  /* DOM */
   const $ = s => document.querySelector(s);
   const img = $('#img'), loading = $('#loading');
-  const promptText = $('#promptText'), openImg = $('#openImg'), copyPrompt = $('#copyPrompt');
+  const promptText = $('#promptText'), openImg = $('#openImg'), copyPromptBtn = $('#copyPrompt');
   const debugText = $('#debugText'), selfTestBtn = $('#selfTest'), retryBtn = $('#retry'), copyURLBtn = $('#copyURL');
+  const peekBtn = $('#peek'), overlay = $('#overlay');
 
   const habitats = ["alpine tundra","boreal coniferous forest","mixed temperate forest","deciduous woodland","grassland steppe","farmland and orchards","Mediterranean scrubland","savanna","semi-desert badlands","sandy desert dunes"];
   const cars = ["microcar (A-segment)","city hatchback (B-segment)","compact sedan (C-segment)","midsize sedan","estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"];
-  const eras = ["1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","futuristic","unbelievably mesmerizingly sci-fi"];
+
+  const eras = [
+    "1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s",
+    "futuristic","unbelievably mesmerizingly sci-fi"
+  ];
+
   const directions = [
     "front three-quarter HERO shot — camera at headlight height",
     "rear three-quarter HERO shot — camera at taillight height",
@@ -180,6 +208,18 @@
   const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
   const log=(m)=>{ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; };
 
+  /* Overlay toggle */
+  function toggleOverlay(force){
+    const open = typeof force==='boolean' ? force : overlay.classList.contains('show')===false;
+    overlay.classList.toggle('show', open);
+    overlay.setAttribute('aria-hidden', String(!open));
+    peekBtn.setAttribute('aria-expanded', String(open));
+  }
+  peekBtn.addEventListener('click', ()=>toggleOverlay());
+  // Escape to close
+  window.addEventListener('keydown', e=>{ if(e.key==='Escape') toggleOverlay(false); });
+
+  /* Time (color-free) */
   function timeCue(h){
     if (h>=4 && h<6)  return "pre-dawn hush; faint horizon glow; long soft shadows; bright morning star visible";
     if (h>=6 && h<8)  return "sun just rising; low-angle light; long soft shadows; thin ground mist";
@@ -191,11 +231,26 @@
     if (h>=22 || h<2) return "night; moonlight and starlight; constellations visible";
     return "deep night; sparse light sources; quiet atmosphere";
   }
+
+  /* Era cues: numeric + word forms + design ethos */
   function eraCue(label){
-    if (label === "futuristic") return "futuristic near-future concept design; advanced materials; seamless panels; plausible tech";
-    if (label === "unbelievably mesmerizingly sci-fi") return "unbelievably mesmerizingly sci-fi; otherworldly scale; alien mega-structures; impossible engineering";
-    return `${label} style authenticity`;
+    const map = {
+      "1890s": "1890s (eighteen-nineties) — horseless carriage spirit; exposed coachwork; spindly wheels; brass fittings",
+      "1920s": "1920s (20s, nineteen-twenties) — early streamlining; art-deco cues; upright radiators; coachbuilt bodies",
+      "1950s": "1950s (50s, nineteen-fifties) — jet-age optimism; tailfins; chrome; two-tone trims; whitewall tires",
+      "1960s": "1960s (60s, nineteen-sixties) — clean curves; coke-bottle waists; muscle-car stance; simple brightwork",
+      "1970s": "1970s (70s, nineteen-seventies) — wedge-shaped experiments; oil-crisis compactness; louvers; vinyl textures",
+      "1980s": "1980s (80s, nineteen-eighties) — boxy precision; sharp creases; pop-up headlamps; black rub strips",
+      "1990s": "1990s (90s, nineteen-nineties) — aero-organic rounding; cab-forward; flush glass; smooth cladding",
+      "2000s": "2000s (00s, two-thousands) — taut surfacing; flame-surfacing accents; big alloys; high beltlines",
+      "2010s": "2010s (10s, twenty-tens) — LED signatures; aggressive grilles; origami creases; crossover boom",
+      "2020s": "2020s (20s, twenty-twenties) — EV minimalism; sealed grilles; parametric lighting; slipperier aero",
+      "futuristic": "futuristic — near-future concept design; seamless panels; advanced composites; plausible sensors",
+      "unbelievably mesmerizingly sci-fi": "unbelievably mesmerizingly sci-fi — starship-like presence; alien megastructures; impossible engineering; luminous seams"
+    };
+    return map[label] || `${label} style authenticity`;
   }
+
   function labelHour(h){
     const hh = String(h).padStart(2,'0')+":00";
     if (h>=4 && h<6)  return `pre-dawn · ${hh}`;
@@ -216,6 +271,7 @@
     dirVal.textContent  = directions[+dirEl.value];
   }
 
+  /* Prompt — now with lively eras + time cues */
   function buildPrompt(){
     const env  = habitats[+envEl.value];
     const car  = cars[+carEl.value];
@@ -236,9 +292,9 @@
   const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p); return [a,b,c,d,uProxy(a),uProxy(b)];};
 
   const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
-  const setControlsEnabled=(enabled)=>{ sliders.forEach(el=>el.disabled=!enabled); };
+  const setControlsEnabled=(enabled)=>{ [timeEl,envEl,carEl,eraEl,dirEl].forEach(el=>el.disabled=!enabled); };
 
-  /* Keep-previous: preload -> swap, re-enable on finish */
+  /* Keep-previous: preload -> swap */
   let genToken=0;
   function loadSequence(prompt){
     const seq=candidates(prompt); let i=0; const token=++genToken;
@@ -271,7 +327,7 @@
     promptText.textContent=prompt;
     openImg.href=url;
     copyURLBtn.onclick=async()=>{try{await navigator.clipboard.writeText(url); log('Copied URL');}catch{showError('Clipboard blocked');}};
-    copyPrompt.onclick=async()=>{try{await navigator.clipboard.writeText(prompt);}catch{showError('Clipboard blocked');}};
+    copyPromptBtn.onclick=async()=>{try{await navigator.clipboard.writeText(prompt);}catch{showError('Clipboard blocked');}};
   }
 
   /* Palette */
@@ -315,30 +371,28 @@
   let debounceT=0, dragging=false;
   function scheduleGenerate(){
     clearTimeout(debounceT);
-    // Disable during the waiting window
     setControlsEnabled(false);
-    // show a subtle queued state without removing previous image
     setLoading(true,' (queued)');
     debounceT=setTimeout(()=>{ setLoading(true,''); loadSequence(buildPrompt()); }, WAIT_MS);
   }
 
-  // Input wiring:
-  // - While dragging: freely move (no disable).
-  // - On release: start 500 ms timer, disable during wait+load.
-  sliders.forEach(el=>{
+  // Input wiring
+  [timeEl, envEl, carEl, eraEl, dirEl].forEach(el=>{
     el.addEventListener('pointerdown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
-    el.addEventListener('input', ()=>{ reflectLabels(); }); // live label updates
+    el.addEventListener('input', ()=>{ reflectLabels(); });
     const release = ()=>{ if(dragging){ dragging=false; scheduleGenerate(); } };
     el.addEventListener('pointerup', release);
     el.addEventListener('touchend', release, {passive:true});
     el.addEventListener('mouseup', release);
-    // Keyboard adjustments
     el.addEventListener('change', ()=>{ if(!dragging) scheduleGenerate(); });
   });
 
+  // Buttons
   retryBtn.onclick=()=>scheduleGenerate();
-
   selfTestBtn.onclick=async()=>{ log(`UA: ${navigator.userAgent}`); log(`online: ${navigator.onLine}`); await probe('https://picsum.photos/3'); const t=uPlain('test'); await probe(t); await probe(uProxy(t)); };
+  copyURLBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(openImg.href||''); log('Copied URL'); }catch{ showError('Clipboard blocked'); } };
+  copyPromptBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(promptText.textContent||''); }catch{ showError('Clipboard blocked'); } };
+
   function probe(url){ return new Promise(res=>{const t0=performance.now(); const im=new Image(); im.onload=()=>{log(`PROBE OK ${url} (${Math.round(performance.now()-t0)}ms)`); res();}; im.onerror=()=>{log(`PROBE ERROR ${url}`); res();}; im.referrerPolicy='no-referrer'; im.crossOrigin='anonymous'; im.src=url+`&p=${Date.now()%1e7}`;}); }
 
   // Init
@@ -348,7 +402,7 @@
   eraEl.value =(Math.random()*eras.length)|0;
   dirEl.value =(Math.random()*directions.length)|0;
   reflectLabels();
-  scheduleGenerate(); // initial run (disables during wait+load)
+  scheduleGenerate(); // initial run
 })();
 </script>
 </body>
