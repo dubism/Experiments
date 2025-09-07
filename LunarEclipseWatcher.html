@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Lunar Eclipse — Precise (Besselian + Live Turn-to-Moon + Concentric Shadow)</title>
+<title>Lunar Eclipse — Precise (Besselian + Live Turn-to-Moon)</title>
 <style>
   :root{
     --bg:#000; --fg:#e8eef5; --muted:#9aa1ad;
@@ -11,67 +11,48 @@
     --ring:rgba(255,255,255,.22);
   }
   *{box-sizing:border-box}
-  html,body{
-    height:100%; margin:0; background:var(--bg); color:var(--fg);
-    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; overflow:hidden;
-  }
-  #stage{
-    position:relative; width:100vw; height:min(100svh,100vh);
-    display:flex; align-items:center; justify-content:center;
-  }
-  #cv{ width:92vmin; height:92vmin; display:block; border-radius:12px; }
-
-  /* Top controls */
-  .hud-top{
-    position:absolute; top:calc(env(safe-area-inset-top,0px) + 10px); left:10px; right:10px;
-    display:flex; justify-content:space-between; gap:8px; z-index:3;
-  }
-  .btn{
-    -webkit-tap-highlight-color:transparent; border:1px solid #293242; background:#12161d; color:var(--fg);
-    padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer;
-  }
-  .btn:active{ transform:translateY(1px) }
-
-  /* Bottom UI: time readout + slider */
-  .bottom-ui{
-    position:absolute; left:calc(env(safe-area-inset-left,0px) + 10px);
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; overflow:hidden;}
+  #stage{position:relative; width:100vw; height:min(100svh,100vh);
+    display:flex; align-items:center; justify-content:center;}
+  #cv{width:92vmin; height:92vmin; display:block; border-radius:12px;}
+  .hud-top{position:absolute; top:calc(env(safe-area-inset-top,0px) + 10px); left:10px; right:10px;
+    display:flex; justify-content:space-between; gap:8px; z-index:3;}
+  .btn{-webkit-tap-highlight-color:transparent; border:1px solid #293242; background:#12161d; color:var(--fg);
+    padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer;}
+  .btn:active{transform:translateY(1px)}
+  .bottom-ui{position:absolute; left:calc(env(safe-area-inset-left,0px) + 10px);
     right:calc(env(safe-area-inset-right,0px) + 10px);
     bottom:calc(env(safe-area-inset-bottom,0px) + 10px);
-    display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:3;
-  }
-  .time{
-    text-align:center; color:var(--fg); font-weight:600;
+    display:flex; flex-direction:column; gap:6px; align-items:stretch; z-index:3;}
+  .time{text-align:center; color:var(--fg); font-weight:600;
     padding:6px 10px; border-radius:10px; background:rgba(18,22,29,.75);
-    border:1px solid #2a3445; backdrop-filter:saturate(120%) blur(6px);
-  }
-  .timeline{
-    appearance:none; width:100%; height:36px; margin:0; padding:0 2px; background:transparent;
-  }
+    border:1px solid #2a3445; backdrop-filter:saturate(120%) blur(6px);}
+  .timeline{appearance:none; width:100%; height:36px; margin:0; padding:0 2px; background:transparent;}
   .timeline::-webkit-slider-runnable-track{height:4px; background:#263041; border-radius:999px;}
   .timeline::-moz-range-track{height:4px; background:#263041; border-radius:999px;}
-  .timeline::-webkit-slider-thumb{
-    -webkit-appearance:none; width:24px; height:24px; margin-top:-10px; border-radius:50%;
-    background:#e6eef8; border:0;
-  }
+  .timeline::-webkit-slider-thumb{-webkit-appearance:none; width:24px; height:24px; margin-top:-10px; border-radius:50%;
+    background:#e6eef8; border:0;}
   .timeline::-moz-range-thumb{width:24px; height:24px; border:0; border-radius:50%; background:#e6eef8;}
+  /* tiny inline error badge (only if something throws) */
+  #err{position:absolute; top:8px; left:8px; padding:4px 8px; border-radius:8px; font-size:12px;
+    background:#3b1e1e; color:#ffd4d4; border:1px solid #592b2b; display:none; z-index:9;}
 </style>
 </head>
 <body>
   <div id="stage">
     <canvas id="cv"></canvas>
 
-    <!-- Top controls -->
+    <div id="err"></div>
+
     <div class="hud-top">
       <div style="display:flex;gap:8px">
         <button id="nowBtn"  class="btn">Now</button>
         <button id="playBtn" class="btn">Play</button>
       </div>
-      <div style="display:flex;gap:8px">
-        <button id="compassBtn" class="btn" title="Enable live heading">🧭 Turn-to-Moon</button>
-      </div>
+      <div><button id="compassBtn" class="btn" title="Enable live heading">🧭 Turn-to-Moon</button></div>
     </div>
 
-    <!-- Bottom UI -->
     <div class="bottom-ui">
       <div id="timeLabel" class="time">—</div>
       <input id="timeSlider" class="timeline" type="range" min="0" max="100" step="1" />
@@ -80,396 +61,277 @@
 
 <script>
 (()=>{
+// ---------- tiny guard ----------
+const badge = document.getElementById('err');
+function showErr(m){ badge.textContent=m; badge.style.display='inline-block'; console.error(m); }
+
 // =================== PHYSICS (EclipseWise Besselian; TT baseline) ===================
 const poly = {
   t0TT: Date.parse("2025-09-07T18:00:00Z"),
-  dTsec: 71.9, // TT - UTC
-  // x,y,d,f1 (pen), f2 (umb), f3 (Moon semidiam) — degrees on sky; x east+, y north+
-  x:  [ 0.02402,  0.48791,  0.00019, -0.00001],
-  y:  [-0.29632,  0.26398,  0.00016, -0.00000],
-  d:  [ 0.10060, -0.00030, -0.00000,  0.00000],
-  f1: [ 1.26901,  0.00040, -0.00000,  0.00000],
-  f2: [ 0.73989,  0.00040, -0.00000,  0.00000],
-  f3: [ 0.26935,  0.00011, -0.00000,  0.00000]
+  dTsec: 71.9,
+  x:[0.02402,0.48791,0.00019,-0.00001], y:[-0.29632,0.26398,0.00016,-0.00000],
+  d:[0.10060,-0.00030,-0.00000,0.00000], f1:[1.26901,0.00040,-0.00000,0.00000],
+  f2:[0.73989,0.00040,-0.00000,0.00000], f3:[0.26935,0.00011,-0.00000,0.00000]
 };
 function evalPoly(c,t){ return ((c[3]||0)*t + (c[2]||0))*t*t + (c[1]||0)*t + c[0]; }
 function besselAtUTC(msUTC){
   const msTT = msUTC + poly.dTsec*1000;
-  const t = (msTT - poly.t0TT)/3600000; // hours from t0
-  const x = evalPoly(poly.x,t), y = evalPoly(poly.y,t);
-  const f1 = evalPoly(poly.f1,t), f2 = evalPoly(poly.f2,t), sm = evalPoly(poly.f3,t);
-  return { x, y, f1, f2, sm }; // degrees
+  const t = (msTT - poly.t0TT)/3600000;
+  const x=evalPoly(poly.x,t), y=evalPoly(poly.y,t);
+  const f1=evalPoly(poly.f1,t), f2=evalPoly(poly.f2,t), sm=evalPoly(poly.f3,t);
+  return {x,y,f1,f2,sm};
 }
 
 // =================== CONTACT WINDOW (UTC) ===================
 const contacts = [
-  { k:"P1", t:"2025-09-07T15:28:06Z" },
-  { k:"U1", t:"2025-09-07T16:26:51Z" },
-  { k:"U2", t:"2025-09-07T17:30:36Z" },
-  { k:"GE", t:"2025-09-07T18:11:46Z" },
-  { k:"U3", t:"2025-09-07T18:53:18Z" },
-  { k:"U4", t:"2025-09-07T19:56:53Z" },
-  { k:"P4", t:"2025-09-07T20:55:27Z" },
-].map(o=>({k:o.k, ms:Date.parse(o.t)}));
-const T0 = contacts[0].ms, T1 = contacts[contacts.length-1].ms;
+  { k:"P1", ms:Date.parse("2025-09-07T15:28:06Z") },
+  { k:"U1", ms:Date.parse("2025-09-07T16:26:51Z") },
+  { k:"U2", ms:Date.parse("2025-09-07T17:30:36Z") },
+  { k:"GE", ms:Date.parse("2025-09-07T18:11:46Z") },
+  { k:"U3", ms:Date.parse("2025-09-07T18:53:18Z") },
+  { k:"U4", ms:Date.parse("2025-09-07T19:56:53Z") },
+  { k:"P4", ms:Date.parse("2025-09-07T20:55:27Z") },
+];
+const T0=contacts[0].ms, T1=contacts[contacts.length-1].ms;
 
 // =================== DOM ===================
-const cv = document.getElementById('cv');
-const ctx = cv.getContext('2d');
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 const slider = document.getElementById('timeSlider');
 const playBtn = document.getElementById('playBtn');
 const nowBtn  = document.getElementById('nowBtn');
 const compassBtn = document.getElementById('compassBtn');
 const timeLabel = document.getElementById('timeLabel');
 
-slider.min = T0; slider.max = T1; slider.step = 1000;
-slider.value = clamp(Date.now(), T0, T1);
+slider.min=T0; slider.max=T1; slider.step=1000; slider.value=clamp(Date.now(),T0,T1);
 
-// =================== COMPASS (topocentric Moon; show RELATIVE arrow only) ===================
+// =================== COMPASS (relative “turn-to-moon”) ===================
 const rad=Math.PI/180, dayMs=86400000;
-const obs = { lat:50.0755, lon:14.4378 }; // default Prague; will update via geolocation
+const obs={lat:50.0755, lon:14.4378}; // default Prague
 let deviceHeading=null, moonBearing=null, moonAlt=null;
 let aligned=false, linkToNow=false;
 
-function toJulian(d){ return d.valueOf()/dayMs - 0.5 + 2440588; }
-function toDays(d){ return toJulian(d) - 2451545; }
-function rightAsc(l,b){ const e=23.4397*rad; return Math.atan2(Math.sin(l)*Math.cos(e)-Math.tan(b)*Math.sin(e), Math.cos(l)); }
-function decl(l,b){ const e=23.4397*rad; return Math.asin(Math.sin(b)*Math.cos(e)+Math.cos(b)*Math.sin(e)*Math.sin(l)); }
-function sidereal(D,lw){ return rad*(280.16 + 360.9856235*D) - lw; }
+function toJulian(d){return d.valueOf()/dayMs - 0.5 + 2440588;}
+function toDays(d){return toJulian(d) - 2451545;}
+function rightAsc(l,b){const e=23.4397*rad;return Math.atan2(Math.sin(l)*Math.cos(e)-Math.tan(b)*Math.sin(e),Math.cos(l));}
+function decl(l,b){const e=23.4397*rad;return Math.asin(Math.sin(b)*Math.cos(e)+Math.cos(b)*Math.sin(e)*Math.sin(l));}
+function sidereal(D,lw){return rad*(280.16+360.9856235*D)-lw;}
 function moonCoords(D){
   const L=rad*(218.316+13.176396*D), M=rad*(134.963+13.064993*D), F=rad*(93.272+13.229350*D);
-  const l=L + rad*6.289*Math.sin(M), b=rad*5.128*Math.sin(F), dist=385001 - 20905*Math.cos(M);
-  return { ra:rightAsc(l,b), dec:decl(l,b), dist };
+  const l=L+rad*6.289*Math.sin(M), b=rad*5.128*Math.sin(F), dist=385001-20905*Math.cos(M);
+  return {ra:rightAsc(l,b), dec:decl(l,b), dist};
 }
 function getMoonPos(date, lat, lon){
   const D=toDays(date), lw=-lon*rad, φ=lat*rad, c=moonCoords(D), H=sidereal(D,lw)-c.ra;
   let h=Math.asin(Math.sin(φ)*Math.sin(c.dec)+Math.cos(φ)*Math.cos(c.dec)*Math.cos(H));
   const az=Math.atan2(Math.sin(H), Math.cos(H)*Math.sin(φ)-Math.tan(c.dec)*Math.cos(φ));
-  const hp=Math.asin(1/(c.dist/6371)); h=h-hp*Math.cos(h); // parallax approx
-  return { alt:h, az };
+  const hp=Math.asin(1/(c.dist/6371)); h=h-hp*Math.cos(h);
+  return {alt:h, az};
 }
-function azToBearing(az){ let b=(az+Math.PI)*180/Math.PI; b%=360; if(b<0)b+=360; return b; }
-function angDiff(a,b){ let d=Math.abs(a-b)%360; return d>180?360-d:d; }
-function normDeg(a){ a%=360; if(a<0)a+=360; return a; }
+function azToBearing(az){let b=(az+Math.PI)*180/Math.PI; b%=360; if(b<0)b+=360; return b;}
+function normDeg(a){a%=360; if(a<0)a+=360; return a;}
 
 // =================== EVENTS (bind BEFORE first paint) ===================
 let playing=false;
-slider.addEventListener('input', ()=>{
-  linkToNow=false;
-  updateForTime(Number(slider.value));
-});
-nowBtn.addEventListener('click', ()=>{
-  linkToNow=true;
-  updateForTime(clamp(Date.now(), T0, T1));
-});
-playBtn.addEventListener('click', ()=>{
-  playing = !playing; linkToNow=false;
-  playBtn.textContent = playing ? 'Pause' : 'Play';
-});
+slider.addEventListener('input',()=>{ linkToNow=false; safeUpdate(Number(slider.value)); });
+nowBtn.addEventListener('click',()=>{ linkToNow=true; safeUpdate(clamp(Date.now(),T0,T1)); });
+playBtn.addEventListener('click',()=>{ playing=!playing; linkToNow=false; playBtn.textContent=playing?'Pause':'Play'; });
 
-compassBtn.addEventListener('click', enableCompass);
-
-function enableCompass(){
+compassBtn.addEventListener('click', ()=>{
   if (navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(p=>{ obs.lat=p.coords.latitude; obs.lon=p.coords.longitude; }, ()=>{});
+    navigator.geolocation.getCurrentPosition(p=>{obs.lat=p.coords.latitude; obs.lon=p.coords.longitude;}, ()=>{});
   }
   function onDO(e){
     let h=null;
-    if (typeof e.webkitCompassHeading === 'number') {
-      h = e.webkitCompassHeading; // iOS, degrees CW from true north
-    } else if (typeof e.alpha === 'number'){
-      // Some Androids: alpha ~ degrees CW from device top to geomagnetic north
-      h = 360 - e.alpha;
+    if (typeof e.webkitCompassHeading==='number') h=e.webkitCompassHeading; // iOS true north
+    else if (typeof e.alpha==='number'){
+      h=360 - e.alpha;
       const ang=(screen.orientation && typeof screen.orientation.angle==='number')?screen.orientation.angle:(window.orientation||0);
-      h = (h + ang);
+      h=(h+ang);
     }
-    if (h!=null && isFinite(h)){
-      deviceHeading = normDeg(h);
-      // live redraw using current simulated time
-      updateForTime(Number(slider.value));
-    }
+    if (h!=null && isFinite(h)){ deviceHeading=normDeg(h); safeUpdate(Number(slider.value)); }
   }
-  const type = ('ondeviceorientationabsolute' in window) ? 'deviceorientationabsolute' : 'deviceorientation';
+  const type=('ondeviceorientationabsolute' in window)?'deviceorientationabsolute':'deviceorientation';
   if (window.DeviceOrientationEvent){
-    if (typeof DeviceOrientationEvent.requestPermission === 'function'){
-      DeviceOrientationEvent.requestPermission().then(state=>{
-        if (state === 'granted') window.addEventListener(type, onDO, true);
-      }).catch(()=>{});
-    } else {
-      window.addEventListener(type, onDO, true);
-    }
+    if (typeof DeviceOrientationEvent.requestPermission==='function'){
+      DeviceOrientationEvent.requestPermission().then(s=>{if(s==='granted')window.addEventListener(type,onDO,true);}).catch(()=>{});
+    } else window.addEventListener(type,onDO,true);
   }
+});
+
+// =================== LAYOUT (guards) ===================
+let compassCenter={x:0,y:0,r:0};
+function cacheCompassPlacement(){
+  const W=cv.clientWidth|0, H=cv.clientHeight|0;
+  if(!W||!H) return;
+  const compR=Math.min(W,H)*0.095;
+  const canvasRect=cv.getBoundingClientRect(), sliderRect=slider.getBoundingClientRect();
+  const sliderTopInCanvas=sliderRect.top - canvasRect.top;
+  const cy=Math.min(H-16-compR, Math.max(compR+16, sliderTopInCanvas - 10 - compR));
+  compassCenter={x:W/2, y:cy, r:compR};
 }
 
-// =================== LAYOUT (guard zero) ===================
 function resize(){
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const w = cv.clientWidth|0, h = cv.clientHeight|0;
-  if (!w || !h) { requestAnimationFrame(resize); return; }
-  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  cacheCompassPlacement();
-  updateForTime(Number(slider.value));
+  try{
+    const dpr=Math.max(1,window.devicePixelRatio||1);
+    const w=cv.clientWidth|0, h=cv.clientHeight|0;
+    if(!w||!h){ requestAnimationFrame(resize); return; }
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    cacheCompassPlacement();
+    safeUpdate(Number(slider.value));
+  }catch(e){ showErr('resize:'+e.message); }
 }
 window.addEventListener('resize', resize, {passive:true});
-requestAnimationFrame(resize);
-
-// Compass placement (outside, below Moon, above slider)
-let compassCenter = { x:0, y:0, r:0 };
-function cacheCompassPlacement(){
-  const W = cv.clientWidth|0, H = cv.clientHeight|0;
-  const compR = Math.min(W,H)*0.095;  // compact
-  const canvasRect = cv.getBoundingClientRect();
-  const sliderRect = slider.getBoundingClientRect();
-  const sliderTopInCanvas = sliderRect.top - canvasRect.top;
-  const cy = Math.min(H - 16 - compR, Math.max(compR + 16, sliderTopInCanvas - 10 - compR));
-  compassCenter = { x: W/2, y: cy, r: compR };
-}
+requestAnimationFrame(resize); // defer first paint until layout exists
 
 // =================== RAF LOOP ===================
-let last = performance.now(), RATE = 120; // simulated seconds / real second
+let last=performance.now(), RATE=120;
 function loop(now){
-  const nowMs = Date.now();
-  if (linkToNow){
-    const v = clamp(nowMs, T0, T1);
-    if (Math.abs(v - Number(slider.value)) > 250) slider.value = v;
-    updateForTime(v);
-  } else if (playing){
-    const dt=(now-last)/1000;
-    let v = Number(slider.value) + dt*1000*RATE;
-    if (v > T1) v = T0;
-    slider.value = v;
-    updateForTime(v);
-  }
-  last = now;
+  try{
+    const nowMs=Date.now();
+    if (linkToNow){
+      const v=clamp(nowMs,T0,T1);
+      if(Math.abs(v-Number(slider.value))>250) slider.value=v;
+      safeUpdate(v);
+    } else if (playing){
+      const dt=(now-last)/1000; let v=Number(slider.value)+dt*1000*RATE; if(v>T1) v=T0;
+      slider.value=v; safeUpdate(v);
+    }
+    last=now;
+  }catch(e){ showErr('loop:'+e.message); }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-// =================== UPDATE + DRAW ===================
+// =================== UPDATE + DRAW (with guards) ===================
+function safeUpdate(ms){ try{ updateForTime(ms); }catch(e){ showErr('update:'+e.message); } }
 function updateForTime(ms){
-  // Update moon target for compass
-  const pos = getMoonPos(new Date(ms), obs.lat, obs.lon);
-  moonAlt = pos.alt*180/Math.PI;
-  moonBearing = azToBearing(pos.az);
-
-  // Time label
-  const isNow = linkToNow && !playing;
-  const dt = new Date(ms);
-  const txt = dt.toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit', second:'2-digit', timeZoneName:'short'});
-  timeLabel.textContent = (playing ? 'Sim ' : (isNow ? 'Now ' : 'Sim ')) + txt;
-
-  draw(ms);
+  const pos=getMoonPos(new Date(ms), obs.lat, obs.lon);
+  moonAlt=pos.alt*180/Math.PI; moonBearing=azToBearing(pos.az);
+  const isNow=linkToNow && !playing;
+  const txt=new Date(ms).toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit', second:'2-digit', timeZoneName:'short'});
+  timeLabel.textContent=(playing?'Sim ': (isNow?'Now ':'Sim ')) + txt;
+  safeDraw(ms);
 }
 
+function safeDraw(ms){ try{ draw(ms); }catch(e){ showErr('draw:'+e.message); } }
+
 function draw(msUTC){
-  const W = cv.clientWidth|0, H = cv.clientHeight|0;
-  if (!W || !H) return;
+  const W=cv.clientWidth|0, H=cv.clientHeight|0;
+  if(!W||!H) return;
 
   const cx=W/2, cy=H/2;
-  const Rpx = Math.max(1, Math.min(W,H)*0.28); // Moon radius in px
+  const Rpx=Math.max(1, Math.min(W,H)*0.28);
 
-  // Besselian → Moon radii (physical placement)
-  const B = besselAtUTC(msUTC);
-  const toMR = 1 / B.sm;
-  const penR = B.f1 * toMR;   // penumbra radius (Moon radii)
-  const umbR = B.f2 * toMR;   // umbra radius
-  const vx =  B.x * toMR;     // east+
-  const vy = -B.y * toMR;     // north+ → canvas y down
+  // Besselian → Moon radii
+  const B=besselAtUTC(msUTC);
+  const toMR=1/Math.max(1e-6,B.sm);
+  const penR=B.f1*toMR, umbR=B.f2*toMR;
+  const vx= B.x*toMR,  vy= -B.y*toMR;
 
   // Clear
   ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
 
-  // ---- 1) SHADOW DISKS (UNCLIPPED, faint) — visible before contact ----
-  ctx.save(); ctx.translate(cx, cy); ctx.scale(Rpx, Rpx);
-  drawConcentricShadow(vx, vy, umbR, penR, /*mode*/'background');
+  // 1) Background shadow (unclipped) — visible before contact
+  ctx.save(); ctx.translate(cx,cy); ctx.scale(Rpx,Rpx);
+  drawConcentricShadow(vx,vy,umbR,penR,'background');
   ctx.restore();
 
-  // ---- 2) MOON (base albedo) ----
+  // 2) Moon base
   ctx.save(); ctx.translate(cx,cy);
-  const g = ctx.createRadialGradient(-Rpx*0.25,-Rpx*0.25,Math.max(1,Rpx*0.2), 0,0,Rpx);
-  g.addColorStop(0, getCSS('--moon-hi')); g.addColorStop(1, getCSS('--moon-lo'));
+  const r1=Math.max(1,Rpx*0.2);
+  const g=ctx.createRadialGradient(-Rpx*0.25,-Rpx*0.25,r1, 0,0,Rpx);
+  g.addColorStop(0,getCSS('--moon-hi')); g.addColorStop(1,getCSS('--moon-lo'));
   ctx.beginPath(); ctx.arc(0,0,Rpx,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
 
-  // ---- 3) SHADOW ON MOON (CLIPPED + MULTIPLY for hue/brightness) ----
-  ctx.save();
-  ctx.beginPath(); ctx.arc(0,0,Rpx,0,Math.PI*2); ctx.clip();
-  ctx.translate(0,0); // still at moon center
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.scale(Rpx, Rpx);
-  drawConcentricShadow(vx, vy, umbR, penR, /*mode*/'onMoon');
-  ctx.globalCompositeOperation = 'source-over';
+  // 3) Shadow on Moon (clipped + multiply)
+  ctx.save(); ctx.beginPath(); ctx.arc(0,0,Rpx,0,Math.PI*2); ctx.clip();
+  ctx.globalCompositeOperation='multiply';
+  ctx.scale(Rpx,Rpx);
+  drawConcentricShadow(vx,vy,umbR,penR,'onMoon');
+  ctx.globalCompositeOperation='source-over';
   ctx.restore(); // unclip
-  ctx.restore(); // moon translate
+  ctx.restore(); // moon
 
-  // ---- 4) TURN-TO-MOON COMPASS (single relative arrow, below the Moon) ----
-  drawTurnToMoon(compassCenter.x, compassCenter.y, compassCenter.r);
+  // 4) Turn-to-moon compass (below Moon)
+  drawTurnToMoon(compassCenter.x,compassCenter.y,compassCenter.r);
 }
 
-// --- Concentric shadow renderer (rings). mode: 'background' or 'onMoon' ---
-function drawConcentricShadow(cxR, cyR, umbR, penR, mode){
-  const Npen = 20, Numb = 28; // more rings -> smoother falloff
+// ---- Concentric shadow (rings) ----
+function drawConcentricShadow(cxR,cyR,umbR,penR,mode){
+  const Npen=20, Numb=28;
+  const k=(mode==='onMoon') ? {pen:0.45, umbCtr:0.92, umbEdg:0.40} : {pen:0.10, umbCtr:0.24, umbEdg:0.12};
 
-  // Penumbra: faint outer → stronger near umbra edge
-  for (let i=0;i<Npen;i++){
-    const t0 = i/Npen, t1 = (i+1)/Npen;
-    const r0 = lerp(umbR, penR, t0), r1 = lerp(umbR, penR, t1);
-    const u = 1 - t0; // 1 near umb edge → 0 at pen edge
-    const a = (mode==='onMoon') ? penOpacityOnMoon(u) : 0.08 * (u*u);
-    ring(cxR, cyR, r1, r0, a, mode);
+  // penumbra: outer→inner
+  for(let i=0;i<Npen;i++){
+    const t0=i/Npen, t1=(i+1)/Npen;
+    const r0=lerp(umbR,penR,t0), r1=lerp(umbR,penR,t1);
+    const u=1 - t0; const a=k.pen*(u*u);
+    ring(cxR,cyR,r1,r0,a,mode,false);
+  }
+  // umbra: center→edge
+  for(let i=0;i<Numb;i++){
+    const t0=i/Numb, t1=(i+1)/Numb;
+    const r0=lerp(0,umbR,t0), r1=lerp(0,umbR,t1);
+    const a=(mode==='onMoon') ? (k.umbCtr - (k.umbCtr-k.umbEdg)*Math.pow(t0,0.8))
+                              : (k.umbCtr*0.3 + (k.umbEdg*0.7)*(1-t0));
+    ring(cxR,cyR,r1,r0,a,mode,true);
   }
 
-  // Umbra: darkest in center → lighter to edge + reddish tint on-moon
-  for (let i=0;i<Numb;i++){
-    const t0 = i/Numb, t1 = (i+1)/Numb;
-    const r0 = lerp(0, umbR, t0), r1 = lerp(0, umbR, t1);
-    const a = (mode==='onMoon') ? umbOpacityOnMoon(t0) : 0.14 + 0.10*(1-t0); // faint background view
-    ring(cxR, cyR, r1, r0, a, mode, /*isUmbra*/true);
-  }
-
-  // outlines (subtle)
-  if (mode==='background'){
-    const s = 1/Math.max(1, cv.clientWidth*0.28);
-    ctx.lineWidth = s;
-    ctx.strokeStyle = getCSS('--ring');
-    ctx.beginPath(); ctx.arc(cxR, cyR, penR, 0, Math.PI*2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cxR, cyR, umbR, 0, Math.PI*2); ctx.stroke();
+  if(mode==='background'){
+    const s=1/Math.max(1, cv.clientWidth*0.28);
+    ctx.lineWidth=s; ctx.strokeStyle=getCSS('--ring');
+    ctx.beginPath(); ctx.arc(cxR,cyR,penR,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cxR,cyR,umbR,0,Math.PI*2); ctx.stroke();
   }
 }
 
-// Opacity models (monotonic, plausible physically)
-function penOpacityOnMoon(u){ // u: 0 at pen edge → 1 near umbra edge
-  // max ~0.35 just outside umbra, fading to 0 at pen edge
-  return 0.35 * (u*u);
-}
-function umbOpacityOnMoon(t){ // t: 0 center → 1 umbra edge
-  // center ~0.90, edge ~0.35
-  return 0.90 - 0.55*Math.pow(t,0.8);
-}
-
-// Draw ring (donut) with black / red-brown depending on umbra
-function ring(cxR, cyR, rOuter, rInner, alpha, mode, isUmbra=false){
-  if (rOuter <= 0 || rOuter <= rInner) return;
-  ctx.beginPath();
-  ctx.arc(cxR, cyR, rOuter, 0, Math.PI*2);
-  if (rInner > 0) ctx.arc(cxR, cyR, rInner, 0, Math.PI*2, true);
-
-  if (mode==='onMoon' && isUmbra){
-    // reddish multiply to simulate Danjon coloration
-    ctx.fillStyle = `rgba(130,40,30,${clamp(alpha,0,1)})`;
-  } else {
-    ctx.fillStyle = `rgba(0,0,0,${clamp(alpha,0,1)})`;
-  }
-  try { ctx.fill('evenodd'); } catch(_) { ctx.fill(); }
+function ring(cxR,cyR,rOuter,rInner,alpha,mode,isUmbra){
+  if(rOuter<=0||rOuter<=rInner) return;
+  ctx.beginPath(); ctx.arc(cxR,cyR,rOuter,0,Math.PI*2);
+  if(rInner>0) ctx.arc(cxR,cyR,rInner,0,Math.PI*2,true);
+  ctx.fillStyle=(mode==='onMoon' && isUmbra) ? `rgba(130,40,30,${clamp(alpha,0,1)})`
+                                             : `rgba(0,0,0,${clamp(alpha,0,1)})`;
+  try{ ctx.fill('evenodd'); }catch(_){ ctx.fill(); }
 }
 
-// ---- Minimal “turn-to-moon” compass: one arrow showing RELATIVE direction ----
+// ---- Turn-to-moon compass (single relative arrow) ----
 function drawTurnToMoon(cx,cy,r){
-  const ring=r, inner=r*0.62;
+  if(!r) return;
   ctx.save(); ctx.translate(cx,cy);
-
   // base ring
   ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.2)';
-  ctx.beginPath(); ctx.arc(0,0, ring, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.stroke();
 
-  // compute relative angle (moon vs device)
-  if (moonBearing!=null && deviceHeading!=null){
-    const rel = normDeg(moonBearing - deviceHeading); // 0 = straight ahead
-    const a = (rel-90)*rad; // canvas rotation
-
-    // target arrow (gold). Always visible, **relative** to your facing.
+  if(moonBearing!=null && deviceHeading!=null){
+    const rel=normDeg(moonBearing - deviceHeading); // 0 = straight ahead
+    const a=(rel-90)*rad;
     ctx.save(); ctx.rotate(a);
-    ctx.beginPath();
-    ctx.moveTo(inner*0.1, 0);
-    ctx.lineTo(inner*0.1, -6);
-    ctx.lineTo(ring*0.88, 0);
-    ctx.lineTo(inner*0.1, 6);
-    ctx.closePath();
-    const above = (moonAlt!=null && moonAlt>0);
-    ctx.fillStyle = above ? 'rgba(255,220,140,.98)' : 'rgba(180,180,180,.85)';
-    ctx.fill();
-    ctx.restore();
+    // gold arrow = where to turn
+    const inner=r*0.62;
+    ctx.beginPath(); ctx.moveTo(inner*0.1,0); ctx.lineTo(inner*0.1,-6);
+    ctx.lineTo(r*0.88,0); ctx.lineTo(inner*0.1,6); ctx.closePath();
+    ctx.fillStyle=(moonAlt!=null && moonAlt>0)?'rgba(255,220,140,.98)':'rgba(180,180,180,.85)';
+    ctx.fill(); ctx.restore();
 
     // alignment glow (±8°)
-    const diff = rel<=180 ? rel : 360-rel;
-    const ok = diff<=8;
-    if (ok){
-      ctx.beginPath(); ctx.arc(0,0, ring+6, 0, Math.PI*2);
+    const diff=rel<=180?rel:360-rel;
+    const ok=diff<=8;
+    if(ok){ ctx.beginPath(); ctx.arc(0,0,r+6,0,Math.PI*2);
       ctx.strokeStyle='rgba(255,220,140,.85)'; ctx.lineWidth=4; ctx.stroke();
-      if (!aligned && 'vibrate' in navigator) navigator.vibrate(20);
+      if(!aligned && 'vibrate' in navigator) navigator.vibrate(20);
     }
-    aligned = ok;
-  } else {
-    // if no heading yet, draw a small hint tick at top
-    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.25)';
-    ctx.beginPath(); ctx.moveTo(0,-inner); ctx.lineTo(0,-ring); ctx.stroke();
+    aligned=ok;
   }
-
   // center dot
-  ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2);
-  ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fill();
   ctx.restore();
 }
 
-// =================== LAYOUT/RAF/UPDATE (same as before) ===================
-function resize(){
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const w = cv.clientWidth|0, h = cv.clientHeight|0;
-  if (!w || !h) { requestAnimationFrame(resize); return; }
-  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  cacheCompassPlacement();
-  updateForTime(Number(slider.value));
-}
-window.addEventListener('resize', resize, {passive:true});
-requestAnimationFrame(resize);
-
-let last = performance.now(), RATE = 120;
-function loop(now){
-  const nowMs = Date.now();
-  if (linkToNow){
-    const v = clamp(nowMs, T0, T1);
-    if (Math.abs(v - Number(slider.value)) > 250) slider.value = v;
-    updateForTime(v);
-  } else if (playing){
-    const dt=(now-last)/1000;
-    let v = Number(slider.value) + dt*1000*RATE;
-    if (v > T1) v = T0;
-    slider.value = v;
-    updateForTime(v);
-  }
-  last = now;
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
-
-function cacheCompassPlacement(){
-  const W = cv.clientWidth|0, H = cv.clientHeight|0;
-  const compR = Math.min(W,H)*0.095;
-  const canvasRect = cv.getBoundingClientRect();
-  const sliderRect = slider.getBoundingClientRect();
-  const sliderTopInCanvas = sliderRect.top - canvasRect.top;
-  const cy = Math.min(H - 16 - compR, Math.max(compR + 16, sliderTopInCanvas - 10 - compR));
-  compassCenter = { x: W/2, y: cy, r: compR };
-}
-
-function updateForTime(ms){
-  const pos = getMoonPos(new Date(ms), obs.lat, obs.lon);
-  moonAlt = pos.alt*180/Math.PI;
-  moonBearing = azToBearing(pos.az);
-
-  const isNow = linkToNow && !playing;
-  const dt = new Date(ms);
-  const txt = dt.toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit', second:'2-digit', timeZoneName:'short'});
-  timeLabel.textContent = (playing ? 'Sim ' : (isNow ? 'Now ' : 'Sim ')) + txt;
-
-  draw(ms);
-}
-
-// Utilities
-function getCSS(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
-function clamp(v,a,b){ return Math.min(Math.max(v,a),b); }
-function lerp(a,b,t){ return a + (b-a)*t; }
+// =================== utils ===================
+function lerp(a,b,t){return a+(b-a)*t;}
+function getCSS(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function clamp(v,a,b){return Math.min(Math.max(v,a),b);}
 
 })();
 </script>
