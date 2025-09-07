@@ -3,15 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Pollinations — Time × Environment × Car × Era × View × Paint</title>
+<title>Pollinations — Time × Environment × Vehicle × Era × View × Paint</title>
 <link rel="preconnect" href="https://image.pollinations.ai" crossorigin>
 <link rel="dns-prefetch" href="//image.pollinations.ai">
 <link rel="dns-prefetch" href="//images.weserv.nl">
 <style>
-  :root{
-    --fg:#e8eef5; --muted:#a6b0bd;
-    --c1:#1a1a1a; --c2:#121212; --c3:#151515; --c4:#0f0f0f; /* neutral waiting palette */
-  }
+  :root{ --fg:#e8eef5; --muted:#a6b0bd; --c1:#1a1a1a; --c2:#121212; --c3:#151515; --c4:#0f0f0f; }
   *{box-sizing:border-box}
   html,body{
     height:100%;margin:0;background:
@@ -21,27 +18,18 @@
       radial-gradient(at 100% 100%, var(--c4), transparent 60%), #0b0b0b;
     color:var(--fg); font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
     overflow-y:auto; overflow-x:hidden;
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
   }
 
-  .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start; gap:8px}
+  .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;gap:8px}
   .stage{width:min(96vw, 900px); display:flex; justify-content:center; align-items:center}
   .frame{
     position:relative; width:100%; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
     box-shadow:0 10px 28px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111;
   }
-  .frame img{
-    position:absolute; inset:0; margin:auto; max-width:100%; max-height:100%;
-    object-fit:contain; image-rendering:auto; filter:contrast(1.02) saturate(1.02);
-  }
-  .loading{
-    position:absolute; left:0; right:0; bottom:8px; text-align:center; font-size:12px; color:var(--muted);
-    transition:opacity .2s ease; opacity:0; pointer-events:none;
-  }
+  .frame img{position:absolute; inset:0; margin:auto; max-width:100%; max-height:100%; object-fit:contain; filter:contrast(1.02) saturate(1.02)}
+  .loading{position:absolute; left:0; right:0; bottom:8px; text-align:center; font-size:12px; color:var(--muted); transition:opacity .2s; opacity:0; pointer-events:none}
   .loading.show{opacity:1}
 
-  /* Controls */
   .controls{width:min(96vw, 900px); margin-top:4px}
   .row{padding:6px 4px}
   .top{display:flex; justify-content:space-between; align-items:baseline; margin:0 2px 4px}
@@ -50,51 +38,29 @@
   input[type="range"]{width:100%; -webkit-appearance:none; appearance:none; height:28px; background:transparent}
   input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
   input[type="range"]::-moz-range-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
-  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%;
-    background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.5); margin-top:-6px}
+  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.5); margin-top:-6px}
   input[type="range"]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.5)}
   input[type="range"]:disabled{opacity:.55; cursor:not-allowed}
-  input[type="range"]:disabled::-webkit-slider-thumb{background:#c9c9c9; box-shadow:none}
-  input[type="range"]:disabled::-moz-range-thumb{background:#c9c9c9; box-shadow:none}
+  input[type="range"]:disabled::-webkit-slider-thumb, input[type="range"]:disabled::-moz-range-thumb{background:#c9c9c9; box-shadow:none}
   .hint{opacity:.75; font-size:11px; text-align:center; margin:6px 0 10px; color:var(--muted)}
 
-  .errbar{
-    position:fixed; left:12px; right:12px; bottom:12px; padding:10px 12px; border-radius:10px;
-    background:#2b1212; color:#ffd6d6; border:1px solid #913c3c; font-size:12px; display:none; z-index:9998
-  }
+  .errbar{position:fixed; left:12px; right:12px; bottom:12px; padding:10px 12px; border-radius:10px;
+    background:#2b1212; color:#ffd6d6; border:1px solid #913c3c; font-size:12px; display:none; z-index:9998}
 
-  /* Overlay: prompt + debug combined, toggled by chevron */
-  .peek{
-    position:fixed; right:12px; bottom:12px; z-index:9999;
-    width:36px; height:36px; border-radius:50%;
-    display:grid; place-items:center;
-    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18);
-    color:#fff; cursor:pointer;
-    backdrop-filter: blur(8px);
-    transform:rotate(0deg); transition:transform .2s ease;
-  }
-  .peek[aria-expanded="true"]{ transform:rotate(180deg); }
-
-  .overlay{
-    position:fixed; inset:12px; z-index:9997; display:none;
-    background:rgba(10,10,10,.88); border:1px solid rgba(255,255,255,.1); border-radius:12px;
-    backdrop-filter: blur(10px);
-  }
-  .overlay.show{ display:block; }
-  .overlay .inner{ height:100%; display:flex; flex-direction:column; }
-  .overlay header{
-    display:flex; align-items:center; justify-content:space-between; padding:10px 12px;
-    border-bottom:1px solid rgba(255,255,255,.08); font-weight:600;
-  }
-  .overlay main{ flex:1; overflow:auto; padding:10px 12px; display:grid; grid-template-columns:1fr; gap:12px; }
-  .card{ background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px; }
-  .card h3{ margin:0 0 6px 0; font-size:13px; color:#dfe6ef; }
+  /* Chevron + overlay */
+  .peek{position:fixed; right:12px; bottom:12px; z-index:9999; width:36px; height:36px; border-radius:50%; display:grid; place-items:center;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); color:#fff; cursor:pointer; backdrop-filter: blur(8px); transition:transform .2s}
+  .peek[aria-expanded="true"]{transform:rotate(180deg)}
+  .overlay{position:fixed; inset:12px; z-index:9997; display:none; background:rgba(10,10,10,.88); border:1px solid rgba(255,255,255,.1); border-radius:12px; backdrop-filter: blur(10px)}
+  .overlay.show{display:block}
+  .overlay .inner{height:100%; display:flex; flex-direction:column}
+  .overlay header{display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.08); font-weight:600}
+  .overlay main{flex:1; overflow:auto; padding:10px 12px; display:grid; grid-template-columns:1fr; gap:12px}
+  .card{background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px}
+  .card h3{margin:0 0 6px 0; font-size:13px; color:#dfe6ef}
   pre{white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; color:#dfe6ef}
   .actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
-  .btn{
-    appearance:none; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px;
-    background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer; text-decoration:none;
-  }
+  .btn{appearance:none; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px; background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer; text-decoration:none}
 </style>
 </head>
 <body>
@@ -114,28 +80,27 @@
       </div>
       <div class="row">
         <div class="top"><div class="label">Environment</div><div class="val" id="envVal"></div></div>
-        <!-- 12 habitats (0..11) -->
         <input id="env" type="range" min="0" max="11" step="1">
       </div>
       <div class="row">
-        <div class="top"><div class="label">Car type</div><div class="val" id="carVal"></div></div>
-        <input id="car" type="range" min="0" max="9" step="1">
+        <div class="top"><div class="label">Vehicle</div><div class="val" id="carVal"></div></div>
+        <!-- exactly 4 types -->
+        <input id="car" type="range" min="0" max="3" step="1">
       </div>
       <div class="row">
         <div class="top"><div class="label">Era</div><div class="val" id="eraVal"></div></div>
         <input id="era" type="range" min="0" max="11" step="1">
       </div>
       <div class="row">
-        <div class="top"><div class="label">View angle</div><div class="val" id="dirVal"></div></div>
-        <!-- 4 views (0..3) -->
+        <div class="top"><div class="label">View (catalog spec)</div><div class="val" id="dirVal"></div></div>
+        <!-- 4 views -->
         <input id="dir" type="range" min="0" max="3" step="1">
       </div>
       <div class="row">
         <div class="top"><div class="label">Body lacquer color</div><div class="val" id="paintVal"></div></div>
-        <!-- 11 paints (0..10) -->
         <input id="paint" type="range" min="0" max="10" step="1">
       </div>
-      <div class="hint">Updates after 500 ms pause · Body lacquer color affects only the car paint</div>
+      <div class="hint">Updates after 500 ms pause · Paint slider affects only the car body lacquer</div>
     </div>
   </div>
 
@@ -195,37 +160,20 @@
     "historic European old-town streets",
     "modern glass high-rise city center"
   ];
-  const cars = ["microcar (A-segment)","city hatchback (B-segment)","compact sedan (C-segment)","midsize sedan","estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"];
 
+  /* Vehicles: exactly what you asked */
+  const cars = [
+    "mid-engine powerful supercar",
+    "elegant simple boat-tail coupe cabrio",
+    "midsize SUV",
+    "midsize sedan"
+  ];
+
+  /* Eras (with lively cues, incl. word forms) */
   const eras = [
     "1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s",
     "futuristic","unbelievably mesmerizingly sci-fi"
   ];
-
-  /* Views: fewer, extremely clear, unique words */
-  const views = [
-    "FRONT-3/4 HERO (primary angle)",
-    "PROFILE ORTHO-90 (pure side, no perspective)",
-    "FRONT HEAD-ON (grille square to camera)",
-    "TOP-DOWN OVERHEAD (true vertical)"
-  ];
-
-  /* Body lacquer colors — explicit “paint-only” phrasing */
-  const paints = [
-    {label:"Gloss factory white",        phrase:"gloss factory white body lacquer (paint only)"},
-    {label:"Piano black high-gloss",     phrase:"piano black high-gloss body lacquer (paint only)"},
-    {label:"Metallic silver fine-flake", phrase:"fine-flake metallic silver body lacquer (paint only)"},
-    {label:"Satin graphite metallic",    phrase:"satin graphite metallic body lacquer (paint only)"},
-    {label:"Deep navy gloss",            phrase:"deep navy gloss body lacquer (paint only)"},
-    {label:"Crimson red gloss",          phrase:"crimson red gloss body lacquer (paint only)"},
-    {label:"Sun yellow high-gloss",      phrase:"sun yellow high-gloss body lacquer (paint only)"},
-    {label:"Emerald green gloss",        phrase:"emerald green gloss body lacquer (paint only)"},
-    {label:"Matte battleship gray",      phrase:"matte battleship gray body lacquer (paint only)"},
-    {label:"Pearl white tri-coat",       phrase:"pearl white tri-coat body lacquer (paint only)"},
-    {label:"Two-tone: black body, white roof", phrase:"two-tone body lacquer: black body with white roof (paint only)"}
-  ];
-
-  /* Era cue: numeric + words + design ethos */
   function eraCue(label){
     const map = {
       "1890s": "1890s (eighteen-nineties) — horseless carriage spirit; exposed coachwork; spindly wheels; brass fittings",
@@ -244,25 +192,33 @@
     return map[label] || `${label} style authenticity`;
   }
 
-  /* Time cues (no colors) */
-  function timeCue(h){
-    if (h>=4 && h<6)  return "pre-dawn hush; faint horizon glow; long soft shadows; bright morning star visible";
-    if (h>=6 && h<8)  return "sun just rising; low-angle light; long soft shadows; thin ground mist";
-    if (h>=8 && h<12) return "clear directional daylight; crisp shadows; airy atmosphere";
-    if (h===12)       return "midday overhead light; minimal shadows; high clarity";
-    if (h>12 && h<17) return "afternoon light; defined shadows; gentle haze";
-    if (h>=17 && h<20)return "sun near horizon; raking light; bold silhouettes possible";
-    if (h>=20 && h<22)return "twilight after sunset; soft ambient glow; first stars emerging";
-    if (h>=22 || h<2) return "night; moonlight and starlight; constellations visible";
-    return "deep night; sparse light sources; quiet atmosphere";
-  }
+  /* Views: catalog/product-image spec, concise and unique */
+  const views = [
+    "Front three-quarter product view — camera at headlamp height; vehicle yaw ~30° toward camera; front wheels straight; centered; covers ~85% of frame; background unobtrusive.",
+    "Side profile product view — left side; camera level at mid-door; perpendicular 90°; wheels straight; full length edge-to-edge; minimal perspective.",
+    "Front head-on product view — camera on centerline at badge height; grille perfectly square; wheels straight; strict symmetry; fills ~80% vertical.",
+    "Top-down product view — camera 90° overhead; car centered; full roofline and outline visible; equal margins on all sides."
+  ];
+
+  /* Body lacquer colors — paint-only */
+  const paints = [
+    {label:"Gloss factory white",        phrase:"gloss factory white body lacquer (paint only)"},
+    {label:"Piano black high-gloss",     phrase:"piano black high-gloss body lacquer (paint only)"},
+    {label:"Metallic silver fine-flake", phrase:"fine-flake metallic silver body lacquer (paint only)"},
+    {label:"Satin graphite metallic",    phrase:"satin graphite metallic body lacquer (paint only)"},
+    {label:"Deep navy gloss",            phrase:"deep navy gloss body lacquer (paint only)"},
+    {label:"Crimson red gloss",          phrase:"crimson red gloss body lacquer (paint only)"},
+    {label:"Sun yellow high-gloss",      phrase:"sun yellow high-gloss body lacquer (paint only)"},
+    {label:"Emerald green gloss",        phrase:"emerald green gloss body lacquer (paint only)"},
+    {label:"Matte battleship gray",      phrase:"matte battleship gray body lacquer (paint only)"},
+    {label:"Pearl white tri-coat",       phrase:"pearl white tri-coat body lacquer (paint only)"},
+    {label:"Two-tone: black body, white roof", phrase:"two-tone body lacquer: black body with white roof (paint only)"}
+  ];
 
   /* UI refs */
-  const timeEl  = $('#time'),  envEl  = $('#env'),  carEl  = $('#car'),
-        eraEl   = $('#era'),   dirEl  = $('#dir'),  paintEl= $('#paint');
-  const timeVal = $('#timeVal'), envVal= $('#envVal'), carVal= $('#carVal'),
-        eraVal  = $('#eraVal'), dirVal= $('#dirVal'), paintVal = $('#paintVal');
-  const sliders = [timeEl, envEl, carEl, eraEl, dirEl, paintEl];
+  const timeEl=$('#time'), envEl=$('#env'), carEl=$('#car'), eraEl=$('#era'), dirEl=$('#dir'), paintEl=$('#paint');
+  const timeVal=$('#timeVal'), envVal=$('#envVal'), carVal=$('#carVal'), eraVal=$('#eraVal'), dirVal=$('#dirVal'), paintVal=$('#paintVal');
+  const sliders=[timeEl,envEl,carEl,eraEl,dirEl,paintEl];
 
   const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
   const log=(m)=>{ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; };
@@ -276,6 +232,19 @@
   }
   peekBtn.addEventListener('click', ()=>toggleOverlay());
   window.addEventListener('keydown', e=>{ if(e.key==='Escape') toggleOverlay(false); });
+
+  /* Time cues (no colors) */
+  function timeCue(h){
+    if (h>=4 && h<6)  return "pre-dawn hush; faint horizon glow; long soft shadows; bright morning star visible";
+    if (h>=6 && h<8)  return "sun just rising; low-angle light; long soft shadows; thin ground mist";
+    if (h>=8 && h<12) return "clear directional daylight; crisp shadows; airy atmosphere";
+    if (h===12)       return "midday overhead light; minimal shadows; high clarity";
+    if (h>12 && h<17) return "afternoon light; defined shadows; gentle haze";
+    if (h>=17 && h<20)return "sun near horizon; raking light; bold silhouettes possible";
+    if (h>=20 && h<22)return "twilight after sunset; soft ambient glow; first stars emerging";
+    if (h>=22 || h<2) return "night; moonlight and starlight; constellations visible";
+    return "deep night; sparse light sources; quiet atmosphere";
+  }
 
   /* Labels */
   function labelHour(h){
@@ -299,17 +268,17 @@
     paintVal.textContent = paints[+paintEl.value].label + " (car body lacquer)";
   }
 
-  /* Prompt */
+  /* Prompt (now with catalog views + new vehicle list) */
   function buildPrompt(){
-    const env     = habitats[+envEl.value];
-    const car     = cars[+carEl.value];
-    const era     = eras[+eraEl.value];
-    const view    = views[+dirEl.value];
-    const paint   = paints[+paintEl.value].phrase;
+    const env   = habitats[+envEl.value];
+    const car   = cars[+carEl.value];
+    const era   = eras[+eraEl.value];
+    const view  = views[+dirEl.value];
+    const paint = paints[+paintEl.value].phrase;
     const timeTxt = timeCue(+timeEl.value);
     const eraTxt  = eraCue(era);
 
-    return `A realistic photo of a ${car} in ${env}. Era: ${eraTxt}. Camera angle: ${view}. Car body lacquer color: ${paint}. Only the car paint color should change — interior and environment unchanged. Time: ${timeTxt}. Natural light, detailed, no text`;
+    return `A realistic photo of a ${car} in ${env}. Era: ${eraTxt}. Catalog view: ${view} Car body lacquer color: ${paint}. Only the car paint color should change — interior and environment unchanged. Time: ${timeTxt}. Natural light, detailed, no text`;
   }
 
   /* Pollinations URLs + fallbacks */
@@ -322,7 +291,7 @@
   const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p); return [a,b,c,d,uProxy(a),uProxy(b)];};
 
   const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
-  const setControlsEnabled=(enabled)=>{ sliders.forEach(el=>el.disabled=!enabled); };
+  const setControlsEnabled=(enabled)=>{ [timeEl,envEl,carEl,eraEl,dirEl,paintEl].forEach(el=>el.disabled=!enabled); };
 
   /* Keep-previous: preload -> swap */
   let genToken=0;
@@ -406,7 +375,7 @@
     debounceT=setTimeout(()=>{ setLoading(true,''); loadSequence(buildPrompt()); }, WAIT_MS);
   }
 
-  /* Wire inputs */
+  /* Wiring */
   [timeEl, envEl, carEl, eraEl, dirEl, paintEl].forEach(el=>{
     el.addEventListener('pointerdown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
     el.addEventListener('input', ()=>{ reflectLabels(); });
@@ -422,7 +391,6 @@
   selfTestBtn.onclick=async()=>{ log(`UA: ${navigator.userAgent}`); log(`online: ${navigator.onLine}`); await probe('https://picsum.photos/3'); const t=uPlain('test'); await probe(t); await probe(uProxy(t)); };
   copyURLBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(openImg.href||''); log('Copied URL'); }catch{ showError('Clipboard blocked'); } };
   copyPromptBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(promptText.textContent||''); }catch{ showError('Clipboard blocked'); } };
-
   function probe(url){ return new Promise(res=>{const t0=performance.now(); const im=new Image(); im.onload=()=>{log(`PROBE OK ${url} (${Math.round(performance.now()-t0)}ms)`); res();}; im.onerror=()=>{log(`PROBE ERROR ${url}`); res();}; im.referrerPolicy='no-referrer'; im.crossOrigin='anonymous'; im.src=url+`&p=${Date.now()%1e7}`;}); }
 
   /* Init */
@@ -433,7 +401,7 @@
   dirEl.value  =(Math.random()*views.length)|0;
   paintEl.value=(Math.random()*paints.length)|0;
   reflectLabels();
-  scheduleGenerate(); // first run
+  scheduleGenerate();
 })();
 </script>
 </body>
