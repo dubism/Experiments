@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Pollinations • Canvas + Prompt Composer + UI Code</title>
+<style>
+  :root { --bg:#0b0e13; --fg:#e9eef7; --muted:#93a1b4; --accent:#7bd7ff; }
+  html,body { height:100%; margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial; }
+  header { padding:12px 16px; display:flex; gap:12px; align-items:center; border-bottom:1px solid #1b2330; position:sticky; top:0; background:linear-gradient(#0b0e138f, #0b0e13 60%); backdrop-filter: blur(6px); }
+  header h1 { font-size:14px; margin:0; letter-spacing:.2px; color:#cfe7ff; }
+  main { display:grid; grid-template-columns: 360px 1fr; gap:16px; height:calc(100% - 54px); }
+  aside { padding:12px 16px; border-right:1px solid #1b2330; overflow:auto; }
+  #work { position:relative; overflow:auto; }
+  textarea { width:100%; min-height:120px; resize:vertical; background:#0f141d; color:var(--fg); border:1px solid #1b2330; border-radius:8px; padding:10px; }
+  fieldset { border:1px solid #1b2330; border-radius:8px; padding:10px; margin:12px 0; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  label.opt { display:flex; gap:6px; align-items:center; padding:4px 8px; border:1px solid #1b2330; border-radius:999px; cursor:pointer; }
+  input[type="number"] { width:100px; background:#0f141d; color:var(--fg); border:1px solid #1b2330; border-radius:6px; padding:6px 8px; }
+  button { background:#152033; color:var(--fg); border:1px solid #223149; border-radius:8px; padding:8px 12px; cursor:pointer; }
+  button:hover { outline:1px solid #29466e; }
+  small { color:var(--muted); }
+  /* Stage */
+  #stage { position:relative; height:100%; min-height:300px; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; background:#0a0a0a; }
+  #imgLayer { position:absolute; inset:0; object-fit:contain; display:none; }
+  #codeOut { position:absolute; inset:16px; border:1px solid #233247; border-radius:10px; background:#0c121b; display:none; }
+  #log { position:absolute; left:12px; bottom:12px; padding:6px 8px; background:#0f141d; border:1px solid #1b2330; border-radius:6px; color:#b7c6da; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Pollinations Prompt Composer → Canvas / UI Code</h1>
+    <div class="row">
+      <button id="genImage">Generate Image → Canvas</button>
+      <button id="genCode">Generate UI Code → Sandboxed</button>
+      <small>⌘K opens palette (in generated UIs)</small>
+    </div>
+  </header>
+
+  <main>
+    <aside>
+      <label>Raw idea (creative core)</label>
+      <textarea id="raw" placeholder="Describe what you want…"></textarea>
+
+      <fieldset>
+        <legend>Prompt Type</legend>
+        <div class="row">
+          <label class="opt"><input type="radio" name="ptype" value="artdir" checked/> Art-Directed Photo</label>
+          <label class="opt"><input type="radio" name="ptype" value="flatillus"/> Flat Illustration</label>
+          <label class="opt"><input type="radio" name="ptype" value="uicode"/> UI Code (text API)</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Image options</legend>
+        <div class="row">
+          <label>Seed <input id="seed" type="number" value="42"/></label>
+          <label>Model <input id="model" placeholder="flux or turbo" value="flux"/></label>
+          <label class="opt"><input id="nologo" type="checkbox" checked/> nologo</label>
+          <label class="opt"><input id="enhance" type="checkbox"/> enhance</label>
+        </div>
+        <small>Canvas DPR & size are auto-sent as width/height.</small>
+      </fieldset>
+
+      <fieldset>
+        <legend>Preview prompt</legend>
+        <pre id="preview" style="white-space:pre-wrap; background:#0f141d; border:1px solid #1b2330; border-radius:8px; padding:10px; min-height:96px;"></pre>
+      </fieldset>
+    </aside>
+
+    <section id="work">
+      <div id="stage">
+        <canvas id="cnv"></canvas>
+        <img id="imgLayer" alt="Pollinations output"/>
+        <iframe id="codeOut" sandbox="allow-scripts" title="Generated UI"></iframe>
+        <div id="log">Ready.</div>
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+const raw = document.getElementById('raw');
+const cnv = document.getElementById('cnv');
+const imgLayer = document.getElementById('imgLayer');
+const codeOut = document.getElementById('codeOut');
+const genImage = document.getElementById('genImage');
+const genCode = document.getElementById('genCode');
+const preview = document.getElementById('preview');
+const logBox = document.getElementById('log');
+const seedEl = document.getElementById('seed');
+const modelEl = document.getElementById('model');
+const nologoEl = document.getElementById('nologo');
+const enhanceEl = document.getElementById('enhance');
+
+function log(msg){ logBox.textContent = msg; }
+function sizeCanvas() {
+  const rect = cnv.getBoundingClientRect();
+  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  cnv.width = Math.floor(rect.width * dpr);
+  cnv.height = Math.floor(rect.height * dpr);
+  const ctx = cnv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.clearRect(0,0,rect.width,rect.height);
+  return { w: rect.width|0, h: rect.height|0, dpr };
+}
+window.addEventListener('resize', sizeCanvas, { passive:true });
+sizeCanvas();
+
+function currentType() {
+  return (new FormData(document.querySelector('aside'))).get('ptype') || 'artdir';
+}
+
+// —— Prompt composers (3 kinds) ————————————————————————————————
+function composePrompt(type, W, H) {
+  const core = (raw.value || 'an evocative scene').trim();
+  if (type === 'artdir') {
+    return `${core}. cinematic composition, pro lighting, rich materials, sharp subject, natural colors, depth of field, shot on 50mm prime, f/1.8, ISO 200, shutter 1/100, aspect ${W}x${H}.`;
+  }
+  if (type === 'flatillus') {
+    return `${core}. minimal flat vector illustration, clean geometric shapes, soft shadows, pastel palette, high contrast focus, export-quality poster, aspect ${W}x${H}.`;
+  }
+  // UI code (text API) – instruct Pollinations to emit runnable code
+  const macReq = [
+    'Provide a COMPLETE single-file HTML document with inline CSS and vanilla JS.',
+    'Do NOT include Markdown fences or explanations.',
+    'UI-only demo with macOS-like interactivity:',
+    ' - ⌘K opens a command palette modal',
+    ' - ⌘S saves UI state to localStorage',
+    ' - Esc closes modals; ⌘/ toggles a short help overlay',
+    ' - Accessible focus states; prefers-reduced-motion respected',
+    'No external URLs or frameworks. Fit responsively to a viewport of '+W+'x'+H+'.'
+  ].join('\n');
+  return `Build a tiny interactive UI for: "${core}". ${macReq}`;
+}
+
+function updatePreview() {
+  const { w, h } = sizeCanvas();
+  preview.textContent = composePrompt(currentType(), w, h);
+}
+raw.addEventListener('input', updatePreview);
+document.querySelectorAll('input[name="ptype"]').forEach(r => r.addEventListener('change', updatePreview));
+updatePreview();
+
+// —— Image generation → draw on <canvas> (fallback to <img>) ————————————
+async function generateImage() {
+  const { w, h } = sizeCanvas();
+  const prompt = composePrompt(currentType(), w, h);
+  const qp = new URLSearchParams({
+    width: String(Math.max(32, Math.floor(w))),
+    height: String(Math.max(32, Math.floor(h))),
+    seed: seedEl.value || '42',
+    model: modelEl.value || 'flux',
+    nologo: String(!!nologoEl.checked),
+    enhance: String(!!enhanceEl.checked),
+    // cache buster
+    _t: String(Date.now())
+  });
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${qp.toString()}`;
+  log('Fetching image…');
+
+  // Prefer drawing onto canvas (may be tainted by CORS; fall back to <img> if so)
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  const done = new Promise((res, rej) => { img.onload = () => res(); img.onerror = rej; });
+  img.src = url;
+  try {
+    await done;
+    const ctx = cnv.getContext('2d');
+    const rect = cnv.getBoundingClientRect();
+    ctx.clearRect(0,0,rect.width,rect.height);
+    ctx.drawImage(img, 0, 0, rect.width, rect.height);
+    imgLayer.style.display = 'none';
+    codeOut.style.display = 'none';
+    log('Image drawn on canvas.');
+  } catch {
+    imgLayer.src = url;
+    imgLayer.style.display = 'block';
+    codeOut.style.display = 'none';
+    log('CORS blocked canvas draw; showing <img> instead.');
+  }
+}
+
+// —— Text generation → sandboxed iframe with returned code ————————————
+async function generateCode() {
+  const { w, h } = sizeCanvas();
+  const prompt = composePrompt('uicode', w, h);
+  const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=qwen-coder`;
+  log('Requesting UI code…');
+
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 30000);
+  let text;
+  try {
+    const rsp = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    text = await rsp.text();
+  } catch (e) {
+    log('Network error.');
+    return;
+  } finally { clearTimeout(to); }
+
+  // Strip accidental ``` fences if present
+  text = text.replace(/^\s*```(?:html)?/i, '').replace(/```$/,'').trim();
+
+  // Basic sanity: must contain <html and <script
+  if (!/\<html/i.test(text)) {
+    log('Response did not look like full HTML. Showing plain text.');
+    const escaped = text.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    codeOut.srcdoc = `<!doctype html><meta charset="utf-8"><pre style="color:#eaeef7;background:#0b0e13;padding:16px;white-space:pre-wrap">${escaped}</pre>`;
+  } else {
+    codeOut.srcdoc = text;
+  }
+  codeOut.style.display = 'block';
+  imgLayer.style.display = 'none';
+  const ctx = cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height);
+  log('UI code embedded (sandboxed).');
+}
+
+genImage.addEventListener('click', generateImage);
+genCode.addEventListener('click', generateCode);
+
+// Optional: ⌘K opens a small local palette to switch prompt type
+window.addEventListener('keydown', (e) => {
+  const isMac = navigator.platform.includes('Mac');
+  if (isMac && e.metaKey && e.key.toLowerCase()==='k') {
+    e.preventDefault();
+    const next = { artdir:'flatillus', flatillus:'uicode', uicode:'artdir' }[currentType()];
+    document.querySelector(`input[name="ptype"][value="${next}"]`).checked = true;
+    updatePreview();
+    log(`Prompt type → ${next}`);
+  }
+});
+</script>
+</body>
+</html>
