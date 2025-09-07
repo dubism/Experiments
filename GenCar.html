@@ -4,11 +4,16 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Pollinations — Time × Environment × Car × Era</title>
+
+<!-- Connect early -->
 <link rel="preconnect" href="https://image.pollinations.ai" crossorigin>
+<link rel="dns-prefetch" href="//image.pollinations.ai">
+<link rel="dns-prefetch" href="//images.weserv.nl">
+
 <style>
   :root{
-    --fg:#e8eef5; --muted:#a6b0bd; --accent:#5ac8fa;
-    --c1:#222; --c2:#111; --c3:#191919; --c4:#101010;
+    --fg:#e8eef5; --muted:#a6b0bd;
+    --c1:#222; --c2:#111; --c3:#191919; --c4:#101010; /* will be updated */
   }
   *{box-sizing:border-box}
   html,body{
@@ -30,9 +35,13 @@
     position:absolute; inset:0; margin:auto; max-width:100%; max-height:100%;
     object-fit:contain; image-rendering:auto; filter:contrast(1.02) saturate(1.02)
   }
-  .loading{position:absolute; inset:auto 0 10px 0; text-align:center; font-size:12px; color:var(--muted)}
+  .loading{
+    position:absolute; inset:auto 0 10px 0; text-align:center; font-size:12px; color:var(--muted);
+    transition:opacity .2s ease; opacity:1;
+  }
+  .loading.hidden{opacity:0; pointer-events:none}
 
-  /* Prompt panel OUTSIDE the image, just below it */
+  /* Panels below the image */
   .panel{width:min(92vw,1000px); margin-top:10px; transform:translateY(-4vh)}
   .box{
     background:rgba(20,20,20,.7); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
@@ -49,7 +58,7 @@
 
   /* Controls */
   .controls{width:min(92vw,860px); margin-top:14px; transform:translateY(-2vh)}
-  .row{display:grid; grid-template-columns:110px 1fr 120px; gap:12px; align-items:center; padding:10px 12px}
+  .row{display:grid; grid-template-columns:110px 1fr 128px; gap:12px; align-items:center; padding:10px 12px}
   .label{font-weight:600; letter-spacing:.2px}
   .val{font-variant-numeric:tabular-nums; text-align:right; color:var(--muted)}
   input[type="range"]{width:100%; -webkit-appearance:none; appearance:none; height:28px; background:transparent}
@@ -71,7 +80,8 @@
   <div class="wrap">
     <div class="stage">
       <div class="frame">
-        <img id="img" alt="Generated scene" crossorigin="anonymous" referrerpolicy="no-referrer" decoding="async" fetchpriority="high" loading="eager">
+        <!-- NOTE: no opacity games; keep always at 1 -->
+        <img id="img" alt="Generated scene" crossorigin="anonymous" referrerpolicy="no-referrer" decoding="async" loading="eager" fetchpriority="high">
         <div class="loading" id="loading" aria-live="polite">Loading…</div>
       </div>
     </div>
@@ -97,8 +107,8 @@
         <div class="body">
           <pre id="debugText">—</pre>
           <div class="actions">
-            <button class="btn" id="selfTest">Run self-test</button>
-            <button class="btn" id="retry">Force retry</button>
+            <button class="btn" id="selfTest">Self-test</button>
+            <button class="btn" id="retry">Retry</button>
             <button class="btn" id="copyURL">Copy image URL</button>
           </div>
         </div>
@@ -126,7 +136,7 @@
         <input id="era" type="range" min="0" max="11" step="1">
         <div class="val" id="eraVal"></div>
       </div>
-      <div class="hint">Updates on every change • Background adapts to image colors (4-point gradient)</div>
+      <div class="hint">Updates on every change · Background adapts to image colors (4-point gradient)</div>
     </div>
   </div>
 
@@ -135,7 +145,7 @@
 <script>
 'use strict';
 (() => {
-  // ======= Error bar =======
+  /* ===== Error bar ===== */
   const errbar = document.getElementById('errbar');
   function showError(msg){
     errbar.textContent = msg;
@@ -143,10 +153,10 @@
     clearTimeout(showError._t);
     showError._t = setTimeout(()=>{ errbar.style.display='none'; }, 7000);
   }
-  window.addEventListener('error', e => { showError(`Script error: ${e.message}`); log(`Script error: ${e.message}`); });
-  window.addEventListener('unhandledrejection', e => { const m = e.reason?.message || e.reason; showError(`Promise error: ${m}`); log(`Promise error: ${m}`); });
+  window.addEventListener('error', e => showError(`Script error: ${e.message}`));
+  window.addEventListener('unhandledrejection', e => showError(`Promise error: ${e.reason?.message || e.reason}`));
 
-  // ======= DOM =======
+  /* ===== DOM ===== */
   const $ = s => document.querySelector(s);
   const img = $('#img'), loading = $('#loading');
   const promptText = $('#promptText'), openImg = $('#openImg'), copyPrompt = $('#copyPrompt');
@@ -162,14 +172,13 @@
     "estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"
   ];
   const eras = [
-    "1890s","1920s","1950s","1960s","1970s","1980s",
-    "1990s","2000s","2010s","2020s","2030s","2050s"
+    "1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","2030s","2050s"
   ];
 
   const timeEl = $('#time'), envEl = $('#env'), carEl = $('#car'), eraEl = $('#era');
   const timeVal = $('#timeVal'), envVal = $('#envVal'), carVal = $('#carVal'), eraVal = $('#eraVal');
 
-  // ======= Utils =======
+  /* ===== Utils ===== */
   const clamp = (v,min,max)=>Math.min(max,Math.max(min,v));
   const rafDebounce = (fn) => { let req=0; return (...a)=>{ cancelAnimationFrame(req); req=requestAnimationFrame(()=>fn(...a)); }; };
   const log = (m) => { debugText.textContent = `[${(new Date).toLocaleTimeString()}] ${m}\n` + debugText.textContent; };
@@ -194,34 +203,61 @@
 
   function buildPrompt(){
     const hour = String(+timeEl.value).padStart(2,'0')+":00";
-    const env  = habitats[+envEl.value];
-    const car  = cars[+carEl.value];
-    const era  = eras[+eraEl.value];
-    // Keep it short (fast).
-    return `A realistic ${era} style photo of a ${car} in ${env} at ${hour}. Natural light, detailed, no text`;
+    return `A realistic ${eras[+eraEl.value]} style photo of a ${cars[+carEl.value]} in ${habitats[+envEl.value]} at ${hour}. Natural light, detailed, no text`;
   }
 
-  // Candidate URL builders (progressive fallbacks)
-  function uTurbo(p){ return uBase(p, 'turbo', 640, 384); }
-  function uFlux(p){  return uBase(p, 'flux', 640, 384); }
-  function uPlain(p){ return uBase(p, null, 640, 384); }
-  function uSmall(p){ return uBase(p, 'turbo', 512, 512); }
-  function uProxy(url){ return `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`; }
-
+  /* ===== URL builders + fallbacks ===== */
   function uBase(prompt, model, w, h){
     const seed = (Math.random()*1e9|0);
     const base = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&enhance=false&seed=${seed}`;
     return model ? `${base}&model=${model}` : base;
   }
+  const uTurbo = p => uBase(p,'turbo',640,384);
+  const uFlux  = p => uBase(p,'flux',640,384);
+  const uPlain = p => uBase(p,null,640,384);
+  const uSmall = p => uBase(p,'turbo',512,512);
+  const uProxy = url => `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
 
-  let lastURL = "", attempt = 0;
-  const candidates = (p) => {
+  function candidates(p){
     const a = uTurbo(p);
     const b = uFlux(p);
     const c = uPlain(p);
     const d = uSmall(p);
     return [a, b, c, d, uProxy(a), uProxy(b)];
-  };
+  }
+
+  /* ===== Strong load-complete detection =====
+     - remove opacity gating entirely
+     - hide the loading label when we KNOW the bitmap is available:
+       1) img.decode() resolves, OR
+       2) 'load' fires, OR
+       3) img.complete && naturalWidth>0 (Safari cache case)
+  */
+  let genToken = 0; // ignore stale completions
+  function setLoading(on){
+    loading.classList.toggle('hidden', !on);
+    loading.textContent = on ? 'Loading…' : '';
+  }
+
+  function startLoad(url, token){
+    img.src = url + `&t=${Date.now()%1e7}`; // cache-buster
+    // Pre-hide issues if Safari cached it
+    if (img.complete && img.naturalWidth > 0) {
+      onLoaded(token);
+      return;
+    }
+    // decode() gives us a reliable promise on modern Safari
+    if (typeof img.decode === 'function'){
+      img.decode().then(()=>{ onLoaded(token); }).catch(()=>{/* fallback to load event */});
+    }
+  }
+
+  function onLoaded(token){
+    if (token !== genToken) { log('Stale decode/load ignored'); return; }
+    setLoading(false);
+    try { extractPaletteToBackground(img); }
+    catch(e){ fallbackPaletteToBackground(img.currentSrc || img.src); }
+  }
 
   function updatePromptUI(prompt, url){
     promptText.textContent = prompt;
@@ -229,56 +265,48 @@
     copyURLBtn.onclick = async () => {
       try{ await navigator.clipboard.writeText(url); log("Copied URL"); } catch{ showError("Clipboard blocked"); }
     };
+    copyPrompt.onclick = async () => {
+      try{ await navigator.clipboard.writeText(prompt); } catch{ showError('Clipboard blocked'); }
+    };
   }
 
   const generate = rafDebounce(() => {
     const prompt = buildPrompt();
     const seq = candidates(prompt);
-    attempt = 0;
-    tryLoad(seq, prompt);
-  });
+    let attempt = 0;
+    genToken++; // new generation
+    const myToken = genToken;
 
-  function tryLoad(seq, prompt){
-    const url = seq[attempt] || seq[seq.length-1];
-    lastURL = url;
-    updatePromptUI(prompt, url);
-    loading.textContent = `Loading… (attempt ${attempt+1}/${seq.length})`;
-    img.style.opacity = .25;
+    // Immediate background so UI never looks static, even if k-means later fails
+    fallbackPaletteToBackground(seq[0]);
 
-    // Handlers
-    img.onload = () => {
-      if (img.src !== url) { log("Stale onload ignored"); return; }
-      img.style.opacity = 1;
-      loading.textContent = "";
-      log(`Loaded OK via ${url.includes('weserv.nl')?'CDN proxy':'direct'} (${attempt+1}/${seq.length})`);
-      // Palette
-      try { extractPaletteToBackground(img); } catch(e){ fallbackPaletteToBackground(url); }
-    };
+    setLoading(true);
+    img.onload = () => onLoaded(myToken);
     img.onerror = () => {
-      log(`onerror for attempt ${attempt+1}: ${url}`);
       if (++attempt < seq.length){
-        setTimeout(()=>tryLoad(seq, prompt), 180);
+        log(`onerror → retry ${attempt+1}/${seq.length}`);
+        updatePromptUI(prompt, seq[attempt]);
+        startLoad(seq[attempt], myToken);
       } else {
-        loading.textContent = "Load failed";
-        showError("Image load failed repeatedly (likely rate-limit or backend).");
-        fallbackPaletteToBackground(url);
+        setLoading(false);
+        showError("Image load failed repeatedly (likely rate-limit/backend).");
       }
     };
 
-    // Start
-    img.src = url + `&t=${Date.now()%1e7}`; // cache-buster
-  }
+    updatePromptUI(prompt, seq[0]);
+    startLoad(seq[0], myToken);
+  });
 
-  // ======= Palette (k-means) with safe fallback =======
+  /* ===== Palette (k-means) + safe fallback ===== */
   function extractPaletteToBackground(imageEl){
     const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d',{willReadFrequently:true});
     const S = 64; cvs.width=S; cvs.height=S; ctx.drawImage(imageEl,0,0,S,S);
     let data;
     try { data = ctx.getImageData(0,0,S,S).data; }
-    catch(e){ log("Canvas tainted, using fallback palette"); fallbackPaletteToBackground(imageEl.src); return; }
+    catch(e){ fallbackPaletteToBackground(imageEl.currentSrc || imageEl.src); return; }
     const pts = [];
     for (let i=0;i<data.length;i+=4){ if (data[i+3]>=16) pts.push([data[i],data[i+1],data[i+2]]); }
-    if (!pts.length){ fallbackPaletteToBackground(imageEl.src); return; }
+    if (!pts.length){ fallbackPaletteToBackground(imageEl.currentSrc || imageEl.src); return; }
     const centers = kmeansRGB(pts,4,7).sort((A,B)=>B.count-A.count);
     const cols = centers.map(c=>rgbToHex(c.r,c.g,c.b));
     applyGradient(cols);
@@ -305,10 +333,11 @@
     root.setProperty('--c1', c1); root.setProperty('--c2', c2);
     root.setProperty('--c3', c3); root.setProperty('--c4', c4);
   }
+  // Always gives *something* immediately; also used as CORS fallback
   function fallbackPaletteToBackground(str){
     const h = xmur3(str), rnd=mulberry32(h());
     const cols = Array.from({length:4}, _=>{
-      const r = 32 + (rnd()*160|0), g = 32 + (rnd()*160|0), b = 32 + (rnd()*160|0);
+      const r = 32 + (rnd()*192|0), g = 32 + (rnd()*192|0), b = 32 + (rnd()*192|0);
       return rgbToHex(r,g,b);
     });
     applyGradient(cols);
@@ -316,17 +345,14 @@
   function xmur3(str){ for(var h=1779033703^str.length,i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19;} return function(){h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return (h^h>>>16)>>>0;};}
   function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}}
 
-  // ======= Self-test (more debugging info) =======
+  /* ===== Self-test ===== */
   selfTestBtn.onclick = async () => {
     log(`UA: ${navigator.userAgent}`);
     log(`online: ${navigator.onLine}`);
-    // 1) Quick external image probe
-    await probe('https://picsum.photos/3'); // success proves cross-origin images load
-    // 2) Probe Pollinations with a tiny prompt (no model)
-    const testURL = uPlain('test');
-    await probe(testURL);
-    // 3) Proxy probe
-    await probe(uProxy(testURL));
+    await probe('https://picsum.photos/3');
+    const t = uPlain('test');
+    await probe(t);
+    await probe(uProxy(t));
   };
   function probe(url){
     return new Promise(res=>{
@@ -341,14 +367,9 @@
   }
 
   retryBtn.onclick = () => generate();
-  copyPrompt.onclick = async () => {
-    try{ await navigator.clipboard.writeText(promptText.textContent); } catch{ showError('Clipboard blocked'); }
-  };
 
-  // ======= Wire sliders =======
+  /* ===== Wire sliders & init ===== */
   [timeEl, envEl, carEl, eraEl].forEach(el => el.addEventListener('input', ()=>{ reflectLabels(); generate(); }));
-
-  // ======= Init =======
   timeEl.value = (Math.random()*24)|0;
   envEl.value  = (Math.random()*habitats.length)|0;
   carEl.value  = (Math.random()*cars.length)|0;
