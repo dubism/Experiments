@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Lunar Eclipse — Clean Mobile + Compass</title>
+<title>Lunar Eclipse — Physics-Precise (Besselian + Compass)</title>
 <style>
   :root{
     --bg:#000; --fg:#e8eef5; --muted:#9aa1ad; --accent:#5ac8fa;
@@ -14,9 +14,9 @@
   *{box-sizing:border-box}
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);
     font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; overflow:hidden;}
-  /* Fullscreen stage */
-  #stage{position:relative; width:100vw; height:100svh; display:flex; align-items:center; justify-content:center;}
-  /* Square canvas that fits on one screen; moon made smaller (≈ 2/3 previous) */
+  /* Fullscreen stage (robust height) */
+  #stage{position:relative; width:100vw; height:min(100svh, 100vh); display:flex; align-items:center; justify-content:center;}
+  /* Square canvas; Moon visual scale (kept) */
   #cv{width:92vmin; height:92vmin; display:block; border-radius:12px;}
   /* Top controls */
   .hud-top{position:absolute; top:calc(env(safe-area-inset-top,0px) + 10px); left:10px; right:10px;
@@ -26,7 +26,7 @@
     padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer;
   }
   .btn:active{transform:translateY(1px)}
-  /* Bottom timeline: fixed inside the stage so no scrolling */
+  /* Bottom timeline: fixed; no page scroll needed */
   .hud-bottom{position:absolute; left:calc(env(safe-area-inset-left,0px) + 10px);
     right:calc(env(safe-area-inset-right,0px) + 10px);
     bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
@@ -72,7 +72,7 @@
   <!-- collapsible info -->
   <div id="sheet" class="sheet" aria-hidden="true">
     <button id="closeSheet" class="btn close">Close</button>
-    <h3>Eclipse details</h3>
+    <h3>Eclipse details (NASA/EclipseWise)</h3>
     <div id="when" style="margin:6px 0 12px; color:var(--muted)"></div>
     <div class="row" id="ticks"></div>
     <p style="color:var(--muted);margin-top:12px">Align the 🧭 pointer to the gold arrow to face the Moon (± a few degrees).</p>
@@ -80,29 +80,28 @@
 
 <script>
 (() => {
-  // ------- Robust: avoid .at() and other fragile calls ----------
-  const contacts = [
-    { k:"P1", t:"2025-09-07T15:28:06Z", pa:231.4, axis:1.5358 },
-    { k:"U1", t:"2025-09-07T16:26:51Z", pa:225.9, axis:1.0069 },
-    { k:"U2", t:"2025-09-07T17:30:36Z", pa:206.0, axis:0.4677 },
-    { k:"GE", t:"2025-09-07T18:11:46Z", pa:151.6, axis:0.2721 },
-    { k:"U3", t:"2025-09-07T18:53:18Z", pa:96.9,  axis:0.4707 },
-    { k:"U4", t:"2025-09-07T19:56:53Z", pa:77.2,  axis:1.0100 },
-    { k:"P4", t:"2025-09-07T20:55:27Z", pa:71.7,  axis:1.5395 }
-  ];
-  for (let i=0;i<contacts.length;i++) contacts[i].ms = Date.parse(contacts[i].t);
+  // ===== Besselian polynomials (EclipseWise). TT baseline; ΔT applied. =====
+  const poly = {
+    t0TT: Date.parse("2025-09-07T18:00:00Z"),
+    dTsec: 71.9,
+    x:  [ 0.02402,  0.48791,  0.00019, -0.00001],
+    y:  [-0.29632,  0.26398,  0.00016, -0.00000],
+    d:  [ 0.10060, -0.00030, -0.00000,  0.00000],
+    f1: [ 1.26901,  0.00040, -0.00000,  0.00000],
+    f2: [ 0.73989,  0.00040, -0.00000,  0.00000],
+    f3: [ 0.26935,  0.00011, -0.00000,  0.00000]
+  };
+  function evalPoly(c,t){ return ((c[3]||0)*t + (c[2]||0))*t*t + (c[1]||0)*t + c[0]; }
+  function besselAtUTC(msUTC){
+    const msTT = msUTC + poly.dTsec*1000;
+    const t = (msTT - poly.t0TT)/3600000;
+    const x = evalPoly(poly.x,t), y = evalPoly(poly.y,t);
+    const f1 = evalPoly(poly.f1,t), f2 = evalPoly(poly.f2,t), sm = evalPoly(poly.f3,t);
+    return { x, y, f1, f2, sm };
+  }
 
-  const PEN_R_DEG = 1.2691, UMB_R_DEG = 0.7400;
-  const MOON_SD_DEG = (16 + 9.8/60)/60; // 16' 9.8"
-  const scaleToMoonR = 1 / MOON_SD_DEG;
-  const penR = PEN_R_DEG * scaleToMoonR;
-  const umbR = UMB_R_DEG * scaleToMoonR;
-
-  const T0 = contacts[0].ms, T1 = contacts[contacts.length-1].ms;
-
-  // ------- DOM refs ----------
-  const cv = document.getElementById('cv');
-  const ctx = cv.getContext('2d'); // no options for max compatibility
+  // ===== DOM =====
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
   const slider = document.getElementById('timeSlider');
   const playBtn = document.getElementById('playBtn');
   const nowBtn  = document.getElementById('nowBtn');
@@ -113,43 +112,29 @@
   const when = document.getElementById('when');
   const compassBtn = document.getElementById('compassBtn');
 
-  // ------- Info content ----------
-  function fmtLocal(ms){ return new Date(ms).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', timeZoneName:'short'}); }
-  when.textContent = `Local window: ${fmtLocal(T0)} — ${fmtLocal(T1)}`;
-  for (let i=0;i<contacts.length;i++){
-    const c=contacts[i]; const el=document.createElement('span');
-    el.className='tag'; el.textContent = `${c.k} ${fmtLocal(c.ms)}`; ticksBox.appendChild(el);
-  }
+  // Contacts (UTC) for sheet
+  const contacts = [
+    { k:"P1", t:"2025-09-07T15:28:06Z" },
+    { k:"U1", t:"2025-09-07T16:26:51Z" },
+    { k:"U2", t:"2025-09-07T17:30:36Z" },
+    { k:"GE", t:"2025-09-07T18:11:46Z" },
+    { k:"U3", t:"2025-09-07T18:53:18Z" },
+    { k:"U4", t:"2025-09-07T19:56:53Z" },
+    { k:"P4", t:"2025-09-07T20:55:27Z" },
+  ].map(o=>({k:o.k, ms:Date.parse(o.t)}));
+  const T0 = contacts[0].ms, T1 = contacts[contacts.length-1].ms;
 
-  // ------- Slider setup (full-width) ----------
+  const fmtLocal = ms => new Date(ms).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', timeZoneName:'short'});
+  when.textContent = `Local window: ${fmtLocal(T0)} — ${fmtLocal(T1)}`;
+  for (const c of contacts){ const el=document.createElement('span'); el.className='tag'; el.textContent=`${c.k} ${fmtLocal(c.ms)}`; ticksBox.appendChild(el); }
+
+  // Slider setup
   slider.min = T0; slider.max = T1; slider.step = 1000;
   slider.value = clamp(Date.now(), T0, T1);
 
-  // ------- Canvas sizing ----------
-  function resize(){
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const w = cv.clientWidth, h = cv.clientHeight;
-    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    draw(Number(slider.value));
-  }
-  window.addEventListener('resize', resize, {passive:true});
-  resize();
-
-  // ------- Geometry interpolation ----------
-  function lerp(a,b,t){ return a + (b-a)*t; }
-  function lerpAng(a,b,t){ let d=b-a; while(d>180)d-=360; while(d<-180)d+=360; return a+d*t; }
-  function interp(tms){
-    if (tms <= T0) return {pa:contacts[0].pa, axis:contacts[0].axis};
-    if (tms >= T1) return {pa:contacts[contacts.length-1].pa, axis:contacts[contacts.length-1].axis};
-    let i=0; while(i<contacts.length-1 && tms>contacts[i+1].ms) i++;
-    const A=contacts[i], B=contacts[i+1], tt=(tms-A.ms)/(B.ms-A.ms);
-    return { pa: lerpAng(A.pa,B.pa,tt), axis: lerp(A.axis,B.axis,tt) };
-  }
-
-  // ------- Moon position for compass (compact SunCalc-like) ----------
+  // ===== Compass (topocentric Moon; phone heading) =====
   const rad=Math.PI/180, dayMs=86400000;
-  const obs = { lat:50.0755, lon:14.4378, hasGeo:false };
+  const obs = { lat:50.0755, lon:14.4378 };
   let deviceHeading=null, moonBearing=null, moonAlt=null, alignedPrev=false;
 
   function toJulian(d){ return d.valueOf()/dayMs - 0.5 + 2440588; }
@@ -159,7 +144,7 @@
   function sidereal(D,lw){ return rad*(280.16 + 360.9856235*D) - lw; }
   function moonCoords(D){
     const L=rad*(218.316+13.176396*D), M=rad*(134.963+13.064993*D), F=rad*(93.272+13.229350*D);
-    const l=L + rad*6.289*Math.sin(M), b=rad*5.128*Math.sin(F); const dist=385001 - 20905*Math.cos(M);
+    const l=L + rad*6.289*Math.sin(M), b=rad*5.128*Math.sin(F), dist=385001 - 20905*Math.cos(M);
     return { ra:rightAsc(l,b), dec:decl(l,b), dist };
   }
   function getMoonPos(date, lat, lon){
@@ -172,33 +157,93 @@
   function azToBearing(az){ let b=(az+Math.PI)*180/Math.PI; b%=360; if(b<0)b+=360; return b; }
   function angDiff(a,b){ let d=Math.abs(a-b)%360; return d>180?360-d:d; }
 
-  // ------- Drawing ----------
-  function draw(tms){
-    const W=cv.clientWidth, H=cv.clientHeight;
+  // ======= Event bindings BEFORE first paint =======
+  slider.addEventListener('input', ()=> updateForTime(Number(slider.value)));
+  nowBtn.addEventListener('click', ()=>{ slider.value=clamp(Date.now(),T0,T1); updateForTime(Number(slider.value)); });
+  let playing=false; playBtn.addEventListener('click', ()=>{ playing=!playing; playBtn.textContent=playing?'Pause':'Play'; });
+  infoBtn.addEventListener('click', ()=>{ sheet.classList.add('on'); sheet.setAttribute('aria-hidden','false'); });
+  closeSheet.addEventListener('click', ()=>{ sheet.classList.remove('on'); sheet.setAttribute('aria-hidden','true'); });
+  compassBtn.addEventListener('click', enableCompass);
+
+  function enableCompass(){
+    if (navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(p=>{ obs.lat=p.coords.latitude; obs.lon=p.coords.longitude; }, ()=>{});
+    }
+    function onDO(e){
+      let h=null;
+      if (typeof e.webkitCompassHeading==='number') h=e.webkitCompassHeading;
+      else if (typeof e.alpha==='number'){
+        h = 360 - e.alpha;
+        const ang=(screen.orientation && typeof screen.orientation.angle==='number')?screen.orientation.angle:(window.orientation||0);
+        h=(h+ang)%360;
+      }
+      if (h!=null && isFinite(h)) deviceHeading=(h%360+360)%360;
+    }
+    if (window.DeviceOrientationEvent){
+      if (typeof DeviceOrientationEvent.requestPermission==='function'){
+        DeviceOrientationEvent.requestPermission().then(state=>{
+          if (state==='granted') window.addEventListener('deviceorientation', onDO, true);
+        }).catch(()=>{});
+      } else {
+        window.addEventListener('deviceorientation', onDO, true);
+      }
+    }
+  }
+
+  // ===== Layout + render (guard against zero size) =====
+  function resize(){
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const w = cv.clientWidth|0, h = cv.clientHeight|0;
+    if (!w || !h) { requestAnimationFrame(resize); return; } // wait for layout
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    draw(Number(slider.value));
+  }
+  window.addEventListener('resize', resize, {passive:true});
+  requestAnimationFrame(resize); // defer first paint until layout is real
+
+  // ===== Animation loop =====
+  let last=performance.now(), RATE=120; // sec simulated per sec real
+  function loop(now){
+    if (playing){
+      const dt=(now-last)/1000; let v=Number(slider.value)+dt*1000*RATE; if (v>T1) v=T0; slider.value=v;
+    }
+    last=now;
+    updateForTime(Number(slider.value));
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ===== Draw (guard against zero size) =====
+  function draw(msUTC){
+    const W=cv.clientWidth|0, H=cv.clientHeight|0;
+    if (!W || !H) return; // bail until we have size
+
     const cx=W/2, cy=H/2;
+    const Rpx = Math.max(1, Math.min(W,H)*0.28); // never 0
 
+    // Besselian → Moon-radii units
+    const B = besselAtUTC(msUTC);
+    const toMR = 1 / B.sm;
+    const penR = B.f1 * toMR;
+    const umbR = B.f2 * toMR;
+    const vx   =  B.x * toMR;
+    const vy   = -B.y * toMR; // y north+, canvas y down
+
+    // Clear
     ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
-
-    // Make Moon radius smaller (~two-thirds of the previous size)
-    const Rpx = Math.min(W,H) * 0.28;
 
     // Moon
     ctx.save(); ctx.translate(cx,cy);
-    const g=ctx.createRadialGradient(-Rpx*0.25,-Rpx*0.25,Rpx*0.2, 0,0,Rpx);
+    const g=ctx.createRadialGradient(-Rpx*0.25,-Rpx*0.25,Math.max(1,Rpx*0.2), 0,0,Rpx);
     g.addColorStop(0, getCSS('--moon-hi')); g.addColorStop(1, getCSS('--moon-lo'));
     ctx.beginPath(); ctx.arc(0,0,Rpx,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
 
-    // Clip to moon to avoid any square artifacts
+    // Clip to Moon
     ctx.save(); ctx.beginPath(); ctx.arc(0,0,Rpx,0,Math.PI*2); ctx.clip();
 
-    // Interpolated Earth-shadow position in Moon-radii units
-    const e = interp(tms);
-    const axisR = e.axis * (1/MOON_SD_DEG);
-    const A = e.pa * rad;
-    const vx = Math.sin(A)*axisR, vy = -Math.cos(A)*axisR;
-
-    // Draw penumbra & umbra as clean circles (thin stroke + black opacity)
-    ctx.save(); ctx.scale(Rpx,Rpx);
+    // Shadows (physically sized)
+    ctx.save(); ctx.scale(Rpx,Rpx); // units: Moon radii
     ctx.beginPath(); ctx.arc(vx,vy,penR,0,Math.PI*2);
     ctx.fillStyle=getCSS('--pen-fill'); ctx.fill();
     ctx.lineWidth=1/Rpx; ctx.strokeStyle=getCSS('--ring'); ctx.stroke();
@@ -206,12 +251,12 @@
     ctx.beginPath(); ctx.arc(vx,vy,umbR,0,Math.PI*2);
     ctx.fillStyle=getCSS('--umb-fill'); ctx.fill();
     ctx.lineWidth=1.25/Rpx; ctx.strokeStyle=getCSS('--ring'); ctx.stroke();
-    ctx.restore();
+    ctx.restore(); // units
 
-    ctx.restore(); // unclip moon
-    ctx.restore();
+    ctx.restore(); // unclip
+    ctx.restore(); // translate
 
-    // Compass (center)
+    // Compass
     drawCompass(cx,cy,Math.min(W,H)*0.12);
   }
 
@@ -261,67 +306,24 @@
     ctx.restore();
   }
 
+  // ===== Update + helpers =====
+  function updateForTime(ms){
+    const pos = getMoonPos(new Date(ms), obs.lat, obs.lon);
+    moonAlt = pos.alt*180/Math.PI;
+    moonBearing = azToBearing(pos.az);
+    draw(ms);
+  }
   function getCSS(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
   function clamp(v,a,b){ return Math.min(Math.max(v,a),b); }
 
-  // ------- Playback / loop ----------
-  let playing=false, last=performance.now(), RATE=120; // sec simulated per sec real
+  // Animation driver
+  let last=performance.now(), RATE=120;
   function loop(now){
-    if (playing){
-      const dt=(now-last)/1000;
-      let v=Number(slider.value)+dt*1000*RATE; if (v>T1) v=T0; slider.value=v;
-    }
-    last=now;
-    updateForTime(Number(slider.value));
+    // playing state handled in event binding above
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
 
-  // ------- Events (ensure interaction works) ----------
-  slider.addEventListener('input', ()=> updateForTime(Number(slider.value)));
-  nowBtn.addEventListener('click', ()=>{ slider.value=clamp(Date.now(),T0,T1); updateForTime(Number(slider.value)); });
-  playBtn.addEventListener('click', ()=>{ playing=!playing; playBtn.textContent=playing?'Pause':'Play'; });
-  infoBtn.addEventListener('click', ()=>{ sheet.classList.add('on'); sheet.setAttribute('aria-hidden','false'); });
-  closeSheet.addEventListener('click', ()=>{ sheet.classList.remove('on'); sheet.setAttribute('aria-hidden','true'); });
-
-  // ------- Compass ----------
-  compassBtn.addEventListener('click', enableCompass);
-  function enableCompass(){
-    if (navigator.geolocation){
-      navigator.geolocation.getCurrentPosition(p=>{ obs.lat=p.coords.latitude; obs.lon=p.coords.longitude; obs.hasGeo=true; }, ()=>{});
-    }
-    function onDO(e){
-      let h=null;
-      if (typeof e.webkitCompassHeading==='number') h=e.webkitCompassHeading;
-      else if (typeof e.alpha==='number'){
-        h = 360 - e.alpha;
-        const ang=(screen.orientation && typeof screen.orientation.angle==='number')?screen.orientation.angle:(window.orientation||0);
-        h=(h+ang)%360;
-      }
-      if (h!=null && isFinite(h)) deviceHeading=(h%360+360)%360;
-    }
-    if (window.DeviceOrientationEvent){
-      if (typeof DeviceOrientationEvent.requestPermission==='function'){
-        DeviceOrientationEvent.requestPermission().then(state=>{
-          if (state==='granted') window.addEventListener('deviceorientation', onDO, true);
-        }).catch(()=>{});
-      } else {
-        window.addEventListener('deviceorientation', onDO, true);
-      }
-    }
-  }
-
-  // ------- Update moon bearing + redraw ----------
-  function updateForTime(tms){
-    const d = new Date(tms);
-    const pos = getMoonPos(d, obs.lat, obs.lon);
-    moonAlt = pos.alt*180/Math.PI;
-    moonBearing = azToBearing(pos.az);
-    draw(tms);
-  }
-
-  // first paint
-  updateForTime(Number(slider.value));
 })();
 </script>
 </body>
