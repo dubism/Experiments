@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Pollinations — Time × Environment × Car × Era × Direction</title>
+<title>Pollinations — Time × Environment × Car × Era × View × Paint</title>
 <link rel="preconnect" href="https://image.pollinations.ai" crossorigin>
 <link rel="dns-prefetch" href="//image.pollinations.ai">
 <link rel="dns-prefetch" href="//images.weserv.nl">
@@ -26,7 +26,6 @@
   }
 
   .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start; gap:8px}
-
   .stage{width:min(96vw, 900px); display:flex; justify-content:center; align-items:center}
   .frame{
     position:relative; width:100%; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
@@ -88,9 +87,7 @@
     border-bottom:1px solid rgba(255,255,255,.08); font-weight:600;
   }
   .overlay main{ flex:1; overflow:auto; padding:10px 12px; display:grid; grid-template-columns:1fr; gap:12px; }
-  .card{
-    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px;
-  }
+  .card{ background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px; }
   .card h3{ margin:0 0 6px 0; font-size:13px; color:#dfe6ef; }
   pre{white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; color:#dfe6ef}
   .actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
@@ -117,7 +114,8 @@
       </div>
       <div class="row">
         <div class="top"><div class="label">Environment</div><div class="val" id="envVal"></div></div>
-        <input id="env" type="range" min="0" max="9" step="1">
+        <!-- 12 habitats (0..11) -->
+        <input id="env" type="range" min="0" max="11" step="1">
       </div>
       <div class="row">
         <div class="top"><div class="label">Car type</div><div class="val" id="carVal"></div></div>
@@ -128,10 +126,16 @@
         <input id="era" type="range" min="0" max="11" step="1">
       </div>
       <div class="row">
-        <div class="top"><div class="label">Direction</div><div class="val" id="dirVal"></div></div>
-        <input id="dir" type="range" min="0" max="7" step="1">
+        <div class="top"><div class="label">View angle</div><div class="val" id="dirVal"></div></div>
+        <!-- 4 views (0..3) -->
+        <input id="dir" type="range" min="0" max="3" step="1">
       </div>
-      <div class="hint">Updates after 500 ms pause · Background adapts to image colors (4-point gradient)</div>
+      <div class="row">
+        <div class="top"><div class="label">Body lacquer color</div><div class="val" id="paintVal"></div></div>
+        <!-- 11 paints (0..10) -->
+        <input id="paint" type="range" min="0" max="10" step="1">
+      </div>
+      <div class="hint">Updates after 500 ms pause · Body lacquer color affects only the car paint</div>
     </div>
   </div>
 
@@ -150,14 +154,8 @@
         </div>
       </header>
       <main>
-        <div class="card">
-          <h3>Current Prompt</h3>
-          <pre id="promptText">—</pre>
-        </div>
-        <div class="card">
-          <h3>Debug log</h3>
-          <pre id="debugText">—</pre>
-        </div>
+        <div class="card"><h3>Current Prompt</h3><pre id="promptText">—</pre></div>
+        <div class="card"><h3>Debug log</h3><pre id="debugText">—</pre></div>
       </main>
     </div>
   </div>
@@ -182,7 +180,21 @@
   const debugText = $('#debugText'), selfTestBtn = $('#selfTest'), retryBtn = $('#retry'), copyURLBtn = $('#copyURL');
   const peekBtn = $('#peek'), overlay = $('#overlay');
 
-  const habitats = ["alpine tundra","boreal coniferous forest","mixed temperate forest","deciduous woodland","grassland steppe","farmland and orchards","Mediterranean scrubland","savanna","semi-desert badlands","sandy desert dunes"];
+  /* Data */
+  const habitats = [
+    "alpine mountain pass",
+    "temperate forest",
+    "grassland steppe",
+    "sandy desert dunes",
+    "arctic ice and snow",
+    "rocky coastal cliffs",
+    "Mediterranean scrubland",
+    "savanna",
+    "farmland and orchards",
+    "rural village lanes",
+    "historic European old-town streets",
+    "modern glass high-rise city center"
+  ];
   const cars = ["microcar (A-segment)","city hatchback (B-segment)","compact sedan (C-segment)","midsize sedan","estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"];
 
   const eras = [
@@ -190,36 +202,49 @@
     "futuristic","unbelievably mesmerizingly sci-fi"
   ];
 
-  const directions = [
-    "front three-quarter HERO shot — camera at headlight height",
-    "rear three-quarter HERO shot — camera at taillight height",
-    "perfect side profile — orthographic 90°, no perspective",
-    "dead-on front view — grille perfectly square to camera",
-    "dead-on rear view — bumper perfectly square to camera",
-    "dramatic LOW-ANGLE front three-quarter — ground-level",
-    "HIGH-ANGLE front three-quarter — from above",
-    "TRUE OVERHEAD top-down — car centered"
+  /* Views: fewer, extremely clear, unique words */
+  const views = [
+    "FRONT-3/4 HERO (primary angle)",
+    "PROFILE ORTHO-90 (pure side, no perspective)",
+    "FRONT HEAD-ON (grille square to camera)",
+    "TOP-DOWN OVERHEAD (true vertical)"
   ];
 
-  const timeEl = $('#time'), envEl = $('#env'), carEl = $('#car'), eraEl = $('#era'), dirEl = $('#dir');
-  const timeVal = $('#timeVal'), envVal = $('#envVal'), carVal = $('#carVal'), eraVal = $('#eraVal'), dirVal = $('#dirVal');
-  const sliders = [timeEl, envEl, carEl, eraEl, dirEl];
+  /* Body lacquer colors — explicit “paint-only” phrasing */
+  const paints = [
+    {label:"Gloss factory white",        phrase:"gloss factory white body lacquer (paint only)"},
+    {label:"Piano black high-gloss",     phrase:"piano black high-gloss body lacquer (paint only)"},
+    {label:"Metallic silver fine-flake", phrase:"fine-flake metallic silver body lacquer (paint only)"},
+    {label:"Satin graphite metallic",    phrase:"satin graphite metallic body lacquer (paint only)"},
+    {label:"Deep navy gloss",            phrase:"deep navy gloss body lacquer (paint only)"},
+    {label:"Crimson red gloss",          phrase:"crimson red gloss body lacquer (paint only)"},
+    {label:"Sun yellow high-gloss",      phrase:"sun yellow high-gloss body lacquer (paint only)"},
+    {label:"Emerald green gloss",        phrase:"emerald green gloss body lacquer (paint only)"},
+    {label:"Matte battleship gray",      phrase:"matte battleship gray body lacquer (paint only)"},
+    {label:"Pearl white tri-coat",       phrase:"pearl white tri-coat body lacquer (paint only)"},
+    {label:"Two-tone: black body, white roof", phrase:"two-tone body lacquer: black body with white roof (paint only)"}
+  ];
 
-  const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
-  const log=(m)=>{ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; };
-
-  /* Overlay toggle */
-  function toggleOverlay(force){
-    const open = typeof force==='boolean' ? force : overlay.classList.contains('show')===false;
-    overlay.classList.toggle('show', open);
-    overlay.setAttribute('aria-hidden', String(!open));
-    peekBtn.setAttribute('aria-expanded', String(open));
+  /* Era cue: numeric + words + design ethos */
+  function eraCue(label){
+    const map = {
+      "1890s": "1890s (eighteen-nineties) — horseless carriage spirit; exposed coachwork; spindly wheels; brass fittings",
+      "1920s": "1920s (20s, nineteen-twenties) — early streamlining; art-deco cues; upright radiators; coachbuilt bodies",
+      "1950s": "1950s (50s, nineteen-fifties) — jet-age optimism; tailfins; chrome; two-tone trims; whitewall tires",
+      "1960s": "1960s (60s, nineteen-sixties) — clean curves; coke-bottle waists; muscle stance; simple brightwork",
+      "1970s": "1970s (70s, nineteen-seventies) — wedge experiments; oil-crisis compactness; louvers; vinyl textures",
+      "1980s": "1980s (80s, nineteen-eighties) — boxy precision; sharp creases; pop-up headlamps; black rub strips",
+      "1990s": "1990s (90s, nineteen-nineties) — aero-organic rounding; cab-forward; flush glass; smooth cladding",
+      "2000s": "2000s (00s, two-thousands) — taut surfaces; flame-surfacing hints; big alloys; high beltlines",
+      "2010s": "2010s (10s, twenty-tens) — LED signatures; assertive grilles; origami creases; crossover boom",
+      "2020s": "2020s (20s, twenty-twenties) — EV minimalism; sealed grilles; parametric lighting; slipperier aero",
+      "futuristic": "futuristic — near-future concept; seamless panels; advanced composites; plausible sensors",
+      "unbelievably mesmerizingly sci-fi": "unbelievably mesmerizingly sci-fi — starship-like; alien megastructures; impossible engineering; luminous seams"
+    };
+    return map[label] || `${label} style authenticity`;
   }
-  peekBtn.addEventListener('click', ()=>toggleOverlay());
-  // Escape to close
-  window.addEventListener('keydown', e=>{ if(e.key==='Escape') toggleOverlay(false); });
 
-  /* Time (color-free) */
+  /* Time cues (no colors) */
   function timeCue(h){
     if (h>=4 && h<6)  return "pre-dawn hush; faint horizon glow; long soft shadows; bright morning star visible";
     if (h>=6 && h<8)  return "sun just rising; low-angle light; long soft shadows; thin ground mist";
@@ -232,25 +257,27 @@
     return "deep night; sparse light sources; quiet atmosphere";
   }
 
-  /* Era cues: numeric + word forms + design ethos */
-  function eraCue(label){
-    const map = {
-      "1890s": "1890s (eighteen-nineties) — horseless carriage spirit; exposed coachwork; spindly wheels; brass fittings",
-      "1920s": "1920s (20s, nineteen-twenties) — early streamlining; art-deco cues; upright radiators; coachbuilt bodies",
-      "1950s": "1950s (50s, nineteen-fifties) — jet-age optimism; tailfins; chrome; two-tone trims; whitewall tires",
-      "1960s": "1960s (60s, nineteen-sixties) — clean curves; coke-bottle waists; muscle-car stance; simple brightwork",
-      "1970s": "1970s (70s, nineteen-seventies) — wedge-shaped experiments; oil-crisis compactness; louvers; vinyl textures",
-      "1980s": "1980s (80s, nineteen-eighties) — boxy precision; sharp creases; pop-up headlamps; black rub strips",
-      "1990s": "1990s (90s, nineteen-nineties) — aero-organic rounding; cab-forward; flush glass; smooth cladding",
-      "2000s": "2000s (00s, two-thousands) — taut surfacing; flame-surfacing accents; big alloys; high beltlines",
-      "2010s": "2010s (10s, twenty-tens) — LED signatures; aggressive grilles; origami creases; crossover boom",
-      "2020s": "2020s (20s, twenty-twenties) — EV minimalism; sealed grilles; parametric lighting; slipperier aero",
-      "futuristic": "futuristic — near-future concept design; seamless panels; advanced composites; plausible sensors",
-      "unbelievably mesmerizingly sci-fi": "unbelievably mesmerizingly sci-fi — starship-like presence; alien megastructures; impossible engineering; luminous seams"
-    };
-    return map[label] || `${label} style authenticity`;
-  }
+  /* UI refs */
+  const timeEl  = $('#time'),  envEl  = $('#env'),  carEl  = $('#car'),
+        eraEl   = $('#era'),   dirEl  = $('#dir'),  paintEl= $('#paint');
+  const timeVal = $('#timeVal'), envVal= $('#envVal'), carVal= $('#carVal'),
+        eraVal  = $('#eraVal'), dirVal= $('#dirVal'), paintVal = $('#paintVal');
+  const sliders = [timeEl, envEl, carEl, eraEl, dirEl, paintEl];
 
+  const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+  const log=(m)=>{ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; };
+
+  /* Overlay toggle */
+  function toggleOverlay(force){
+    const open = typeof force==='boolean' ? force : !overlay.classList.contains('show');
+    overlay.classList.toggle('show', open);
+    overlay.setAttribute('aria-hidden', String(!open));
+    peekBtn.setAttribute('aria-expanded', String(open));
+  }
+  peekBtn.addEventListener('click', ()=>toggleOverlay());
+  window.addEventListener('keydown', e=>{ if(e.key==='Escape') toggleOverlay(false); });
+
+  /* Labels */
   function labelHour(h){
     const hh = String(h).padStart(2,'0')+":00";
     if (h>=4 && h<6)  return `pre-dawn · ${hh}`;
@@ -264,25 +291,28 @@
     return `late night · ${hh}`;
   }
   function reflectLabels(){
-    timeVal.textContent = labelHour(+timeEl.value);
-    envVal.textContent  = habitats[+envEl.value];
-    carVal.textContent  = cars[+carEl.value];
-    eraVal.textContent  = eras[+eraEl.value];
-    dirVal.textContent  = directions[+dirEl.value];
+    timeVal.textContent  = labelHour(+timeEl.value);
+    envVal.textContent   = habitats[+envEl.value];
+    carVal.textContent   = cars[+carEl.value];
+    eraVal.textContent   = eras[+eraEl.value];
+    dirVal.textContent   = views[+dirEl.value];
+    paintVal.textContent = paints[+paintEl.value].label + " (car body lacquer)";
   }
 
-  /* Prompt — now with lively eras + time cues */
+  /* Prompt */
   function buildPrompt(){
-    const env  = habitats[+envEl.value];
-    const car  = cars[+carEl.value];
-    const era  = eras[+eraEl.value];
-    const dir  = directions[+dirEl.value];
-    const timeText = timeCue(+timeEl.value);
-    const eraText  = eraCue(era);
-    return `A realistic photo of a ${car} in ${env}. Era: ${eraText}. Camera angle: ${dir}. Time: ${timeText}. Natural light, detailed, no text`;
+    const env     = habitats[+envEl.value];
+    const car     = cars[+carEl.value];
+    const era     = eras[+eraEl.value];
+    const view    = views[+dirEl.value];
+    const paint   = paints[+paintEl.value].phrase;
+    const timeTxt = timeCue(+timeEl.value);
+    const eraTxt  = eraCue(era);
+
+    return `A realistic photo of a ${car} in ${env}. Era: ${eraTxt}. Camera angle: ${view}. Car body lacquer color: ${paint}. Only the car paint color should change — interior and environment unchanged. Time: ${timeTxt}. Natural light, detailed, no text`;
   }
 
-  /* URLs + fallbacks */
+  /* Pollinations URLs + fallbacks */
   const uBase=(prompt,model,w,h)=>{const seed=(Math.random()*1e9|0);const base=`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&enhance=false&seed=${seed}`;return model?`${base}&model=${model}`:base;};
   const uTurbo=p=>uBase(p,'turbo',640,384);
   const uFlux =p=>uBase(p,'flux',640,384);
@@ -292,7 +322,7 @@
   const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p); return [a,b,c,d,uProxy(a),uProxy(b)];};
 
   const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
-  const setControlsEnabled=(enabled)=>{ [timeEl,envEl,carEl,eraEl,dirEl].forEach(el=>el.disabled=!enabled); };
+  const setControlsEnabled=(enabled)=>{ sliders.forEach(el=>el.disabled=!enabled); };
 
   /* Keep-previous: preload -> swap */
   let genToken=0;
@@ -330,7 +360,7 @@
     copyPromptBtn.onclick=async()=>{try{await navigator.clipboard.writeText(prompt);}catch{showError('Clipboard blocked');}};
   }
 
-  /* Palette */
+  /* Palette (k-means) */
   function extractPaletteToBackground(imageEl){
     const cvs=document.createElement('canvas'), ctx=cvs.getContext('2d',{willReadFrequently:true});
     const S=64; cvs.width=S; cvs.height=S; ctx.drawImage(imageEl,0,0,S,S);
@@ -367,7 +397,7 @@
   function xmur3(str){for(var h=1779033703^str.length,i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19;}return function(){h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return (h^h>>>16)>>>0;};}
   function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}}
 
-  /* Debounce to 500 ms; disable sliders while waiting + loading */
+  /* Debounce 500 ms; disable sliders while waiting + loading */
   let debounceT=0, dragging=false;
   function scheduleGenerate(){
     clearTimeout(debounceT);
@@ -376,8 +406,8 @@
     debounceT=setTimeout(()=>{ setLoading(true,''); loadSequence(buildPrompt()); }, WAIT_MS);
   }
 
-  // Input wiring
-  [timeEl, envEl, carEl, eraEl, dirEl].forEach(el=>{
+  /* Wire inputs */
+  [timeEl, envEl, carEl, eraEl, dirEl, paintEl].forEach(el=>{
     el.addEventListener('pointerdown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
     el.addEventListener('input', ()=>{ reflectLabels(); });
     const release = ()=>{ if(dragging){ dragging=false; scheduleGenerate(); } };
@@ -387,7 +417,7 @@
     el.addEventListener('change', ()=>{ if(!dragging) scheduleGenerate(); });
   });
 
-  // Buttons
+  /* Buttons */
   retryBtn.onclick=()=>scheduleGenerate();
   selfTestBtn.onclick=async()=>{ log(`UA: ${navigator.userAgent}`); log(`online: ${navigator.onLine}`); await probe('https://picsum.photos/3'); const t=uPlain('test'); await probe(t); await probe(uProxy(t)); };
   copyURLBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(openImg.href||''); log('Copied URL'); }catch{ showError('Clipboard blocked'); } };
@@ -395,14 +425,15 @@
 
   function probe(url){ return new Promise(res=>{const t0=performance.now(); const im=new Image(); im.onload=()=>{log(`PROBE OK ${url} (${Math.round(performance.now()-t0)}ms)`); res();}; im.onerror=()=>{log(`PROBE ERROR ${url}`); res();}; im.referrerPolicy='no-referrer'; im.crossOrigin='anonymous'; im.src=url+`&p=${Date.now()%1e7}`;}); }
 
-  // Init
-  timeEl.value=(Math.random()*24)|0;
-  envEl.value =(Math.random()*habitats.length)|0;
-  carEl.value =(Math.random()*cars.length)|0;
-  eraEl.value =(Math.random()*eras.length)|0;
-  dirEl.value =(Math.random()*directions.length)|0;
+  /* Init */
+  timeEl.value =(Math.random()*24)|0;
+  envEl.value  =(Math.random()*habitats.length)|0;
+  carEl.value  =(Math.random()*cars.length)|0;
+  eraEl.value  =(Math.random()*eras.length)|0;
+  dirEl.value  =(Math.random()*views.length)|0;
+  paintEl.value=(Math.random()*paints.length)|0;
   reflectLabels();
-  scheduleGenerate(); // initial run
+  scheduleGenerate(); // first run
 })();
 </script>
 </body>
