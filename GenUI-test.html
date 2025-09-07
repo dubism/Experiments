@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Pollinations • Canvas + Prompt Composer + UI Code</title>
+<title>Pollinations • Prompt → Canvas / Interactive UI</title>
 <style>
-  :root { --bg:#0b0e13; --fg:#e9eef7; --muted:#93a1b4; --accent:#7bd7ff; }
+  :root { --bg:#0b0e13; --fg:#e9eef7; --muted:#93a1b4; --accent:#7bd7ff; --ok:#38d39f; --err:#ff6b6b; --wait:#ffd166; --send:#7bb7ff; --render:#b388ff; }
   html,body { height:100%; margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; }
   header { padding:12px 16px; display:flex; gap:12px; align-items:center; border-bottom:1px solid #1b2330; position:sticky; top:0; background:linear-gradient(#0b0e138f,#0b0e13 60%); backdrop-filter:blur(6px) }
   header h1 { font-size:14px; margin:0; letter-spacing:.2px; color:#cfe7ff }
@@ -19,14 +19,28 @@
   input[type="number"] { width:96px; background:#0f141d; color:var(--fg); border:1px solid #1b2330; border-radius:6px; padding:6px 8px }
   button { background:#152033; color:var(--fg); border:1px solid #223149; border-radius:8px; padding:9px 12px; cursor:pointer }
   button:hover { outline:1px solid #29466e }
+  button[disabled] { opacity:.6; cursor:not-allowed }
   small { color:var(--muted) }
   /* Stage */
   #stage { position:relative; height:100%; min-height:300px }
   canvas { position:absolute; inset:0; width:100%; height:100%; display:block; background:#0a0a0a }
   #imgLayer { position:absolute; inset:0; object-fit:contain; display:none }
   #codeOut { position:absolute; inset:16px; border:1px solid #233247; border-radius:10px; background:#0c121b; display:none }
-  #log { position:absolute; left:12px; bottom:12px; padding:6px 8px; background:#0f141d; border:1px solid #1b2330; border-radius:6px; color:#b7c6da; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace }
-  .cta { display:flex; gap:8px; align-items:center; margin-top:8px }
+  /* Status bar */
+  #statusBar { position:fixed; left:12px; bottom:12px; display:flex; gap:10px; align-items:center; background:#0f141d; border:1px solid #1b2330; border-radius:10px; padding:7px 10px; z-index:10; }
+  #dot { width:10px; height:10px; border-radius:50%; background:#5b6474; box-shadow:0 0 0 0 rgba(123,215,255,0); }
+  .pulse { animation:pulse 1s infinite; }
+  @keyframes pulse { 0%{ box-shadow:0 0 0 0 rgba(123,215,255,0.6)} 70%{ box-shadow:0 0 0 8px rgba(123,215,255,0)} 100%{ box-shadow:0 0 0 0 rgba(123,215,255,0)} }
+  #phase { min-width:110px; font-weight:600 }
+  #elapsed { min-width:56px; text-align:right; color:#b7c6da }
+  #progress { width:120px; height:8px; appearance:none; background:#141c28; border:1px solid #223149; border-radius:999px; overflow:hidden }
+  #progress::-webkit-progress-bar { background:#141c28 }
+  #progress::-webkit-progress-value { background:var(--accent) }
+  #progress::-moz-progress-bar { background:var(--accent) }
+  #cancel { margin-left:6px }
+  #feed { position:fixed; right:12px; bottom:12px; max-width:38ch; max-height:35vh; overflow:auto; list-style:none; margin:0; padding:8px 10px; background:#0f141d; border:1px solid #1b2330; border-radius:10px; color:#b7c6da; }
+  #feed li { margin:2px 0; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+  #offline { position:fixed; top:8px; left:50%; transform:translateX(-50%); background:#2a1111; color:#ffdede; border:1px solid #542323; padding:6px 10px; border-radius:8px; display:none; z-index:11 }
 </style>
 </head>
 <body>
@@ -35,7 +49,7 @@
     <div class="row">
       <button id="genImage" title="Force image mode">Image</button>
       <button id="genCode" title="Force UI code mode">UI Code</button>
-      <small>Tip: ⌘/Ctrl + Enter = Run</small>
+      <small>⌘/Ctrl + Enter = Run</small>
     </div>
   </header>
 
@@ -43,10 +57,9 @@
     <aside>
       <label>Raw idea (creative core)</label>
       <textarea id="raw" placeholder="Describe what you want…"></textarea>
-
-      <div class="cta">
+      <div class="row" style="margin-top:8px">
         <button id="run">Run</button>
-        <small id="hint">Runs current mode. Shift+Enter makes a new line.</small>
+        <small id="hint">Runs current mode. Shift+Enter = new line.</small>
       </div>
 
       <fieldset>
@@ -80,27 +93,44 @@
         <canvas id="cnv"></canvas>
         <img id="imgLayer" alt="Pollinations output"/>
         <iframe id="codeOut" sandbox="allow-scripts" title="Generated UI"></iframe>
-        <div id="log">Ready.</div>
       </div>
     </section>
   </main>
 
-<script type="module">
-const raw = document.getElementById('raw');
-const runBtn = document.getElementById('run');
-const cnv = document.getElementById('cnv');
-const imgLayer = document.getElementById('imgLayer');
-const codeOut = document.getElementById('codeOut');
-const genImage = document.getElementById('genImage');
-const genCode = document.getElementById('genCode');
-const preview = document.getElementById('preview');
-const logBox = document.getElementById('log');
-const seedEl = document.getElementById('seed');
-const modelEl = document.getElementById('model');
-const nologoEl = document.getElementById('nologo');
-const enhanceEl = document.getElementById('enhance');
+  <!-- Status + logs -->
+  <div id="offline">Offline. Check your connection.</div>
+  <div id="statusBar" aria-live="polite">
+    <div id="dot" aria-hidden="true"></div>
+    <div id="phase">Ready</div>
+    <progress id="progress" max="1" value="0"></progress>
+    <div id="elapsed">0.0s</div>
+    <button id="cancel" hidden>Cancel</button>
+  </div>
+  <ul id="feed" aria-live="polite"></ul>
 
-function log(msg){ logBox.textContent = msg; }
+<script type="module">
+const $ = sel => document.querySelector(sel);
+const raw = $('#raw'); const runBtn = $('#run');
+const cnv = $('#cnv'); const imgLayer = $('#imgLayer'); const codeOut = $('#codeOut');
+const genImage = $('#genImage'); const genCode = $('#genCode'); const preview = $('#preview');
+const seedEl = $('#seed'); const modelEl = $('#model'); const nologoEl = $('#nologo'); const enhanceEl = $('#enhance');
+const hint = $('#hint'); const dot = $('#dot'); const phase = $('#phase'); const prog = $('#progress');
+const elapsed = $('#elapsed'); const cancelBtn = $('#cancel'); const feed = $('#feed'); const offline = $('#offline');
+
+const state = { id:0, controller:null, timer:null, start:0, running:false, mode:'image' };
+
+function feedLine(text){ const li=document.createElement('li'); li.textContent=text; feed.appendChild(li); while(feed.children.length>12) feed.removeChild(feed.firstChild); feed.scrollTop=feed.scrollHeight; }
+function setDot(color, pulse=false){ dot.style.background=color; dot.classList.toggle('pulse', pulse); }
+function setPhase(text,color,pulse=false){ phase.textContent=text; setDot(color,pulse); }
+function setElapsed(t=0){ elapsed.textContent = `${t.toFixed(1)}s`; }
+function startTimer(){ state.start=performance.now(); state.timer=setInterval(()=>{ setElapsed((performance.now()-state.start)/1000); },100); }
+function stopTimer(){ clearInterval(state.timer); state.timer=null; }
+function disableControls(disabled){
+  [runBtn, genImage, genCode, ...document.querySelectorAll('input, textarea')].forEach(el=>{
+    if (el===raw) return; // keep typing allowed
+    if (el!==cancelBtn) el.disabled = disabled;
+  });
+}
 function sizeCanvas() {
   const rect = cnv.getBoundingClientRect();
   const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
@@ -108,150 +138,164 @@ function sizeCanvas() {
   cnv.height = Math.floor(rect.height * dpr);
   const ctx = cnv.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.imageSmoothingEnabled = true;
   ctx.clearRect(0,0,rect.width,rect.height);
   return { w: rect.width|0, h: rect.height|0, dpr };
 }
 addEventListener('resize', sizeCanvas, { passive:true }); sizeCanvas();
 
-function currentType() { return (new FormData(document.querySelector('aside'))).get('ptype') || 'artdir'; }
+function currentType(){ return (new FormData(document.querySelector('aside'))).get('ptype') || 'artdir'; }
 
-// ——— Prompt composers (3 kinds) ————————————————————————————————
+// —— Prompts ——
 function composePrompt(type, W, H) {
   const core = (raw.value || 'an evocative scene').trim();
-
-  if (type === 'artdir') {
-    return `${core}. cinematic composition, pro lighting, rich materials, natural color, depth of field, shot on 50mm prime, aspect ${W}x${H}.`;
-  }
-  if (type === 'flatillus') {
-    return `${core}. minimal flat vector illustration, clean geometry, soft shadows, high-contrast focus, aspect ${W}x${H}.`;
-  }
-  // UI code (text API): ask for MAXIMUM INTERACTIVITY, not Mac-specific
+  if (type==='artdir') return `${core}. cinematic, pro lighting, natural color, dof, 50mm prime, aspect ${W}x${H}.`;
+  if (type==='flatillus') return `${core}. minimal flat vector illustration, clean geometry, soft shadows, aspect ${W}x${H}.`;
   const uiSpec = [
-    'Return a COMPLETE single-file HTML document with inline CSS and vanilla JS.',
-    'NO Markdown fences, NO external URLs, NO frameworks.',
-    'Goal: MAXIMUM interactivity inside one page (UI-only). Include:',
-    '• Resizable split panes, draggable items, and a command palette.',
-    '• Keyboard shortcuts: Ctrl/Cmd+K (palette), Ctrl/Cmd+S (save state), Esc (close), ? (help).',
-    '• Theme toggle (light/dark), basic undo/redo, localStorage persistence.',
-    '• Accessible roles/labels, visible focus, respect prefers-reduced-motion.',
-    `• Fit responsively to a viewport of ${W}x${H}.`
+    'Return a COMPLETE single-file HTML with inline CSS and vanilla JS.',
+    'No Markdown fences or external URLs.',
+    'MAXIMUM interactivity inside one page:',
+    '• Resizable split panes, draggable items, command palette.',
+    '• Shortcuts: Ctrl/Cmd+K (palette), Ctrl/Cmd+S (save), Esc (close), ? (help).',
+    '• Theme toggle, undo/redo, localStorage persistence.',
+    '• Proper ARIA roles/labels, visible focus, respects prefers-reduced-motion.',
+    `• Fit responsively to viewport ${W}x${H}.`
   ].join('\n');
   return `Build an interactive UI for: "${core}".\n${uiSpec}`;
 }
-
-function updatePreview() {
-  const { w, h } = sizeCanvas();
-  const t = currentType();
-  const p = composePrompt(t, w, h);
-  preview.textContent = p;
-  document.getElementById('hint').textContent =
-    t === 'uicode' ? 'Run → generate interactive UI (sandboxed).' : 'Run → generate image and draw on canvas.';
+function updatePreview(){
+  const {w,h}=sizeCanvas(); const t=currentType(); preview.textContent = composePrompt(t,w,h);
+  hint.textContent = t==='uicode' ? 'Run → generate interactive UI (sandboxed).' : 'Run → generate image and draw on canvas.';
 }
 raw.addEventListener('input', updatePreview);
-document.querySelectorAll('input[name="ptype"]').forEach(r => r.addEventListener('change', updatePreview));
+document.querySelectorAll('input[name="ptype"]').forEach(r=>r.addEventListener('change', updatePreview));
 updatePreview();
 
-// ——— Image generation → draw on <canvas> (fallback to <img>) ————————————
-async function generateImage() {
-  const { w, h } = sizeCanvas();
+// —— Network banner ——
+function netBanner(){ offline.style.display = navigator.onLine ? 'none' : 'block'; }
+addEventListener('online', netBanner); addEventListener('offline', netBanner); netBanner();
+
+// —— Task wrapper with real feedback ——
+function begin(kind){
+  state.running = true; state.id++; state.controller = new AbortController(); cancelBtn.hidden = false;
+  disableControls(true); prog.value = 0;
+  setPhase('Composing', '#5b6474'); setElapsed(0); startTimer(); feedLine(`▶ #${state.id} ${kind} — composing prompt`);
+}
+function sending(){ setPhase('Sending', 'var(--send)', true); feedLine('↗ sent; awaiting response…'); }
+function waiting(){ setPhase('Waiting', 'var(--wait)', true); }
+function receiving(frac){ setPhase('Receiving', 'var(--wait)', true); prog.value = Math.max(0, Math.min(1, frac)); }
+function rendering(){ setPhase('Rendering', 'var(--render)', true); feedLine('⚙ rendering…'); }
+function done(msg='Done'){ setPhase('Done', 'var(--ok)'); prog.value = 1; stopTimer(); cancelBtn.hidden=true; disableControls(false); state.running=false; feedLine(`✔ ${msg}`); }
+function failed(msg){ setPhase('Error', 'var(--err)'); stopTimer(); cancelBtn.hidden=true; disableControls(false); state.running=false; feedLine(`✖ ${msg}`); }
+
+cancelBtn.addEventListener('click', ()=>{ if(state.controller){ state.controller.abort(); failed('Canceled'); } });
+
+// —— Image generation with progress (stream when CORS allows; else fallback) ——
+async function generateImage(){
+  const { w, h } = sizeCanvas(); begin('image');
   const prompt = composePrompt(currentType(), w, h);
   const qp = new URLSearchParams({
-    width: String(Math.max(32, Math.floor(w))),
-    height: String(Math.max(32, Math.floor(h))),
-    seed: seedEl.value || '42',
-    model: modelEl.value || 'flux',
-    nologo: String(!!nologoEl.checked),
-    enhance: String(!!enhanceEl.checked),
-    _t: String(Date.now())
+    width:String(Math.max(32,Math.floor(w))), height:String(Math.max(32,Math.floor(h))),
+    seed: seedEl.value||'42', model: modelEl.value||'flux',
+    nologo:String(!!nologoEl.checked), enhance:String(!!enhanceEl.checked), _t:String(Date.now())
   });
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${qp.toString()}`;
-  log('Fetching image…');
-
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  const done = new Promise((res, rej) => { img.onload = () => res(); img.onerror = rej; });
-  img.src = url;
-  try {
-    await done;
-    const ctx = cnv.getContext('2d');
-    const rect = cnv.getBoundingClientRect();
-    ctx.clearRect(0,0,rect.width,rect.height);
-    ctx.drawImage(img, 0, 0, rect.width, rect.height);
-    imgLayer.style.display = 'none';
-    codeOut.style.display = 'none';
-    log('Image drawn on canvas.');
-  } catch {
-    // CORS taint: show <img> instead
-    imgLayer.src = url;
-    imgLayer.style.display = 'block';
-    codeOut.style.display = 'none';
-    log('CORS blocked canvas draw; showing <img> instead.');
+  sending();
+  // Try streaming fetch → progress
+  try{
+    const rsp = await fetch(url, { signal: state.controller.signal, cache:'no-store', mode:'cors' });
+    waiting();
+    if (!rsp.ok) throw new Error(`HTTP ${rsp.status}`);
+    const len = +rsp.headers.get('Content-Length') || 0;
+    if (rsp.body && len>0){
+      const reader = rsp.body.getReader(); const chunks=[]; let rec=0;
+      while(true){
+        const {done,value} = await reader.read();
+        if(done) break;
+        chunks.push(value); rec += value.length;
+        receiving(rec/len);
+      }
+      const blob = new Blob(chunks, { type:'image/png' });
+      const urlObj = URL.createObjectURL(blob);
+      rendering();
+      await new Promise((res,rej)=>{
+        const img = new Image(); img.onload=()=>{ 
+          const ctx = cnv.getContext('2d'); const rect = cnv.getBoundingClientRect();
+          ctx.clearRect(0,0,rect.width,rect.height); ctx.drawImage(img,0,0,rect.width,rect.height);
+          URL.revokeObjectURL(urlObj); imgLayer.style.display='none'; codeOut.style.display='none'; res();
+        }; img.onerror=rej; img.src=urlObj;
+      });
+      done('Image drawn to canvas');
+      return;
+    }
+    // If no stream/progress, fall through to <img> approach
+    throw new Error('No readable stream; using <img> fallback');
+  } catch(e){
+    // Fallback to <img> (still shows phases)
+    waiting();
+    const img=new Image(); img.crossOrigin='anonymous';
+    const loaded = new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; });
+    img.src = url;
+    try{
+      await loaded; rendering();
+      const ctx = cnv.getContext('2d'); const rect = cnv.getBoundingClientRect();
+      ctx.clearRect(0,0,rect.width,rect.height); ctx.drawImage(img,0,0,rect.width,rect.height);
+      imgLayer.style.display='none'; codeOut.style.display='none'; done('Image drawn (fallback)');
+    } catch(err){ failed('Image load failed'); }
   }
 }
 
-// ——— Text generation → sandboxed iframe with returned code ————————————
-async function generateCode() {
-  const { w, h } = sizeCanvas();
+// —— Text → sandboxed UI (with clear phases) ——
+async function generateCode(){
+  const { w, h } = sizeCanvas(); begin('ui-code');
   const prompt = composePrompt('uicode', w, h);
   const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=qwen-coder`;
-  log('Requesting UI code…');
+  sending();
+  let text='';
+  try{
+    const rsp = await fetch(url, { signal: state.controller.signal, cache:'no-store' });
+    waiting();
+    if (!rsp.ok) throw new Error(`HTTP ${rsp.status}`);
+    // Stream characters if possible
+    if (rsp.body && 'getReader' in rsp.body){
+      const reader = rsp.body.getReader(); const dec = new TextDecoder(); let buf=''; let rec=0;
+      while(true){
+        const {done,value} = await reader.read();
+        if(done) break;
+        buf += dec.decode(value, {stream:true}); rec += value.length; receiving(Math.min(0.9, rec/200000)); // heuristic cap
+      }
+      text = buf + dec.decode();
+    } else {
+      text = await rsp.text();
+    }
+  } catch(e){ failed('Network/text fetch failed'); return; }
 
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 30000);
-  let text;
-  try {
-    const rsp = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
-    text = await rsp.text();
-  } catch (e) {
-    log('Network error.');
-    return;
-  } finally { clearTimeout(to); }
-
-  // Strip accidental ``` fences if present
-  text = text.replace(/^\s*```(?:html)?/i, '').replace(/```$/,'').trim();
-
-  // Basic sanity: must contain <html
-  if (!/\<html/i.test(text)) {
-    const escaped = text.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    codeOut.srcdoc = `<!doctype html><meta charset="utf-8"><pre style="color:#eaeef7;background:#0b0e13;padding:16px;white-space:pre-wrap">${escaped}</pre>`;
-    log('Response wasn’t full HTML; showing text.');
+  // Clean up fences and mount
+  text = text.replace(/^\s*```(?:html)?/i,'').replace(/```$/,'').trim();
+  rendering();
+  if (!/\<html/i.test(text)){
+    const esc = s=>s.replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    codeOut.srcdoc = `<!doctype html><meta charset="utf-8"><pre style="color:#eaeef7;background:#0b0e13;padding:16px;white-space:pre-wrap">${esc(text)}</pre>`;
+    done('Received text (not full HTML)');
   } else {
-    codeOut.srcdoc = text;
-    log('UI code embedded (sandboxed).');
+    codeOut.srcdoc = text; codeOut.style.display='block'; imgLayer.style.display='none';
+    const ctx = cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height);
+    done('Interactive UI embedded');
   }
-  codeOut.style.display = 'block';
-  imgLayer.style.display = 'none';
-  const ctx = cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height);
 }
 
-// ——— Controls ————————————————————————————————————————————————
-function runCurrent(){
-  const t = currentType();
-  if (t === 'uicode') return generateCode();
-  return generateImage();
-}
+function runCurrent(){ const t=currentType(); state.mode = (t==='uicode')?'code':'image'; return t==='uicode' ? generateCode() : generateImage(); }
+
+// Controls
 runBtn.addEventListener('click', runCurrent);
 genImage.addEventListener('click', generateImage);
 genCode.addEventListener('click', generateCode);
+// Keyboard: ⌘/Ctrl+Enter runs; Shift+Enter = newline
+raw.addEventListener('keydown', (e)=>{ const meta=e.metaKey||e.ctrlKey; if(meta && e.key==='Enter'){ e.preventDefault(); runCurrent(); } });
 
-// Keyboard: ⌘/Ctrl+Enter runs; Shift+Enter = newline in textarea
-raw.addEventListener('keydown', (e)=>{
-  const meta = e.metaKey || e.ctrlKey;
-  if (meta && e.key === 'Enter') { e.preventDefault(); runCurrent(); }
-});
-
-// Optional quick switcher on ⌘/Ctrl+K (local palette)
-addEventListener('keydown', (e) => {
-  const meta = e.metaKey || e.ctrlKey;
-  if (meta && e.key.toLowerCase()==='k') {
-    e.preventDefault();
-    const next = { artdir:'flatillus', flatillus:'uicode', uicode:'artdir' }[currentType()];
-    document.querySelector(`input[name="ptype"][value="${next}"]`).checked = true;
-    updatePreview();
-    log(`Prompt type → ${next}`);
-  }
-});
+// Local quick switcher ⌘/Ctrl+K
+addEventListener('keydown',(e)=>{ const meta=e.metaKey||e.ctrlKey; if(meta && e.key.toLowerCase()==='k'){ e.preventDefault();
+  const next = { artdir:'flatillus', flatillus:'uicode', uicode:'artdir' }[currentType()];
+  document.querySelector(`input[name="ptype"][value="${next}"]`).checked = true; updatePreview(); feedLine(`Mode → ${next}`); }});
 </script>
 </body>
 </html>
