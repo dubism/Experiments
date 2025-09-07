@@ -26,6 +26,7 @@
   }
 
   .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start; gap:8px}
+
   .stage{width:min(96vw, 900px); display:flex; justify-content:center; align-items:center}
   .frame{
     position:relative; width:100%; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
@@ -60,12 +61,18 @@
   .top{display:flex; justify-content:space-between; align-items:baseline; margin:0 2px 4px}
   .label{font-weight:600; letter-spacing:.2px}
   .val{font-variant-numeric:tabular-nums; color:var(--muted); font-size:12px}
+
+  /* Long sliders + clear disabled state */
   input[type="range"]{width:100%; -webkit-appearance:none; appearance:none; height:28px; background:transparent}
   input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
   input[type="range"]::-moz-range-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
   input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%;
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.5); margin-top:-6px}
   input[type="range"]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  input[type="range"]:disabled{opacity:.55; cursor:not-allowed}
+  input[type="range"]:disabled::-webkit-slider-thumb{background:#c9c9c9; box-shadow:none}
+  input[type="range"]:disabled::-moz-range-thumb{background:#c9c9c9; box-shadow:none}
+
   .hint{opacity:.75; font-size:11px; text-align:center; margin:6px 0 10px; color:var(--muted)}
 
   .errbar{
@@ -131,7 +138,7 @@
         <div class="top"><div class="label">Direction</div><div class="val" id="dirVal"></div></div>
         <input id="dir" type="range" min="0" max="7" step="1">
       </div>
-      <div class="hint">Updates after 200 ms pause · Background adapts to image colors (4-point gradient)</div>
+      <div class="hint">Updates after 500 ms pause · Background adapts to image colors (4-point gradient)</div>
     </div>
   </div>
 
@@ -140,6 +147,8 @@
 <script>
 'use strict';
 (() => {
+  const WAIT_MS = 500; // ← 500 ms debounce
+
   const errbar = document.getElementById('errbar');
   const showError = (msg)=>{ errbar.textContent = msg; errbar.style.display='block'; clearTimeout(showError._t); showError._t=setTimeout(()=>errbar.style.display='none',7000); };
   window.addEventListener('error', e => showError(`Script error: ${e.message}`));
@@ -152,11 +161,7 @@
 
   const habitats = ["alpine tundra","boreal coniferous forest","mixed temperate forest","deciduous woodland","grassland steppe","farmland and orchards","Mediterranean scrubland","savanna","semi-desert badlands","sandy desert dunes"];
   const cars = ["microcar (A-segment)","city hatchback (B-segment)","compact sedan (C-segment)","midsize sedan","estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"];
-  const eras = [
-    "1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s",
-    "futuristic",
-    "unbelievably mesmerizingly sci-fi"
-  ];
+  const eras = ["1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","futuristic","unbelievably mesmerizingly sci-fi"];
   const directions = [
     "front three-quarter HERO shot — camera at headlight height",
     "rear three-quarter HERO shot — camera at taillight height",
@@ -170,11 +175,11 @@
 
   const timeEl = $('#time'), envEl = $('#env'), carEl = $('#car'), eraEl = $('#era'), dirEl = $('#dir');
   const timeVal = $('#timeVal'), envVal = $('#envVal'), carVal = $('#carVal'), eraVal = $('#eraVal'), dirVal = $('#dirVal');
+  const sliders = [timeEl, envEl, carEl, eraEl, dirEl];
 
   const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
   const log=(m)=>{ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; };
 
-  // Color-free, vivid time cues
   function timeCue(h){
     if (h>=4 && h<6)  return "pre-dawn hush; faint horizon glow; long soft shadows; bright morning star visible";
     if (h>=6 && h<8)  return "sun just rising; low-angle light; long soft shadows; thin ground mist";
@@ -186,16 +191,11 @@
     if (h>=22 || h<2) return "night; moonlight and starlight; constellations visible";
     return "deep night; sparse light sources; quiet atmosphere";
   }
-
-  // Stronger era cues, especially for the two future eras
   function eraCue(label){
-    if (label === "futuristic")
-      return "futuristic near-future concept design; advanced materials; seamless panels; plausible tech";
-    if (label === "unbelievably mesmerizingly sci-fi")
-      return "unbelievably mesmerizingly sci-fi; otherworldly scale; alien mega-structures; impossible engineering";
+    if (label === "futuristic") return "futuristic near-future concept design; advanced materials; seamless panels; plausible tech";
+    if (label === "unbelievably mesmerizingly sci-fi") return "unbelievably mesmerizingly sci-fi; otherworldly scale; alien mega-structures; impossible engineering";
     return `${label} style authenticity`;
   }
-
   function labelHour(h){
     const hh = String(h).padStart(2,'0')+":00";
     if (h>=4 && h<6)  return `pre-dawn · ${hh}`;
@@ -216,21 +216,17 @@
     dirVal.textContent  = directions[+dirEl.value];
   }
 
-  // >>> UPDATED PROMPT (future eras + color-free time)
   function buildPrompt(){
-    const hour = +timeEl.value;
     const env  = habitats[+envEl.value];
     const car  = cars[+carEl.value];
     const era  = eras[+eraEl.value];
     const dir  = directions[+dirEl.value];
-
+    const timeText = timeCue(+timeEl.value);
     const eraText  = eraCue(era);
-    const timeText = timeCue(hour);
-
     return `A realistic photo of a ${car} in ${env}. Era: ${eraText}. Camera angle: ${dir}. Time: ${timeText}. Natural light, detailed, no text`;
   }
 
-  /* ===== URLs + fallbacks (unchanged) ===== */
+  /* URLs + fallbacks */
   const uBase=(prompt,model,w,h)=>{const seed=(Math.random()*1e9|0);const base=`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&enhance=false&seed=${seed}`;return model?`${base}&model=${model}`:base;};
   const uTurbo=p=>uBase(p,'turbo',640,384);
   const uFlux =p=>uBase(p,'flux',640,384);
@@ -240,8 +236,9 @@
   const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p); return [a,b,c,d,uProxy(a),uProxy(b)];};
 
   const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
+  const setControlsEnabled=(enabled)=>{ sliders.forEach(el=>el.disabled=!enabled); };
 
-  // Keep-previous: preload -> swap
+  /* Keep-previous: preload -> swap, re-enable on finish */
   let genToken=0;
   function loadSequence(prompt){
     const seq=candidates(prompt); let i=0; const token=++genToken;
@@ -255,13 +252,13 @@
       const start=performance.now();
 
       pre.onload=()=>{ if(token!==genToken) return;
-        img.src=pre.src; setLoading(false);
+        img.src=pre.src; setLoading(false); setControlsEnabled(true);
         log(`Loaded OK in ${Math.round(performance.now()-start)}ms via ${url.includes('weserv.nl')?'proxy':'direct'}`);
         try{ extractPaletteToBackground(pre); }catch{ setWaitingGradient(url); }
       };
       pre.onerror=()=>{ if(token!==genToken) return;
         if(++i<seq.length){ setLoading(true,` (attempt ${i+1}/${seq.length})`); tryOne(seq[i]); }
-        else{ setLoading(false); showError('Image load failed repeatedly.'); log('All attempts failed.'); }
+        else{ setLoading(false); setControlsEnabled(true); showError('Image load failed repeatedly.'); log('All attempts failed.'); }
       };
 
       pre.src=url+`&t=${Date.now()%1e7}`;
@@ -277,7 +274,7 @@
     copyPrompt.onclick=async()=>{try{await navigator.clipboard.writeText(prompt);}catch{showError('Clipboard blocked');}};
   }
 
-  // Palette
+  /* Palette */
   function extractPaletteToBackground(imageEl){
     const cvs=document.createElement('canvas'), ctx=cvs.getContext('2d',{willReadFrequently:true});
     const S=64; cvs.width=S; cvs.height=S; ctx.drawImage(imageEl,0,0,S,S);
@@ -314,22 +311,44 @@
   function xmur3(str){for(var h=1779033703^str.length,i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19;}return function(){h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return (h^h>>>16)>>>0;};}
   function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}}
 
-  // Debounced generate (200 ms after last input)
-  let debounceT=0;
-  function scheduleGenerate(){ clearTimeout(debounceT); debounceT=setTimeout(()=>{ loadSequence(buildPrompt()); },200); }
+  /* Debounce to 500 ms; disable sliders while waiting + loading */
+  let debounceT=0, dragging=false;
+  function scheduleGenerate(){
+    clearTimeout(debounceT);
+    // Disable during the waiting window
+    setControlsEnabled(false);
+    // show a subtle queued state without removing previous image
+    setLoading(true,' (queued)');
+    debounceT=setTimeout(()=>{ setLoading(true,''); loadSequence(buildPrompt()); }, WAIT_MS);
+  }
+
+  // Input wiring:
+  // - While dragging: freely move (no disable).
+  // - On release: start 500 ms timer, disable during wait+load.
+  sliders.forEach(el=>{
+    el.addEventListener('pointerdown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
+    el.addEventListener('input', ()=>{ reflectLabels(); }); // live label updates
+    const release = ()=>{ if(dragging){ dragging=false; scheduleGenerate(); } };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('touchend', release, {passive:true});
+    el.addEventListener('mouseup', release);
+    // Keyboard adjustments
+    el.addEventListener('change', ()=>{ if(!dragging) scheduleGenerate(); });
+  });
 
   retryBtn.onclick=()=>scheduleGenerate();
+
   selfTestBtn.onclick=async()=>{ log(`UA: ${navigator.userAgent}`); log(`online: ${navigator.onLine}`); await probe('https://picsum.photos/3'); const t=uPlain('test'); await probe(t); await probe(uProxy(t)); };
   function probe(url){ return new Promise(res=>{const t0=performance.now(); const im=new Image(); im.onload=()=>{log(`PROBE OK ${url} (${Math.round(performance.now()-t0)}ms)`); res();}; im.onerror=()=>{log(`PROBE ERROR ${url}`); res();}; im.referrerPolicy='no-referrer'; im.crossOrigin='anonymous'; im.src=url+`&p=${Date.now()%1e7}`;}); }
 
-  // Wire sliders & init
-  [timeEl, envEl, carEl, eraEl, dirEl].forEach(el=>el.addEventListener('input',()=>{ reflectLabels(); scheduleGenerate(); }));
+  // Init
   timeEl.value=(Math.random()*24)|0;
   envEl.value =(Math.random()*habitats.length)|0;
   carEl.value =(Math.random()*cars.length)|0;
   eraEl.value =(Math.random()*eras.length)|0;
   dirEl.value =(Math.random()*directions.length)|0;
-  reflectLabels(); scheduleGenerate();
+  reflectLabels();
+  scheduleGenerate(); // initial run (disables during wait+load)
 })();
 </script>
 </body>
