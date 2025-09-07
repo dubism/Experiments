@@ -1,184 +1,179 @@
 <!doctype html>
-
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Predictive Mobility — Signal Chips → UI Generator</title>
+  <title>Predictive Mobility — Chips → UI</title>
   <style>
-    :root{--bg:#0c0d10;--fg:#e9eaee;--muted:#9aa0aa;--chip:#1a1c21;--chip-on:#2b6ef6;--chip-on-fg:#fff;--line:#23252b;--accent:#21c07c;--warn:#ffb020;--err:#ff5c5c}
-    *{box-sizing:border-box} html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";-webkit-font-smoothing:antialiased}
-    .wrap{max-width:920px;margin:0 auto;padding:16px 14px 32px}
-    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin:6px 0 10px}
-    h1{font-size:16px;font-weight:700;letter-spacing:.2px;margin:0}
-    .explain{color:var(--muted);font-size:13px;margin:6px 0 14px}
-    .panel{border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0 14px;background:#0e1014}
+    :root{
+      --bg:#0b0d11; --fg:#e9ecf1; --muted:#a0a6b2; --line:#22242a;
+      --chip:#161922; --chip-on:#2a66ff; --chip-on-fg:#fff;
+      --btn:#2a66ff; --btn2:#2a2d36; --ok:#21c07c; --warn:#ffb020; --err:#ff5c5c;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;background:var(--bg);color:var(--fg);
+      font:15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial;
+      -webkit-font-smoothing:antialiased; touch-action:manipulation;
+    }
+    .wrap{max-width:720px;margin:0 auto;padding:14px 12px 90px}
+    header{display:flex;justify-content:space-between;align-items:center;margin:4px 0 8px}
+    h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px}
+    .status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+    .dot{width:8px;height:8px;border-radius:50%}.ready{background:var(--ok)}.wait{background:var(--warn)}.bad{background:var(--err)}
+    .explain{color:var(--muted);font-size:13px;margin:8px 2px 10px}
+    .panel{border:1px solid var(--line);border-radius:12px;background:#0d1016;padding:10px;margin:10px 0}
+    .label{font-size:12px;color:#c8cdd6;text-transform:uppercase;letter-spacing:.6px;font-weight:700}
     .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-    .label{font-size:12px;font-weight:600;color:#c6cbd6;text-transform:uppercase;letter-spacing:.6px}
-    button.chip{border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:8px 11px;border-radius:999px;cursor:pointer}
-    button.chip[aria-pressed="true"]{background:var(--chip-on);color:var(--chip-on-fg);border-color:transparent}
-    .split{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .btn{border:none;border-radius:10px;padding:12px 14px;background:var(--chip-on);color:#fff;cursor:pointer;font-weight:600}
-    .btn.secondary{background:#2a2d34}
-    .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
-    .status{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
-    .dot{width:8px;height:8px;border-radius:50%;}
-    .dot.ready{background:var(--accent)} .dot.wait{background:var(--warn)} .dot.err{background:var(--err)}
-    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
-    .small{font-size:12px;color:var(--muted)}
-    .inline-input{display:inline-flex;align-items:center;gap:8px}
-    input[type="time"],input[type="number"]{background:#0c0e12;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:13px}
-    /* Overlay */
-    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:10px;z-index:9999}
-    .sheet{position:relative;background:#0b0c0f;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.6);width:calc(100vw - 20px);height:calc(100vh - 20px);display:flex;flex-direction:column;overflow:hidden}
-    .sheet-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
-    .sheet-title{font-weight:700;font-size:14px}
-    .sheet-actions{display:flex;gap:8px}
-    .sheet-body{flex:1;position:relative;background:#000}
+    button.chip{
+      background:var(--chip);color:var(--fg);border:1px solid var(--line);
+      padding:9px 12px;border-radius:999px;cursor:pointer;font-weight:600;font-size:14px
+    }
+    button.chip.selected{background:var(--chip-on);color:var(--chip-on-fg);border-color:transparent}
+    .inline{display:inline-flex;align-items:center;gap:8px}
+    .pill{padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#11141b;color:#c8cdd6;font-size:11px}
+    input[type="time"],input[type="number"]{
+      background:#0b0e14;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:14px
+    }
+    .progress{font-size:12px;color:var(--muted);padding:10px;border:1px dashed var(--line);border-radius:10px;margin:10px 0}
+    /* Bottom bar (mobile-first) */
+    .bar{
+      position:fixed;left:0;right:0;bottom:0;z-index:10;
+      background:linear-gradient(180deg,rgba(11,13,17,.0),rgba(11,13,17,.85) 20%,rgba(11,13,17,.95));
+      padding:10px 12px 12px;backdrop-filter:saturate(1.4) blur(6px);
+      border-top:1px solid var(--line);
+    }
+    .bar-inner{max-width:720px;margin:0 auto;display:flex;gap:8px}
+    .btn{flex:1;border:none;border-radius:12px;padding:13px 14px;font-weight:700;font-size:15px;cursor:pointer}
+    .primary{background:var(--btn);color:#fff}
+    .secondary{background:var(--btn2);color:#fff}
+    /* Overlay renderer */
+    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:10px;background:rgba(0,0,0,.55);z-index:9999}
+    .sheet{
+      width:calc(100vw - 20px);height:calc(100vh - 20px);max-width:900px;
+      background:#0b0c10;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.6);
+      display:flex;flex-direction:column;overflow:hidden
+    }
+    .sheet-h{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--line)}
+    .sheet-t{font-weight:700;font-size:14px}
+    .sheet-a{display:flex;gap:8px}
+    .sbtn{border:1px solid var(--line);background:#171a22;color:#e9ecf1;border-radius:10px;padding:8px 10px;cursor:pointer}
+    .sheet-b{flex:1;position:relative;background:#fff}
     .center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
     .spinner{width:28px;height:28px;border:3px solid #2a2d34;border-top-color:#8aa2ff;border-radius:50%;animation:spin 1s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
-    iframe#render{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    .pill{padding:3px 8px;border:1px solid var(--line);border-radius:999px;color:#c9cdd5;background:#111319;font-size:11px}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    @media (max-width:760px){.grid{grid-template-columns:1fr}}
+    iframe#render{position:absolute;inset:0;width:100%;height:100%;border:0}
+    /* Small modal for preview (simple) */
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:10px;background:rgba(0,0,0,.55);z-index:9998}
+    .modal-card{max-width:860px;width:calc(100vw - 20px);background:#0b0c10;border:1px solid var(--line);border-radius:12px;padding:10px}
+    textarea{width:100%;min-height:220px;background:#0e1016;color:#e9ecf1;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+    .mt8{margin-top:8px}
+    @media (min-width:768px){ .wrap{padding-bottom:100px} }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <h1>Predictive Mobility — Situation Chips</h1>
-      <div class="status"><span class="dot ready"></span><span id="statusText">Ready</span></div>
+      <div class="status"><span class="dot ready" id="dot"></span><span id="stat">Ready</span></div>
     </header>
+
     <p class="explain">
-      Pick the chips that describe your situation. Click <b>Run</b> to ask the model for a tailored mobility UI.
-      The model is instructed to return <b>only an HTML document</b> (starts with <span class="mono">&lt;!doctype html&gt;</span>),
-      which we render below in a centered overlay.
+      Select the chips that describe your situation. Tap <b>Run</b> to generate a tailored mobility UI.
+      The model is forced to return <b>only an HTML document</b> starting with <code>&lt;!doctype html&gt;</code>, which we render in the overlay.
     </p>
 
+    <!-- Mission & Time -->
+    <section class="panel" data-group="mission">
+      <div class="label">Mission &amp; Time</div>
+      <div class="row">
+        <button class="chip" data-v="arrive-by" aria-pressed="false">Arrive-by</button>
+        <button class="chip" data-v="leave-after" aria-pressed="false">Leave-after</button>
+        <button class="chip" data-v="pickup" aria-pressed="false">Pickup</button>
+        <button class="chip" data-v="errand" aria-pressed="false">Errand</button>
+        <button class="chip" data-v="airport" aria-pressed="false">Airport</button>
+      </div>
+      <div class="row" style="align-items:center">
+        <span class="pill">Time</span><input type="time" id="timeIn">
+        <span class="pill">Buffer (min)</span><input type="number" id="bufIn" min="0" max="60" step="5" placeholder="10" style="width:86px">
+      </div>
+    </section>
 
-<!-- 1) Mission & Time -->
-<section class="panel" data-group="mission">
-  <div class="label">Mission &amp; Time</div>
-  <div class="row">
-    <button class="chip" data-value="arrive-by">Arrive-by</button>
-    <button class="chip" data-value="start-at">Start-at</button>
-    <button class="chip" data-value="leave-after">Leave-after</button>
-    <button class="chip" data-value="commute">Commute</button>
-    <button class="chip" data-value="pickup">Pickup</button>
-    <button class="chip" data-value="errand">Errand</button>
-    <button class="chip" data-value="airport">Airport</button>
-    <button class="chip" data-value="exercise">Exercise</button>
-    <button class="chip" data-value="scenic">Scenic</button>
-  </div>
-  <div class="row" style="margin-top:6px;align-items:center;gap:12px">
-    <div class="inline-input"><span class="pill">Time</span><input type="time" id="timeValue" /></div>
-    <div class="inline-input"><span class="pill">Buffer (min)</span><input id="bufferValue" type="number" min="0" max="60" step="5" placeholder="10" style="width:80px" /></div>
-  </div>
-</section>
+    <!-- Assets & Access -->
+    <section class="panel" data-group="assets">
+      <div class="label">Assets &amp; Access</div>
+      <div class="row">
+        <button class="chip" data-v="car-ready" aria-pressed="false">Car ready</button>
+        <button class="chip" data-v="low-range" aria-pressed="false">Low range</button>
+        <button class="chip" data-v="pt-pass" aria-pressed="false">PT pass</button>
+        <button class="chip" data-v="micro-nearby" aria-pressed="false">Micromobility</button>
+      </div>
+    </section>
 
-<!-- 2) Assets & Access -->
-<section class="panel" data-group="assets">
-  <div class="label">Assets &amp; Access</div>
-  <div class="row">
-    <button class="chip" data-value="car-ready">Car ready</button>
-    <button class="chip" data-value="car-low-range">Car low range</button>
-    <button class="chip" data-value="find-car">Unknown car location</button>
-    <button class="chip" data-value="parking-permit">Parking permit</button>
-    <button class="chip" data-value="pt-pass">PT pass</button>
-    <button class="chip" data-value="micro-nearby">Micromobility nearby</button>
-    <button class="chip" data-value="charger-available">Charger available</button>
-    <button class="chip" data-value="payment-ready">Payment ready</button>
-  </div>
-</section>
+    <!-- Rules & Payload -->
+    <section class="panel" data-group="rules">
+      <div class="label">Rules &amp; Payload</div>
+      <div class="row">
+        <button class="chip" data-v="step-free" aria-pressed="false">Step-free</button>
+        <button class="chip" data-v="flat-route" aria-pressed="false">Flat (bike)</button>
+        <button class="chip" data-v="business" aria-pressed="false">Business (receipt)</button>
+        <button class="chip" data-v="budget-cap" aria-pressed="false">Budget cap</button>
+      </div>
+      <div class="row" style="align-items:center">
+        <span class="pill">Max CZK</span><input type="number" id="budgetIn" min="0" step="50" placeholder="—" style="width:110px">
+      </div>
+    </section>
 
-<!-- 3) Your Rules & Payload -->
-<section class="panel" data-group="rules">
-  <div class="label">Your Rules &amp; Payload</div>
-  <div class="row">
-    <button class="chip" data-value="avoid-tolls">Avoid tolls</button>
-    <button class="chip" data-value="step-free">Step-free</button>
-    <button class="chip" data-value="flat-only">Flat (bike)</button>
-    <button class="chip" data-value="scenic-bias">Scenic bias</button>
-    <button class="chip" data-value="budget-cap">Budget cap</button>
-    <button class="chip" data-value="with-child">With child</button>
-    <button class="chip" data-value="with-pet">With pet</button>
-    <button class="chip" data-value="luggage">Luggage</button>
-    <button class="chip" data-value="with-bike">Bike with me</button>
-    <button class="chip" data-value="business">Business (receipt)</button>
-  </div>
-  <div class="row" style="margin-top:6px;align-items:center;gap:12px">
-    <div class="inline-input"><span class="pill">Max CZK</span><input id="budgetValue" type="number" min="0" step="50" placeholder="—" style="width:100px" /></div>
-  </div>
-</section>
+    <!-- Out There Now -->
+    <section class="panel" data-group="world">
+      <div class="label">Out There Now</div>
+      <div class="row">
+        <button class="chip" data-v="traffic" aria-pressed="false">Traffic</button>
+        <button class="chip" data-v="rain" aria-pressed="false">Rain</button>
+        <button class="chip" data-v="pt-strike" aria-pressed="false">PT strike</button>
+        <button class="chip" data-v="night" aria-pressed="false">Night</button>
+      </div>
+    </section>
 
-<!-- 4) Out There Now -->
-<section class="panel" data-group="outthere">
-  <div class="label">Out There Now</div>
-  <div class="row">
-    <button class="chip" data-value="traffic-bad">Traffic bad</button>
-    <button class="chip" data-value="pt-strike">PT strike</button>
-    <button class="chip" data-value="rain">Rain</button>
-    <button class="chip" data-value="heat">Heat</button>
-    <button class="chip" data-value="snow">Snow</button>
-    <button class="chip" data-value="windy">Windy</button>
-    <button class="chip" data-value="event-closure">Event/closure</button>
-    <button class="chip" data-value="charger-busy">Chargers busy</button>
-    <button class="chip" data-value="night-safety">Night safety</button>
-  </div>
-</section>
+    <!-- Habits & People -->
+    <section class="panel" data-group="habits">
+      <div class="label">Habits &amp; People</div>
+      <div class="row">
+        <button class="chip" data-v="commute" aria-pressed="false">Commute</button>
+        <button class="chip" data-v="coffee" aria-pressed="false">Coffee stop</button>
+        <button class="chip" data-v="groceries" aria-pressed="false">Groceries</button>
+        <button class="chip" data-v="pickup-friend" aria-pressed="false">Pick up friend</button>
+      </div>
+    </section>
 
-<!-- 5) Habits & People -->
-<section class="panel" data-group="habits">
-  <div class="label">Habits &amp; People</div>
-  <div class="row">
-    <button class="chip" data-value="routine-commute">Routine commute</button>
-    <button class="chip" data-value="school-pickup">School pickup</button>
-    <button class="chip" data-value="coffee-along">Coffee stop</button>
-    <button class="chip" data-value="groceries-along">Groceries stop</button>
-    <button class="chip" data-value="preferred-charger">Preferred charger</button>
-    <button class="chip" data-value="social-pickup">Pick up a friend</button>
-  </div>
-</section>
-
-<div class="footer">
-  <div class="small">
-    Defaults used silently: Prague • iPhone • Citymove • Drive/PT/Walk/Brompton (flat).
-  </div>
-  <div class="split">
-    <button class="btn ghost" id="btnPreview">Preview prompt</button>
-    <button class="btn" id="btnRun">Run</button>
-  </div>
-</div>
-
-<div class="panel">
-  <div class="label">Progress</div>
-  <div id="progress" class="small">Waiting to run…</div>
-</div>
-
+    <div class="progress" id="progress">Waiting to run…</div>
   </div>
 
+  <!-- Bottom action bar -->
+  <div class="bar">
+    <div class="bar-inner">
+      <button class="btn secondary" id="previewBtn">Preview prompt</button>
+      <button class="btn primary" id="runBtn">Run</button>
+    </div>
+  </div>
 
-  <!-- Overlay Renderer -->
-
-
+  <!-- Overlay renderer -->
   <div class="overlay" id="overlay">
     <div class="sheet" role="dialog" aria-modal="true" aria-label="Rendered UI">
-      <div class="sheet-header">
-        <div class="sheet-title">Rendered UI (HTML doc)</div>
-        <div class="sheet-actions">
-          <button class="btn secondary" id="btnCopy">Copy HTML</button>
-          <button class="btn secondary" id="btnDownload">Download</button>
-          <button class="btn" id="btnClose">Close</button>
+      <div class="sheet-h">
+        <div class="sheet-t">Rendered UI (HTML document)</div>
+        <div class="sheet-a">
+          <button class="sbtn" id="copyBtn">Copy HTML</button>
+          <button class="sbtn" id="dlBtn">Download</button>
+          <button class="sbtn" id="closeBtn">Close</button>
         </div>
       </div>
-      <div class="sheet-body">
+      <div class="sheet-b">
         <div class="center" id="loading">
-          <div>
+          <div style="text-align:center">
             <div class="spinner" style="margin:0 auto 12px"></div>
-            <div class="small" id="loadMsg">Calling model…</div>
+            <div id="loadMsg" style="color:#111; font:13px/1.2 system-ui">Calling model…</div>
           </div>
         </div>
         <iframe id="render" title="Model Output" sandbox="allow-scripts allow-forms allow-same-origin"></iframe>
@@ -186,202 +181,201 @@
     </div>
   </div>
 
+  <!-- Simple modal for prompt preview -->
+  <div class="modal" id="modal">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="label" style="text-transform:none;color:#e9ecf1">Preview prompt (<span id="plen">0</span> chars)</div>
+        <button class="sbtn" id="mclose">Close</button>
+      </div>
+      <textarea id="ptxt" readonly class="mt8"></textarea>
+      <div class="mt8" style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="sbtn" id="pcopy">Copy</button>
+      </div>
+    </div>
+  </div>
 
   <script>
+    // ---------- Helpers (no redeclarations) ----------
+    const qs  = (s, p=document) => p.querySelector(s);
+    const qsa = (s, p=document) => Array.from(p.querySelectorAll(s));
+
     // ---------- Chip toggles ----------
-    document.querySelectorAll('button.chip').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        const on = btn.getAttribute('aria-pressed') === 'true';
-        btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    qsa('button.chip').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        b.classList.toggle('selected');
+        const sel = b.classList.contains('selected');
+        b.setAttribute('aria-pressed', sel ? 'true' : 'false');
       });
     });
 
-    // ---------- Helpers ----------
-    const $ = sel => document.querySelector(sel);
-    const $$ = sel => Array.from(document.querySelectorAll(sel));
-
+    // ---------- Signal collection ----------
     function collectSignals(){
-      const groups = {};
-      $$('section.panel').forEach(sec=>{
-        const g = sec.dataset.group;
-        groups[g] = $$('.chip[aria-pressed="true"]', sec).map(b=>b.dataset.value);
+      const data = {};
+      qsa('section.panel').forEach(sec=>{
+        const key = sec.getAttribute('data-group');
+        data[key] = qsa('button.chip.selected', sec).map(b=>b.getAttribute('data-v'));
       });
-      // Inputs
-      const t = $('#timeValue')?.value?.trim();
-      const buf = $('#bufferValue')?.value?.trim();
-      const budget = $('#budgetValue')?.value?.trim();
-      const extras = [];
-      if (t) extras.push(`time=${t}`);
-      if (buf) extras.push(`bufferMin=${buf}`);
-      if (budget) extras.push(`budgetCZK=${budget}`);
-
-      return { ...groups, extras };
+      const t = qs('#timeIn').value.trim();
+      const buf = qs('#bufIn').value.trim();
+      const bud = qs('#budgetIn').value.trim();
+      data.meta = [];
+      if (t)   data.meta.push(`time=${t}`);
+      if (buf) data.meta.push(`bufferMin=${buf}`);
+      if (bud) data.meta.push(`budgetCZK=${bud}`);
+      return data;
     }
 
-    // Safe selector within a parent
-    function $$(sel, parent){ return Array.from((parent||document).querySelectorAll(sel)); }
-
-    // ---------- Prompt Builder (concise) ----------
+    // ---------- Prompt builder (concise, mobile-safe) ----------
     function buildPrompt(signals){
+      // Known defaults for this user
       const known = "defaults: Prague; iPhone; Citymove; modes Drive/PT/Walk/Brompton(flat).";
       const s = [
         `mission:[${(signals.mission||[]).join(',')}]`,
         `assets:[${(signals.assets||[]).join(',')}]`,
         `rules:[${(signals.rules||[]).join(',')}]`,
-        `world:[${(signals.outthere||[]).join(',')}]`,
+        `world:[${(signals.world||[]).join(',')}]`,
         `habits:[${(signals.habits||[]).join(',')}]`,
-        signals.extras?.length?`meta:[${signals.extras.join(',')}]`:""
+        (signals.meta&&signals.meta.length)?`meta:[${signals.meta.join(',')}]`:""
       ].filter(Boolean).join(' ');
 
-      const rulebookBrief =
-        "Follow 5-signal rulebook (Mission&Time, Assets&Access, Rules&Payload, OutThereNow, Habits&People)."+
-        " Policy: high→one primary; mid→primary+2 alternates; low→two contrasted cards; very low→neutral chips."+
-        " Microcopy: goal first, one-line reason, verb buttons. Use minimal inline CSS/JS; mobile-first; no externals.";
+      // Ultra-short rulebook for Pollinations
+      const rb = "Use 5-signal rulebook. High→1 primary; Mid→primary+2 alts; Low→two contrasted cards; Very low→neutral chips. Goal-first copy; one-line reason; verb buttons. Minimal inline CSS/JS; mobile-first; no externals.";
+      const contract = "OUTPUT: Return ONLY a single HTML5 document starting with <!doctype html>. No markdown, no backticks, no explanations. Inline assets only.";
 
-      // Hard output contract
-      const contract =
-        "OUTPUT: Return ONLY a single HTML5 document. Start with <!doctype html>. "+ 
-        "No markdown, no triple backticks, no explanations. Inline CSS/JS only.";
+      let prompt = `Task: Mobility UI from chips. ${known} Signals: ${s} ${rb} ${contract}`;
 
-      let prompt = `Task: Design a mobility UI for the selected situation. ${known} Signals: ${s} ${rulebookBrief} ${contract}`;
-
-      // Auto-optimize length
-      const MAX = 1400;
-      if(prompt.length>MAX){
-        const shorterRulebook =
-          "Use 5-signal rulebook. Pick minimal components. High→primary; mid→primary+alts; low→dual; very low→neutral chips. Imperative microcopy.";
-        prompt = `Task: Mobility UI. ${known} Signals: ${s} ${shorterRulebook} ${contract}`;
+      // Keep prompt compact (< 1200 chars)
+      const MAX = 1200;
+      if (prompt.length > MAX){
+        const rb2 = "5-signal rulebook; minimal components; high→primary, mid→alts, low→dual, veryLow→neutral. Mobile-first. Output ONLY <!doctype html> doc.";
+        prompt = `Task: Mobility UI. ${known} Signals: ${s} ${rb2} ${contract}`;
       }
       return prompt;
     }
 
-    // ---------- Pollinations Call ----------
+    // ---------- Pollinations call ----------
     const ENDPOINT = "https://text.pollinations.ai/";
 
     async function callModel(prompt){
-      // Prefer Chat-style JSON; many Pollinations deployments accept this shape.
+      // Try POST JSON first
       try{
         const res = await fetch(ENDPOINT, {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
+          method: "POST",
+          headers: { "Content-Type":"application/json" },
           body: JSON.stringify({
             messages: [
-              { role:"system", content:"You are a UI generator." },
-              { role:"user", content: prompt }
+              { role:"system", content:"You are a UI generator that outputs a single HTML document only." },
+              { role:"user",   content: prompt }
             ],
             temperature: 0.2
           })
         });
-        const text = await res.text();
-        return text;
+        return await res.text();
       }catch(e){
-        // Fallback GET
+        // Fallback GET (query)
         const url = ENDPOINT + "?messages=" + encodeURIComponent(prompt);
         const res = await fetch(url);
         return await res.text();
       }
     }
 
-    function extractHtmlDoc(raw){
-      // Extract from the first <!doctype html
+    function extractHtml(raw){
       const i = raw.toLowerCase().indexOf("<!doctype html");
-      if(i>=0) return raw.slice(i);
-      return null;
+      return (i>=0) ? raw.slice(i) : null;
     }
 
     // ---------- UI wiring ----------
-    const btnRun = $('#btnRun');
-    const btnPreview = $('#btnPreview');
-    const overlay = $('#overlay');
-    const iframe = $('#render');
-    const loading = $('#loading');
-    const statusText = $('#statusText');
-    const progress = $('#progress');
-    const loadMsg = $('#loadMsg');
-    const btnClose = $('#btnClose');
-    const btnCopy = $('#btnCopy');
-    const btnDownload = $('#btnDownload');
+    const runBtn = qs('#runBtn');
+    const previewBtn = qs('#previewBtn');
+    const progress = qs('#progress');
+    const stat = qs('#stat');
+    const dot = qs('#dot');
 
-    btnPreview.addEventListener('click', ()=>{
+    const overlay = qs('#overlay');
+    const render = qs('#render');
+    const loading = qs('#loading');
+    const loadMsg = qs('#loadMsg');
+    const closeBtn = qs('#closeBtn');
+    const copyBtn = qs('#copyBtn');
+    const dlBtn = qs('#dlBtn');
+
+    const modal = qs('#modal');
+    const ptxt = qs('#ptxt');
+    const plen = qs('#plen');
+    const mclose = qs('#mclose');
+    const pcopy = qs('#pcopy');
+
+    previewBtn.addEventListener('click', ()=>{
       const sig = collectSignals();
       const prompt = buildPrompt(sig);
-      alert(`Prompt (${prompt.length} chars):\n\n`+prompt);
+      ptxt.value = prompt;
+      plen.textContent = String(prompt.length);
+      modal.style.display = 'flex';
+    });
+    mclose.addEventListener('click', ()=> modal.style.display='none');
+    pcopy.addEventListener('click', async ()=>{
+      try{ await navigator.clipboard.writeText(ptxt.value); alert('Prompt copied.'); }catch{}
     });
 
-    btnRun.addEventListener('click', async ()=>{
+    runBtn.addEventListener('click', async ()=>{
       const sig = collectSignals();
       const prompt = buildPrompt(sig);
 
-      statusText.textContent = "Running…";
+      stat.textContent = "Running…"; dot.className = "dot wait";
       progress.textContent = "Building prompt and calling model…";
       overlay.style.display = "flex";
-      iframe.removeAttribute('srcdoc');
       loading.style.display = "flex";
       loadMsg.textContent = "Calling model…";
+      render.removeAttribute('srcdoc');
+      render.dataset.lastHtml = "";
 
-      let raw="";
+      let raw = "";
       try{
         raw = await callModel(prompt);
       }catch(e){
-        loading.style.display="flex";
         loadMsg.textContent = "Network error.";
-        statusText.textContent = "Error";
+        stat.textContent = "Error"; dot.className = "dot bad";
         return;
       }
 
       progress.textContent = `Response received (${raw.length} chars). Validating…`;
-      const html = extractHtmlDoc(raw);
+      const html = extractHtml(raw);
 
       if(!html){
-        loading.style.display="flex";
-        loadMsg.innerHTML = "The response did not start with <span class='mono'>&lt;!doctype html&gt;</span>.";
-        statusText.textContent = "Error";
-        statusText.previousElementSibling.className = "dot err";
+        loadMsg.innerHTML = "Response didn't start with <code>&lt;!doctype html&gt;</code>.";
+        stat.textContent = "Error"; dot.className = "dot bad";
         return;
       }
 
-      // Render
-      iframe.setAttribute('srcdoc', html);
+      render.setAttribute('srcdoc', html);
+      render.dataset.lastHtml = html;
       loading.style.display = "none";
-      statusText.textContent = "Ready";
-      statusText.previousElementSibling.className = "dot ready";
-      progress.textContent = "Rendered successfully. Use Copy or Download to export the HTML document.";
-      // Stash for copy/download
-      iframe.dataset.lastHtml = html;
+      stat.textContent = "Ready"; dot.className = "dot ready";
+      progress.textContent = "Rendered successfully. Use Copy/Download to export.";
     });
 
-    btnClose.addEventListener('click', ()=>{
-      overlay.style.display = "none";
+    closeBtn.addEventListener('click', ()=> overlay.style.display="none");
+    copyBtn.addEventListener('click', async ()=>{
+      const html = render.dataset.lastHtml || "";
+      if(!html) return alert("Nothing to copy yet.");
+      try{ await navigator.clipboard.writeText(html); alert("HTML copied."); }catch{}
     });
-
-    btnCopy.addEventListener('click', async ()=>{
-      const html = iframe.dataset.lastHtml || "";
-      if(!html){ return alert("Nothing to copy yet."); }
-      try{
-        await navigator.clipboard.writeText(html);
-        alert("HTML copied to clipboard.");
-      }catch{ alert("Clipboard failed."); }
-    });
-
-    btnDownload.addEventListener('click', ()=>{
-      const html = iframe.dataset.lastHtml || "";
-      if(!html){ return alert("Nothing to download yet."); }
+    dlBtn.addEventListener('click', ()=>{
+      const html = render.dataset.lastHtml || "";
+      if(!html) return alert("Nothing to download yet.");
       const blob = new Blob([html], {type:"text/html"});
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = "rendered-ui.html";
-      document.body.appendChild(a);
-      a.click();
-      URL.revokeObjectURL(url);
-      a.remove();
+      const a = document.createElement('a'); a.href=url; a.download="rendered-ui.html";
+      document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); a.remove();
     });
 
-    // Ensure overlay remains perfectly centered with 10px margins (handled by CSS).
-    // Optional: open overlay when URL has ?auto
-    if(location.search.includes("auto")) overlay.style.display="flex";
+    // Prevent layout jump on iOS when focusing inputs
+    document.addEventListener('focusin', (e)=>{
+      if(e.target.tagName==='INPUT'){
+        document.body.style.height = '100%';
+      }
+    });
   </script>
-
-
 </body>
 </html>
