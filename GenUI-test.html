@@ -7,11 +7,15 @@
 <style>
   :root{ --bg:#0b0e13; --fg:#e9eef7; --muted:#93a1b4; --accent:#7bd7ff; --ok:#38d39f; --err:#ff6b6b; --wait:#ffd166; --send:#7bb7ff; --render:#b388ff; }
   html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; overflow-x:hidden; }
-  header{ padding:12px 16px; border-bottom:1px solid #1b2330; position:sticky; top:0; background:#0b0e13; }
-  header h1{ font-size:14px; margin:0; color:#cfe7ff; letter-spacing:.2px; }
+
+  header{ padding:12px 16px; border-bottom:1px solid #1b2330; position:sticky; top:0; background:#0b0e13; display:flex; align-items:center; gap:8px; }
+  header h1{ font-size:14px; margin:0; color:#cfe7ff; letter-spacing:.2px; flex:1 1 auto; }
+  header .rt{ display:flex; gap:8px; }
+
   main{ display:grid; grid-template-columns:360px 1fr; gap:16px; height:calc(100% - 54px); }
   aside{ padding:12px 16px; border-right:1px solid #1b2330; overflow:auto; }
   #work{ position:relative; overflow:hidden; }
+
   textarea{ width:100%; min-height:120px; resize:vertical; background:#0f141d; color:var(--fg); border:1px solid #1b2330; border-radius:8px; padding:10px; }
   fieldset{ border:1px solid #1b2330; border-radius:8px; padding:10px; margin:12px 0; }
   .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -22,16 +26,23 @@
   button:hover{ outline:1px solid #29466e; }
   button[disabled]{ opacity:.6; cursor:not-allowed; }
   small{ color:var(--muted); }
+
   /* Stage */
   #stage{ position:relative; height:100%; min-height:320px; }
   canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; background:#0a0a0a; }
   #imgLayer{ position:absolute; inset:0; object-fit:contain; display:none; }
-  #codeOut{ position:absolute; inset:16px; border:1px solid #233247; border-radius:10px; background:#0c121b; display:none; }
+  #codeOut{ position:absolute; inset:16px; border:1px solid #233247; border-radius:10px; background:#0c121b; display:none; z-index:20; }
+
+  /* Immersive full-viewport preview for code */
+  body.immersive #codeOut{ position:fixed !important; inset: env(safe-area-inset-top,0) env(safe-area-inset-right,0) calc(env(safe-area-inset-bottom,0)) env(safe-area-inset-left,0); border-radius:0; border:0; }
+  #immersiveBar{ position:fixed; top:calc(env(safe-area-inset-top,0) + 8px); right:calc(env(safe-area-inset-right,0) + 8px);
+    z-index:30; display:none; }
+  body.immersive #immersiveBar{ display:flex; }
+  #immersiveBar button{ padding:8px 10px; background:#0f141d; border:1px solid #1b2330; }
+
   /* Status bar */
-  #statusBar{ position:fixed; left:12px; right:12px;
-    bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
-    display:flex; gap:10px; align-items:center; background:#0f141d;
-    border:1px solid #1b2330; border-radius:10px; padding:7px 10px; z-index:10; flex-wrap:wrap; }
+  #statusBar{ position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+    display:flex; gap:10px; align-items:center; background:#0f141d; border:1px solid #1b2330; border-radius:10px; padding:7px 10px; z-index:50; flex-wrap:wrap; }
   #dot{ width:10px; height:10px; border-radius:50%; background:#5b6474; }
   .pulse{ animation:pulse 1s infinite; }
   @keyframes pulse{ 0%{ box-shadow:0 0 0 0 rgba(123,215,255,.6)} 70%{ box-shadow:0 0 0 8px rgba(123,215,255,0)} 100%{ box-shadow:0 0 0 0 rgba(123,215,255,0)} }
@@ -40,10 +51,14 @@
   #progress{ width:140px; height:8px; appearance:none; background:#141c28; border:1px solid #223149; border-radius:999px; overflow:hidden; }
   #progress::-webkit-progress-value{ background:var(--accent); }
   #cancel{ margin-left:auto; }
-  #feed{ position:fixed; right:12px; bottom:calc(env(safe-area-inset-bottom,0px) + 12px); max-width:42ch; max-height:35vh; overflow:auto; list-style:none; margin:0; padding:8px 10px; background:#0f141d; border:1px solid #1b2330; border-radius:10px; color:#b7c6da; }
+
+  #feed{ position:fixed; right:12px; bottom:calc(env(safe-area-inset-bottom,0px) + 12px); max-width:42ch; max-height:35vh;
+    overflow:auto; list-style:none; margin:0; padding:8px 10px; background:#0f141d; border:1px solid #1b2330; border-radius:10px; color:#b7c6da; z-index:40; }
   #feed li{ margin:2px 0; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
-  #offline{ position:fixed; top:8px; left:50%; transform:translateX(-50%); background:#2a1111; color:#ffdede; border:1px solid #542323; padding:6px 10px; border-radius:8px; display:none; z-index:11; }
-  /* Mobile: stack, no sideways scroll, big stage */
+
+  #offline{ position:fixed; top:8px; left:50%; transform:translateX(-50%); background:#2a1111; color:#ffdede; border:1px solid #542323; padding:6px 10px; border-radius:8px; display:none; z-index:60; }
+
+  /* Mobile: stack, big stage */
   @media (max-width: 820px){
     main{ grid-template-columns:1fr; height:auto; }
     aside{ border-right:0; border-bottom:1px solid #1b2330; }
@@ -53,13 +68,17 @@
 </style>
 </head>
 <body>
-<header><h1>Pollinations — Prompt → Canvas / Interactive UI</h1></header>
+<header>
+  <h1>Pollinations — Prompt → Canvas / Interactive UI</h1>
+  <div class="rt">
+    <button id="expand">Expand</button>
+  </div>
+</header>
 
 <main>
   <aside>
     <label>Raw idea (creative core)</label>
     <textarea id="raw" placeholder="e.g., Simple traffic-light game with score"></textarea>
-
     <div class="row" style="margin-top:8px">
       <button id="run">Run</button>
       <small>⌘/Ctrl+Enter runs. Shift+Enter = new line.</small>
@@ -109,6 +128,7 @@
   <button id="cancel" hidden>Cancel</button>
 </div>
 <ul id="feed" aria-live="polite"></ul>
+<div id="immersiveBar"><button id="exitImmersive">Exit</button></div>
 
 <script type="module">
 const $ = s => document.querySelector(s);
@@ -116,26 +136,25 @@ const $ = s => document.querySelector(s);
 // UI refs
 const raw = $('#raw'), runBtn = $('#run'), preview = $('#preview');
 const seedEl = $('#seed'), modelEl = $('#model'), nologoEl = $('#nologo'), enhanceEl = $('#enhance');
-const cnv = $('#cnv'), imgLayer = $('#imgLayer'), codeOut = $('#codeOut');
+const cnv = $('#cnv'), codeOut = $('#codeOut');
 const dot = $('#dot'), phase = $('#phase'), prog = $('#progress'), elapsed = $('#elapsed'), cancelBtn = $('#cancel');
 const feed = $('#feed'), offline = $('#offline');
+const expandBtn = $('#expand'), exitImmersiveBtn = $('#exitImmersive');
 
 const state = { id:0, ctrl:null, timer:null, start:0, running:false };
+const TIMEOUT_MS = 25000;
 
-// —— Mode (Safari-safe)
-function currentType(){
-  return (document.querySelector('input[name="ptype"]:checked') || { value:'artdir' }).value;
-}
+function currentType(){ return (document.querySelector('input[name="ptype"]:checked') || { value:'artdir' }).value; }
 
-// —— Stage-aware canvas sizing (clamped)
+// ——— Canvas sizing uses stage, clamps size
 function sizeCanvas(){
   const host = document.getElementById('stage');
   const rect = host.getBoundingClientRect();
-  const cssW = Math.max(240, Math.floor(rect.width));
-  const cssH = Math.max(240, Math.floor(rect.height));
+  const cssW = Math.max(280, Math.floor(rect.width));
+  const cssH = Math.max(280, Math.floor(rect.height));
   const dpr  = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
 
-  cnv.style.width  = cssW + 'px';
+  cnv.style.width = cssW + 'px';
   cnv.style.height = cssH + 'px';
   cnv.width  = Math.floor(cssW * dpr);
   cnv.height = Math.floor(cssH * dpr);
@@ -147,29 +166,35 @@ function sizeCanvas(){
 }
 addEventListener('resize', sizeCanvas, { passive:true }); sizeCanvas();
 
-// —— Prompt builders
+// ——— Prompt builders
 function composePrompt(type,W,H){
   const core = (raw.value || 'an evocative scene').trim();
+
   if (type==='artdir')  return `${core}. cinematic, pro lighting, natural color, depth of field, shot on 50mm, aspect ${W}x${H}.`;
   if (type==='flatillus') return `${core}. minimal flat vector illustration, clean geometry, soft shadows, aspect ${W}x${H}.`;
+
+  // HARD constraint: HTML only, mobile-first, full-viewport
   const uiSpec = [
-    'Return a COMPLETE single-file HTML with inline CSS and vanilla JS.',
-    'No Markdown fences or external URLs.',
-    'MAXIMUM interactivity in one page:',
-    '• Resizable split panes, draggable items, command palette.',
-    '• Shortcuts: Ctrl/Cmd+K (palette), Ctrl/Cmd+S (save), Esc (close), ? (help).',
-    '• Theme toggle, undo/redo, localStorage persistence.',
-    '• Proper ARIA roles/labels, visible focus, respects prefers-reduced-motion.',
-    `• Fit responsively to viewport ${W}x${H}.`
+    'RESPOND WITH HTML ONLY — a complete single-file HTML document starting with "<!doctype html>".',
+    'Do NOT include any prose, explanations, or Markdown fences before or after the HTML.',
+    'Inline CSS and vanilla JS only. No external URLs, no iframes, no frameworks.',
+    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"> is required.',
+    'Mobile-first: html, body {height:100%}. The app must fill the viewport (100vh) and respect iOS safe-area insets.',
+    'Touch-friendly (min tap target 44×44), keyboard accessible, visible focus.',
+    'Interactivity: command palette (Ctrl/Cmd+K), save (Ctrl/Cmd+S to localStorage), Esc closes overlays, "?" shows help.',
+    'Theme toggle (light/dark), undo/redo, prefers-reduced-motion respected.',
+    `Fit responsively to a viewport of ${W}×${H}.`
   ].join('\n');
+
   return `Build an interactive UI for: "${core}".\n${uiSpec}`;
 }
+
 function updatePreview(){ const {w,h}=sizeCanvas(); preview.textContent = composePrompt(currentType(), w, h); }
 raw.addEventListener('input', updatePreview);
 document.querySelectorAll('input[name="ptype"]').forEach(r=>r.addEventListener('change', updatePreview));
 updatePreview();
 
-// —— Status + logs
+// ——— Status + logs
 function feedLine(t){ const li=document.createElement('li'); li.textContent=t; feed.appendChild(li); while(feed.children.length>12) feed.removeChild(feed.firstChild); feed.scrollTop=feed.scrollHeight; }
 function setDot(color,pulse=false){ dot.style.background=color; dot.classList.toggle('pulse', pulse); }
 function setPhase(text,color,pulse=false){ phase.textContent=text; setDot(color,pulse); }
@@ -177,7 +202,7 @@ function setElapsed(t=0){ elapsed.textContent = `${t.toFixed(1)}s`; }
 function startTimer(){ state.start=performance.now(); state.timer=setInterval(()=>setElapsed((performance.now()-state.start)/1000),100); }
 function stopTimer(){ clearInterval(state.timer); state.timer=null; }
 function disableControls(disabled){
-  [runBtn, ...document.querySelectorAll('input, textarea')].forEach(el=>{
+  [runBtn, expandBtn, ...document.querySelectorAll('input, textarea')].forEach(el=>{
     if (el===raw) return; if (el!==cancelBtn) el.disabled = disabled;
   });
 }
@@ -199,110 +224,114 @@ function failed(msg){ setPhase('Error','var(--err)'); stopTimer(); cancelBtn.hid
 
 cancelBtn.addEventListener('click', ()=>{ if(state.ctrl) state.ctrl.abort(); failed('Canceled'); });
 
-// —— Image path
+// ——— Immersive controls
+function enterImmersive(){ document.body.classList.add('immersive'); }
+function exitImmersive(){ document.body.classList.remove('immersive'); }
+expandBtn.addEventListener('click', enterImmersive);
+exitImmersiveBtn.addEventListener('click', exitImmersive);
+
+// Auto-immersive on small screens when UI code arrives
+function autoImmersiveIfMobile(){ if (matchMedia('(max-width: 820px)').matches) enterImmersive(); }
+
+// ——— Image path
 async function generateImage(){
   const {w,h} = sizeCanvas(); begin('image');
+
   const prompt = composePrompt(currentType(), w, h);
   const qp = new URLSearchParams({
     width:String(Math.max(32,Math.floor(w))),
     height:String(Math.max(32,Math.floor(h))),
     seed:seedEl.value||'42', model:modelEl.value||'flux',
-    nologo:String(!!nologoEl.checked), enhance:String(!!enhanceEl.checked),
-    _t:String(Date.now())
+    nologo:String(!!nologoEl.checked), enhance:String(!!enhanceEl.checked), _t:String(Date.now())
   });
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${qp.toString()}`;
+
   sending();
+  const t0 = performance.now();
+  const headerTimeout = setTimeout(()=>{ try{ state.ctrl.abort(); }catch(_){} failed('Timeout waiting for headers'); }, TIMEOUT_MS);
+
+  let rsp;
+  try{ rsp = await fetch(url, { signal:state.ctrl.signal, cache:'no-store' }); }
+  catch{ clearTimeout(headerTimeout); failed('Network error before headers'); return; }
+
+  clearTimeout(headerTimeout); waiting();
+  if (!rsp.ok){ failed(`HTTP ${rsp.status}`); return; }
+  feedLine(`↘ headers in ${((performance.now()-t0)/1000).toFixed(1)}s · ${rsp.headers.get('Content-Type')||'unknown'}`);
+
   try{
-    const rsp = await fetch(url, { signal:state.ctrl.signal, cache:'no-store' });
-    waiting(); if(!rsp.ok) throw new Error(`HTTP ${rsp.status}`);
     if (rsp.body){
-      const reader=rsp.body.getReader(); const chunks=[]; let rec=0;
-      while(true){ const {done,value}=await reader.read(); if(done) break; chunks.push(value); rec+=value.length; receiving(Math.min(0.9,rec/200000)); }
+      const reader=rsp.body.getReader(); const chunks=[]; let rec=0; const len=+rsp.headers.get('Content-Length')||0;
+      while(true){ const {done,value}=await reader.read(); if(done) break; chunks.push(value); rec+=value.length; if(len) receiving(rec/len); }
       const blob=new Blob(chunks,{type:'image/png'}); const o=URL.createObjectURL(blob);
       rendering();
-      await new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>{ 
-        const ctx=cnv.getContext('2d'); const r=cnv.getBoundingClientRect();
-        ctx.clearRect(0,0,r.width,r.height); ctx.drawImage(img,0,0,r.width,r.height);
-        URL.revokeObjectURL(o); imgLayer.style.display='none'; codeOut.style.display='none'; res();
-      }; img.onerror=rej; img.src=o; });
-      done('Image drawn'); return;
-    }
-    throw new Error('No body stream');
-  }catch(e){
-    waiting();
-    const img=new Image(); img.crossOrigin='anonymous';
-    const loaded=new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; });
-    img.src=url;
-    try{
-      await loaded; rendering();
-      const ctx=cnv.getContext('2d'); const r=cnv.getBoundingClientRect();
-      ctx.clearRect(0,0,r.width,r.height); ctx.drawImage(img,0,0,r.width,r.height);
-      imgLayer.style.display='none'; codeOut.style.display='none'; done('Image drawn (fallback)');
-    }catch(err){ failed('Image load failed'); }
-  }
+      await new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>{ const ctx=cnv.getContext('2d'); const r=cnv.getBoundingClientRect(); ctx.clearRect(0,0,r.width,r.height); ctx.drawImage(img,0,0,r.width,r.height); URL.revokeObjectURL(o); res(); }; img.onerror=rej; img.src=o; });
+      codeOut.style.display='none'; done('Image drawn');
+    }else{ throw new Error('No stream'); }
+  }catch{ failed('Image load failed'); }
 }
 
-// —— Code path (+ clear handling for “picture” / non-HTML)
+// ——— Code path (HTML-only enforcement + cleanup)
 async function generateCode(){
   const {w,h} = sizeCanvas(); begin('ui-code');
+
   const prompt = composePrompt('uicode', w, h);
   const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=qwen-coder`;
+
   sending();
+  const t0 = performance.now();
+  const headerTimeout = setTimeout(()=>{ try{ state.ctrl.abort(); }catch(_){} failed('Timeout waiting for headers'); }, TIMEOUT_MS);
+
+  let rsp;
+  try{ rsp = await fetch(url, { signal:state.ctrl.signal, cache:'no-store' }); }
+  catch{ clearTimeout(headerTimeout); failed('Network error before headers'); return; }
+
+  clearTimeout(headerTimeout); waiting();
+  if (!rsp.ok){ failed(`HTTP ${rsp.status}`); return; }
+  feedLine(`↘ headers in ${((performance.now()-t0)/1000).toFixed(1)}s · ${rsp.headers.get('Content-Type')||'unknown'}`);
+
   let text='';
   try{
-    const rsp = await fetch(url, { signal:state.ctrl.signal, cache:'no-store' });
-    waiting(); if(!rsp.ok) throw new Error(`HTTP ${rsp.status}`);
     if (rsp.body){
       const reader=rsp.body.getReader(); const dec=new TextDecoder(); let buf='';
-      while(true){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true}); receiving(Math.min(0.9,buf.length/150000)); }
+      while(true){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true}); receiving(Math.min(0.9, buf.length/150000)); }
       text = buf + new TextDecoder().decode();
     } else { text = await rsp.text(); }
-  } catch(e){ failed('Network/text fetch failed'); return; }
+  } catch{ failed('Stream/read failed'); return; }
 
+  // Strip fences and any preface; force from <!doctype or <html
   text = text.replace(/^\s*```(?:html)?/i,'').replace(/```$/,'').trim();
+  const start = text.search(/<!doctype html|<html/i);
+  if (start > 0) text = text.slice(start);
+
   rendering();
 
   const looksHTML = /<html/i.test(text);
   const oneWord   = /^[a-z]+$/i.test(text) && text.length<=12;
 
   if (!looksHTML){
-    // Auto-fallback if the model replied with a single word like “picture”
-    if (oneWord){
-      feedLine(`ℹ Non-HTML reply “${text}”. Falling back to image…`);
-      // switch mode to artdir image temporarily
-      const prev = document.querySelector('input[name="ptype"]:checked');
-      const art = document.querySelector('input[name="ptype"][value="artdir"]');
-      if (art && prev) art.checked = true;
-      done('Switching to image');   // close this run cleanly
-      return generateImage();       // start a new run
-    }
-    // Otherwise, show the text so it’s obvious what happened
-    const esc=s=>s.replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    codeOut.srcdoc = `<!doctype html><meta charset="utf-8">
-    <body style="margin:0;background:#0b0e13;color:#eaeef7;font:14px system-ui">
+    if (oneWord){ feedLine(`ℹ Non-HTML reply “${text}”. Falling back to image…`); done('Switching to image'); return generateImage(); }
+    const esc=s=>s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    codeOut.srcdoc = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#0b0e13;color:#eaeef7;font:14px system-ui">
       <div style="padding:16px;border:1px solid #233247;border-radius:10px;margin:16px">
-        <b>Provider returned non-HTML.</b><br>
+        <b>Provider returned non-HTML.</b>
         <div style="opacity:.9;margin-top:6px">Preview: “${esc(text.slice(0,180)).replace(/\s+/g,' ')}${text.length>180?'…':''}”</div>
-        <div style="margin-top:10px">Try again or switch to <b>Image</b> mode.</div>
-      </div>
-    </body>`;
+      </div></body>`;
     codeOut.style.display='block';
-    const ctx=cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height);
     done('Non-HTML from provider'); return;
   }
 
-  codeOut.srcdoc = text;
-  codeOut.style.display='block';
-  const ctx=cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height);
+  codeOut.srcdoc = text; codeOut.style.display='block';
+  // Auto-immersive on small screens
+  autoImmersiveIfMobile();
   done('Interactive UI embedded');
 }
 
-// —— Run control
+// ——— Run control
 function runCurrent(){ return currentType()==='uicode' ? generateCode() : generateImage(); }
 runBtn.addEventListener('click', runCurrent);
 raw.addEventListener('keydown', e => { const meta=e.metaKey||e.ctrlKey; if(meta && e.key==='Enter'){ e.preventDefault(); runCurrent(); } });
 
-// —— Surface JS errors
+// ——— Surface JS errors
 addEventListener('error', e => feedLine(`⚠ JS error: ${e.message}`));
 addEventListener('unhandledrejection', e => feedLine(`⚠ Promise: ${e.reason}`));
 </script>
