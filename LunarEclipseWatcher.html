@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Lunar Eclipse — Precise (Besselian + Live Compass + Concentric Shadow)</title>
+<title>Lunar Eclipse — Precise (Besselian + Live Turn-to-Moon + Concentric Shadow)</title>
 <style>
   :root{
     --bg:#000; --fg:#e8eef5; --muted:#9aa1ad;
@@ -67,7 +67,7 @@
         <button id="playBtn" class="btn">Play</button>
       </div>
       <div style="display:flex;gap:8px">
-        <button id="compassBtn" class="btn" title="Enable location & orientation">🧭 Compass</button>
+        <button id="compassBtn" class="btn" title="Enable live heading">🧭 Turn-to-Moon</button>
       </div>
     </div>
 
@@ -125,7 +125,7 @@ const timeLabel = document.getElementById('timeLabel');
 slider.min = T0; slider.max = T1; slider.step = 1000;
 slider.value = clamp(Date.now(), T0, T1);
 
-// =================== COMPASS (topocentric Moon; device heading) ===================
+// =================== COMPASS (topocentric Moon; show RELATIVE arrow only) ===================
 const rad=Math.PI/180, dayMs=86400000;
 const obs = { lat:50.0755, lon:14.4378 }; // default Prague; will update via geolocation
 let deviceHeading=null, moonBearing=null, moonAlt=null;
@@ -150,6 +150,7 @@ function getMoonPos(date, lat, lon){
 }
 function azToBearing(az){ let b=(az+Math.PI)*180/Math.PI; b%=360; if(b<0)b+=360; return b; }
 function angDiff(a,b){ let d=Math.abs(a-b)%360; return d>180?360-d:d; }
+function normDeg(a){ a%=360; if(a<0)a+=360; return a; }
 
 // =================== EVENTS (bind BEFORE first paint) ===================
 let playing=false;
@@ -165,6 +166,7 @@ playBtn.addEventListener('click', ()=>{
   playing = !playing; linkToNow=false;
   playBtn.textContent = playing ? 'Pause' : 'Play';
 });
+
 compassBtn.addEventListener('click', enableCompass);
 
 function enableCompass(){
@@ -174,16 +176,16 @@ function enableCompass(){
   function onDO(e){
     let h=null;
     if (typeof e.webkitCompassHeading === 'number') {
-      h = e.webkitCompassHeading; // iOS, true north
+      h = e.webkitCompassHeading; // iOS, degrees CW from true north
     } else if (typeof e.alpha === 'number'){
-      // Try absolute heading; adjust for screen orientation
+      // Some Androids: alpha ~ degrees CW from device top to geomagnetic north
       h = 360 - e.alpha;
       const ang=(screen.orientation && typeof screen.orientation.angle==='number')?screen.orientation.angle:(window.orientation||0);
-      h = (h + ang) % 360;
+      h = (h + ang);
     }
     if (h!=null && isFinite(h)){
-      deviceHeading = (h%360+360)%360;
-      // live: redraw immediately with current slider time
+      deviceHeading = normDeg(h);
+      // live redraw using current simulated time
       updateForTime(Number(slider.value));
     }
   }
@@ -216,7 +218,7 @@ requestAnimationFrame(resize);
 let compassCenter = { x:0, y:0, r:0 };
 function cacheCompassPlacement(){
   const W = cv.clientWidth|0, H = cv.clientHeight|0;
-  const compR = Math.min(W,H)*0.095;  // small
+  const compR = Math.min(W,H)*0.095;  // compact
   const canvasRect = cv.getBoundingClientRect();
   const sliderRect = slider.getBoundingClientRect();
   const sliderTopInCanvas = sliderRect.top - canvasRect.top;
@@ -251,11 +253,11 @@ function updateForTime(ms){
   moonAlt = pos.alt*180/Math.PI;
   moonBearing = azToBearing(pos.az);
 
-  // Time label: Now vs Sim
+  // Time label
   const isNow = linkToNow && !playing;
   const dt = new Date(ms);
   const txt = dt.toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit', second:'2-digit', timeZoneName:'short'});
-  timeLabel.textContent = (isNow ? 'Now ' : 'Sim ') + txt;
+  timeLabel.textContent = (playing ? 'Sim ' : (isNow ? 'Now ' : 'Sim ')) + txt;
 
   draw(ms);
 }
@@ -278,135 +280,196 @@ function draw(msUTC){
   // Clear
   ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
 
-  // ---- CONCENTRIC SHADOW (NO MASK) ----
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(Rpx, Rpx); // units: Moon radii
-
-  drawConcentricShadow(vx, vy, umbR, penR);
+  // ---- 1) SHADOW DISKS (UNCLIPPED, faint) — visible before contact ----
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(Rpx, Rpx);
+  drawConcentricShadow(vx, vy, umbR, penR, /*mode*/'background');
   ctx.restore();
 
-  // ---- MOON (fixed center) ----
+  // ---- 2) MOON (base albedo) ----
   ctx.save(); ctx.translate(cx,cy);
   const g = ctx.createRadialGradient(-Rpx*0.25,-Rpx*0.25,Math.max(1,Rpx*0.2), 0,0,Rpx);
   g.addColorStop(0, getCSS('--moon-hi')); g.addColorStop(1, getCSS('--moon-lo'));
   ctx.beginPath(); ctx.arc(0,0,Rpx,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
-  ctx.restore();
 
-  // ---- COMPASS (minimal: just "where to look") ----
-  drawCompass(compassCenter.x, compassCenter.y, compassCenter.r);
+  // ---- 3) SHADOW ON MOON (CLIPPED + MULTIPLY for hue/brightness) ----
+  ctx.save();
+  ctx.beginPath(); ctx.arc(0,0,Rpx,0,Math.PI*2); ctx.clip();
+  ctx.translate(0,0); // still at moon center
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.scale(Rpx, Rpx);
+  drawConcentricShadow(vx, vy, umbR, penR, /*mode*/'onMoon');
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore(); // unclip
+  ctx.restore(); // moon translate
+
+  // ---- 4) TURN-TO-MOON COMPASS (single relative arrow, below the Moon) ----
+  drawTurnToMoon(compassCenter.x, compassCenter.y, compassCenter.r);
 }
 
-// --- Concentric shadow renderer (rings) ---
-function drawConcentricShadow(cxR, cyR, umbR, penR){
-  // Rings counts
-  const Npen = 14; // penumbra rings from umbR→penR
-  const Numb = 16; // umbra rings center→umbR
+// --- Concentric shadow renderer (rings). mode: 'background' or 'onMoon' ---
+function drawConcentricShadow(cxR, cyR, umbR, penR, mode){
+  const Npen = 20, Numb = 28; // more rings -> smoother falloff
 
-  // Penumbra: faint at outer edge → darker near umbra edge
+  // Penumbra: faint outer → stronger near umbra edge
   for (let i=0;i<Npen;i++){
-    const t = i / Npen; // 0 at umb edge → 1 at pen edge
-    const rOuter = lerp(umbR, penR, t);
-    const rInner = lerp(umbR, penR, (i+1)/Npen);
-    const alpha = penOpacity(1 - t); // 1 near umb edge → 0 near pen edge
-    ring(cxR, cyR, rOuter, rInner, alpha);
+    const t0 = i/Npen, t1 = (i+1)/Npen;
+    const r0 = lerp(umbR, penR, t0), r1 = lerp(umbR, penR, t1);
+    const u = 1 - t0; // 1 near umb edge → 0 at pen edge
+    const a = (mode==='onMoon') ? penOpacityOnMoon(u) : 0.08 * (u*u);
+    ring(cxR, cyR, r1, r0, a, mode);
   }
 
-  // Umbra: darkest at center → slightly lighter toward edge
+  // Umbra: darkest in center → lighter to edge + reddish tint on-moon
   for (let i=0;i<Numb;i++){
-    const t = i / Numb; // 0 center → 1 edge
-    const rOuter = lerp(0, umbR, t + 1/Numb);
-    const rInner = lerp(0, umbR, t);
-    const alpha = umbOpacity(t); // high in center, lower at edge
-    ring(cxR, cyR, rOuter, rInner, alpha);
+    const t0 = i/Numb, t1 = (i+1)/Numb;
+    const r0 = lerp(0, umbR, t0), r1 = lerp(0, umbR, t1);
+    const a = (mode==='onMoon') ? umbOpacityOnMoon(t0) : 0.14 + 0.10*(1-t0); // faint background view
+    ring(cxR, cyR, r1, r0, a, mode, /*isUmbra*/true);
   }
 
-  // thin outlines for reference
-  ctx.lineWidth = 1/Math.max(1, cv.clientWidth*0.28);
-  ctx.strokeStyle = getCSS('--ring');
-  ctx.beginPath(); ctx.arc(cxR, cyR, penR, 0, Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(cxR, cyR, umbR, 0, Math.PI*2); ctx.stroke();
+  // outlines (subtle)
+  if (mode==='background'){
+    const s = 1/Math.max(1, cv.clientWidth*0.28);
+    ctx.lineWidth = s;
+    ctx.strokeStyle = getCSS('--ring');
+    ctx.beginPath(); ctx.arc(cxR, cyR, penR, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cxR, cyR, umbR, 0, Math.PI*2); ctx.stroke();
+  }
 }
 
-// Opacity models (tuned, monotonic, physically sensible ordering)
-function penOpacity(u){ // u: 0 at pen edge → 1 toward umbra edge
-  // Up to ~0.25 near umbra edge, fading to 0 at pen edge
-  const eased = u*u; // quadratic ease-in
-  return 0.25 * eased;
+// Opacity models (monotonic, plausible physically)
+function penOpacityOnMoon(u){ // u: 0 at pen edge → 1 near umbra edge
+  // max ~0.35 just outside umbra, fading to 0 at pen edge
+  return 0.35 * (u*u);
 }
-function umbOpacity(t){ // t: 0 center → 1 edge
-  // ~0.85 at center, ~0.35 near umbra edge
-  const eased = Math.pow(t, 0.8); // gentle falloff
-  return 0.85 - 0.50*eased;
+function umbOpacityOnMoon(t){ // t: 0 center → 1 umbra edge
+  // center ~0.90, edge ~0.35
+  return 0.90 - 0.55*Math.pow(t,0.8);
 }
 
-// Draw a donut ring [rInner, rOuter] with black alpha
-function ring(cxR, cyR, rOuter, rInner, alpha){
+// Draw ring (donut) with black / red-brown depending on umbra
+function ring(cxR, cyR, rOuter, rInner, alpha, mode, isUmbra=false){
   if (rOuter <= 0 || rOuter <= rInner) return;
   ctx.beginPath();
   ctx.arc(cxR, cyR, rOuter, 0, Math.PI*2);
-  if (rInner > 0){
-    ctx.arc(cxR, cyR, rInner, 0, Math.PI*2, true);
+  if (rInner > 0) ctx.arc(cxR, cyR, rInner, 0, Math.PI*2, true);
+
+  if (mode==='onMoon' && isUmbra){
+    // reddish multiply to simulate Danjon coloration
+    ctx.fillStyle = `rgba(130,40,30,${clamp(alpha,0,1)})`;
+  } else {
+    ctx.fillStyle = `rgba(0,0,0,${clamp(alpha,0,1)})`;
   }
-  ctx.fillStyle = `rgba(0,0,0,${clamp(alpha,0,1)})`;
-  // evenodd ensures an annulus
-  try { ctx.fill('evenodd'); } catch (_) { ctx.fill(); }
+  try { ctx.fill('evenodd'); } catch(_) { ctx.fill(); }
 }
 
-// ---- Minimal compass: device pointer + target arrow; highlight when aligned ----
-function drawCompass(cx,cy,r){
+// ---- Minimal “turn-to-moon” compass: one arrow showing RELATIVE direction ----
+function drawTurnToMoon(cx,cy,r){
   const ring=r, inner=r*0.62;
   ctx.save(); ctx.translate(cx,cy);
 
-  // Base ring
+  // base ring
   ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.2)';
   ctx.beginPath(); ctx.arc(0,0, ring, 0, Math.PI*2); ctx.stroke();
 
-  // Target arrow (where to look)
-  if (moonBearing!=null){
-    const a=(moonBearing-90)*rad; ctx.save(); ctx.rotate(a);
+  // compute relative angle (moon vs device)
+  if (moonBearing!=null && deviceHeading!=null){
+    const rel = normDeg(moonBearing - deviceHeading); // 0 = straight ahead
+    const a = (rel-90)*rad; // canvas rotation
+
+    // target arrow (gold). Always visible, **relative** to your facing.
+    ctx.save(); ctx.rotate(a);
     ctx.beginPath();
     ctx.moveTo(inner*0.1, 0);
-    ctx.lineTo(inner*0.1, -5);
-    ctx.lineTo(ring*0.86, 0);
-    ctx.lineTo(inner*0.1, 5);
+    ctx.lineTo(inner*0.1, -6);
+    ctx.lineTo(ring*0.88, 0);
+    ctx.lineTo(inner*0.1, 6);
     ctx.closePath();
-    ctx.fillStyle = (moonAlt!=null && moonAlt>0) ? 'rgba(255,220,140,.98)' : 'rgba(180,180,180,.85)';
-    ctx.fill(); ctx.restore();
-  }
-
-  // Your device heading arrow
-  if (deviceHeading!=null){
-    const a=(deviceHeading-90)*rad;
-    ctx.save(); ctx.rotate(a);
-    ctx.beginPath(); ctx.moveTo(inner*0.2,0); ctx.lineTo(ring*0.95,0);
-    ctx.strokeStyle='rgba(90,200,250,.95)'; ctx.lineWidth=3; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(ring*0.95,0); ctx.lineTo(ring*0.78,-6); ctx.lineTo(ring*0.78,6); ctx.closePath();
-    ctx.fillStyle='rgba(90,200,250,.95)'; ctx.fill();
+    const above = (moonAlt!=null && moonAlt>0);
+    ctx.fillStyle = above ? 'rgba(255,220,140,.98)' : 'rgba(180,180,180,.85)';
+    ctx.fill();
     ctx.restore();
-  }
 
-  // Alignment glow (±10°)
-  if (deviceHeading!=null && moonBearing!=null){
-    const diff=angDiff(deviceHeading,moonBearing);
-    const ok = diff<=10;
+    // alignment glow (±8°)
+    const diff = rel<=180 ? rel : 360-rel;
+    const ok = diff<=8;
     if (ok){
       ctx.beginPath(); ctx.arc(0,0, ring+6, 0, Math.PI*2);
-      ctx.strokeStyle='rgba(90,200,250,.8)'; ctx.lineWidth=4; ctx.stroke();
+      ctx.strokeStyle='rgba(255,220,140,.85)'; ctx.lineWidth=4; ctx.stroke();
+      if (!aligned && 'vibrate' in navigator) navigator.vibrate(20);
     }
     aligned = ok;
+  } else {
+    // if no heading yet, draw a small hint tick at top
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.25)';
+    ctx.beginPath(); ctx.moveTo(0,-inner); ctx.lineTo(0,-ring); ctx.stroke();
   }
 
-  // Center dot
+  // center dot
   ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2);
   ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fill();
   ctx.restore();
 }
 
-// =================== HELPERS ===================
-function lerp(a,b,t){ return a + (b-a)*t; }
+// =================== LAYOUT/RAF/UPDATE (same as before) ===================
+function resize(){
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const w = cv.clientWidth|0, h = cv.clientHeight|0;
+  if (!w || !h) { requestAnimationFrame(resize); return; }
+  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  cacheCompassPlacement();
+  updateForTime(Number(slider.value));
+}
+window.addEventListener('resize', resize, {passive:true});
+requestAnimationFrame(resize);
+
+let last = performance.now(), RATE = 120;
+function loop(now){
+  const nowMs = Date.now();
+  if (linkToNow){
+    const v = clamp(nowMs, T0, T1);
+    if (Math.abs(v - Number(slider.value)) > 250) slider.value = v;
+    updateForTime(v);
+  } else if (playing){
+    const dt=(now-last)/1000;
+    let v = Number(slider.value) + dt*1000*RATE;
+    if (v > T1) v = T0;
+    slider.value = v;
+    updateForTime(v);
+  }
+  last = now;
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+function cacheCompassPlacement(){
+  const W = cv.clientWidth|0, H = cv.clientHeight|0;
+  const compR = Math.min(W,H)*0.095;
+  const canvasRect = cv.getBoundingClientRect();
+  const sliderRect = slider.getBoundingClientRect();
+  const sliderTopInCanvas = sliderRect.top - canvasRect.top;
+  const cy = Math.min(H - 16 - compR, Math.max(compR + 16, sliderTopInCanvas - 10 - compR));
+  compassCenter = { x: W/2, y: cy, r: compR };
+}
+
+function updateForTime(ms){
+  const pos = getMoonPos(new Date(ms), obs.lat, obs.lon);
+  moonAlt = pos.alt*180/Math.PI;
+  moonBearing = azToBearing(pos.az);
+
+  const isNow = linkToNow && !playing;
+  const dt = new Date(ms);
+  const txt = dt.toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit', second:'2-digit', timeZoneName:'short'});
+  timeLabel.textContent = (playing ? 'Sim ' : (isNow ? 'Now ' : 'Sim ')) + txt;
+
+  draw(ms);
+}
+
+// Utilities
 function getCSS(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 function clamp(v,a,b){ return Math.min(Math.max(v,a),b); }
+function lerp(a,b,t){ return a + (b-a)*t; }
 
 })();
 </script>
