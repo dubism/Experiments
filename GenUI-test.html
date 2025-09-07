@@ -142,7 +142,7 @@ const feed = $('#feed'), offline = $('#offline');
 const expandBtn = $('#expand'), exitImmersiveBtn = $('#exitImmersive');
 
 const state = { id:0, ctrl:null, timer:null, start:0, running:false };
-const TIMEOUT_MS = 25000;
+const TIMEOUT_MS = 60000;
 
 function currentType(){ return (document.querySelector('input[name="ptype"]:checked') || { value:'artdir' }).value; }
 
