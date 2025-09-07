@@ -10,7 +10,8 @@
 <style>
   :root{
     --fg:#e8eef5; --muted:#a6b0bd;
-    --c1:#1a1a1a; --c2:#121212; --c3:#151515; --c4:#0f0f0f; /* grayscale waiting palette */
+    /* neutral waiting palette */
+    --c1:#1a1a1a; --c2:#121212; --c3:#151515; --c4:#0f0f0f;
   }
   *{box-sizing:border-box}
   html,body{
@@ -20,51 +21,57 @@
       radial-gradient(at 0% 100%, var(--c3), transparent 60%),
       radial-gradient(at 100% 100%, var(--c4), transparent 60%), #0b0b0b;
     color:var(--fg); font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-    overflow-x:hidden;
+    overflow-y:auto; overflow-x:hidden;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  .stage{width:min(92vw,1000px); transform:translateY(-5vh); display:flex; justify-content:center; align-items:center}
+
+  .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start; gap:8px}
+
+  /* Stage: no negative translate so nothing goes off-screen */
+  .stage{width:min(96vw, 900px); display:flex; justify-content:center; align-items:center}
   .frame{
-    position:relative; width:100%; aspect-ratio:16/10; border-radius:14px; overflow:hidden;
-    box-shadow:0 12px 32px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111;
+    position:relative; width:100%; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
+    box-shadow:0 10px 28px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111;
   }
   .frame img{
     position:absolute; inset:0; margin:auto; max-width:100%; max-height:100%;
     object-fit:contain; image-rendering:auto; filter:contrast(1.02) saturate(1.02);
   }
   .loading{
-    position:absolute; inset:auto 0 10px 0; text-align:center; font-size:12px; color:var(--muted);
+    position:absolute; left:0; right:0; bottom:8px; text-align:center; font-size:12px; color:var(--muted);
     transition:opacity .2s ease; opacity:0; pointer-events:none;
   }
   .loading.show{opacity:1}
 
-  /* Panels below the image */
-  .panel{width:min(92vw,1000px); margin-top:10px; transform:translateY(-4vh)}
+  /* Panels directly under the image, compact */
+  .panel{width:min(96vw, 900px); margin-top:2px}
   .box{
     background:rgba(20,20,20,.7); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
-    border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:0; overflow:hidden;
+    border:1px solid rgba(255,255,255,.08); border-radius:10px; overflow:hidden;
   }
-  .box summary{list-style:none; cursor:pointer; padding:10px 12px; font-weight:600; letter-spacing:.2px}
-  .body{padding:8px 12px 12px}
-  .body pre{white-space:pre-wrap; word-break:break-word; margin:0 0 8px 0; font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; color:#dfe6ef}
+  .box summary{list-style:none; cursor:pointer; padding:8px 10px; font-weight:600; letter-spacing:.2px}
+  .body{padding:8px 10px 10px}
+  .body pre{white-space:pre-wrap; word-break:break-word; margin:0 0 6px 0; font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; color:#dfe6ef}
   .actions{display:flex; gap:8px; flex-wrap:wrap}
   .btn{
     appearance:none; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px;
     background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer; text-decoration:none;
   }
 
-  /* Controls */
-  .controls{width:min(92vw,860px); margin-top:14px; transform:translateY(-2vh)}
-  .row{display:grid; grid-template-columns:110px 1fr 148px; gap:12px; align-items:center; padding:10px 12px}
+  /* Controls: longer sliders, value ABOVE; compact vertically */
+  .controls{width:min(96vw, 900px); margin-top:4px}
+  .row{padding:6px 4px}
+  .top{display:flex; justify-content:space-between; align-items:baseline; margin:0 2px 4px}
   .label{font-weight:600; letter-spacing:.2px}
-  .val{font-variant-numeric:tabular-nums; text-align:right; color:var(--muted)}
+  .val{font-variant-numeric:tabular-nums; color:var(--muted); font-size:12px}
   input[type="range"]{width:100%; -webkit-appearance:none; appearance:none; height:28px; background:transparent}
-  input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.25), rgba(255,255,255,.12))}
-  input[type="range"]::-moz-range-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.25), rgba(255,255,255,.12))}
+  input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
+  input[type="range"]::-moz-range-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
   input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%;
     background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.5); margin-top:-6px}
   input[type="range"]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.5)}
-  .hint{opacity:.75; font-size:11px; text-align:center; margin-top:8px; color:var(--muted)}
+  .hint{opacity:.75; font-size:11px; text-align:center; margin:6px 0 10px; color:var(--muted)}
 
   /* Error bar */
   .errbar{
@@ -77,7 +84,7 @@
   <div class="wrap">
     <div class="stage">
       <div class="frame">
-        <!-- Keeps showing the previous image; we swap only after preload finishes -->
+        <!-- Keep previous image; swap only after preload finishes -->
         <img id="img" alt="Generated scene" crossorigin="anonymous" referrerpolicy="no-referrer" decoding="async" loading="eager" fetchpriority="high">
         <div class="loading" id="loading" aria-live="polite">Loading…</div>
       </div>
@@ -112,32 +119,33 @@
       </details>
     </div>
 
+    <!-- Controls -->
     <div class="controls">
       <div class="row">
-        <div class="label">Time</div>
+        <div class="top"><div class="label">Time</div><div class="val" id="timeVal"></div></div>
         <input id="time" type="range" min="0" max="23" step="1">
-        <div class="val" id="timeVal"></div>
       </div>
+
       <div class="row">
-        <div class="label">Environment</div>
+        <div class="top"><div class="label">Environment</div><div class="val" id="envVal"></div></div>
         <input id="env" type="range" min="0" max="9" step="1">
-        <div class="val" id="envVal"></div>
       </div>
+
       <div class="row">
-        <div class="label">Car type</div>
+        <div class="top"><div class="label">Car type</div><div class="val" id="carVal"></div></div>
         <input id="car" type="range" min="0" max="9" step="1">
-        <div class="val" id="carVal"></div>
       </div>
+
       <div class="row">
-        <div class="label">Era</div>
+        <div class="top"><div class="label">Era</div><div class="val" id="eraVal"></div></div>
         <input id="era" type="range" min="0" max="11" step="1">
-        <div class="val" id="eraVal"></div>
       </div>
+
       <div class="row">
-        <div class="label">Direction</div>
+        <div class="top"><div class="label">Direction</div><div class="val" id="dirVal"></div></div>
         <input id="dir" type="range" min="0" max="7" step="1">
-        <div class="val" id="dirVal"></div>
       </div>
+
       <div class="hint">Updates after 200 ms pause · Background adapts to image colors (4-point gradient)</div>
     </div>
   </div>
@@ -149,12 +157,7 @@
 (() => {
   /* ===== Error bar ===== */
   const errbar = document.getElementById('errbar');
-  function showError(msg){
-    errbar.textContent = msg;
-    errbar.style.display = 'block';
-    clearTimeout(showError._t);
-    showError._t = setTimeout(()=>{ errbar.style.display='none'; }, 7000);
-  }
+  const showError = (msg)=>{ errbar.textContent = msg; errbar.style.display='block'; clearTimeout(showError._t); showError._t=setTimeout(()=>errbar.style.display='none',7000); };
   window.addEventListener('error', e => showError(`Script error: ${e.message}`));
   window.addEventListener('unhandledrejection', e => showError(`Promise error: ${e.reason?.message || e.reason}`));
 
@@ -164,19 +167,9 @@
   const promptText = $('#promptText'), openImg = $('#openImg'), copyPrompt = $('#copyPrompt');
   const debugText = $('#debugText'), selfTestBtn = $('#selfTest'), retryBtn = $('#retry'), copyURLBtn = $('#copyURL');
 
-  const habitats = [
-    "alpine tundra","boreal coniferous forest","mixed temperate forest","deciduous woodland",
-    "grassland steppe","farmland and orchards","Mediterranean scrubland","savanna",
-    "semi-desert badlands","sandy desert dunes"
-  ];
-  const cars = [
-    "microcar (A-segment)","city hatchback (B-segment)","compact sedan (C-segment)","midsize sedan",
-    "estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"
-  ];
-  const eras = [
-    "1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","2030s","2050s"
-  ];
-  // Ordered, typical exterior views
+  const habitats = ["alpine tundra","boreal coniferous forest","mixed temperate forest","deciduous woodland","grassland steppe","farmland and orchards","Mediterranean scrubland","savanna","semi-desert badlands","sandy desert dunes"];
+  const cars = ["microcar (A-segment)","city hatchback (B-segment)","compact sedan (C-segment)","midsize sedan","estate wagon","compact SUV","midsize SUV","large SUV","pickup truck","minibus / van"];
+  const eras = ["1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","2030s","2050s"];
   const directions = [
     "front three-quarter view",
     "rear three-quarter view",
@@ -192,20 +185,9 @@
   const timeVal = $('#timeVal'), envVal = $('#envVal'), carVal = $('#carVal'), eraVal = $('#eraVal'), dirVal = $('#dirVal');
 
   /* ===== Utils ===== */
-  const clamp = (v,min,max)=>Math.min(max,Math.max(min,v));
-  const log = (m) => { debugText.textContent = `[${(new Date).toLocaleTimeString()}] ${m}\n` + debugText.textContent; };
-  function labelHour(h){
-    const hh = String(h).padStart(2,'0')+":00";
-    if (h>=4 && h<6)  return `pre-dawn · ${hh}`;
-    if (h>=6 && h<8)  return `sunrise · ${hh}`;
-    if (h>=8 && h<12) return `morning · ${hh}`;
-    if (h===12)       return `noon · 12:00`;
-    if (h>12 && h<17) return `afternoon · ${hh}`;
-    if (h>=17 && h<20)return `sunset · ${hh}`;
-    if (h>=20 && h<22)return `blue hour · ${hh}`;
-    if (h>=22 || h<2) return `night · ${hh}`;
-    return `late night · ${hh}`;
-  }
+  const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+  const log=(m)=>{ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; };
+  const labelHour=(h)=>{const hh=String(h).padStart(2,'0')+":00"; if(h>=4&&h<6)return`pre-dawn · ${hh}`; if(h>=6&&h<8)return`sunrise · ${hh}`; if(h>=8&&h<12)return`morning · ${hh}`; if(h===12)return`noon · 12:00`; if(h>12&&h<17)return`afternoon · ${hh}`; if(h>=17&&h<20)return`sunset · ${hh}`; if(h>=20&&h<22)return`blue hour · ${hh}`; if(h>=22||h<2)return`night · ${hh}`; return`late night · ${hh}`; };
   function reflectLabels(){
     timeVal.textContent = labelHour(+timeEl.value);
     envVal.textContent  = habitats[+envEl.value];
@@ -219,176 +201,107 @@
     return `A realistic ${eras[+eraEl.value]} style photo, ${directions[+dirEl.value]}, of a ${cars[+carEl.value]} in ${habitats[+envEl.value]} at ${hour}. Natural light, detailed, no text`;
   }
 
-  /* ===== URL builders + fallbacks ===== */
-  function uBase(prompt, model, w, h){
-    const seed = (Math.random()*1e9|0);
-    const base = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&enhance=false&seed=${seed}`;
-    return model ? `${base}&model=${model}` : base;
-  }
-  const uTurbo = p => uBase(p,'turbo',640,384);
-  const uFlux  = p => uBase(p,'flux',640,384);
-  const uPlain = p => uBase(p,null,640,384);
-  const uSmall = p => uBase(p,'turbo',512,512);
-  const uProxy = url => `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
-  function candidates(p){
-    const a = uTurbo(p), b = uFlux(p), c = uPlain(p), d = uSmall(p);
-    return [a,b,c,d,uProxy(a),uProxy(b)];
-  }
+  /* ===== URLs + fallbacks ===== */
+  const uBase=(prompt,model,w,h)=>{const seed=(Math.random()*1e9|0);const base=`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&enhance=false&seed=${seed}`;return model?`${base}&model=${model}`:base;};
+  const uTurbo=p=>uBase(p,'turbo',640,384);
+  const uFlux =p=>uBase(p,'flux',640,384);
+  const uPlain=p=>uBase(p,null,640,384);
+  const uSmall=p=>uBase(p,'turbo',512,512);
+  const uProxy=url=>`https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
+  const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p); return [a,b,c,d,uProxy(a),uProxy(b)];};
 
-  /* ===== Loader state ===== */
-  function setLoading(on, attemptText=''){
-    loading.classList.toggle('show', !!on);
-    loading.textContent = on ? `Loading…${attemptText}` : '';
-  }
+  /* ===== Loading state ===== */
+  const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
 
-  /* ===== Keep-previous-image: preload → swap ===== */
-  let genToken = 0;
+  /* ===== Keep-previous: preload -> swap ===== */
+  let genToken=0;
   function loadSequence(prompt){
-    const seq = candidates(prompt);
-    let i = 0;
-    const token = ++genToken;
-
-    // apply neutral grayscale while waiting
+    const seq=candidates(prompt); let i=0; const token=++genToken;
     setWaitingGradient(prompt);
-
-    setLoading(true, ` (attempt ${i+1}/${seq.length})`);
+    setLoading(true,` (attempt ${i+1}/${seq.length})`);
     tryOne(seq[i]);
 
     function tryOne(url){
-      if (token !== genToken) return; // stale
-      const pre = new Image();
-      pre.crossOrigin = 'anonymous';
-      pre.referrerPolicy = 'no-referrer';
-      const start = performance.now();
+      if(token!==genToken) return;
+      const pre=new Image(); pre.crossOrigin='anonymous'; pre.referrerPolicy='no-referrer';
+      const start=performance.now();
 
-      pre.onload = () => {
-        if (token !== genToken) return;
-        // swap only now — old image stays visible until this moment
-        img.src = pre.src;
-        setLoading(false);
+      pre.onload=()=>{ if(token!==genToken) return;
+        img.src=pre.src; setLoading(false);
         log(`Loaded OK in ${Math.round(performance.now()-start)}ms via ${url.includes('weserv.nl')?'proxy':'direct'}`);
-        // palette from the loaded bitmap
-        try { extractPaletteToBackground(pre); } catch { setWaitingGradient(url); }
+        try{ extractPaletteToBackground(pre); }catch{ setWaitingGradient(url); }
       };
-      pre.onerror = () => {
-        if (token !== genToken) return;
-        if (++i < seq.length){
-          setLoading(true, ` (attempt ${i+1}/${seq.length})`);
-          tryOne(seq[i]);
-        } else {
-          setLoading(false);
-          showError('Image load failed repeatedly.');
-          log('All attempts failed.');
-        }
+      pre.onerror=()=>{ if(token!==genToken) return;
+        if(++i<seq.length){ setLoading(true,` (attempt ${i+1}/${seq.length})`); tryOne(seq[i]); }
+        else{ setLoading(false); showError('Image load failed repeatedly.'); log('All attempts failed.'); }
       };
 
-      // decode() gives early readiness on Safari/iOS too
-      pre.src = url + `&t=${Date.now()%1e7}`;
-      if (typeof pre.decode === 'function'){
-        pre.decode().catch(()=>{/* ignore, onload will still fire when ready */});
-      }
-      // update prompt UI every attempt
-      updatePromptUI(prompt, url);
+      pre.src=url+`&t=${Date.now()%1e7}`;
+      if(typeof pre.decode==='function'){ pre.decode().catch(()=>{}); }
+      updatePromptUI(prompt,url);
     }
   }
 
-  function updatePromptUI(prompt, url){
-    promptText.textContent = prompt;
-    openImg.href = url;
-    copyURLBtn.onclick = async () => {
-      try{ await navigator.clipboard.writeText(url); log("Copied URL"); } catch{ showError("Clipboard blocked"); }
-    };
-    copyPrompt.onclick = async () => {
-      try{ await navigator.clipboard.writeText(prompt); } catch{ showError('Clipboard blocked'); }
-    };
+  function updatePromptUI(prompt,url){
+    promptText.textContent=prompt;
+    openImg.href=url;
+    copyURLBtn.onclick=async()=>{try{await navigator.clipboard.writeText(url); log('Copied URL');}catch{showError('Clipboard blocked');}};
+    copyPrompt.onclick=async()=>{try{await navigator.clipboard.writeText(prompt);}catch{showError('Clipboard blocked');}};
   }
 
-  /* ===== Palette: k-means + grayscale waiting ===== */
+  /* ===== Palette ===== */
   function extractPaletteToBackground(imageEl){
-    const cvs = document.createElement('canvas'), ctx = cvs.getContext('2d',{willReadFrequently:true});
-    const S = 64; cvs.width=S; cvs.height=S; ctx.drawImage(imageEl,0,0,S,S);
-    let data;
-    try { data = ctx.getImageData(0,0,S,S).data; }
-    catch { setWaitingGradient(imageEl.currentSrc || imageEl.src); return; }
-    const pts = [];
-    for (let i=0;i<data.length;i+=4){ if (data[i+3]>=16) pts.push([data[i],data[i+1],data[i+2]]); }
-    if (!pts.length){ setWaitingGradient(imageEl.currentSrc || imageEl.src); return; }
-    const centers = kmeansRGB(pts,4,7).sort((A,B)=>B.count-A.count);
-    const cols = centers.map(c=>rgbToHex(c.r,c.g,c.b));
-    applyGradient(cols);
+    const cvs=document.createElement('canvas'), ctx=cvs.getContext('2d',{willReadFrequently:true});
+    const S=64; cvs.width=S; cvs.height=S; ctx.drawImage(imageEl,0,0,S,S);
+    let data; try{ data=ctx.getImageData(0,0,S,S).data; }catch{ setWaitingGradient(imageEl.currentSrc||imageEl.src); return; }
+    const pts=[]; for(let i=0;i<data.length;i+=4){ if(data[i+3]>=16) pts.push([data[i],data[i+1],data[i+2]]); }
+    if(!pts.length){ setWaitingGradient(imageEl.currentSrc||imageEl.src); return; }
+    const centers=kmeansRGB(pts,4,7).sort((A,B)=>B.count-A.count);
+    const cols=centers.map(c=>rgbToHex(c.r,c.g,c.b)); applyGradient(cols);
   }
   function kmeansRGB(points,k=4,iters=6){
-    const centers = Array.from({length:k}, _=>{
-      const p = points[(Math.random()*points.length)|0]; return {r:p[0],g:p[1],b:p[2],count:1};
-    });
+    const centers=Array.from({length:k},_=>{const p=points[(Math.random()*points.length)|0]; return {r:p[0],g:p[1],b:p[2],count:1};});
     for(let t=0;t<iters;t++){
-      const acc = centers.map(_=>({r:0,g:0,b:0,n:0}));
-      for (let i=0;i<points.length;i++){
-        const p=points[i]; let bi=0, bd=Infinity;
-        for (let j=0;j<k;j++){ const c=centers[j], dr=p[0]-c.r, dg=p[1]-c.g, db=p[2]-c.b; const d=dr*dr+dg*dg+db*db; if(d<bd){bd=d;bi=j;} }
+      const acc=centers.map(_=>({r:0,g:0,b:0,n:0}));
+      for(let i=0;i<points.length;i++){
+        const p=points[i]; let bi=0,bd=Infinity;
+        for(let j=0;j<k;j++){const c=centers[j],dr=p[0]-c.r,dg=p[1]-c.g,db=p[2]-c.b; const d=dr*dr+dg*dg+db*db; if(d<bd){bd=d;bi=j;}}
         const A=acc[bi]; A.r+=p[0]; A.g+=p[1]; A.b+=p[2]; A.n++;
       }
-      for (let j=0;j<k;j++){ const A=acc[j]; if(A.n>0){ centers[j].r=A.r/A.n; centers[j].g=A.g/A.n; centers[j].b=A.b/A.n; centers[j].count=A.n; } }
+      for(let j=0;j<k;j++){const A=acc[j]; if(A.n>0){centers[j].r=A.r/A.n; centers[j].g=A.g/A.n; centers[j].b=A.b/A.n; centers[j].count=A.n;}}
     }
     return centers.map(c=>({r:c.r|0,g:c.g|0,b:c.b|0,count:c.count||1}));
   }
-  function rgbToHex(r,g,b){ return "#"+[r,g,b].map(v=>clamp(v|0,0,255).toString(16).padStart(2,'0')).join(''); }
+  const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>clamp(v|0,0,255).toString(16).padStart(2,'0')).join('');
   function applyGradient(cols){
-    const [c1="#1a1a1a",c2="#121212",c3="#151515",c4="#0f0f0f"] = cols;
-    const root = document.documentElement.style;
-    root.setProperty('--c1', c1); root.setProperty('--c2', c2);
-    root.setProperty('--c3', c3); root.setProperty('--c4', c4);
+    const [c1="#1a1a1a",c2="#121212",c3="#151515",c4="#0f0f0f"]=cols;
+    const root=document.documentElement.style;
+    root.setProperty('--c1',c1); root.setProperty('--c2',c2); root.setProperty('--c3',c3); root.setProperty('--c4',c4);
   }
-  // Waiting gradient: 4 shades of gray (seeded but neutral)
   function setWaitingGradient(seedStr){
-    const seed = xmur3(seedStr||'seed')();
-    const rnd = mulberry32(seed);
-    const g = n => {
-      const v = 24 + ((rnd()*180)|0); return `#${[v,v,v].map(x=>x.toString(16).padStart(2,'0')).join('')}`;
-    };
+    const seed=xmur3(seedStr||'seed')(); const rnd=mulberry32(seed);
+    const g=()=>{const v=24+((rnd()*180)|0); return `#${[v,v,v].map(x=>x.toString(16).padStart(2,'0')).join('')}`;};
     applyGradient([g(),g(),g(),g()]);
   }
-  function xmur3(str){ for(var h=1779033703^str.length,i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19;} return function(){h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return (h^h>>>16)>>>0;};}
+  function xmur3(str){for(var h=1779033703^str.length,i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19;}return function(){h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return (h^h>>>16)>>>0;};}
   function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}}
 
   /* ===== Debounced generate (200 ms after last input) ===== */
-  let debounceT = 0;
-  function scheduleGenerate(){
-    clearTimeout(debounceT);
-    debounceT = setTimeout(()=> {
-      const prompt = buildPrompt();
-      loadSequence(prompt);
-    }, 200);
-  }
+  let debounceT=0;
+  function scheduleGenerate(){ clearTimeout(debounceT); debounceT=setTimeout(()=>{ loadSequence(buildPrompt()); },200); }
 
-  retryBtn.onclick = () => scheduleGenerate();
-  selfTestBtn.onclick = async () => {
-    log(`UA: ${navigator.userAgent}`);
-    log(`online: ${navigator.onLine}`);
-    await probe('https://picsum.photos/3');
-    const t = uPlain('test'); await probe(t); await probe(uProxy(t));
-  };
-  function probe(url){
-    return new Promise(res=>{
-      const t0 = performance.now();
-      const test = new Image();
-      test.onload  = ()=>{ log(`PROBE OK ${url} (${Math.round(performance.now()-t0)}ms)`); res(); };
-      test.onerror = ()=>{ log(`PROBE ERROR ${url}`); res(); };
-      test.referrerPolicy = 'no-referrer';
-      test.crossOrigin = 'anonymous';
-      test.src = url + `&p=${Date.now()%1e7}`;
-    });
-  }
+  retryBtn.onclick=()=>scheduleGenerate();
+  selfTestBtn.onclick=async()=>{ log(`UA: ${navigator.userAgent}`); log(`online: ${navigator.onLine}`); await probe('https://picsum.photos/3'); const t=uPlain('test'); await probe(t); await probe(uProxy(t)); };
+  function probe(url){ return new Promise(res=>{const t0=performance.now(); const im=new Image(); im.onload=()=>{log(`PROBE OK ${url} (${Math.round(performance.now()-t0)}ms)`); res();}; im.onerror=()=>{log(`PROBE ERROR ${url}`); res();}; im.referrerPolicy='no-referrer'; im.crossOrigin='anonymous'; im.src=url+`&p=${Date.now()%1e7}`;}); }
 
   /* ===== Wire sliders & init ===== */
-  [timeEl, envEl, carEl, eraEl, dirEl].forEach(el => el.addEventListener('input', ()=>{ reflectLabels(); scheduleGenerate(); }));
-  timeEl.value = (Math.random()*24)|0;
-  envEl.value  = (Math.random()*habitats.length)|0;
-  carEl.value  = (Math.random()*cars.length)|0;
-  eraEl.value  = (Math.random()*eras.length)|0;
-  dirEl.value  = (Math.random()*directions.length)|0;
-  reflectLabels();
-  scheduleGenerate(); // initial generate (debounced)
+  [timeEl, envEl, carEl, eraEl, dirEl].forEach(el=>el.addEventListener('input',()=>{ reflectLabels(); scheduleGenerate(); }));
+  timeEl.value=(Math.random()*24)|0;
+  envEl.value =(Math.random()*habitats.length)|0;
+  carEl.value =(Math.random()*cars.length)|0;
+  eraEl.value =(Math.random()*eras.length)|0;
+  dirEl.value =(Math.random()*directions.length)|0;
+  reflectLabels(); scheduleGenerate();
 })();
 </script>
 </body>
