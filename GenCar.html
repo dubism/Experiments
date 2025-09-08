@@ -128,7 +128,7 @@
 <script>
 'use strict';
 (() => {
-  const VERSION = 'hardened-2025-09-08-01';
+  const VERSION = 'hardened-2025-09-08-02';
   const WAIT_MS = 500;
 
   /* ==== Error bar / global guards ==== */
@@ -141,7 +141,7 @@
   const $ = s => document.querySelector(s);
   const req = (s)=>{ const el=$(s); if(!el){ throw new Error(`Missing element: ${s}`);} return el; };
 
-  /* ==== DOM refs (single source of truth) ==== */
+  /* ==== DOM refs ==== */
   const img = req('#img'), loading = req('#loading');
   const promptText = req('#promptText'), openImg = req('#openImg'), copyPromptBtn = req('#copyPrompt');
   const debugText = req('#debugText'), selfTestBtn = req('#selfTest'), retryBtn = req('#retry'), copyURLBtn = req('#copyURL');
@@ -166,13 +166,15 @@
     "minibus / van"
   ];
   const eras = ["1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","futuristic","unbelievably mesmerizingly sci-fi"];
+
+  // Era cues (1970s changed → "iconic wedge car edges")
   function eraCue(label){
     const map = {
       "1890s": "1890s (eighteen-nineties) — horseless carriage spirit; exposed coachwork; spindly wheels; brass fittings",
       "1920s": "1920s (20s, nineteen-twenties) — early streamlining; art-deco cues; upright radiators; coachbuilt bodies",
       "1950s": "1950s (50s, nineteen-fifties) — jet-age optimism; tailfins; chrome; two-tone trims; whitewall tires",
       "1960s": "1960s (60s, nineteen-sixties) — clean curves; coke-bottle waists; muscle stance; simple brightwork",
-      "1970s": "1970s (70s, nineteen-seventies) — wedge experiments; oil-crisis compactness; louvers; vinyl textures",
+      "1970s": "1970s (70s, nineteen-seventies) — iconic wedge car edges; compact proportions; louvers; vinyl textures",
       "1980s": "1980s (80s, nineteen-eighties) — boxy precision; sharp creases; pop-up headlamps; black rub strips",
       "1990s": "1990s (90s, nineteen-nineties) — aero-organic rounding; cab-forward; flush glass; smooth cladding",
       "2000s": "2000s (00s, two-thousands) — taut surfaces; flame-surfacing hints; big alloys; high beltlines",
@@ -183,12 +185,16 @@
     };
     return map[label] || `${label} style authenticity`;
   }
+
+  // Views (head-on uses "straight frontal view")
   const views = [
     "Front three-quarter product view — camera at headlamp height; vehicle yaw ~30° toward camera; wheels straight; centered; ~85% frame coverage; neutral background.",
     "Side profile product view — left side; camera level at mid-door; perpendicular 90°; wheels straight; full length edge-to-edge; minimal perspective.",
-    "Front head-on product view — camera on centerline at badge height; grille perfectly square; wheels straight; strict symmetry; ~80% vertical coverage.",
+    "Front head-on product view — camera on centerline at badge height; straight frontal view; wheels straight; strict symmetry; ~80% vertical coverage.",
     "Top-down product view — camera 90° overhead; car centered; full roofline and outline visible; equal margins on all sides."
   ];
+
+  // Body lacquer colors (labels shown in UI)
   const paints = [
     {label:"Gloss factory white",        phrase:"gloss factory white body lacquer (paint only)"},
     {label:"Piano black high-gloss",     phrase:"piano black high-gloss body lacquer (paint only)"},
@@ -213,18 +219,20 @@
   peekBtn.addEventListener('click', ()=>toggleOverlay());
   window.addEventListener('keydown', e=>{ if(e.key==='Escape') toggleOverlay(false); });
 
-  /* ==== Labels & time cues ==== */
+  /* ==== Time cues — include light & sun colors ==== */
   function timeCue(h){
-    if (h>=4 && h<6)  return "pre-dawn hush; faint horizon glow; long soft shadows; bright morning star visible";
-    if (h>=6 && h<8)  return "sun just rising; low-angle light; long soft shadows; thin ground mist";
-    if (h>=8 && h<12) return "clear directional daylight; crisp shadows; airy atmosphere";
-    if (h===12)       return "midday overhead light; minimal shadows; high clarity";
-    if (h>12 && h<17) return "afternoon light; defined shadows; gentle haze";
-    if (h>=17 && h<20)return "sun near horizon; raking light; bold silhouettes possible";
-    if (h>=20 && h<22)return "twilight after sunset; soft ambient glow; first stars emerging";
-    if (h>=22 || h<2) return "night; moonlight and starlight; constellations visible";
-    return "deep night; sparse light sources; quiet atmosphere";
+    if (h>=4 && h<6)  return "pre-dawn blue hour; cool indigo sky; faint orange line at horizon; long soft shadows";
+    if (h>=6 && h<8)  return "sunrise; warm golden sunlight; amber rim light; thin ground mist; gentle pink clouds";
+    if (h>=8 && h<12) return "morning; clean neutral-white sunlight; pale blue sky; crisp shadows";
+    if (h===12)       return "noon; bright white sun overhead; high contrast; pale cyan sky; minimal shadows";
+    if (h>12 && h<17) return "afternoon; warm sun with light yellow tint; softening shadows; light haze";
+    if (h>=17 && h<20)return "sunset; golden-orange sunlight; amber shafts; long deep shadows; fiery sky band";
+    if (h>=20 && h<22)return "twilight; cobalt-blue sky glow; first stars; cool bluish ambience";
+    if (h>=22 || h<2) return "night; silvery moonlight; deep navy sky; starlight highlights";
+    return "late night; sparse lighting; inky blue-black sky; subdued reflections";
   }
+
+  /* ==== Labels ==== */
   const labelHour=(h)=>{const hh=String(h).padStart(2,'0')+":00";
     if (h>=4 && h<6)  return `pre-dawn · ${hh}`;
     if (h>=6 && h<8)  return `sunrise · ${hh}`;
@@ -244,16 +252,23 @@
     paintVal.textContent = paints[+paintEl.value].label + " (car body lacquer)";
   }
 
-  /* ==== Prompt ==== */
+  /* ==== Prompt (paint phrasing adjusted) ==== */
   function buildPrompt(){
     const env   = habitats[+envEl.value];
     const car   = cars[+carEl.value];
     const era   = eras[+eraEl.value];
     const view  = views[+dirEl.value];
-    const paint = paints[+paintEl.value].phrase;
+    const colorName = paints[+paintEl.value].label.toLowerCase();
     const timeTxt = timeCue(+timeEl.value);
     const eraTxt  = eraCue(era);
-    return `A realistic photo of a ${car} in ${env}. Era: ${eraTxt}. Catalog view: ${view} Car body lacquer color: ${paint}. Only the car paint color should change — interior and environment unchanged. Time: ${timeTxt}. Natural light, detailed, no text`;
+    return [
+      `A realistic photo of a ${car} in ${env}.`,
+      `Era: ${eraTxt}.`,
+      `Catalog view: ${view}`,
+      `Car paint finished in ${colorName}; body paint in ${colorName}; overall body color ${colorName}.`,
+      `Time: ${timeTxt}.`,
+      `Natural light, detailed, no text`
+    ].join(' ');
   }
 
   /* ==== URL candidates ==== */
@@ -269,7 +284,7 @@
 
   /* ==== UI state ==== */
   const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
-  const setControlsEnabled=(enabled)=>{ sliders.forEach(el=>{ if (el) el.disabled=!enabled; }); };
+  const setControlsEnabled=(enabled)=>{ [timeEl,envEl,carEl,eraEl,dirEl,paintEl].forEach(el=>{ if (el) el.disabled=!enabled; }); };
 
   /* ==== Very dark waiting gradient ==== */
   function applyGradient(cols){
@@ -367,14 +382,12 @@
     debounceT=setTimeout(()=>{ setLoading(true,''); loadSequence(buildPrompt()); }, WAIT_MS);
   }
 
-  /* ==== Robust event binding helpers ==== */
+  /* ==== Robust event binding ==== */
   const supportsPointer = 'onpointerdown' in window;
   function on(el, type, handler, opts){ if(!el) return; el.addEventListener(type, handler, opts||false); }
   function bindSlider(el){
     if(!el) return;
-    // live label updates on input, regardless of state
     on(el,'input', ()=>{ reflectLabels(); });
-    // keyboard (arrow keys, page up/down, home/end)
     on(el,'change', ()=>{ if(!dragging) scheduleGenerate(); });
     on(el,'keyup', (e)=>{ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)){ scheduleGenerate(); } });
 
@@ -385,7 +398,6 @@
       on(el,'pointercancel', release);
       on(el,'lostpointercapture', release);
     }else{
-      // mouse + touch fallback
       on(el,'mousedown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
       on(window,'mouseup', release);
       on(el,'touchstart', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); }, {passive:true});
@@ -411,9 +423,8 @@
     });
   }
 
-  /* ==== INIT (guarded) ==== */
+  /* ==== INIT ==== */
   try{
-    // random defaults
     timeEl.value =(Math.random()*24)|0;
     envEl.value  =(Math.random()*habitats.length)|0;
     carEl.value  =(Math.random()*cars.length)|0;
@@ -421,15 +432,10 @@
     dirEl.value  =(Math.random()*views.length)|0;
     paintEl.value=(Math.random()*paints.length)|0;
 
-    // bind once
     [timeEl, envEl, carEl, eraEl, dirEl, paintEl].forEach(bindSlider);
     reflectLabels();
-
-    // initial run
     log('INIT OK — listeners bound, scheduling first generation');
     scheduleGenerate();
-
-    // health ping: ensure listeners remain active
     setTimeout(()=>{ log('HEALTH: alive'); }, 1500);
   }catch(err){
     showError(`Init failed: ${err.message}`); console.error(err);
