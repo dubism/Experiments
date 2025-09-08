@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Pollinations — Hardened</title>
+<title>Pollinations — Hardened (throttled)</title>
 <link rel="preconnect" href="https://image.pollinations.ai" crossorigin>
 <link rel="dns-prefetch" href="//image.pollinations.ai">
 <link rel="dns-prefetch" href="//images.weserv.nl">
@@ -19,17 +19,14 @@
     color:var(--fg); font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
     overflow-y:auto; overflow-x:hidden;
   }
-
   .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;gap:8px}
   .stage{width:min(96vw, 900px); display:flex; justify-content:center; align-items:center}
-  .frame{
-    position:relative; width:100%; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
-    box-shadow:0 10px 28px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111;
-  }
+  .frame{position:relative; width:100%; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
+    box-shadow:0 10px 28px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111;}
   .frame img{position:absolute; inset:0; margin:auto; max-width:100%; max-height:100%; object-fit:contain; filter:contrast(1.02) saturate(1.02)}
-  .loading{position:absolute; left:0; right:0; bottom:8px; text-align:center; font-size:12px; color:var(--muted); transition:opacity .2s; opacity:0; pointer-events:none}
+  .loading{position:absolute; left:0; right:0; bottom:8px; text-align:center; font-size:12px; color:var(--muted);
+    transition:opacity .2s; opacity:0; pointer-events:none}
   .loading.show{opacity:1}
-
   .controls{width:min(96vw, 900px); margin-top:4px}
   .row{padding:6px 4px}
   .top{display:flex; justify-content:space-between; align-items:baseline; margin:0 2px 4px}
@@ -43,11 +40,8 @@
   input[type="range"]:disabled{opacity:.55; cursor:not-allowed}
   input[type="range"]:disabled::-webkit-slider-thumb, input[type="range"]:disabled::-moz-range-thumb{background:#c9c9c9; box-shadow:none}
   .hint{opacity:.75; font-size:11px; text-align:center; margin:6px 0 10px; color:var(--muted)}
-
   .errbar{position:fixed; left:12px; right:12px; bottom:12px; padding:10px 12px; border-radius:10px;
     background:#2b1212; color:#ffd6d6; border:1px solid #913c3c; font-size:12px; display:none; z-index:9998}
-
-  /* Chevron + overlay */
   .peek{position:fixed; right:12px; bottom:12px; z-index:9999; width:36px; height:36px; border-radius:50%; display:grid; place-items:center;
     background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); color:#fff; cursor:pointer; backdrop-filter: blur(8px); transition:transform .2s}
   .peek[aria-expanded="true"]{transform:rotate(180deg)}
@@ -72,7 +66,6 @@
       </div>
     </div>
 
-    <!-- Controls -->
     <div class="controls">
       <div class="row">
         <div class="top"><div class="label">Time</div><div class="val" id="timeVal"></div></div>
@@ -102,7 +95,6 @@
     </div>
   </div>
 
-  <!-- Chevron + Overlay -->
   <button id="peek" class="peek" aria-expanded="false" title="Show prompt & debug">⌄</button>
   <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="inner">
@@ -128,20 +120,20 @@
 <script>
 'use strict';
 (() => {
-  const VERSION = 'hardened-2025-09-08-02';
-  const WAIT_MS = 500;
+  const VERSION = 'throttle-2025-09-08';
+  const WAIT_MS = 500;                   // user debounce
+  const MIN_API_INTERVAL_MS = 5200;      // Pollinations guideline
+  const ATTEMPT_GAP_MS = 5200;           // between our retries
+  const MAX_PATH_BYTES = 850;            // safe path length budget (prevents 414)
 
-  /* ==== Error bar / global guards ==== */
   const errbar = document.getElementById('errbar');
   const showError = (msg)=>{ errbar.textContent = msg; errbar.style.display='block'; clearTimeout(showError._t); showError._t=setTimeout(()=>errbar.style.display='none',7000); };
   window.addEventListener('error', e => showError(`Script error: ${e.message}`));
   window.addEventListener('unhandledrejection', e => showError(`Promise error: ${e.reason?.message || e.reason}`));
 
-  /* ==== Query helpers + assert ==== */
   const $ = s => document.querySelector(s);
   const req = (s)=>{ const el=$(s); if(!el){ throw new Error(`Missing element: ${s}`);} return el; };
 
-  /* ==== DOM refs ==== */
   const img = req('#img'), loading = req('#loading');
   const promptText = req('#promptText'), openImg = req('#openImg'), copyPromptBtn = req('#copyPrompt');
   const debugText = req('#debugText'), selfTestBtn = req('#selfTest'), retryBtn = req('#retry'), copyURLBtn = req('#copyURL');
@@ -151,7 +143,6 @@
   const timeVal=req('#timeVal'), envVal=req('#envVal'), carVal=req('#carVal'), eraVal=req('#eraVal'), dirVal=req('#dirVal'), paintVal=req('#paintVal');
   const sliders=[timeEl,envEl,carEl,eraEl,dirEl,paintEl];
 
-  /* ==== Data ==== */
   const habitats = [
     "alpine mountain pass","temperate forest","grassland steppe","sandy desert dunes","arctic ice and snow",
     "rocky coastal cliffs","Mediterranean scrubland","savanna","farmland and orchards",
@@ -167,7 +158,6 @@
   ];
   const eras = ["1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","futuristic","unbelievably mesmerizingly sci-fi"];
 
-  // Era cues (1970s changed → "iconic wedge car edges")
   function eraCue(label){
     const map = {
       "1890s": "1890s (eighteen-nineties) — horseless carriage spirit; exposed coachwork; spindly wheels; brass fittings",
@@ -186,7 +176,6 @@
     return map[label] || `${label} style authenticity`;
   }
 
-  // Views (head-on uses "straight frontal view")
   const views = [
     "Front three-quarter product view — camera at headlamp height; vehicle yaw ~30° toward camera; wheels straight; centered; ~85% frame coverage; neutral background.",
     "Side profile product view — left side; camera level at mid-door; perpendicular 90°; wheels straight; full length edge-to-edge; minimal perspective.",
@@ -194,22 +183,13 @@
     "Top-down product view — camera 90° overhead; car centered; full roofline and outline visible; equal margins on all sides."
   ];
 
-  // Body lacquer colors (labels shown in UI)
   const paints = [
-    {label:"Gloss factory white",        phrase:"gloss factory white body lacquer (paint only)"},
-    {label:"Piano black high-gloss",     phrase:"piano black high-gloss body lacquer (paint only)"},
-    {label:"Metallic silver fine-flake", phrase:"fine-flake metallic silver body lacquer (paint only)"},
-    {label:"Satin graphite metallic",    phrase:"satin graphite metallic body lacquer (paint only)"},
-    {label:"Deep navy gloss",            phrase:"deep navy gloss body lacquer (paint only)"},
-    {label:"Crimson red gloss",          phrase:"crimson red gloss body lacquer (paint only)"},
-    {label:"Sun yellow high-gloss",      phrase:"sun yellow high-gloss body lacquer (paint only)"},
-    {label:"Emerald green gloss",        phrase:"emerald green gloss body lacquer (paint only)"},
-    {label:"Matte battleship gray",      phrase:"matte battleship gray body lacquer (paint only)"},
-    {label:"Pearl white tri-coat",       phrase:"pearl white tri-coat body lacquer (paint only)"},
-    {label:"Two-tone: black body, white roof", phrase:"two-tone body lacquer: black body with white roof (paint only)"}
+    {label:"Gloss factory white"},{label:"Piano black high-gloss"},{label:"Metallic silver fine-flake"},
+    {label:"Satin graphite metallic"},{label:"Deep navy gloss"},{label:"Crimson red gloss"},
+    {label:"Sun yellow high-gloss"},{label:"Emerald green gloss"},{label:"Matte battleship gray"},
+    {label:"Pearl white tri-coat"},{label:"Two-tone: black body, white roof"}
   ];
 
-  /* ==== Overlay toggle ==== */
   function toggleOverlay(force){
     const open = typeof force==='boolean' ? force : !overlay.classList.contains('show');
     overlay.classList.toggle('show', open);
@@ -219,7 +199,6 @@
   peekBtn.addEventListener('click', ()=>toggleOverlay());
   window.addEventListener('keydown', e=>{ if(e.key==='Escape') toggleOverlay(false); });
 
-  /* ==== Time cues — include light & sun colors ==== */
   function timeCue(h){
     if (h>=4 && h<6)  return "pre-dawn blue hour; cool indigo sky; faint orange line at horizon; long soft shadows";
     if (h>=6 && h<8)  return "sunrise; warm golden sunlight; amber rim light; thin ground mist; gentle pink clouds";
@@ -232,7 +211,6 @@
     return "late night; sparse lighting; inky blue-black sky; subdued reflections";
   }
 
-  /* ==== Labels ==== */
   const labelHour=(h)=>{const hh=String(h).padStart(2,'0')+":00";
     if (h>=4 && h<6)  return `pre-dawn · ${hh}`;
     if (h>=6 && h<8)  return `sunrise · ${hh}`;
@@ -243,6 +221,7 @@
     if (h>=20 && h<22)return `twilight · ${hh}`;
     if (h>=22 || h<2) return `night · ${hh}`;
     return `late night · ${hh}`; };
+
   function reflectLabels(){
     timeVal.textContent  = labelHour(+timeEl.value);
     envVal.textContent   = habitats[+envEl.value];
@@ -252,26 +231,70 @@
     paintVal.textContent = paints[+paintEl.value].label + " (car body lacquer)";
   }
 
-  /* ==== Prompt (paint phrasing adjusted) ==== */
-  function buildPrompt(){
+  // ---- Prompt builders (long + short fallback) ----
+  function buildPromptLong(){
     const env   = habitats[+envEl.value];
     const car   = cars[+carEl.value];
     const era   = eras[+eraEl.value];
     const view  = views[+dirEl.value];
-    const colorName = paints[+paintEl.value].label.toLowerCase();
+    const color = paints[+paintEl.value].label.toLowerCase();
     const timeTxt = timeCue(+timeEl.value);
     const eraTxt  = eraCue(era);
     return [
       `A realistic photo of a ${car} in ${env}.`,
       `Era: ${eraTxt}.`,
       `Catalog view: ${view}`,
-      `Car paint finished in ${colorName}; body paint in ${colorName}; overall body color ${colorName}.`,
+      `Car paint finished in ${color}; body paint in ${color}; overall body color ${color}.`,
       `Time: ${timeTxt}.`,
       `Natural light, detailed, no text`
     ].join(' ');
   }
+  function eraCueShort(label){
+    const m={
+      "1890s":"1890s coachbuilt, brass, spindly wheels",
+      "1920s":"1920s deco, early streamlining",
+      "1950s":"1950s jet-age, chrome, two-tone",
+      "1960s":"1960s clean curves, muscle stance",
+      "1970s":"1970s iconic wedge edges, louvers",
+      "1980s":"1980s boxy, sharp creases",
+      "1990s":"1990s aero-rounded, cab-forward",
+      "2000s":"2000s taut surfaces, big alloys",
+      "2010s":"2010s LEDs, assertive grilles",
+      "2020s":"2020s EV minimal, sealed grille",
+      "futuristic":"near-future concept sleek",
+      "unbelievably mesmerizingly sci-fi":"starship-like, luminous seams"
+    }; return m[label]||label;
+  }
+  function timeCueShort(h){
+    if (h>=4 && h<6)  return "pre-dawn blue hour, orange horizon";
+    if (h>=6 && h<8)  return "sunrise golden/amber light";
+    if (h>=8 && h<12) return "morning neutral-white sunlight";
+    if (h===12)       return "noon bright white sun";
+    if (h>12 && h<17) return "afternoon warm yellow sun";
+    if (h>=17 && h<20)return "sunset golden-orange light";
+    if (h>=20 && h<22)return "twilight cobalt-blue glow";
+    if (h>=22 || h<2) return "night silvery moonlight";
+    return "late night inky sky";
+  }
+  function buildPromptShort(){
+    const env   = habitats[+envEl.value];
+    const car   = cars[+carEl.value];
+    const era   = eras[+eraEl.value];
+    const color = paints[+paintEl.value].label.toLowerCase();
+    const view  = ["front 3/4","side profile","front head-on straight","top-down"][+dirEl.value] || "front 3/4";
+    return `Photo of a ${car} in ${env}. Era: ${eraCueShort(era)}. View: ${view}. Car paint ${color}; body paint ${color}. Time: ${timeCueShort(+timeEl.value)}. Natural light, detailed, no text`;
+  }
 
-  /* ==== URL candidates ==== */
+  function choosePrompt(){
+    const long = buildPromptLong();
+    const bytes = encodeURIComponent(long).length;
+    if (bytes <= MAX_PATH_BYTES) return long;
+    const short = buildPromptShort();
+    log(`Prompt too long (${bytes} bytes). Using short form (${encodeURIComponent(short).length} bytes).`);
+    return short;
+  }
+
+  // ---- URL candidates (two models + plain + proxy fallbacks) ----
   const uBase=(prompt,model,w,h)=>{const seed=(Math.random()*1e9|0);
     const base=`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&enhance=false&seed=${seed}`;
     return model?`${base}&model=${model}`:base;};
@@ -282,23 +305,9 @@
   const uProxy=url=>`https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
   const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p); return [a,b,c,d,uProxy(a),uProxy(b)];};
 
-  /* ==== UI state ==== */
   const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
   const setControlsEnabled=(enabled)=>{ [timeEl,envEl,carEl,eraEl,dirEl,paintEl].forEach(el=>{ if (el) el.disabled=!enabled; }); };
 
-  /* ==== Very dark waiting gradient ==== */
-  function applyGradient(cols){
-    const [c1="#0e0e0f",c2="#0b0b0c",c3="#101011",c4="#0a0a0a"]=cols;
-    const root=document.documentElement.style;
-    root.setProperty('--c1',c1); root.setProperty('--c2',c2); root.setProperty('--c3',c3); root.setProperty('--c4',c4);
-  }
-  function setVeryDarkWaitingGradient(){
-    const g = (v)=>`#${[v,v,v].map(x=>x.toString(16).padStart(2,'0')).join('')}`;
-    const base = 8 + (Math.random()*8|0); // 8..15
-    applyGradient([g(base+4), g(base+2), g(base+5), g(base)]);
-  }
-
-  /* ==== Palette (k-means) + L_mean logging ==== */
   const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
   const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>clamp(v|0,0,255).toString(16).padStart(2,'0')).join('');
   function luminance(r,g,b){ return 0.2126*r + 0.7152*g + 0.0722*b; }
@@ -314,6 +323,16 @@
       for(let j=0;j<k;j++){const A=acc[j]; if(A.n>0){ centers[j].r=A.r/A.n; centers[j].g=A.g/A.n; centers[j].b=A.b/A.n; centers[j].count=A.n; }}
     }
     return centers;
+  }
+  function applyGradient(cols){
+    const [c1="#0e0e0f",c2="#0b0b0c",c3="#101011",c4="#0a0a0a"]=cols;
+    const root=document.documentElement.style;
+    root.setProperty('--c1',c1); root.setProperty('--c2',c2); root.setProperty('--c3',c3); root.setProperty('--c4',c4);
+  }
+  function setVeryDarkWaitingGradient(){
+    const g = (v)=>`#${[v,v,v].map(x=>x.toString(16).padStart(2,'0')).join('')}`;
+    const base = 8 + (Math.random()*8|0); // 8..15
+    applyGradient([g(base+4), g(base+2), g(base+5), g(base)]);
   }
   function extractPaletteToBackground(imageEl){
     const S=64, cvs=document.createElement('canvas'), ctx=cvs.getContext('2d',{willReadFrequently:true});
@@ -336,17 +355,17 @@
     log(`Palette: ${cols.join(', ')} | L_mean=${Lmean.toFixed(1)}`);
   }
 
-  /* ==== Debug log ==== */
   function log(m){ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; }
 
-  /* ==== Image load with retries (keep-previous) ==== */
-  let genToken=0;
   function updatePromptUI(prompt,url){
     promptText.textContent=prompt;
     openImg.href=url;
     copyURLBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(url); log('Copied URL'); }catch{ showError('Clipboard blocked'); } };
     copyPromptBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(prompt); }catch{ showError('Clipboard blocked'); } };
   }
+
+  // ---- Throttled image loader with spaced retries ----
+  let genToken=0, lastRequestAt=0;
   function loadSequence(prompt){
     const seq=candidates(prompt); let i=0; const token=++genToken;
     setVeryDarkWaitingGradient();
@@ -357,59 +376,63 @@
       if(token!==genToken) return;
       const pre=new Image(); pre.crossOrigin='anonymous'; pre.referrerPolicy='no-referrer';
       const start=performance.now();
+
       pre.onload=()=>{ if(token!==genToken) return;
         img.src=pre.src; setLoading(false); setControlsEnabled(true);
         log(`Loaded OK in ${Math.round(performance.now()-start)}ms via ${url.includes('weserv.nl')?'proxy':'direct'}`);
         try{ extractPaletteToBackground(pre); }catch{ setVeryDarkWaitingGradient(); }
       };
       pre.onerror=()=>{ if(token!==genToken) return;
-        if(++i<seq.length){ setLoading(true,` (attempt ${i+1}/${seq.length})`); tryOne(seq[i]); }
-        else{ setLoading(false); setControlsEnabled(true); showError('Image load failed repeatedly.'); log('All attempts failed.'); }
+        if(++i<seq.length){
+          setLoading(true,` (attempt ${i+1}/${seq.length})`);
+          setTimeout(()=>tryOne(seq[i]), ATTEMPT_GAP_MS); // respect interval before retry
+        } else {
+          setLoading(false); setControlsEnabled(true);
+          showError('Image load failed repeatedly.');
+          log('All attempts failed (respecting API interval).');
+        }
       };
-      pre.src=url+`&t=${Date.now()%1e7}`;
-      if(typeof pre.decode==='function'){ pre.decode().catch(()=>{}); }
-      updatePromptUI(prompt,url);
+
+      // throttle: ensure >= MIN_API_INTERVAL_MS since last request start
+      const now=Date.now();
+      const wait=Math.max(0, MIN_API_INTERVAL_MS - (now - lastRequestAt));
+      const go=()=>{ lastRequestAt=Date.now(); pre.src=url+`&t=${Date.now()%1e7}`; if(pre.decode) pre.decode().catch(()=>{}); updatePromptUI(prompt,url); };
+      if(wait>0){ log(`Throttling ${wait}ms before request to respect API interval`); setTimeout(go, wait); } else { go(); }
     }
   }
 
-  /* ==== Debounce + controls ==== */
+  // ---- Debounce + binding ----
   let debounceT=0, dragging=false;
   function scheduleGenerate(){
     clearTimeout(debounceT);
     setControlsEnabled(false);
     setLoading(true,' (queued)');
     setVeryDarkWaitingGradient();
-    debounceT=setTimeout(()=>{ setLoading(true,''); loadSequence(buildPrompt()); }, WAIT_MS);
+    debounceT=setTimeout(()=>{ setLoading(true,''); const p=choosePrompt(); const encLen=encodeURIComponent(p).length; log(`Generate with prompt bytes=${encLen}`); loadSequence(p); }, WAIT_MS);
   }
 
-  /* ==== Robust event binding ==== */
-  const supportsPointer = 'onpointerdown' in window;
   function on(el, type, handler, opts){ if(!el) return; el.addEventListener(type, handler, opts||false); }
+  const supportsPointer = 'onpointerdown' in window;
   function bindSlider(el){
     if(!el) return;
     on(el,'input', ()=>{ reflectLabels(); });
     on(el,'change', ()=>{ if(!dragging) scheduleGenerate(); });
     on(el,'keyup', (e)=>{ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)){ scheduleGenerate(); } });
-
     const release = ()=>{ if(dragging){ dragging=false; scheduleGenerate(); } };
     if(supportsPointer){
       on(el,'pointerdown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
-      on(el,'pointerup', release);
-      on(el,'pointercancel', release);
-      on(el,'lostpointercapture', release);
+      on(el,'pointerup', release); on(el,'pointercancel', release); on(el,'lostpointercapture', release);
     }else{
       on(el,'mousedown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
       on(window,'mouseup', release);
       on(el,'touchstart', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); }, {passive:true});
-      on(window,'touchend', release, {passive:true});
-      on(window,'touchcancel', release, {passive:true});
+      on(window,'touchend', release, {passive:true}); on(window,'touchcancel', release, {passive:true});
     }
   }
 
-  /* ==== Buttons ==== */
   retryBtn.onclick=()=>scheduleGenerate();
   selfTestBtn.onclick=async()=>{
-    log(`VERSION ${VERSION} | UA: ${navigator.userAgent} | online=${navigator.onLine}`);
+    log(`VERSION ${VERSION} | online=${navigator.onLine} | UA: ${navigator.userAgent}`);
     await probe('https://picsum.photos/4');
     const t=uPlain('probe'); await probe(t); await probe(uProxy(t));
   };
@@ -423,7 +446,7 @@
     });
   }
 
-  /* ==== INIT ==== */
+  // ---- Init ----
   try{
     timeEl.value =(Math.random()*24)|0;
     envEl.value  =(Math.random()*habitats.length)|0;
