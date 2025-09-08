@@ -84,11 +84,11 @@
         <input id="era" type="range" min="0" max="11" step="1">
       </div>
       <div class="row">
-        <div class="top"><div class="label">View (catalog spec)</div><div class="val" id="dirVal"></div></div>
+        <div class="top"><div class="label">View</div><div class="val" id="dirVal"></div></div>
         <input id="dir" type="range" min="0" max="3" step="1">
       </div>
       <div class="row">
-        <div class="top"><div class="label">Body lacquer color</div><div class="val" id="paintVal"></div></div>
+        <div class="top"><div class="label">Color</div><div class="val" id="paintVal"></div></div>
         <input id="paint" type="range" min="0" max="9" step="1">
       </div>
       <div class="hint">Updates after 500 ms pause</div>
@@ -122,7 +122,7 @@
 <script>
 'use strict';
 (() => {
-  const VERSION = 'throttle-2025-09-08c';
+  const VERSION = 'throttle-2025-09-08d';
   const WAIT_MS = 500;
   const MIN_API_INTERVAL_MS = 6500;
   const ATTEMPT_GAP_MS = 6500;
@@ -146,18 +146,18 @@
   const timeVal=req('#timeVal'), envVal=req('#envVal'), carVal=req('#carVal'), eraVal=req('#eraVal'), dirVal=req('#dirVal'), paintVal=req('#paintVal');
   const sliders=[timeEl,envEl,carEl,eraEl,dirEl,paintEl];
 
-  /* data (prompts use these long forms) */
+  /* data for prompts */
   const habitats = [
     "alpine mountain pass","temperate forest","grassland steppe","sandy desert dunes","arctic ice and snow",
     "rocky coastal cliffs","Mediterranean scrubland","savanna","farmland and orchards",
     "rural village lanes","historic European old-town streets","modern glass high-rise city center"
   ];
-  const envShort = ["mountain pass","forest","steppe","desert","arctic","coast","scrubland","savanna","farmland","village","old-town","city center"]; // UI-only
+  const envShort = ["mountain pass","forest","steppe","desert","arctic","coast","scrubland","savanna","farmland","village","old-town","city center"];
   const cars = [
     "mid-engine powerful supercar","elegant simple boat-tail coupe cabrio","midsize SUV",
     "midsize sedan","microcar (A-segment)","minibus / van"
   ];
-  const carShort = ["supercar","boat-tail cabrio","SUV","sedan","microcar","minibus"]; // UI-only
+  const carShort = ["supercar","boat-tail cabrio","SUV","sedan","microcar","minibus"];
   const eras = ["1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","futuristic","unbelievably mesmerizingly sci-fi"];
   function eraCue(label){
     const map = {
@@ -182,7 +182,7 @@
     "Front head-on product view — camera on centerline at badge height; straight frontal view; wheels straight; strict symmetry; ~80% vertical coverage.",
     "Top-down product view — camera 90° overhead; car centered; full roofline and outline visible; equal margins on all sides."
   ];
-  const viewShort = ["Front 3/4","Side","Front head-on","Top-down"]; // UI-only
+  const viewShort = ["Front 3/4","Side","Front head-on","Top-down"];
 
   /* simple paints */
   const paints = [
@@ -224,7 +224,7 @@
     if (h>=22 || h<2) return `night · ${hh}`;
     return `late night · ${hh}`; };
 
-  /* UI labels — SUPER SIMPLE (prompts unaffected) */
+  /* SUPER SIMPLE UI labels (prompts unaffected) */
   function reflectLabels(){
     timeVal.textContent  = labelHour(+timeEl.value);
     envVal.textContent   = envShort[+envEl.value] || habitats[+envEl.value];
@@ -234,7 +234,7 @@
     paintVal.textContent = paints[+paintEl.value].label;
   }
 
-  /* scene lead */
+  /* scene lead (e.g., “a blue car on a desert.”) */
   const envShortForLead = [
     {np:"a mountain pass", prep:"on"},{np:"a forest", prep:"in"},{np:"a grassland steppe", prep:"in"},
     {np:"a desert", prep:"on"},{np:"arctic ice and snow", prep:"on"},{np:"rocky coastal cliffs", prep:"by"},
@@ -246,26 +246,7 @@
     return `a ${colorWord} car ${e.prep} ${e.np}.`;
   }
 
-  /* prompts */
-  function buildPromptLong(){
-    const envIdx = +envEl.value;
-    const env   = habitats[envIdx];
-    const car   = cars[+carEl.value];
-    const era   = eras[+eraEl.value];
-    const view  = views[+dirEl.value];
-    const color = (paints[+paintEl.value].name || paints[+paintEl.value].label).toLowerCase();
-    const timeTxt = timeCue(+timeEl.value);
-    const eraTxt  = eraCue(era);
-    return [
-      sceneLead(color, envIdx),
-      `A realistic photo of a ${car} in ${env}.`,
-      `Era: ${eraTxt}.`,
-      `Catalog view: ${view}`,
-      `Car paint finished in ${color}; body paint in ${color}; overall body color ${color}.`,
-      `Time: ${timeTxt}.`,
-      `Natural light, detailed, no text`
-    ].join(' ');
-  }
+  /* prompts (long + short with same semantics) */
   function eraCueShort(label){
     const m={
       "1890s":"1890s coachbuilt, brass, spindly wheels","1920s":"1920s deco, early streamlining",
@@ -287,7 +268,25 @@
     if (h>=22 || h<2) return "night silvery moonlight";
     return "late night inky sky";
   }
-  const MAX_PATH_BYTES = 850;
+  function buildPromptLong(){
+    const envIdx = +envEl.value;
+    const env   = habitats[envIdx];
+    const car   = cars[+carEl.value];
+    const era   = eras[+eraEl.value];
+    const view  = views[+dirEl.value];
+    const color = (paints[+paintEl.value].name || paints[+paintEl.value].label).toLowerCase();
+    const timeTxt = timeCue(+timeEl.value);
+    const eraTxt  = eraCue(era);
+    return [
+      sceneLead(color, envIdx),
+      `A realistic photo of a ${car} in ${env}.`,
+      `Era: ${eraTxt}.`,
+      `Catalog view: ${view}`,
+      `Car paint finished in ${color}; body paint in ${color}; overall body color ${color}.`,
+      `Time: ${timeTxt}.`,
+      `Natural light, detailed, no text`
+    ].join(' ');
+  }
   function buildPromptShort(){
     const envIdx=+envEl.value;
     const env   = habitats[envIdx];
@@ -306,7 +305,7 @@
     return short;
   }
 
-  /* urls + fallbacks */
+  /* URLs + fallbacks (single definitions) */
   const uBase=(prompt,model,w,h)=>{const seed=(Math.random()*1e9|0);
     const base=`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&enhance=false&seed=${seed}`;
     return model?`${base}&model=${model}`:base;};
@@ -319,7 +318,7 @@
   const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p),e=uTiny(p); return [a,b,c,d,e,uProxy(a),uProxy(b)];};
 
   const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
-  const setControlsEnabled=(enabled)=>{ [timeEl,envEl,carEl,eraEl,dirEl,paintEl].forEach(el=>{ if (el) el.disabled=!enabled; }); };
+  const setControlsEnabled=(enabled)=>{ sliders.forEach(el=>{ if (el) el.disabled=!enabled; }); };
 
   /* palette + grayscale waiting */
   const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
@@ -355,7 +354,7 @@
     let data;
     try{ data=ctx.getImageData(0,0,S,S).data; }catch(e){ log(`Palette error: ${e}`); setVeryDarkWaitingGradient(); return; }
     const pts=[]; let sumL=0, n=0;
-    for (let i=0;i<data.length;i+=4){
+    for(let i=0;i<data.length;i+=4){
       const a=data[i+3]; if (a<16) continue;
       const r=data[i], g=data[i+1], b=data[i+2];
       pts.push([r,g,b]); sumL += luminance(r,g,b); n++;
@@ -373,14 +372,13 @@
   function log(m){ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; }
   copyPromptBtn.onclick = async()=>{ try{ await navigator.clipboard.writeText(promptText.textContent||''); log('Copied prompt'); }catch{ showError('Clipboard blocked'); } };
   copyDebugBtn.onclick  = async()=>{ try{ await navigator.clipboard.writeText(debugText.textContent||'');  log('Copied debug');  }catch{ showError('Clipboard blocked'); } };
-
   function updatePromptUI(prompt,url){
     promptText.textContent=prompt;
     openImg.href=url;
     copyURLBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(url); log('Copied URL'); }catch{ showError('Clipboard blocked'); } };
   }
 
-  /* throttled loader */
+  /* throttled loader (keeps previous image) */
   let genToken=0, lastRequestAt=0;
   function loadSequence(prompt){
     const seq=candidates(prompt); let i=0; const token=++genToken;
@@ -423,15 +421,14 @@
     setControlsEnabled(false);
     setLoading(true,' (queued)');
     setVeryDarkWaitingGradient();
-    debounceT=setTimeout(()=>{ setLoading(true,''); const p=choosePrompt(); const encLen=encodeURIComponent(p).length; log(`Generate with prompt bytes=${encLen}`); loadSequence(p); }, WAIT_MS);
+    debounceT=setTimeout(()=>{ setLoading(true,''); const p=choosePrompt(); const n=encodeURIComponent(p).length; log(`Generate with prompt bytes=${n}`); loadSequence(p); }, WAIT_MS);
   }
-  function on(el, type, handler, opts){ if(!el) return; el.addEventListener(type, handler, opts||false); }
   const supportsPointer = 'onpointerdown' in window;
+  function on(el, type, handler, opts){ if(!el) return; el.addEventListener(type, handler, opts||false); }
   function bindSlider(el){
-    if(!el) return;
-    on(el,'input', ()=>{ reflectLabels(); });
+    on(el,'input', reflectLabels);
     on(el,'change', ()=>{ if(!dragging) scheduleGenerate(); });
-    on(el,'keyup', (e)=>{ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)){ scheduleGenerate(); } });
+    on(el,'keyup', (e)=>{ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) scheduleGenerate(); });
     const release = ()=>{ if(dragging){ dragging=false; scheduleGenerate(); } };
     if(supportsPointer){
       on(el,'pointerdown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
@@ -443,10 +440,6 @@
       on(window,'touchend', release, {passive:true}); on(window,'touchcancel', release, {passive:true});
     }
   }
-
-  const uPlain=p=>`https://image.pollinations.ai/prompt/${encodeURIComponent(p)}?width=640&height=384&enhance=false&seed=${Math.random()*1e9|0}`;
-  const uProxy=url=>`https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
-  function choosePrompt(){ const long=buildPromptLong(); const n=encodeURIComponent(long).length; if(n<=MAX_PATH_BYTES) return long; const short=buildPromptShort(); log(`Prompt too long (${n}). Using short.`); return short; }
 
   retryBtn.onclick=()=>scheduleGenerate();
   selfTestBtn.onclick=async()=>{
