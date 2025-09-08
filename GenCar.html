@@ -1,479 +1,74 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Pollinations — Hardened (throttled)</title>
-<link rel="preconnect" href="https://image.pollinations.ai" crossorigin>
-<link rel="dns-prefetch" href="//image.pollinations.ai">
-<link rel="dns-prefetch" href="//images.weserv.nl">
-<style>
-  :root{ --fg:#e8eef5; --muted:#a6b0bd; --c1:#0e0e0f; --c2:#0b0b0c; --c3:#101011; --c4:#0a0a0a; }
-  *{box-sizing:border-box}
-  html,body{
-    height:100%;margin:0;background:
-      radial-gradient(at 0% 0%, var(--c1), transparent 60%),
-      radial-gradient(at 100% 0%, var(--c2), transparent 60%),
-      radial-gradient(at 0% 100%, var(--c3), transparent 60%),
-      radial-gradient(at 100% 100%, var(--c4), transparent 60%), #0a0a0a;
-    color:var(--fg); font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-    overflow-y:auto; overflow-x:hidden;
-  }
-  .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;gap:8px}
-  .stage{width:min(96vw, 900px); display:flex; justify-content:center; align-items:center}
-  .frame{position:relative; width:100%; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
-    box-shadow:0 10px 28px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); background:#111;}
-  .frame img{position:absolute; inset:0; margin:auto; max-width:100%; max-height:100%; object-fit:contain; filter:contrast(1.02) saturate(1.02)}
-  .loading{position:absolute; left:0; right:0; bottom:8px; text-align:center; font-size:12px; color:var(--muted);
-    transition:opacity .2s; opacity:0; pointer-events:none}
-  .loading.show{opacity:1}
-  .controls{width:min(96vw, 900px); margin-top:4px}
-  .row{padding:6px 4px}
-  .top{display:flex; justify-content:space-between; align-items:baseline; margin:0 2px 4px}
-  .label{font-weight:600; letter-spacing:.2px}
-  .val{font-variant-numeric:tabular-nums; color:var(--muted); font-size:12px}
-  input[type="range"]{width:100%; -webkit-appearance:none; appearance:none; height:28px; background:transparent}
-  input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
-  input[type="range"]::-moz-range-track{height:6px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.14))}
-  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.5); margin-top:-6px}
-  input[type="range"]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.5)}
-  input[type="range"]:disabled{opacity:.55; cursor:not-allowed}
-  input[type="range"]:disabled::-webkit-slider-thumb, input[type="range"]:disabled::-moz-range-thumb{background:#c9c9c9; box-shadow:none}
-  .hint{opacity:.75; font-size:11px; text-align:center; margin:6px 0 10px; color:var(--muted)}
-  .errbar{position:fixed; left:12px; right:12px; bottom:12px; padding:10px 12px; border-radius:10px;
-    background:#2b1212; color:#ffd6d6; border:1px solid #913c3c; font-size:12px; display:none; z-index:9998}
-  .peek{position:fixed; right:12px; bottom:12px; z-index:9999; width:36px; height:36px; border-radius:50%; display:grid; place-items:center;
-    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); color:#fff; cursor:pointer; backdrop-filter: blur(8px); transition:transform .2s}
-  .peek[aria-expanded="true"]{transform:rotate(180deg)}
-  .overlay{position:fixed; inset:12px; z-index:9997; display:none; background:rgba(10,10,10,.88); border:1px solid rgba(255,255,255,.1); border-radius:12px; backdrop-filter: blur(10px)}
-  .overlay.show{display:block}
-  .overlay .inner{height:100%; display:flex; flex-direction:column}
-  .overlay header{display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.08); font-weight:600}
-  .overlay main{flex:1; overflow:auto; padding:10px 12px; display:grid; grid-template-columns:1fr; gap:12px}
-  .card{background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px}
-  .card h3{margin:0 0 6px 0; font-size:13px; color:#dfe6ef}
-  pre{white-space:pre-wrap; word-break:break-word; margin:0; font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; color:#dfe6ef}
-  .actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
-  .btn{appearance:none; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px; background:rgba(255,255,255,.06); color:var(--fg); font:12px; cursor:pointer; text-decoration:none}
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="stage">
-      <div class="frame">
-        <img id="img" alt="Generated scene" crossorigin="anonymous" referrerpolicy="no-referrer" decoding="async" loading="eager" fetchpriority="high">
-        <div class="loading" id="loading" aria-live="polite">Loading…</div>
-      </div>
-    </div>
+// 1) Views — remove "neutral background" so env/time can show
+const views = [
+  "Front three-quarter product view — camera at headlamp height; vehicle yaw ~30° toward camera; wheels straight; centered; ~85% frame coverage.",
+  "Side profile product view — left side; camera level at mid-door; perpendicular 90°; wheels straight; full length edge-to-edge; minimal perspective.",
+  "Front head-on product view — camera on centerline at badge height; straight frontal view; wheels straight; strict symmetry; ~80% vertical coverage.",
+  "Top-down product view — camera 90° overhead; car centered; full roofline and outline visible; equal margins on all sides."
+];
 
-    <div class="controls">
-      <div class="row">
-        <div class="top"><div class="label">Time</div><div class="val" id="timeVal"></div></div>
-        <input id="time" type="range" min="0" max="23" step="1">
-      </div>
-      <div class="row">
-        <div class="top"><div class="label">Environment</div><div class="val" id="envVal"></div></div>
-        <input id="env" type="range" min="0" max="11" step="1">
-      </div>
-      <div class="row">
-        <div class="top"><div class="label">Vehicle</div><div class="val" id="carVal"></div></div>
-        <input id="car" type="range" min="0" max="5" step="1">
-      </div>
-      <div class="row">
-        <div class="top"><div class="label">Era</div><div class="val" id="eraVal"></div></div>
-        <input id="era" type="range" min="0" max="11" step="1">
-      </div>
-      <div class="row">
-        <div class="top"><div class="label">View</div><div class="val" id="dirVal"></div></div>
-        <input id="dir" type="range" min="0" max="3" step="1">
-      </div>
-      <div class="row">
-        <div class="top"><div class="label">Color</div><div class="val" id="paintVal"></div></div>
-        <input id="paint" type="range" min="0" max="9" step="1">
-      </div>
-      <div class="hint">Updates after 500 ms pause</div>
-    </div>
-  </div>
+// 2) Strong time tokens (prime + lighting)
+function timeTokens(h){
+  if (h>=4 && h<6)  return {prime:"pre-dawn blue hour",
+    lighting:"cool indigo ambience, faint orange horizon glow, long soft shadows"};
+  if (h>=6 && h<8)  return {prime:"sunrise golden hour",
+    lighting:"warm golden sunlight, amber rim light, gentle morning mist"};
+  if (h>=8 && h<12) return {prime:"morning daylight",
+    lighting:"neutral-white sunlight, pale sky, crisp short shadows"};
+  if (h===12)       return {prime:"noon",
+    lighting:"bright white sun overhead, high contrast, very short shadows"};
+  if (h>12 && h<17) return {prime:"afternoon",
+    lighting:"warm sunlight with light yellow tint, gradually softening shadows"};
+  if (h>=17 && h<20)return {prime:"sunset golden hour",
+    lighting:"golden-orange sunlight, long deep shadows, glowing sky band"};
+  if (h>=20 && h<22)return {prime:"twilight blue hour",
+    lighting:"cobalt-blue ambient glow, first stars visible"};
+  if (h>=22 || h<2) return {prime:"night",
+    lighting:"silvery moonlight, deep navy sky, stars visible"};
+  return {prime:"late night",
+    lighting:"sparse lighting, inky sky, subdued reflections"};
+}
 
-  <!-- chevron + overlay -->
-  <button id="peek" class="peek" aria-expanded="false" title="Show prompt & debug">⌄</button>
-  <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="inner">
-      <header>
-        <span>Prompt & Debug</span>
-        <div class="actions">
-          <button class="btn" id="copyPrompt">Copy prompt</button>
-          <button class="btn" id="copyDebug">Copy debug</button>
-          <button class="btn" id="copyURL">Copy image URL</button>
-          <button class="btn" id="retry">Retry</button>
-          <button class="btn" id="selfTest">Self-test</button>
-          <a class="btn" id="openImg" target="_blank" rel="noopener">Open image</a>
-        </div>
-      </header>
-      <main>
-        <div class="card"><h3>Current Prompt</h3><pre id="promptText">—</pre></div>
-        <div class="card"><h3>Debug log</h3><pre id="debugText">—</pre></div>
-      </main>
-    </div>
-  </div>
+// 3) Prompts — put time FIRST; keep your lead + era/view/paint unchanged otherwise
+function buildPromptLong(){
+  const envIdx = +envEl.value;
+  const env   = habitats[envIdx];
+  const car   = cars[+carEl.value];
+  const era   = eras[+eraEl.value];
+  const view  = views[+dirEl.value];
+  const color = (paints[+paintEl.value].name || paints[+paintEl.value].label).toLowerCase();
+  const t     = timeTokens(+timeEl.value);
+  const eraTxt= eraCue(era);
 
-  <div id="errbar" class="errbar"></div>
+  return [
+    // simple scene primer you already wanted
+    sceneLead(color, envIdx),
+    // move time to the front with canonical tokens
+    `Time of day: ${t.prime}; ${t.lighting}.`,
+    // then the rest of your structure
+    `A realistic photo of a ${car} in ${env}.`,
+    `Era: ${eraTxt}.`,
+    `Catalog view: ${view}`,
+    `Car paint finished in ${color}; body paint in ${color}; overall body color ${color}.`,
+    `Photorealistic, high detail, no text`
+  ].join(' ');
+}
 
-<script>
-'use strict';
-(() => {
-  const VERSION = 'throttle-2025-09-08d';
-  const WAIT_MS = 500;
-  const MIN_API_INTERVAL_MS = 6500;
-  const ATTEMPT_GAP_MS = 6500;
-  const MAX_PATH_BYTES = 850;
+function buildPromptShort(){
+  const envIdx=+envEl.value;
+  const env   = habitats[envIdx];
+  const car   = cars[+carEl.value];
+  const era   = eras[+eraEl.value];
+  const color = (paints[+paintEl.value].name || paints[+paintEl.value].label).toLowerCase();
+  const view  = ["front 3/4","side profile","front head-on straight","top-down"][+dirEl.value] || "front 3/4";
+  const t     = timeTokens(+timeEl.value);
 
-  const errbar = document.getElementById('errbar');
-  const showError = (msg)=>{ errbar.textContent = msg; errbar.style.display='block'; clearTimeout(showError._t); showError._t=setTimeout(()=>errbar.style.display='none',7000); };
-  window.addEventListener('error', e => showError(`Script error: ${e.message}`));
-  window.addEventListener('unhandledrejection', e => showError(`Promise error: ${e.reason?.message || e.reason}`));
-
-  const $ = s => document.querySelector(s);
-  const req = (s)=>{ const el=$(s); if(!el){ throw new Error(`Missing element: ${s}`);} return el; };
-
-  const img = req('#img'), loading = req('#loading');
-  const promptText = req('#promptText'), openImg = req('#openImg');
-  const debugText = req('#debugText'), selfTestBtn = req('#selfTest'), retryBtn = req('#retry');
-  const copyURLBtn = req('#copyURL'), copyPromptBtn = req('#copyPrompt'), copyDebugBtn = req('#copyDebug');
-  const peekBtn = req('#peek'), overlay = req('#overlay');
-
-  const timeEl=req('#time'), envEl=req('#env'), carEl=req('#car'), eraEl=req('#era'), dirEl=req('#dir'), paintEl=req('#paint');
-  const timeVal=req('#timeVal'), envVal=req('#envVal'), carVal=req('#carVal'), eraVal=req('#eraVal'), dirVal=req('#dirVal'), paintVal=req('#paintVal');
-  const sliders=[timeEl,envEl,carEl,eraEl,dirEl,paintEl];
-
-  /* data for prompts */
-  const habitats = [
-    "alpine mountain pass","temperate forest","grassland steppe","sandy desert dunes","arctic ice and snow",
-    "rocky coastal cliffs","Mediterranean scrubland","savanna","farmland and orchards",
-    "rural village lanes","historic European old-town streets","modern glass high-rise city center"
-  ];
-  const envShort = ["mountain pass","forest","steppe","desert","arctic","coast","scrubland","savanna","farmland","village","old-town","city center"];
-  const cars = [
-    "mid-engine powerful supercar","elegant simple boat-tail coupe cabrio","midsize SUV",
-    "midsize sedan","microcar (A-segment)","minibus / van"
-  ];
-  const carShort = ["supercar","boat-tail cabrio","SUV","sedan","microcar","minibus"];
-  const eras = ["1890s","1920s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s","futuristic","unbelievably mesmerizingly sci-fi"];
-  function eraCue(label){
-    const map = {
-      "1890s": "1890s (eighteen-nineties) — horseless carriage spirit; exposed coachwork; spindly wheels; brass fittings",
-      "1920s": "1920s (20s, nineteen-twenties) — early streamlining; art-deco cues; upright radiators; coachbuilt bodies",
-      "1950s": "1950s (50s, nineteen-fifties) — jet-age optimism; tailfins; chrome; two-tone trims; whitewall tires",
-      "1960s": "1960s (60s, nineteen-sixties) — clean curves; coke-bottle waists; muscle stance; simple brightwork",
-      "1970s": "1970s (70s, nineteen-seventies) — iconic wedge car edges; compact proportions; louvers; vinyl textures",
-      "1980s": "1980s (80s, nineteen-eighties) — boxy precision; sharp creases; pop-up headlamps; black rub strips",
-      "1990s": "1990s (90s, nineteen-nineties) — aero-organic rounding; cab-forward; flush glass; smooth cladding",
-      "2000s": "2000s (00s, two-thousands) — taut surfaces; flame-surfacing hints; big alloys; high beltlines",
-      "2010s": "2010s (10s, twenty-tens) — LED signatures; assertive grilles; origami creases; crossover boom",
-      "2020s": "2020s (20s, twenty-twenties) — EV minimalism; sealed grilles; parametric lighting; slipperier aero",
-      "futuristic": "futuristic — near-future concept; seamless panels; advanced composites; plausible sensors",
-      "unbelievably mesmerizingly sci-fi": "unbelievably mesmerizingly sci-fi — starship-like; alien megastructures; impossible engineering; luminous seams"
-    };
-    return map[label] || `${label} style authenticity`;
-  }
-  const views = [
-    "Front three-quarter product view — camera at headlamp height; vehicle yaw ~30° toward camera; wheels straight; centered; ~85% frame coverage; neutral background.",
-    "Side profile product view — left side; camera level at mid-door; perpendicular 90°; wheels straight; full length edge-to-edge; minimal perspective.",
-    "Front head-on product view — camera on centerline at badge height; straight frontal view; wheels straight; strict symmetry; ~80% vertical coverage.",
-    "Top-down product view — camera 90° overhead; car centered; full roofline and outline visible; equal margins on all sides."
-  ];
-  const viewShort = ["Front 3/4","Side","Front head-on","Top-down"];
-
-  /* simple paints */
-  const paints = [
-    {label:"White",name:"white"},{label:"Black",name:"black"},{label:"Silver",name:"silver"},
-    {label:"Gray",name:"gray"},{label:"Red",name:"red"},{label:"Blue",name:"blue"},
-    {label:"Green",name:"green"},{label:"Yellow",name:"yellow"},{label:"Orange",name:"orange"},{label:"Beige",name:"beige"}
-  ];
-
-  /* overlay */
-  function toggleOverlay(force){
-    const open = typeof force==='boolean' ? force : !overlay.classList.contains('show');
-    overlay.classList.toggle('show', open);
-    overlay.setAttribute('aria-hidden', String(!open));
-    peekBtn.setAttribute('aria-expanded', String(open));
-  }
-  peekBtn.addEventListener('click', ()=>toggleOverlay());
-  window.addEventListener('keydown', e=>{ if(e.key==='Escape') toggleOverlay(false); });
-
-  /* time cues with colors */
-  function timeCue(h){
-    if (h>=4 && h<6)  return "pre-dawn blue hour; cool indigo sky; faint orange line at horizon; long soft shadows";
-    if (h>=6 && h<8)  return "sunrise; warm golden sunlight; amber rim light; thin ground mist; gentle pink clouds";
-    if (h>=8 && h<12) return "morning; clean neutral-white sunlight; pale blue sky; crisp shadows";
-    if (h===12)       return "noon; bright white sun overhead; high contrast; pale cyan sky; minimal shadows";
-    if (h>12 && h<17) return "afternoon; warm sun with light yellow tint; softening shadows; light haze";
-    if (h>=17 && h<20)return "sunset; golden-orange sunlight; amber shafts; long deep shadows; fiery sky band";
-    if (h>=20 && h<22)return "twilight; cobalt-blue sky glow; first stars; cool bluish ambience";
-    if (h>=22 || h<2) return "night; silvery moonlight; deep navy sky; starlight highlights";
-    return "late night; sparse lighting; inky blue-black sky; subdued reflections";
-  }
-  const labelHour=(h)=>{const hh=String(h).padStart(2,'0')+":00";
-    if (h>=4 && h<6)  return `pre-dawn · ${hh}`;
-    if (h>=6 && h<8)  return `sunrise · ${hh}`;
-    if (h>=8 && h<12) return `morning · ${hh}`;
-    if (h===12)       return `noon · 12:00`;
-    if (h>12 && h<17) return `afternoon · ${hh}`;
-    if (h>=17 && h<20)return `sunset · ${hh}`;
-    if (h>=20 && h<22)return `twilight · ${hh}`;
-    if (h>=22 || h<2) return `night · ${hh}`;
-    return `late night · ${hh}`; };
-
-  /* SUPER SIMPLE UI labels (prompts unaffected) */
-  function reflectLabels(){
-    timeVal.textContent  = labelHour(+timeEl.value);
-    envVal.textContent   = envShort[+envEl.value] || habitats[+envEl.value];
-    carVal.textContent   = carShort[+carEl.value] || cars[+carEl.value];
-    eraVal.textContent   = eras[+eraEl.value];
-    dirVal.textContent   = viewShort[+dirEl.value] || "View";
-    paintVal.textContent = paints[+paintEl.value].label;
-  }
-
-  /* scene lead (e.g., “a blue car on a desert.”) */
-  const envShortForLead = [
-    {np:"a mountain pass", prep:"on"},{np:"a forest", prep:"in"},{np:"a grassland steppe", prep:"in"},
-    {np:"a desert", prep:"on"},{np:"arctic ice and snow", prep:"on"},{np:"rocky coastal cliffs", prep:"by"},
-    {np:"Mediterranean scrubland", prep:"in"},{np:"a savanna", prep:"in"},{np:"farmland and orchards", prep:"in"},
-    {np:"rural village lanes", prep:"in"},{np:"historic old-town streets", prep:"in"},{np:"a modern city center", prep:"in"}
-  ];
-  function sceneLead(colorWord, envIdx){
-    const e = envShortForLead[envIdx] || {np:"a location", prep:"in"};
-    return `a ${colorWord} car ${e.prep} ${e.np}.`;
-  }
-
-  /* prompts (long + short with same semantics) */
-  function eraCueShort(label){
-    const m={
-      "1890s":"1890s coachbuilt, brass, spindly wheels","1920s":"1920s deco, early streamlining",
-      "1950s":"1950s jet-age, chrome, two-tone","1960s":"1960s clean curves, muscle stance",
-      "1970s":"1970s iconic wedge edges, louvers","1980s":"1980s boxy, sharp creases",
-      "1990s":"1990s aero-rounded, cab-forward","2000s":"2000s taut surfaces, big alloys",
-      "2010s":"2010s LEDs, assertive grilles","2020s":"2020s EV minimal, sealed grille",
-      "futuristic":"near-future concept sleek","unbelievably mesmerizingly sci-fi":"starship-like, luminous seams"
-    }; return m[label]||label;
-  }
-  function timeCueShort(h){
-    if (h>=4 && h<6)  return "pre-dawn blue hour, orange horizon";
-    if (h>=6 && h<8)  return "sunrise golden/amber light";
-    if (h>=8 && h<12) return "morning neutral-white sunlight";
-    if (h===12)       return "noon bright white sun";
-    if (h>12 && h<17) return "afternoon warm yellow sun";
-    if (h>=17 && h<20)return "sunset golden-orange light";
-    if (h>=20 && h<22)return "twilight cobalt-blue glow";
-    if (h>=22 || h<2) return "night silvery moonlight";
-    return "late night inky sky";
-  }
-  function buildPromptLong(){
-    const envIdx = +envEl.value;
-    const env   = habitats[envIdx];
-    const car   = cars[+carEl.value];
-    const era   = eras[+eraEl.value];
-    const view  = views[+dirEl.value];
-    const color = (paints[+paintEl.value].name || paints[+paintEl.value].label).toLowerCase();
-    const timeTxt = timeCue(+timeEl.value);
-    const eraTxt  = eraCue(era);
-    return [
-      sceneLead(color, envIdx),
-      `A realistic photo of a ${car} in ${env}.`,
-      `Era: ${eraTxt}.`,
-      `Catalog view: ${view}`,
-      `Car paint finished in ${color}; body paint in ${color}; overall body color ${color}.`,
-      `Time: ${timeTxt}.`,
-      `Natural light, detailed, no text`
-    ].join(' ');
-  }
-  function buildPromptShort(){
-    const envIdx=+envEl.value;
-    const env   = habitats[envIdx];
-    const car   = cars[+carEl.value];
-    const era   = eras[+eraEl.value];
-    const color = (paints[+paintEl.value].name || paints[+paintEl.value].label).toLowerCase();
-    const view  = ["front 3/4","side profile","front head-on straight","top-down"][+dirEl.value] || "front 3/4";
-    return `${sceneLead(color, envIdx)} Photo of a ${car} in ${env}. Era: ${eraCueShort(era)}. View: ${view}. Car paint ${color}; body paint ${color}. Time: ${timeCueShort(+timeEl.value)}. Natural light, detailed, no text`;
-  }
-  function choosePrompt(){
-    const long = buildPromptLong();
-    const bytes = encodeURIComponent(long).length;
-    if (bytes <= MAX_PATH_BYTES) return long;
-    const short = buildPromptShort();
-    log(`Prompt too long (${bytes} bytes). Using short form (${encodeURIComponent(short).length} bytes).`);
-    return short;
-  }
-
-  /* URLs + fallbacks (single definitions) */
-  const uBase=(prompt,model,w,h)=>{const seed=(Math.random()*1e9|0);
-    const base=`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&enhance=false&seed=${seed}`;
-    return model?`${base}&model=${model}`:base;};
-  const uTurbo=p=>uBase(p,'turbo',640,384);
-  const uFlux =p=>uBase(p,'flux',640,384);
-  const uPlain=p=>uBase(p,null,640,384);
-  const uSmall=p=>uBase(p,'turbo',512,320);
-  const uTiny =p=>uBase(p,'turbo',384,240);
-  const uProxy=url=>`https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//,''))}`;
-  const candidates=(p)=>{const a=uTurbo(p),b=uFlux(p),c=uPlain(p),d=uSmall(p),e=uTiny(p); return [a,b,c,d,e,uProxy(a),uProxy(b)];};
-
-  const setLoading=(on,txt='')=>{loading.classList.toggle('show',!!on); loading.textContent=on?`Loading…${txt}`:'';};
-  const setControlsEnabled=(enabled)=>{ sliders.forEach(el=>{ if (el) el.disabled=!enabled; }); };
-
-  /* palette + grayscale waiting */
-  const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
-  const rgbToHex=(r,g,b)=>"#"+[r,g,b].map(v=>clamp(v|0,0,255).toString(16).padStart(2,'0')).join('');
-  function luminance(r,g,b){ return 0.2126*r + 0.7152*g + 0.0722*b; }
-  function kmeansRGB(points,k=4,iters=7){
-    const centers=Array.from({length:k}, _=>{const p=points[(Math.random()*points.length)|0]; return {r:p[0],g:p[1],b:p[2],count:1};});
-    for(let t=0;t<iters;t++){
-      const acc=centers.map(_=>({r:0,g:0,b:0,n:0}));
-      for(let i=0;i<points.length;i++){
-        const p=points[i]; let bi=0,bd=Infinity;
-        for(let j=0;j<k;j++){const c=centers[j],dr=p[0]-c.r,dg=p[1]-c.g,db=p[2]-c.b; const d=dr*dr+dg*dg+db*db; if(d<bd){bd=d;bi=j;}}
-        const A=acc[bi]; A.r+=p[0]; A.g+=p[1]; A.b+=p[2]; A.n++;
-      }
-      for(let j=0;j<k;j++){const A=acc[j]; if(A.n>0){ centers[j].r=A.r/A.n; centers[j].g=A.g/A.n; centers[j].b=A.b/A.n; centers[j].count=A.n; }}
-    }
-    return centers;
-  }
-  function applyGradient(cols){
-    const [c1="#0e0e0f",c2="#0b0b0c",c3="#101011",c4="#0a0a0a"]=cols;
-    const root=document.documentElement.style;
-    root.setProperty('--c1',c1); root.setProperty('--c2',c2); root.setProperty('--c3',c3); root.setProperty('--c4',c4);
-  }
-  function setVeryDarkWaitingGradient(){
-    const g = (v)=>`#${[v,v,v].map(x=>x.toString(16).padStart(2,'0')).join('')}`;
-    const base = 8 + (Math.random()*8|0); // 8..15
-    applyGradient([g(base+4), g(base+2), g(base+5), g(base)]);
-  }
-  function extractPaletteToBackground(imageEl){
-    const S=64, cvs=document.createElement('canvas'), ctx=cvs.getContext('2d',{willReadFrequently:true});
-    cvs.width=S; cvs.height=S;
-    try{ ctx.drawImage(imageEl,0,0,S,S); }catch{ setVeryDarkWaitingGradient(); return; }
-    let data;
-    try{ data=ctx.getImageData(0,0,S,S).data; }catch(e){ log(`Palette error: ${e}`); setVeryDarkWaitingGradient(); return; }
-    const pts=[]; let sumL=0, n=0;
-    for(let i=0;i<data.length;i+=4){
-      const a=data[i+3]; if (a<16) continue;
-      const r=data[i], g=data[i+1], b=data[i+2];
-      pts.push([r,g,b]); sumL += luminance(r,g,b); n++;
-    }
-    if (!pts.length){ setVeryDarkWaitingGradient(); return; }
-    const Lmean = sumL/n;
-    const centers = kmeansRGB(pts,4,8).map(c=>({r:c.r|0,g:c.g|0,b:c.b|0,count:c.count||1}));
-    centers.sort((A,B)=>B.count-A.count);
-    const cols = centers.slice(0,4).map(c=>rgbToHex(c.r,c.g,c.b));
-    applyGradient(cols);
-    log(`Palette: ${cols.join(', ')} | L_mean=${Lmean.toFixed(1)}`);
-  }
-
-  /* debug helpers */
-  function log(m){ debugText.textContent=`[${(new Date).toLocaleTimeString()}] ${m}\n`+debugText.textContent; }
-  copyPromptBtn.onclick = async()=>{ try{ await navigator.clipboard.writeText(promptText.textContent||''); log('Copied prompt'); }catch{ showError('Clipboard blocked'); } };
-  copyDebugBtn.onclick  = async()=>{ try{ await navigator.clipboard.writeText(debugText.textContent||'');  log('Copied debug');  }catch{ showError('Clipboard blocked'); } };
-  function updatePromptUI(prompt,url){
-    promptText.textContent=prompt;
-    openImg.href=url;
-    copyURLBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(url); log('Copied URL'); }catch{ showError('Clipboard blocked'); } };
-  }
-
-  /* throttled loader (keeps previous image) */
-  let genToken=0, lastRequestAt=0;
-  function loadSequence(prompt){
-    const seq=candidates(prompt); let i=0; const token=++genToken;
-    setVeryDarkWaitingGradient();
-    setLoading(true,` (attempt ${i+1}/${seq.length})`);
-    tryOne(seq[i]);
-
-    function tryOne(url){
-      if(token!==genToken) return;
-      const pre=new Image(); pre.crossOrigin='anonymous'; pre.referrerPolicy='no-referrer';
-      const start=performance.now();
-
-      pre.onload=()=>{ if(token!==genToken) return;
-        img.src=pre.src; setLoading(false); setControlsEnabled(true);
-        log(`Loaded OK in ${Math.round(performance.now()-start)}ms via ${url.includes('weserv.nl')?'proxy':'direct'}`);
-        try{ extractPaletteToBackground(pre); }catch{ setVeryDarkWaitingGradient(); }
-      };
-      pre.onerror=()=>{ if(token!==genToken) return;
-        if(++i<seq.length){
-          setLoading(true,` (attempt ${i+1}/${seq.length})`);
-          setTimeout(()=>tryOne(seq[i]), ATTEMPT_GAP_MS);
-        } else {
-          setLoading(false); setControlsEnabled(true);
-          showError('Image load failed repeatedly.');
-          log('All attempts failed (respecting API interval).');
-        }
-      };
-
-      const now=Date.now();
-      const wait=Math.max(0, MIN_API_INTERVAL_MS - (now - lastRequestAt));
-      const go=()=>{ lastRequestAt=Date.now(); pre.src=url+`&t=${Date.now()%1e7}`; if(pre.decode) pre.decode().catch(()=>{}); updatePromptUI(prompt,url); };
-      if(wait>0){ log(`Throttling ${wait}ms before request to respect API interval`); setTimeout(go, wait); } else { go(); }
-    }
-  }
-
-  /* debounce + binding */
-  let debounceT=0, dragging=false;
-  function scheduleGenerate(){
-    clearTimeout(debounceT);
-    setControlsEnabled(false);
-    setLoading(true,' (queued)');
-    setVeryDarkWaitingGradient();
-    debounceT=setTimeout(()=>{ setLoading(true,''); const p=choosePrompt(); const n=encodeURIComponent(p).length; log(`Generate with prompt bytes=${n}`); loadSequence(p); }, WAIT_MS);
-  }
-  const supportsPointer = 'onpointerdown' in window;
-  function on(el, type, handler, opts){ if(!el) return; el.addEventListener(type, handler, opts||false); }
-  function bindSlider(el){
-    on(el,'input', reflectLabels);
-    on(el,'change', ()=>{ if(!dragging) scheduleGenerate(); });
-    on(el,'keyup', (e)=>{ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) scheduleGenerate(); });
-    const release = ()=>{ if(dragging){ dragging=false; scheduleGenerate(); } };
-    if(supportsPointer){
-      on(el,'pointerdown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
-      on(el,'pointerup', release); on(el,'pointercancel', release); on(el,'lostpointercapture', release);
-    }else{
-      on(el,'mousedown', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); });
-      on(window,'mouseup', release);
-      on(el,'touchstart', ()=>{ dragging=true; clearTimeout(debounceT); setControlsEnabled(true); setLoading(false); }, {passive:true});
-      on(window,'touchend', release, {passive:true}); on(window,'touchcancel', release, {passive:true});
-    }
-  }
-
-  retryBtn.onclick=()=>scheduleGenerate();
-  selfTestBtn.onclick=async()=>{
-    log(`VERSION ${VERSION} | online=${navigator.onLine} | UA: ${navigator.userAgent}`);
-    await probe('https://picsum.photos/4'); const t=uPlain('probe'); await probe(t); await probe(uProxy(t));
-  };
-  async function probe(url){
-    return new Promise(res=>{
-      const t0=performance.now();
-      const im=new Image();
-      im.onload=()=>{ log(`PROBE OK ${url} (${Math.round(performance.now()-t0)}ms)`); res(); };
-      im.onerror=()=>{ log(`PROBE ERR ${url}`); res(); };
-      im.referrerPolicy='no-referrer'; im.crossOrigin='anonymous'; im.src=url+`&p=${Date.now()%1e7}`;
-    });
-  }
-
-  /* init */
-  try{
-    timeEl.value =(Math.random()*24)|0;
-    envEl.value  =(Math.random()*habitats.length)|0;
-    carEl.value  =(Math.random()*cars.length)|0;
-    eraEl.value  =(Math.random()*eras.length)|0;
-    dirEl.value  =(Math.random()*views.length)|0;
-    paintEl.value=(Math.random()*paints.length)|0;
-
-    [timeEl, envEl, carEl, eraEl, dirEl, paintEl].forEach(bindSlider);
-    reflectLabels();
-    log('INIT OK — listeners bound, scheduling first generation');
-    scheduleGenerate();
-    setTimeout(()=>{ log('HEALTH: alive'); }, 1500);
-  }catch(err){
-    showError(`Init failed: ${err.message}`); console.error(err);
-  }
-})();
-</script>
-</body>
-</html>
+  return [
+    sceneLead(color, envIdx),
+    `Time of day: ${t.prime}; ${t.lighting}.`,
+    `Photo of a ${car} in ${env}.`,
+    `Era: ${eraCueShort(era)}.`,
+    `View: ${view}.`,
+    `Car paint ${color}; body paint ${color}.`,
+    `Photorealistic, high detail, no text`
+  ].join(' ');
+}
