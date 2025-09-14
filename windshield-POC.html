@@ -1,100 +1,866 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>North Stream Debug HUD</title>
+<title>Snowflakes Through Windshield — North-Locked</title>
+<meta name="theme-color" content="#000000" />
 <style>
-  html,body{height:100%;margin:0;background:#000;color:#fff;font:14px system-ui;overflow:hidden}
-  canvas{display:block;width:100vw;height:100svh;touch-action:none}
-  .hud{position:fixed;left:0;bottom:0;right:0;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);padding:.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.5rem;font-size:13px}
-  .hud label{display:flex;flex-direction:column;font-weight:600}
-  .hud input[type=range]{width:100%}
+  :root {
+    --hud-bg: rgba(0,0,0,0.6);
+    --hud-fg: #eaeaea;
+    --accent: #69f;
+  }
+  html, body {
+    margin: 0; padding: 0; background:#000; color:#fff; height:100%;
+  }
+  .app {
+    position: fixed; inset: 0;
+    width: 100vw; height: 100dvh;
+  }
+  canvas { position:absolute; inset: 0; width:100%; height:100%; display:block; touch-action:none; }
+  #overlay {
+    position: absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background: rgba(0,0,0,0.85); color:#fff; z-index: 10; padding: 2rem; text-align:center;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  #overlay button {
+    margin-top: 1rem; padding: .8rem 1.2rem; border-radius: 12px; border: 1px solid #444;
+    background: #111; color:#fff; font-weight:600;
+  }
+  #hud {
+    position: absolute; right: env(safe-area-inset-right, 12px); top: calc(env(safe-area-inset-top, 12px));
+    z-index: 20; min-width: 260px; max-width: 92vw; color: var(--hud-fg);
+    font: 12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    display:none;
+  }
+  #hud .card {
+    background: var(--hud-bg); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 14px;
+    padding: 10px 12px; margin: 6px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  }
+  #hud h3 { margin:.2rem 0 .5rem 0; font-size: 12px; letter-spacing:.04em; opacity:.8; }
+  #hud .row { display:flex; align-items:center; justify-content:space-between; gap:.6rem; margin:.25rem 0; }
+  #hud .row label { flex: 1 1 auto; opacity:.9; }
+  #hud .row input[type=range] { width: 130px; }
+  #badge {
+    position: absolute; left: env(safe-area-inset-left, 12px); bottom: calc(8px + env(safe-area-inset-bottom, 8px));
+    font: 11px/1.1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    color: rgba(255,255,255,.55); background: rgba(0,0,0,.45);
+    border: 1px solid rgba(255,255,255,.1); padding: 6px 8px; border-radius: 10px; z-index: 5;
+    pointer-events:none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root { --reduced: 1; }
+  }
 </style>
 </head>
 <body>
-  <canvas id="stage"></canvas>
-  <div class="hud">
-    <label>Count<input id="count" type="range" min="100" max="5000" value="1600"></label>
-    <label>Speed<input id="speed" type="range" min="1" max="100" value="30"></label>
-    <label>Spread<input id="spread" type="range" step="0.1" min="0.1" max="2.5" value="0.9"></label>
-    <label>FocalLen<input id="focal" type="range" min="200" max="2000" value="950"></label>
-    <label>Trail<input id="trail" type="range" min="1" max="50" value="18"></label>
+<div class="app" id="app">
+  <canvas id="gl"></canvas>
+  <canvas id="cv"></canvas>
+
+  <div id="overlay" hidden>
+    <div>
+      <div style="font-size:1.1rem; font-weight:700; margin-bottom:.6rem;">Motion Access Needed</div>
+      <div>To lock flow to real-world North, allow motion & compass access.<br/>If you decline, effect still runs with North=up.</div>
+      <button id="btnPerm">Allow Motion</button>
+    </div>
   </div>
+
+  <div id="hud">
+    <div class="card" id="stats">
+      <h3>Stats</h3>
+      <div class="row"><label>FPS</label><div id="fps">—</div></div>
+      <div class="row"><label>DPR</label><div id="dpr">—</div></div>
+      <div class="row"><label>Pipeline</label><div id="pipe">—</div></div>
+      <div class="row"><label>Particles</label><div id="pcount">—</div></div>
+      <div class="row"><label>Sensors</label><div id="sstate">—</div></div>
+      <div class="row"><label>Compass</label><div id="csrc">—</div></div>
+      <div class="row"><label>Yaw/Pitch/Roll</label><div id="ypr">—</div></div>
+      <div class="row"><label>Northᵈ</label><div id="nd">—</div></div>
+      <div class="row"><label>Notes</label><div id="notes">—</div></div>
+    </div>
+    <div class="card" id="controls">
+      <h3>Controls</h3>
+      <div class="row"><label>Count</label><input id="ctlCount" type="range" min="200" max="5000" step="50"></div>
+      <div class="row"><label>Speed</label><input id="ctlSpeed" type="range" min="1" max="100" step="1"></div>
+      <div class="row"><label>Spread</label><input id="ctlSpread" type="range" min="0.1" max="2.5" step="0.05"></div>
+      <div class="row"><label>FOV (°)</label><input id="ctlFov" type="range" min="35" max="90" step="1"></div>
+      <div class="row"><label>Trail ×</label><input id="ctlTrail" type="range" min="1" max="50" step="1"></div>
+      <div class="row"><label>Persistence α</label><input id="ctlPersist" type="range" min="0.08" max="0.35" step="0.01"></div>
+      <div class="row"><label>Invert Y</label><input id="ctlInvertY" type="checkbox"></div>
+    </div>
+  </div>
+
+  <div id="badge" aria-hidden="true">Direction: North</div>
+</div>
+
 <script>
 (() => {
-  const canvas=document.getElementById('stage');
-  const ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});
-  let DPR=1,W=0,H=0,CX=0,CY=0;
-  function resize(){
-    DPR=Math.max(1,Math.min(3,devicePixelRatio||1));
-    const cssW=Math.round(innerWidth), cssH=Math.round(innerHeight);
-    canvas.width=cssW*DPR; canvas.height=cssH*DPR;
-    canvas.style.width=cssW+'px'; canvas.style.height=cssH+'px';
-    W=canvas.width; H=canvas.height; CX=W/2; CY=H/2;
-  }
-  addEventListener('resize',resize);resize();
+  // ============ URL FLAGS ============
+  const params = new URLSearchParams(location.search);
+  const DEBUG = params.get('debug') === '1';
+  const FORCE_CANVAS = params.has('forceCanvas');
+  const INVERT_Y = params.has('invertY');
+  const NO_SENSORS = params.has('noSensors');
 
-  // controls
-  const ctrl={
-    count:1600,
-    speed:30,
-    spread:0.9,
-    focal:950,
-    trail:18
+  // ============ GLOBAL STATE ============
+  const S = {
+    running: true,
+    dpr: Math.min(devicePixelRatio || 1, 3),
+    maxInternalDpr: 2.0,
+    width: 0, height: 0,
+    pipeline: 'webgl', // or 'canvas'
+    sensors: {
+      permission: 'unknown', // 'granted' | 'denied' | 'unknown'
+      source: 'none', // 'webkitCompass' | 'deviceorientation' | 'none'
+      yaw: 0, pitch: 0, roll: 0, // radians
+      filtered: { yaw: 0, pitch: 0, roll: 0 },
+      alpha: 0.15, // low-pass alpha
+      invertY: INVERT_Y,
+      compassUnstable: false,
+      lastYawSamples: [],
+    },
+    // Visual controls (live-tweakable)
+    controls: {
+      count: 1600,
+      speed: 30,
+      spread: 0.6,
+      fovDeg: 55,
+      trailMul: 8,
+      persistence: 0.14,
+    },
+    // Adaptive perf
+    perf: {
+      avgDt: 16.7,
+      lastAdjustT: 0,
+    },
+    reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
   };
-  for (const k in ctrl){
-    document.getElementById(k).addEventListener('input',e=>{ctrl[k]=parseFloat(e.target.value);if(k==='count')resetStars();});
+
+  if (S.reducedMotion) {
+    S.controls.speed = 12;
+    S.controls.trailMul = 4;
   }
 
-  // math utils
-  const TAU=Math.PI*2; const deg2rad=d=>d*Math.PI/180;
-  const norm=v=>{const m=Math.hypot(v[0],v[1],v[2])||1;return[v[0]/m,v[1]/m,v[2]/m];};
-  const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
-  function mul3(A,B){const r=new Array(9);for(let rI=0;rI<3;rI++)for(let c=0;c<3;c++)r[rI*3+c]=A[rI*3+0]*B[0*3+c]+A[rI*3+1]*B[1*3+c]+A[rI*3+2]*B[2*3+c];return r;}
-  function mul3Tv(R,v){return[ R[0]*v[0]+R[3]*v[1]+R[6]*v[2], R[1]*v[0]+R[4]*v[1]+R[7]*v[2], R[2]*v[0]+R[5]*v[1]+R[8]*v[2] ];}
-  function rotWorldToDevice(yaw,pitch,roll){const z=deg2rad(yaw),x=deg2rad(pitch),y=deg2rad(roll);const cz=Math.cos(z),sz=Math.sin(z),cx=Math.cos(x),sx=Math.sin(x),cy=Math.cos(y),sy=Math.sin(y);const Rz=[cz,-sz,0, sz,cz,0, 0,0,1];const Rx=[1,0,0, 0,cx,-sx, 0,sx,cx];const Ry=[cy,0,sy, 0,1,0, -sy,0,cy];return mul3(mul3(Rz,Rx),Ry);}
+  // Expose to HUD inputs later
+  const qs = sel => document.querySelector(sel);
 
-  // stars
-  let stars; function resetStars(){stars=new Float32Array(ctrl.count*3);for(let i=0;i<ctrl.count;i++)spawn(i,Nd);}
-  function spawn(i,Nd){const idx=i*3;let tmp=Math.abs(Nd[1])<0.9?[0,1,0]:[1,0,0];let U=norm(cross(tmp,Nd));let V=norm(cross(Nd,U));const r=(Math.random()**1.4)*ctrl.spread;const t=Math.random()*TAU;const j=[U[0]*r*Math.cos(t)+V[0]*r*Math.sin(t),U[1]*r*Math.cos(t)+V[1]*r*Math.sin(t),U[2]*r*Math.cos(t)+V[2]*r*Math.sin(t)];const FAR=80;stars[idx]=Nd[0]*FAR+j[0];stars[idx+1]=Nd[1]*FAR+j[1];stars[idx+2]=Nd[2]*FAR+j[2];}
+  // ============ MATH UTILS ============
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const deg2rad = d => d * Math.PI / 180;
+  const rad2deg = r => r * 180 / Math.PI;
+  const v3 = {
+    create: (x=0,y=0,z=0)=>new Float32Array([x,y,z]),
+    dot: (a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+    cross: (a,b)=>new Float32Array([a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]),
+    len: a=>Math.hypot(a[0],a[1],a[2]),
+    norm: a=>{const l=v3.len(a)||1; return new Float32Array([a[0]/l,a[1]/l,a[2]/l]);},
+    scale: (a,s)=>new Float32Array([a[0]*s,a[1]*s,a[2]*s]),
+    add: (a,b)=>new Float32Array([a[0]+b[0],a[1]+b[1],a[2]+b[2]]),
+    sub: (a,b)=>new Float32Array([a[0]-b[0],a[1]-b[1],a[2]-b[2]]),
+  };
 
-  // sensor state
-  let headingDeg=0,pitchDeg=0,rollDeg=0;
-  function handleDO(e){if(typeof e.webkitCompassHeading==='number')headingDeg=e.webkitCompassHeading; else if(isFinite(e.alpha))headingDeg=(360-e.alpha)%360; if(isFinite(e.beta))pitchDeg=e.beta; if(isFinite(e.gamma))rollDeg=e.gamma;}
-  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
-    DeviceOrientationEvent.requestPermission().then(r=>{if(r==='granted')addEventListener('deviceorientation',handleDO,true);}).catch(()=>{});
-  } else addEventListener('deviceorientation',handleDO,true);
+  // Build rotation matrix world->device from yaw, pitch, roll (Z-Y-X order)
+  function R_world_to_device(yaw, pitch, roll) {
+    // World axes: X=East, Y=North, Z=Up.
+    // Device/view axes: x right, y up, z forward (+Z out of screen).
+    // Apply Rz(yaw) * Rx(pitch) * Ry(roll) on world vector to bring into device frame.
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const cr = Math.cos(roll), sr = Math.sin(roll);
+    // Compose: M = Rz(yaw) * Rx(pitch) * Ry(roll)
+    // We'll return 3x3 in column-major array m[0..8], to use as R
+    const m = new Float32Array(9);
+    // Intermediate A = Rz * Rx
+    // Multiply A * Ry
+    m[0] =  cy*cr + sy*sp*sr;  m[3] =  sr*cp;           m[6] = -sy*cr + cy*sp*sr;
+    m[1] = -cy*sr + sy*sp*cr;  m[4] =  cr*cp;           m[7] =  sy*sr + cy*sp*cr;
+    m[2] =  sy*cp;             m[5] = -sp;              m[8] =  cy*cp;
+    return m;
+  }
+  function Rt_mul_v(Rt, v) { // Rt is transpose of R (so world->device transpose equals device->world?)
+    // We need Nᵈ = Rᵀ · N (given brief). We'll directly pass R and use its transpose multiply.
+    return new Float32Array([
+      Rt[0]*v[0] + Rt[1]*v[1] + Rt[2]*v[2],
+      Rt[3]*v[0] + Rt[4]*v[1] + Rt[5]*v[2],
+      Rt[6]*v[0] + Rt[7]*v[1] + Rt[8]*v[2],
+    ]);
+  }
 
-  // init
-  let last=performance.now();
-  let Nd=[0,1,0];
-  resetStars();
+  // ============ PIPELINES ============
+  const glCanvas = qs('#gl');
+  const cvCanvas = qs('#cv');
+  let GL = null;
 
-  function loop(now){
-    const dt=Math.min(0.05,(now-last)/1000);last=now;
-    // update Nd from sensors
-    const Rwd=rotWorldToDevice(headingDeg,pitchDeg,rollDeg);
-    Nd=norm(mul3Tv(Rwd,[0,1,0]));
+  // Particle buffers (shared semantics)
+  let particles = null; // Float32Array of xyz
+  let velocities = null; // Float32Array of xyz unit vectors (points against -Nᵈ with jitter)
+  let ages = null, lifetimes = null; // for respawn
+  let countTarget = S.controls.count;
 
-    ctx.fillStyle='rgba(0,0,0,0.2)';ctx.fillRect(0,0,W,H);
-    ctx.strokeStyle='#fff';ctx.lineCap='round';ctx.globalCompositeOperation='lighter';
+  // WebGL program & buffers
+  let glProg = null, glBufPos = null, glBufVel = null, glVAO = null;
+  let u = {}; // uniforms locations
 
-    for(let i=0;i<ctrl.count;i++){
-      const idx=i*3;let x=stars[idx],y=stars[idx+1],z=stars[idx+2];
-      const inv1=ctrl.focal/(ctrl.focal+z*DPR);const px=x*inv1*DPR+CX;const py=y*inv1*DPR+CY;
-      x-=Nd[0]*ctrl.speed*dt;y-=Nd[1]*ctrl.speed*dt;z-=Nd[2]*ctrl.speed*dt;
-      const inv2=ctrl.focal/(ctrl.focal+z*DPR);const sx=x*inv2*DPR+CX;const sy=y*inv2*DPR+CY;
-      const dx=sx-px,dy=sy-py;const depthFactor=Math.max(0,Math.min(1,1-z/80));
-      const k=ctrl.trail*depthFactor;const tx=sx-dx*k,ty=sy-dy*k;
-      const w=Math.max(0.5*DPR,Math.min(5*DPR,0.6+depthFactor*4));
-      ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(sx,sy);ctx.stroke();
-      if(z<0.5||sx<-100||sx>W+100||sy<-100||sy>H+100)spawn(i,Nd); else{stars[idx]=x;stars[idx+1]=y;stars[idx+2]=z;}
+  // Canvas2D trail buffer
+  let cvCtx = null, cvLastFrameT = 0;
+
+  // Perspective / projection
+  let proj = {
+    fov: deg2rad(S.controls.fovDeg),
+    near: 0.05, far: 200,
+    aspect: 1,
+  };
+
+  // ============ RESIZE ============
+  function resize() {
+    const rect = document.body.getBoundingClientRect();
+    S.width = Math.max(1, rect.width | 0);
+    S.height = Math.max(1, rect.height | 0);
+    const externalDpr = Math.min(S.dpr, 4);
+    const internalDpr = Math.min(externalDpr, S.maxInternalDpr);
+    const w = Math.floor(S.width * internalDpr);
+    const h = Math.floor(S.height * internalDpr);
+    if (glCanvas) { glCanvas.width = w; glCanvas.height = h; glCanvas.style.width='100%'; glCanvas.style.height='100%'; }
+    if (cvCanvas) { cvCanvas.width = w; cvCanvas.height = h; cvCanvas.style.width='100%'; cvCanvas.style.height='100%'; }
+    proj.aspect = S.width / S.height;
+    proj.fov = deg2rad(S.controls.fovDeg);
+    if (cvCtx) {
+      // Fade to black during buffer rebuild to avoid artifacts
+      cvCtx.save();
+      cvCtx.setTransform(1,0,0,1,0,0);
+      cvCtx.globalAlpha = 1;
+      cvCtx.fillStyle = '#000';
+      cvCtx.fillRect(0,0,cvCanvas.width, cvCanvas.height);
+      cvCtx.restore();
     }
-    requestAnimationFrame(loop);
   }
-  ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);requestAnimationFrame(loop);
+  window.addEventListener('resize', resize, { passive: true });
+  window.addEventListener('orientationchange', () => {
+    resize();
+  }, { passive: true });
+
+  // ============ SENSORS ============
+  const overlay = qs('#overlay');
+  const btnPerm = qs('#btnPerm');
+
+  async function requestMotion() {
+    if (NO_SENSORS) { S.sensors.permission = 'denied'; return; }
+    try {
+      const Any = window.DeviceOrientationEvent;
+      if (typeof Any !== 'undefined' && typeof Any.requestPermission === 'function') {
+        const res = await Any.requestPermission();
+        S.sensors.permission = (res === 'granted') ? 'granted' : 'denied';
+      } else {
+        S.sensors.permission = 'granted';
+      }
+    } catch (e) {
+      S.sensors.permission = 'denied';
+    }
+    overlay.hidden = true;
+  }
+
+  function setupSensors() {
+    if (NO_SENSORS) return;
+
+    // iOS compass (webkitCompassHeading) if available
+    let haveWebKitCompass = false;
+
+    window.addEventListener('deviceorientation', (e) => {
+      // On iOS, webkitCompassHeading gives 0..360 where 0 = North (clockwise)
+      const any = e;
+      if (typeof any.webkitCompassHeading === 'number' && isFinite(any.webkitCompassHeading)) {
+        haveWebKitCompass = true;
+        S.sensors.source = 'webkitCompass';
+        // Heading degrees CW from North; convert to yaw radians where yaw=0 means facing North
+        let yawDeg = 360 - any.webkitCompassHeading; // convert CW compass to CCW math heading
+        let yaw = deg2rad(yawDeg);
+        let pitch = deg2rad(clamp(e.beta ?? 0, -90, 90));
+        let roll = deg2rad(e.gamma ?? 0);
+        applyYPR(yaw, pitch, roll);
+      } else {
+        S.sensors.source = 'deviceorientation';
+        // alpha: z (0..360), beta: x (-180..180), gamma: y (-90..90)
+        let yaw = deg2rad((e.alpha ?? 0));
+        let pitch = deg2rad(clamp(e.beta ?? 0, -90, 90));
+        let roll = deg2rad(e.gamma ?? 0);
+        // This mapping is heuristic; we low-pass and offer invertY toggle.
+        applyYPR(yaw, pitch, roll);
+      }
+    }, true);
+
+    function applyYPR(yaw, pitch, roll) {
+      if (S.sensors.invertY) pitch = -pitch;
+      // low-pass
+      const f = S.sensors.filtered;
+      const a = clamp(S.sensors.alpha, 0.01, 0.5);
+      // unwrap yaw to avoid flips
+      const unwrappedYaw = unwrapAngle(f.yaw, yaw);
+      f.yaw = f.yaw + a * (unwrappedYaw - f.yaw);
+      f.pitch = f.pitch + a * (pitch - f.pitch);
+      f.roll = f.roll + a * (roll - f.roll);
+
+      // compass stability (debug only)
+      S.sensors.lastYawSamples.push(unwrappedYaw);
+      if (S.sensors.lastYawSamples.length > 15) S.sensors.lastYawSamples.shift();
+      let jitter = 0;
+      for (let i=1;i<S.sensors.lastYawSamples.length;i++) {
+        jitter += Math.abs(normAngle(S.sensors.lastYawSamples[i] - S.sensors.lastYawSamples[i-1]));
+      }
+      S.sensors.compassUnstable = (jitter / Math.max(1,(S.sensors.lastYawSamples.length-1))) > deg2rad(2.0);
+    }
+  }
+  function normAngle(a) {
+    while (a > Math.PI) a -= 2*Math.PI;
+    while (a < -Math.PI) a += 2*Math.PI;
+    return a;
+  }
+  function unwrapAngle(prev, next) {
+    // bring next close to prev (continuous)
+    let d = normAngle(next - prev);
+    return prev + d;
+  }
+
+  // Derived: N^d = R^T * N
+  function northInDevice() {
+    const f = S.sensors.filtered;
+    const R = R_world_to_device(f.yaw, f.pitch, f.roll);
+    // transpose:
+    const Rt = new Float32Array([R[0],R[3],R[6], R[1],R[4],R[7], R[2],R[5],R[8]]);
+    const Nworld = new Float32Array([0,1,0]); // North in world
+    const Nd = Rt_mul_v(Rt, Nworld);
+    const n = v3.norm(Nd);
+    // If sensors are denied/unavailable: default North=up (device +Y)
+    if (S.sensors.permission !== 'granted' || S.sensors.source === 'none') return new Float32Array([0,1,0]);
+    return n;
+  }
+
+  // ============ PARTICLES ============
+  function allocParticles(n) {
+    particles = new Float32Array(n * 3);
+    velocities = new Float32Array(n * 3);
+    ages = new Float32Array(n);
+    lifetimes = new Float32Array(n);
+  }
+  function randomOnBasis(nDir, spread) {
+    // Build orthonormal basis around nDir
+    const up = Math.abs(nDir[2]) < 0.9 ? new Float32Array([0,0,1]) : new Float32Array([1,0,0]);
+    const t = v3.norm(v3.cross(up, nDir));
+    const b = v3.cross(nDir, t);
+    // Small jitter angle within cone ~spread radians (approx via small random on t,b)
+    const a = (Math.random() * 2 - 1) * spread;
+    const c = (Math.random() * 2 - 1) * spread;
+    const v = v3.norm(v3.add(nDir, v3.add(v3.scale(t, a), v3.scale(b, c))));
+    return v;
+  }
+  function spawnParticle(i, Nd, far=60, jitter= S.controls.spread) {
+    const n = Nd || new Float32Array([0,1,0]);
+    // Spawn band: far along +Nᵈ with small perpendicular jitter
+    const dir = randomOnBasis(n, 0.2 * jitter);
+    const base = v3.scale(n, far + Math.random()*20);
+    const jitterPos = v3.scale(randomOnBasis(n, 1.0), (Math.random()*2-1) * 12.0);
+    const p = v3.add(base, jitterPos);
+    particles[i*3+0]=p[0]; particles[i*3+1]=p[1]; particles[i*3+2]=p[2];
+    // Motion is towards camera along -Nᵈ with spread
+    const vm = v3.norm(v3.add(v3.scale(n, -1), v3.scale(dir, 0.25)));
+    velocities[i*3+0]=vm[0]; velocities[i*3+1]=vm[1]; velocities[i*3+2]=vm[2];
+    ages[i]=0;
+    lifetimes[i]= 2.5 + Math.random()*2.0; // seconds (for respawn cadence)
+  }
+  function initParticles(n) {
+    allocParticles(n);
+    const Nd = northInDevice();
+    for (let i=0;i<n;i++) {
+      spawnParticle(i, Nd);
+      // distribute along path
+      ages[i] = Math.random() * lifetimes[i];
+    }
+  }
+
+  // ============ WEBGL2 SHADERS ============
+  const VS = `#version 300 es
+  precision highp float;
+
+  // Per-instance attributes
+  layout(location=0) in vec3 aPos;   // position in device/view space
+  layout(location=1) in vec3 aVel;   // normalized velocity in view space (toward camera is -N^d)
+
+  // Per-vertex quad corner via gl_VertexID (instanced strip of 4)
+  // 0:(-1,-1) 1:(+1,-1) 2:(-1,+1) 3:(+1,+1)
+  out vec2 vCorner;
+  out float vZ;
+  out float vLenFactor;
+
+  uniform mat4 uProj;
+  uniform float uTrailMul;
+  uniform float uTime;
+  uniform float uWidthPx;
+  uniform vec2 uViewport; // pixels
+
+  void main() {
+    int vid = gl_VertexID % 4;
+    vec2 corner = vec2((vid==1||vid==3)? 1.0 : -1.0, (vid>=2)? 1.0 : -1.0); // -1..+1 square
+    vCorner = corner;
+
+    // Project base position to NDC to estimate velocity in screen space
+    // We'll do a cheap approximation: streak length L ~ (|vel| / (z + k)) * uTrailMul
+    float z = aPos.z;
+    vZ = z;
+
+    // screen-space direction (projected a small step along velocity)
+    vec3 p0 = aPos;
+    vec3 p1 = aPos + aVel * 0.5; // small step
+    // project
+    vec4 P0 = uProj * vec4(p0, 1.0);
+    vec4 P1 = uProj * vec4(p1, 1.0);
+    vec2 ndc0 = P0.xy / P0.w;
+    vec2 ndc1 = P1.xy / P1.w;
+    vec2 dir2d = normalize(ndc1 - ndc0 + vec2(1e-6));
+
+    // Convert a pixel length to NDC length
+    vec2 px2ndc = 2.0 / uViewport; // 1px in NDC
+    float baseWidthPx = uWidthPx; // width across the streak
+    float widthNdc = baseWidthPx * px2ndc.y; // assume y for thickness
+
+    // Streak length in pixels increases as z decreases (closer to camera)
+    float depthFactor = clamp(1.5 / max(0.2, z), 0.0, 5.0);
+    float Lpx = uTrailMul * 12.0 * depthFactor; // tune
+    vLenFactor = Lpx;
+
+    // Build billboard quad: long axis along dir2d, short axis perpendicular
+    vec2 longAxis = dir2d;
+    vec2 shortAxis = vec2(-dir2d.y, dir2d.x);
+    // corner.x chooses left/right across; corner.y chooses head/tail along length
+    vec2 ndcOffset = longAxis * (corner.y * (Lpx * px2ndc.y)) + shortAxis * (corner.x * widthNdc);
+
+    vec4 outPos = vec4(ndc0 + ndcOffset, (P0.z / P0.w), 1.0); // keep depth
+    gl_Position = outPos;
+  }`;
+
+  const FS = `#version 300 es
+  precision highp float;
+  in vec2 vCorner;
+  in float vZ;
+  in float vLenFactor;
+  out vec4 o;
+
+  void main() {
+    // Radial/longitudinal fade: stronger near head, softer tail
+    float along = (vCorner.y * 0.5 + 0.5); // 0 tail .. 1 head
+    float across = abs(vCorner.x);
+    float fade = (1.0 - across) * smoothstep(0.0, 1.0, along);
+    // brightness decays with distance
+    float distFade = clamp(1.5 / (0.4 + vZ), 0.0, 1.0);
+    float intensity = fade * distFade;
+    o = vec4(vec3(intensity), intensity); // additive target
+  }`;
+
+  function createProgram(gl, vsSrc, fsSrc) {
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(s) || 'shader compile error');
+      }
+      return s;
+    }
+    const vs = compile(gl.VERTEX_SHADER, vsSrc);
+    const fs = compile(gl.FRAGMENT_SHADER, fsSrc);
+    const p = gl.createProgram();
+    gl.attachShader(p, vs); gl.attachShader(p, fs);
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      throw new Error(gl.getProgramInfoLog(p) || 'link error');
+    }
+    gl.deleteShader(vs); gl.deleteShader(fs);
+    return p;
+  }
+
+  function glInit(n) {
+    GL = glCanvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false, alpha: false, desynchronized: true });
+    if (!GL) throw new Error('no webgl2');
+
+    glProg = createProgram(GL, VS, FS);
+    GL.useProgram(glProg);
+    // Buffers
+    glBufPos = GL.createBuffer();
+    glBufVel = GL.createBuffer();
+    glVAO = GL.createVertexArray();
+    GL.bindVertexArray(glVAO);
+
+    // aPos
+    GL.bindBuffer(GL.ARRAY_BUFFER, glBufPos);
+    GL.bufferData(GL.ARRAY_BUFFER, particles.byteLength, GL.DYNAMIC_DRAW);
+    GL.enableVertexAttribArray(0);
+    GL.vertexAttribPointer(0, 3, GL.FLOAT, false, 12, 0);
+    GL.vertexAttribDivisor(0, 1);
+
+    // aVel
+    GL.bindBuffer(GL.ARRAY_BUFFER, glBufVel);
+    GL.bufferData(GL.ARRAY_BUFFER, velocities.byteLength, GL.DYNAMIC_DRAW);
+    GL.enableVertexAttribArray(1);
+    GL.vertexAttribPointer(1, 3, GL.FLOAT, false, 12, 0);
+    GL.vertexAttribDivisor(1, 1);
+
+    // uniforms
+    u.uProj = GL.getUniformLocation(glProg, 'uProj');
+    u.uTrailMul = GL.getUniformLocation(glProg, 'uTrailMul');
+    u.uWidthPx = GL.getUniformLocation(glProg, 'uWidthPx');
+    u.uTime = GL.getUniformLocation(glProg, 'uTime');
+    u.uViewport = GL.getUniformLocation(glProg, 'uViewport');
+
+    GL.enable(GL.BLEND);
+    GL.blendFunc(GL.ONE, GL.ONE); // additive
+    GL.disable(GL.DEPTH_TEST);
+    GL.clearColor(0,0,0,1);
+    updateProjUniform();
+    updateStaticUniforms();
+  }
+  function updateProjUniform() {
+    // Standard perspective; camera looks along +Z
+    const f = 1.0 / Math.tan(proj.fov / 2);
+    const a = proj.aspect;
+    const n = proj.near, fa = proj.far;
+    const P = new Float32Array([
+      f/a, 0, 0, 0,
+      0, f, 0, 0,
+      0, 0, (fa+n)/(n-fa), -1,
+      0, 0, (2*fa*n)/(n-fa), 0
+    ]);
+    GL.useProgram(glProg);
+    GL.uniformMatrix4fv(u.uProj, false, P);
+  }
+  function updateStaticUniforms() {
+    GL.useProgram(glProg);
+    GL.uniform1f(u.uWidthPx, 1.25); // base thickness; adaptive can tweak
+  }
+
+  function glRender(n, timeSec) {
+    const gl = GL;
+    gl.viewport(0,0,glCanvas.width, glCanvas.height);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.useProgram(glProg);
+    gl.uniform1f(u.uTime, timeSec);
+    gl.uniform1f(u.uTrailMul, S.controls.trailMul);
+    gl.uniform2f(u.uViewport, glCanvas.width, glCanvas.height);
+
+    // update buffers (positions, velocities)
+    gl.bindBuffer(gl.ARRAY_BUFFER, glBufPos);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, particles);
+    gl.bindBuffer(gl.ARRAY_BUFFER, glBufVel);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, velocities);
+
+    // draw instanced 4-vertex quad per particle (triangle strip)
+    gl.bindVertexArray(glVAO);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n);
+  }
+
+  // ============ CANVAS2D FALLBACK ============
+  function cvInit() {
+    cvCtx = cvCanvas.getContext('2d', { alpha:false, desynchronized:true });
+    cvCtx.fillStyle = '#000';
+    cvCtx.fillRect(0,0,cvCanvas.width, cvCanvas.height);
+    cvLastFrameT = performance.now();
+  }
+  function projectCanvas2D(x,y,z, fpx) {
+    // s = f/(f+z), screen=(x*s, y*s)
+    const s = fpx / (fpx + z);
+    const sx = (x*s) * (cvCanvas.height*0.5) + (cvCanvas.width*0.5);
+    const sy = (-y*s) * (cvCanvas.height*0.5) + (cvCanvas.height*0.5); // y up to screen down
+    return [sx, sy, s];
+  }
+  function cvRender(n, dt) {
+    const ctx = cvCtx;
+    // Persistence clear
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = S.controls.persistence;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,cvCanvas.width, cvCanvas.height);
+    ctx.restore();
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+
+    const fpx = clamp((S.height * 0.5)/Math.tan(proj.fov/2), 200, 2000); // focal length in px
+
+    for (let i=0;i<n;i++) {
+      const ix = i*3;
+      const x = particles[ix], y = particles[ix+1], z = particles[ix+2];
+      const vx = velocities[ix], vy = velocities[ix+1], vz = velocities[ix+2];
+
+      const p0 = projectCanvas2D(x, y, z, fpx);
+      const p1 = projectCanvas2D(x + vx*0.5, y + vy*0.5, z + vz*0.5, fpx);
+      const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+      const len = Math.hypot(dx,dy);
+      const dirx = (len>1e-3) ? dx/len : 1, diry = (len>1e-3) ? dy/len : 0;
+
+      const L = clamp(S.controls.trailMul * 10 * (1.5/(0.4+z)), 2, 120);
+      const w = clamp(1.0 * (1.2/(0.5+z)), 0.6, 2.5);
+
+      ctx.lineWidth = w * S.dpr;
+      ctx.globalAlpha = clamp(0.15 + 0.85*(1.5/(0.4+z)), 0.2, 1.0);
+
+      // from tail to head
+      ctx.beginPath();
+      ctx.moveTo(p0[0] - dirx*L, p0[1] - diry*L);
+      ctx.lineTo(p0[0] + dirx*L*0.35, p0[1] + diry*L*0.35);
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    }
+  }
+
+  // ============ LOOP ============
+  let rafId = 0, lastT = performance.now();
+  function loop(t) {
+    if (!S.running) return;
+    const now = t;
+    const dt = clamp((now - lastT) / 1000, 0.001, 0.05); // clamp background tab spikes
+    lastT = now;
+
+    // Perf avg
+    S.perf.avgDt = lerp(S.perf.avgDt, dt, 0.05);
+
+    // Compute Nd in device space
+    const Nd = northInDevice();
+
+    // Update particles
+    const baseSpeed = S.controls.speed * (S.reducedMotion ? 0.6 : 1.0);
+    const vdt = baseSpeed * dt;
+    for (let i=0;i<countTarget;i++) {
+      const ix = i*3;
+      // Depth-based acceleration cue
+      let z = particles[ix+2];
+      const accel = clamp(1.0 + (1.2 / Math.max(0.25, z)), 1.0, 2.5);
+      particles[ix]   += velocities[ix]   * vdt * accel;
+      particles[ix+1] += velocities[ix+1] * vdt * accel;
+      particles[ix+2] += velocities[ix+2] * vdt * accel;
+
+      ages[i] += dt;
+      // Respawn if too close or lifetime exceeded or off frustum
+      const close = particles[ix+2] < 0.1;
+      const tooOld = ages[i] > lifetimes[i];
+      const out = (Math.abs(particles[ix])>120 || Math.abs(particles[ix+1])>120 || particles[ix+2]>220);
+      if (close || tooOld || out) {
+        spawnParticle(i, Nd);
+      } else if (Math.random() < 0.02) {
+        // Gentle drift of velocity toward -Nd with spread
+        const nudge = randomOnBasis(Nd, S.controls.spread*0.05);
+        const v = v3.norm(v3.add(v3.scale(Nd, -1), v3.scale(nudge, 0.2)));
+        velocities[ix]=v[0]; velocities[ix+1]=v[1]; velocities[ix+2]=v[2];
+      }
+    }
+
+    // Render
+    if (S.pipeline === 'webgl') {
+      glRender(countTarget, now/1000);
+    } else {
+      cvRender(countTarget, dt);
+    }
+
+    // HUD + adapt
+    if (DEBUG) {
+      updateHUD(Nd);
+      adaptPerformance();
+    }
+
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function adaptPerformance() {
+    const avgMs = S.perf.avgDt * 1000;
+    const tNow = performance.now();
+    if (tNow - S.perf.lastAdjustT < 500) return;
+
+    if (avgMs > 22) { // slow
+      // reduce trail, then count, then FOV
+      if (S.controls.trailMul > 4) S.controls.trailMul = Math.max(4, Math.floor(S.controls.trailMul * 0.85));
+      else if (countTarget > 400) setCount(Math.max(200, Math.floor(countTarget * 0.5)));
+      else if (S.controls.fovDeg < 85) { S.controls.fovDeg = Math.min(90, S.controls.fovDeg + 4); proj.fov = deg2rad(S.controls.fovDeg); if (GL) updateProjUniform(); }
+      S.perf.lastAdjustT = tNow;
+    } else if (avgMs < 14) { // fast
+      if (countTarget < 5000) setCount(Math.min(5000, Math.floor(countTarget * 1.15)));
+      S.perf.lastAdjustT = tNow;
+    }
+  }
+
+  // ============ HUD ============
+  function updateHUD(Nd) {
+    qs('#fps').textContent = (1000 / (S.perf.avgDt*1000)).toFixed(0);
+    qs('#dpr').textContent = `${S.dpr.toFixed(2)} (int ≤ ${S.maxInternalDpr})`;
+    qs('#pipe').textContent = S.pipeline;
+    qs('#pcount').textContent = String(countTarget);
+    qs('#sstate').textContent = `${S.sensors.permission}/${S.sensors.source}` + (S.sensors.compassUnstable ? ' (unstable)' : '');
+    const f = S.sensors.filtered;
+    qs('#ypr').textContent = `${rad2deg(f.yaw).toFixed(0)}° / ${rad2deg(f.pitch).toFixed(0)}° / ${rad2deg(f.roll).toFixed(0)}°`;
+    qs('#csrc').textContent = S.sensors.source;
+    qs('#nd').textContent = `[${Nd[0].toFixed(2)}, ${Nd[1].toFixed(2)}, ${Nd[2].toFixed(2)}]`;
+    qs('#notes').textContent = (S.sensors.permission!=='granted') ? 'Sensors off → North=up' : '—';
+  }
+
+  function bindControls() {
+    const c = S.controls;
+    const ui = {
+      count: qs('#ctlCount'),
+      speed: qs('#ctlSpeed'),
+      spread: qs('#ctlSpread'),
+      fov: qs('#ctlFov'),
+      trail: qs('#ctlTrail'),
+      persist: qs('#ctlPersist'),
+      invertY: qs('#ctlInvertY'),
+    };
+    ui.count.value = c.count; ui.speed.value = c.speed; ui.spread.value = c.spread;
+    ui.fov.value = c.fovDeg; ui.trail.value = c.trailMul; ui.persist.value = c.persistence;
+    ui.invertY.checked = S.sensors.invertY;
+
+    ui.count.addEventListener('input', e => setCount(+e.target.value));
+    ui.speed.addEventListener('input', e => c.speed = +e.target.value);
+    ui.spread.addEventListener('input', e => c.spread = +e.target.value);
+    ui.fov.addEventListener('input', e => { c.fovDeg = +e.target.value; proj.fov = deg2rad(c.fovDeg); if (GL) updateProjUniform(); });
+    ui.trail.addEventListener('input', e => c.trailMul = +e.target.value);
+    ui.persist.addEventListener('input', e => c.persistence = +e.target.value);
+    ui.invertY.addEventListener('change', e => { S.sensors.invertY = e.target.checked; });
+  }
+
+  function setCount(n) {
+    countTarget = n|0;
+    initParticles(countTarget);
+    if (GL) {
+      GL.bindBuffer(GL.ARRAY_BUFFER, glBufPos);
+      GL.bufferData(GL.ARRAY_BUFFER, particles.byteLength, GL.DYNAMIC_DRAW);
+      GL.bindBuffer(GL.ARRAY_BUFFER, glBufVel);
+      GL.bufferData(GL.ARRAY_BUFFER, velocities.byteLength, GL.DYNAMIC_DRAW);
+    }
+    if (DEBUG) qs('#ctlCount').value = countTarget;
+  }
+
+  // ============ VISIBILITY ============
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      S.running = false;
+      cancelAnimationFrame(rafId);
+    } else {
+      S.running = true;
+      lastT = performance.now();
+      rafId = requestAnimationFrame(loop);
+    }
+  });
+
+  // ============ INIT ============
+  function init() {
+    // DPR clamp for internal rendering
+    S.dpr = Math.min(devicePixelRatio || 1, 3);
+    if (params.has('debug')) qs('#hud').style.display = 'block';
+
+    resize();
+
+    // Pipeline selection
+    let useGl = !FORCE_CANVAS;
+    try {
+      if (useGl) {
+        initParticles(S.controls.count);
+        glInit(countTarget);
+        S.pipeline = 'webgl';
+        cvCanvas.style.display = 'none';
+      }
+    } catch (e) {
+      console.warn('WebGL2 unavailable, falling back to Canvas2D:', e);
+      useGl = false;
+    }
+
+    if (!useGl) {
+      S.pipeline = 'canvas';
+      cvCanvas.style.display = 'block';
+      glCanvas.style.display = 'none';
+      initParticles(clamp(S.controls.count, 700, 1500));
+      cvInit();
+    }
+
+    // Sensors permission UI (iOS gating)
+    if (!NO_SENSORS) {
+      const Any = window.DeviceOrientationEvent;
+      const needsPrompt = Any && typeof Any.requestPermission === 'function';
+      if (needsPrompt) {
+        overlay.hidden = false;
+        btnPerm.onclick = requestMotion;
+      } else {
+        overlay.hidden = true;
+        S.sensors.permission = 'granted';
+      }
+      setupSensors();
+    } else {
+      S.sensors.permission = 'denied';
+    }
+
+    // Start
+    lastT = performance.now();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  // Start after DOM ready
+  if (document.readyState === 'complete' || document.readyState === 'interactive') init();
+  else document.addEventListener('DOMContentLoaded', init, { once: true });
+
 })();
 </script>
+
+<!-- ============ README (inline for single-file deliverable) ============
+Setup
+- Open index.html in any modern browser. Add ?debug=1 for HUD.
+- Feature flags:
+  • ?forceCanvas – force Canvas2D fallback.
+  • ?invertY – invert pitch sign for stacks that flip Y.
+  • ?noSensors – run with North=up (sensors disabled).
+  • ?debug=1 – show HUD and controls.
+
+Sensors & Permissions
+- iOS: prompts once via DeviceOrientationEvent.requestPermission(). If denied/unavailable, effect runs with North=up.
+- Compass source priority: webkitCompassHeading (iOS) > deviceorientation(alpha/beta/gamma).
+- Low-pass filter α=0.15; yaw unwrapped to avoid flips; debug warns if compass jitter > ~2°/frame.
+
+Coordinate Frames
+- World: X=East, Y=North, Z=Up. North fixed N=(0,1,0).
+- Device/view: x right, y up, z forward (+Z out of the screen). Camera looks along +Z.
+- Build R(world→device) from yaw/pitch/roll; compute Nᵈ = Rᵀ·N. Particle motion p = p − Nᵈ·v·dt.
+- Spawn band: far along +Nᵈ with perpendicular jitter using an orthonormal basis.
+
+Rendering
+- WebGL2: instanced quads, additive blending. Streak length scales with projected velocity and proximity; per-fragment fade.
+- Canvas2D: line from prev→current approx; motion persistence clear with rgba(0,0,0,α).
+- Tone: white on black. Subtle “bloom” can be added later (guard by perf flag).
+
+Adaptive Performance
+- If avgFrameTime > 22 ms for 0.5 s: reduce trail, then halve particles, then widen FOV.
+- If avgFrameTime < 14 ms: increase particles by ~15% up to 5000.
+- Internal render DPR clamped to ≤2.0 (via canvas size), UI displays physical DPR.
+
+Controls (debug only)
+- Count (200–5000), Speed (1–100), Spread (0.1–2.5), FOV (35°–90°), Trail × (1–50), Persistence α (0.08–0.35), Invert Y.
+- HUD shows fps, DPR, pipeline, particle count, sensor state, compass source, yaw/pitch/roll, current Nᵈ.
+
+Edge Cases & Correctness
+- Axis flips: Use ?invertY or HUD toggle.
+- Magnetic interference: If heading jitter is high, HUD marks “unstable”.
+- Orientation/resize: canvases and projection recomputed; Canvas2D fades between rebuilds.
+- Background tab: loop paused on visibilitychange; dt clamp prevents jumps.
+
+Accessibility & UX
+- Respects prefers-reduced-motion: lower speed and trails.
+- No gestures required; single iOS permission tap if needed.
+
+QA Suggestions
+- Test iPhone 12–15, Pixel 6–8, Samsung S21–S24; iOS Safari, Chrome/Android, Samsung Internet.
+- Try portrait/landscape; indoors/outdoors; low battery/thermal throttling (watch adaptive scaling).
+
+Tuning Notes
+- For “Snow” mode (nice-to-have), increase width (uWidthPx in GL, lineWidth in Canvas) and vary brightness per-particle.
+- For “Stars” mode, raise Count, lower width and Trail ×.
+===================================================================== -->
 </body>
 </html>
