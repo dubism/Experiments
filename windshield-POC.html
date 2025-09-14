@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Snowflakes / Stars — Vanishing Point Field</title>
+<style>
+  :root{
+    --bg:#000; --fg:#e8eef5; --muted:#9aa1ad; --accent:#5ac8fa;
+  }
+  html,body{height:100%;margin:0;}
+  body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden;}
+  canvas{display:block;width:100vw;height:100svh;touch-action:none;}
+  .hud{position:fixed;left:12px;top:10px;padding:.35rem .5rem;border-radius:.5rem;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);
+       font-weight:600;letter-spacing:.02em;color:var(--fg);user-select:none;pointer-events:none}
+  .hud .small{display:block;opacity:.7;font-weight:500;font-size:.8em;}
+</style>
+</head>
+<body>
+  <canvas id="stage" aria-hidden="true"></canvas>
+  <div class="hud" id="hud">
+    <span class="small">Direction</span>
+    <span id="dirTxt">North</span>
+  </div>
+<script>
+(() => {
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d', { alpha:false, desynchronized:true, willReadFrequently:true });
+  const hud = document.getElementById('hud');
+  const dirTxt = document.getElementById('dirTxt');
+
+  // DPR-aware sizing
+  let DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  let W=0,H=0,CX=0,CY=0;
+  const resize = () => {
+    DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const cssW = Math.max(1, Math.round(window.innerWidth));
+    const cssH = Math.max(1, Math.round(window.innerHeight));
+    canvas.width = Math.floor(cssW * DPR);
+    canvas.height = Math.floor(cssH * DPR);
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    W = canvas.width; H = canvas.height; CX = W*0.5; CY = H*0.5;
+  };
+  addEventListener('resize', resize, { passive:true });
+  resize();
+
+  // Sensor state (no interaction). We try; if blocked, we fall back to default North.
+  let headingDeg = 0;     // 0° = North; increases clockwise
+  let pitchDeg = 0;       // device tilt forward/back (beta)
+  let rollDeg = 0;        // device left/right tilt (gamma)
+  let haveHeading = false;
+
+  function bearingToText(b) {
+    if (b==null || !isFinite(b)) return 'North';
+    b = (b%360+360)%360;
+    const names = ['North','NNE','NE','ENE','East','ESE','SE','SSE','South','SSW','SW','WSW','West','WNW','NW','NNW'];
+    const idx = Math.round(b/22.5)%16; return names[idx];
+  }
+
+  function updateHUD(){ dirTxt.textContent = bearingToText(headingDeg); }
+
+  // iOS-specific compass heading
+  function handleIOSCompass(e){
+    // webkitCompassHeading is 0 (North) … 360 clockwise
+    if (typeof e.webkitCompassHeading === 'number' && isFinite(e.webkitCompassHeading)) {
+      headingDeg = e.webkitCompassHeading; haveHeading = true; updateHUD();
+    }
+  }
+
+  // Generic DeviceOrientation
+  function handleDO(e){
+    // alpha: 0..360 (z axis), beta: -180..180 (x), gamma: -90..90 (y)
+    const { alpha, beta, gamma } = e;
+    if (typeof alpha === 'number' && isFinite(alpha)) {
+      // In many browsers, alpha is 0 at East; in some it’s relative. We accept it as a bearing proxy.
+      // Convert to compass-like 0=North by simple transform; it will still track rotation.
+      headingDeg = (360 - alpha + 90) % 360; // shift so 0-ish ≈ North
+      haveHeading = true;
+    }
+    if (typeof beta === 'number' && isFinite(beta)) pitchDeg = beta;
+    if (typeof gamma === 'number' && isFinite(gamma)) rollDeg = gamma;
+    updateHUD();
+  }
+
+  // Newer OrientationSensor API (rare, permission-gated). We attempt, but ignore failures.
+  async function tryAbsoluteOrientationSensor(){
+    try {
+      const sensor = new AbsoluteOrientationSensor({ frequency: 30, referenceFrame:'device' });
+      sensor.addEventListener('reading', () => {
+        // Convert quaternion to yaw/pitch/roll; take yaw as heading proxy.
+        const q = sensor.quaternion; if (!q) return;
+        const [qw,qx,qy,qz] = q; // NOTE: spec is [x,y,z,w]; some impls differ. Guard via conversion.
+        // Normalize to [x,y,z,w]
+        let x=qx, y=qy, z=qz, w=qw;
+        // Yaw-Pitch-Roll from quaternion (Tait-Bryan ZYX)
+        const ys = 2*(w*z + x*y);
+        const yc = 1 - 2*(y*y + z*z);
+        const yaw = Math.atan2(ys, yc); // radians
+        const ps = 2*(w*y - z*x);
+        const pitch = Math.abs(ps)>=1 ? Math.sign(ps)*Math.PI/2 : Math.asin(ps);
+        const rs = 2*(w*x + y*z);
+        const rc = 1 - 2*(x*x + y*y);
+        const roll = Math.atan2(rs, rc);
+        headingDeg = ( ( ( -yaw * 180/Math.PI) % 360) + 360 ) % 360; // CW compass-ish
+        pitchDeg = pitch * 180/Math.PI;
+        rollDeg = roll * 180/Math.PI;
+        haveHeading = true; updateHUD();
+      });
+      sensor.addEventListener('error', ()=>{});
+      sensor.start();
+    } catch(_){}
+  }
+
+  // Wire listeners. Some platforms require permission from a user gesture; we proceed best-effort.
+  if ('ondeviceorientationabsolute' in window) addEventListener('deviceorientationabsolute', handleDO, true);
+  if ('ondeviceorientation' in window) addEventListener('deviceorientation', handleDO, true);
+  if (typeof DeviceOrientationEvent !== 'undefined' && 'requestPermission' in DeviceOrientationEvent) {
+    // iOS 13+ usually requires a tap; we avoid interaction per brief. We fall back silently.
+    // If the UA allows without gesture (rare), events will fire.
+    addEventListener('deviceorientation', handleIOSCompass, true);
+  }
+  tryAbsoluteOrientationSensor();
+  updateHUD();
+
+  // Starfield / snow-streak engine -----------------------------------------------------------
+  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+  const MAX = isMobile ? 450 : 900; // tune density
+  const particles = new Array(MAX);
+  let seed = 1337;
+  const rand = () => (seed = (seed*1664525 + 1013904223) >>> 0, seed / 4294967296);
+
+  // Each particle in polar form relative to vanishing point.
+  // r: distance from center (px), a: angle (rad), v: radial speed scalar, life: remaining until reset.
+  function spawn(i){
+    // Start very close to the vanishing point, with a tiny random offset.
+    const r0 = 0.5 + rand()*2.5;                    // px
+    const a0 = rand()*Math.PI*2;                    // rad
+    const v = 60 + rand()*200;                      // px/s base (will accelerate with r)
+    const life = 2 + rand()*2;                      // seconds until forced reset (safety)
+    particles[i] = { r:r0, a:a0, v, life, x:CX, y:CY, px:CX, py:CY, w:1 };
+  }
+  for (let i=0;i<MAX;i++) spawn(i);
+
+  // Timing
+  let last = performance.now();
+
+  function loop(now){
+    const dt = Math.min(0.035, (now - last)/1000); // clamp to avoid jumps
+    last = now;
+
+    // Vanishing point offset by device tilt (subtle, for depth cue)
+    const offX = (rollDeg/45) * (W*0.06);   // left/right tilt shifts VP
+    const offY = (pitchDeg/45) * (H*0.06);  // forward/back tilt shifts VP
+    const VPX = CX + offX;
+    const VPY = CY + offY;
+
+    // Heading rotates the whole field; 0° (North) = up; clockwise
+    const rot = ((headingDeg||0) * Math.PI/180);
+    const cosR = Math.cos(rot), sinR = Math.sin(rot);
+
+    // Fade trail for smooth motion (motion blur-like persistence)
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0,0,W,H);
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#ffffff';
+
+    for (let i=0;i<MAX;i++){
+      let p = particles[i];
+      p.life -= dt;
+
+      // Accelerate outward proportionally to distance; ensures streaking
+      const accel = 1.0 + (p.r * 0.0025);
+      p.r += p.v * accel * dt;  // radial expansion (px)
+      // Angle rotated by heading to give the sense of world-space direction
+      const a = p.a + rot;
+
+      // Current position in screen space relative to VP
+      const rx = Math.cos(a) * p.r;
+      const ry = Math.sin(a) * p.r;
+      p.px = p.x; p.py = p.y;   // store previous
+      p.x = VPX + rx;
+      p.y = VPY - ry;           // screen y grows down; North = up
+
+      // Width scales with speed & distance; clamp for aesthetics
+      const speed = p.v * accel;
+      p.w = Math.min(4.0*DPR, Math.max(0.6*DPR, (p.r * 0.002) + (speed*0.002*dt)));
+
+      // Draw streak from previous to current
+      ctx.lineWidth = p.w;
+      ctx.beginPath();
+      ctx.moveTo(p.px, p.py);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+
+      // Reset if off-screen or life exhausted
+      if (p.life <= 0 || p.x < -20 || p.x > W+20 || p.y < -20 || p.y > H+20){
+        spawn(i);
+        // Re-spawn angle biased slightly towards heading for subtle flow coherence
+        particles[i].a = (rot + (rand()-0.5)*0.6) % (Math.PI*2);
+      }
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // Initialize with a black clear to avoid flash
+  ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
