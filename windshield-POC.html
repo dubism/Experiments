@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -6,498 +6,935 @@
 <title>Snowflakes Through Windshield — North-Locked</title>
 <meta name="theme-color" content="#000000" />
 <style>
-  :root { --hud-bg: rgba(0,0,0,0.6); --hud-fg:#eaeaea; }
-  html,body{margin:0;padding:0;background:#000;color:#fff;height:100%}
-  .app{position:fixed;inset:0;width:100vw;height:100dvh}
-  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-  #overlay{
-    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    background:rgba(0,0,0,.85);color:#fff;z-index:10;padding:2rem;text-align:center;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif
+  :root{
+    --hud-bg: rgba(10,10,12,.72);
+    --hud-fg: #e8e8ea;
+    --hud-accent: #9ad1ff;
   }
-  #overlay .box{max-width:520px}
-  #overlay button{
-    margin-top:1rem;padding:.8rem 1.2rem;border-radius:12px;border:1px solid #444;
-    background:#111;color:#fff;font-weight:600
+  html,body { margin:0; height:100%; background:#000; color:#fff; }
+  body { overflow:hidden; touch-action:none; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif; }
+  #app { position:fixed; inset:0; display:grid; grid-template-rows: 1fr; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #overlay-permission {
+    position:absolute; inset:0; display:none; place-items:center; background:rgba(0,0,0,.8); color:#fff; z-index:10;
   }
-  #hud{
-    position:absolute;right:env(safe-area-inset-right,12px);top:calc(env(safe-area-inset-top,12px));
-    z-index:20;min-width:260px;max-width:92vw;color:var(--hud-fg);
-    font:12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:none
+  #overlay-permission.show { display:grid; }
+  #overlay-permission button {
+    padding:.9rem 1.1rem; border:1px solid #666; background:#111; color:#fff; border-radius:.8rem; font-weight:600;
   }
-  #hud .card{
-    background:var(--hud-bg);backdrop-filter:blur(8px);
-    border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:10px 12px;margin:6px;
-    box-shadow:0 6px 20px rgba(0,0,0,.35)
+  #hud {
+    position:fixed; right: env(safe-area-inset-right); top: calc(env(safe-area-inset-top) + 8px);
+    background:var(--hud-bg); color:var(--hud-fg); border:1px solid #2b2b32; padding:.75rem; border-radius:12px;
+    z-index: 20; min-width: 260px; backdrop-filter: blur(10px);
+    display:none;
   }
-  #hud h3{margin:.2rem 0 .5rem 0;font-size:12px;letter-spacing:.04em;opacity:.8}
-  #hud .row{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin:.25rem 0}
-  #hud .row label{flex:1 1 auto;opacity:.9}
-  #hud .row input[type=range]{width:130px}
-  #badge{
-    position:absolute;left:env(safe-area-inset-left,12px);bottom:calc(8px + env(safe-area-inset-bottom,8px));
-    font:11px/1.1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    color:rgba(255,255,255,.55);background:rgba(0,0,0,.45);
-    border:1px solid rgba(255,255,255,.1);padding:6px 8px;border-radius:10px;z-index:5;pointer-events:none
+  #hud.show { display:block; }
+  #hud h2 { margin:0 0 .5rem; font-size:14px; font-weight:700; letter-spacing:.02em; color:#fff; }
+  #hud .row { display:grid; grid-template-columns: 1fr auto; align-items:center; gap:.5rem; font-size:12px; margin:.25rem 0; }
+  #hud .row > span.value { color: var(--hud-accent); font-variant-numeric: tabular-nums; }
+  #hud details { margin-top:.25rem; }
+  #hud input[type=range] { width: 170px; }
+  #tiny {
+    position:fixed; left: calc(env(safe-area-inset-left) + 8px); bottom: calc(env(safe-area-inset-bottom) + 8px);
+    font-size:11px; color:#aaa; opacity:.8; z-index:5; user-select:none;
   }
-  @media (prefers-reduced-motion: reduce){:root{--reduced:1}}
+  .badge { display:inline-block; padding:.15rem .4rem; border:1px solid #3a3a44; border-radius:.5rem; margin-left:.35rem; }
+  #unstable { color:#ffcc66; display:none; }
+  #unstable.show { display:inline; }
+  @media (prefers-reduced-motion: reduce) {
+    #tiny::after { content: " · gentle"; }
+  }
 </style>
 </head>
 <body>
-<div class="app" id="app">
-  <canvas id="gl"></canvas>
-  <canvas id="cv"></canvas>
-
-  <!-- Overlay with inline onclick fallbacks -->
-  <div id="overlay" hidden>
-    <div class="box">
-      <div style="font-size:1.1rem;font-weight:700;margin-bottom:.6rem">Motion Access Needed</div>
-      <div>To lock flow to real-world North, allow motion &amp; compass access.<br/>If you decline, the effect runs with North=up.</div>
-      <div style="margin-top:1rem">
-        <button id="btnPerm" type="button" onclick="window.__allowMotionClick && window.__allowMotionClick()">Allow Motion</button>
-        <button id="btnSkip" type="button" onclick="window.__skipMotionClick && window.__skipMotionClick()" style="margin-left:.75rem">Run without sensors</button>
+  <div id="app">
+    <canvas id="gl"></canvas>
+    <canvas id="c2d"></canvas>
+    <div id="overlay-permission" aria-hidden="true">
+      <div style="text-align:center; max-width:320px;">
+        <p style="opacity:.9; margin:0 0 .75rem;">Motion access is needed to lock flow to real North.</p>
+        <button id="btn-permit">Enable Motion & Compass</button>
+        <p style="opacity:.6; margin:.6rem 0 0; font-size:.9rem;">If denied, effect still runs with North = up.</p>
       </div>
-      <div id="permHint" style="margin-top:.75rem;font-size:.9rem;opacity:.8"></div>
     </div>
+    <div id="hud" role="region" aria-label="Debug HUD">
+      <h2>Snowflakes — Debug
+        <span class="badge" id="badge-pipeline">–</span>
+        <span class="badge" id="badge-dpr">DPR</span>
+        <span class="badge" id="badge-sensor">–</span>
+      </h2>
+      <div class="row"><span>fps</span><span class="value" id="stat-fps">–</span></div>
+      <div class="row"><span>particles</span><span class="value" id="stat-count">–</span></div>
+      <div class="row"><span>heading / pitch / roll</span><span class="value" id="stat-hpr">–</span></div>
+      <div class="row"><span>North vec (device)</span><span class="value" id="stat-nd">–</span></div>
+      <div class="row"><span>compass</span><span class="value" id="stat-comp">– <span id="unstable">unstable</span></span></div>
+      <details>
+        <summary style="cursor:pointer; margin-top:.25rem;">Controls</summary>
+        <div class="row"><label>Count</label><input id="ctl-count" type="range" min="200" max="5000" step="50"></div>
+        <div class="row"><label>Speed</label><input id="ctl-speed" type="range" min="1" max="100" step="1"></div>
+        <div class="row"><label>Spread</label><input id="ctl-spread" type="range" min="0.1" max="2.5" step="0.05"></div>
+        <div class="row"><label>FOV (°)</label><input id="ctl-fov" type="range" min="35" max="90" step="1"></div>
+        <div class="row"><label>Trail x</label><input id="ctl-trail" type="range" min="1" max="50" step="1"></div>
+        <div class="row"><label>Persistence α</label><input id="ctl-persist" type="range" min="0.08" max="0.35" step="0.01"></div>
+        <div class="row"><label>Strict −Nᵈ (z)</label><input id="ctl-strict" type="checkbox"></div>
+        <div class="row"><label>Invert Y proj</label><input id="ctl-invY" type="checkbox"></div>
+      </details>
+    </div>
+    <div id="tiny">Direction: North</div>
   </div>
-
-  <div id="hud">
-    <div class="card" id="stats">
-      <h3>Stats</h3>
-      <div class="row"><label>FPS</label><div id="fps">—</div></div>
-      <div class="row"><label>DPR</label><div id="dpr">—</div></div>
-      <div class="row"><label>Pipeline</label><div id="pipe">—</div></div>
-      <div class="row"><label>Particles</label><div id="pcount">—</div></div>
-      <div class="row"><label>Sensors</label><div id="sstate">—</div></div>
-      <div class="row"><label>Compass</label><div id="csrc">—</div></div>
-      <div class="row"><label>Yaw/Pitch/Roll</label><div id="ypr">—</div></div>
-      <div class="row"><label>Northᵈ</label><div id="nd">—</div></div>
-      <div class="row"><label>Notes</label><div id="notes">—</div></div>
-    </div>
-    <div class="card" id="controls">
-      <h3>Controls</h3>
-      <div class="row"><label>Count</label><input id="ctlCount" type="range" min="200" max="5000" step="50"></div>
-      <div class="row"><label>Speed</label><input id="ctlSpeed" type="range" min="1" max="100" step="1"></div>
-      <div class="row"><label>Spread</label><input id="ctlSpread" type="range" min="0.1" max="2.5" step="0.05"></div>
-      <div class="row"><label>FOV (°)</label><input id="ctlFov" type="range" min="35" max="90" step="1"></div>
-      <div class="row"><label>Trail ×</label><input id="ctlTrail" type="range" min="1" max="50" step="1"></div>
-      <div class="row"><label>Persistence α</label><input id="ctlPersist" type="range" min="0.08" max="0.35" step="0.01"></div>
-      <div class="row"><label>Invert Y</label><input id="ctlInvertY" type="checkbox"></div>
-    </div>
-  </div>
-
-  <div id="badge" aria-hidden="true">Direction: North</div>
-</div>
 
 <script>
-(() => {
-  // Flags
-  const params = new URLSearchParams(location.search);
-  const DEBUG = params.get('debug') === '1';
-  const FORCE_CANVAS = params.has('forceCanvas');
-  const INVERT_Y = params.has('invertY');
-  const NO_SENSORS = params.has('noSensors');
-  const isLocalhost = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const isSecure = location.protocol === 'https:' || isLocalhost;
+(function(){
+  "use strict";
 
-  // State
-  const S = {
-    running:true,
-    dpr:Math.min(devicePixelRatio||1,3),
-    maxInternalDpr:2.0,
-    width:0,height:0,
-    pipeline:'webgl',
-    sensors:{ permission:'unknown', source:'none', filtered:{yaw:0,pitch:0,roll:0}, alpha:0.15, invertY:INVERT_Y, compassUnstable:false, lastYawSamples:[] },
-    controls:{count:1600,speed:30,spread:0.6,fovDeg:55,trailMul:8,persistence:0.14},
-    perf:{avgDt:16.7/1000,lastAdjustT:0},
-    reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches
+  // ——————— Feature flags via query params ——————————————————————————————
+  const qp = new URLSearchParams(location.search);
+  const FLAGS = {
+    debug: qp.get('debug') === '1',
+    forceCanvas: qp.get('forceCanvas') === '1',
+    invertY: qp.get('invertY') === '1',
+    noSensors: qp.get('noSensors') === '1',
+    strictNd: qp.get('strictNd') === '1',
+    bloom: qp.get('bloom') === '1', // reserved, not applied (guarded)
   };
-  if (S.reducedMotion){ S.controls.speed=12; S.controls.trailMul=4; }
 
-  const qs = s=>document.querySelector(s);
-  const qst = (s,t)=>{ const el=qs(s); if(el) el.textContent=t; };
+  // ——————— Globals & central state ——————————————————————————————
+  const app = {
+    dpr: 1,
+    width: 0, height: 0,
+    paused: document.hidden,
+    pipeline: 'webgl', // or 'canvas'
+    now: performance.now(),
+    last: performance.now(),
+    frameTimes: [],
+    frameSum: 0,
+    fps: 0,
+    // Parameters (live-tunable)
+    params: {
+      count: 1600,
+      speed: 40,           // world-units/s base
+      spread: 0.6,         // angular jitter
+      fovDeg: 55,          // vertical FOV
+      trailMul: 12,        // trail visual multiplier
+      persistAlpha: 0.14,  // canvas2D screen decay
+      clampDPR: 2.0,
+    },
+    // Limits & adapt
+    adapt: {
+      minCount: 700,
+      maxCount: 5000,
+      timeWindow: 24, // frames
+      incThresh: 14, // ms
+      decThresh: 22, // ms
+      lastCheck: 0
+    },
+    // Sensor state (filtered)
+    sensor: {
+      enabled: false,
+      havePermission: false,
+      source: 'none',     // 'webkit', 'alpha', 'sensor', 'none'
+      headingDeg: 0,
+      pitchDeg: 0,
+      rollDeg: 0,
+      yawFilt: 0, pitchFilt: 0, rollFilt: 0,
+      alphaLPF: 0.15,
+      unstable: false,
+      yawHistory: [],
+    },
+    // Orientation / math
+    Nd: new Float32Array([0,1,0]), // North vector in device/camera space
+    NdStrict: false, // whether to include Nd.z in motion or clamp toward camera
+    invertY: !!FLAGS.invertY,
+    // Particles
+    particles: [],
+    dead: [], // stack of free indices
+    bounds: { near: 0.6, far: 60, maxXY: 40 },
+    // Matrices
+    proj: new Float32Array(16),
+    // WebGL
+    gl: null,
+    glRes: null,
+    // Canvas2D
+    ctx: null,
+    // Reduced motion
+    gentle: window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    // UI refs
+    ui: {}
+  };
 
-  // Math
-  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
-  const lerp=(a,b,t)=>a+(b-a)*t;
-  const deg2rad=d=>d*Math.PI/180;
-  const rad2deg=r=>r*180/Math.PI;
-  const v3={ norm:a=>{const l=Math.hypot(a[0],a[1],a[2])||1; return new Float32Array([a[0]/l,a[1]/l,a[2]/l]);},
-             cross:(a,b)=>new Float32Array([a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]),
-             scale:(a,s)=>new Float32Array([a[0]*s,a[1]*s,a[2]*s]),
-             add:(a,b)=>new Float32Array([a[0]+b[0],a[1]+b[1],a[2]+b[2]]) };
-  function R_world_to_device(y,p,r){
-    const cy=Math.cos(y), sy=Math.sin(y), cp=Math.cos(p), sp=Math.sin(p), cr=Math.cos(r), sr=Math.sin(r);
-    const m=new Float32Array(9);
-    m[0]= cy*cr + sy*sp*sr;  m[3]= sr*cp;           m[6]= -sy*cr + cy*sp*sr;
-    m[1]= -cy*sr + sy*sp*cr; m[4]= cr*cp;           m[7]=  sy*sr + cy*sp*cr;
-    m[2]= sy*cp;             m[5]= -sp;             m[8]=  cy*cp;
-    return m;
+  if (app.gentle) {
+    app.params.speed = Math.max(8, app.params.speed * 0.5);
+    app.params.trailMul = Math.max(4, Math.round(app.params.trailMul * 0.6));
   }
-  function Rt_mul_v(Rt,v){ return new Float32Array([ Rt[0]*v[0]+Rt[1]*v[1]+Rt[2]*v[2], Rt[3]*v[0]+Rt[4]*v[1]+Rt[5]*v[2], Rt[6]*v[0]+Rt[7]*v[1]+Rt[8]*v[2] ]); }
-  function normAngle(a){ while(a>Math.PI)a-=2*Math.PI; while(a<-Math.PI)a+=2*Math.PI; return a; }
-  function unwrapAngle(prev,next){ return prev+normAngle(next-prev); }
+  if (FLAGS.strictNd) app.NdStrict = true;
 
-  // Canvases
-  const glCanvas=qs('#gl'), cvCanvas=qs('#cv'); let GL=null, glProg=null, glBufPos=null, glBufVel=null, glVAO=null, u={}; let cvCtx=null;
-  let particles=null, velocities=null, ages=null, lifetimes=null, countTarget=S.controls.count;
-  let proj={fov:deg2rad(S.controls.fovDeg),near:0.05,far:200,aspect:1};
-
-  // Resize
-  function resize(){
-    const rect=document.body.getBoundingClientRect();
-    S.width=Math.max(1,rect.width|0); S.height=Math.max(1,rect.height|0);
-    const internalDpr=Math.min(S.dpr,S.maxInternalDpr);
-    const w=Math.floor(S.width*internalDpr), h=Math.floor(S.height*internalDpr);
-    glCanvas.width=w; glCanvas.height=h; glCanvas.style.width='100%'; glCanvas.style.height='100%';
-    cvCanvas.width=w; cvCanvas.height=h; cvCanvas.style.width='100%'; cvCanvas.style.height='100%';
-    proj.aspect=S.width/S.height; proj.fov=deg2rad(S.controls.fovDeg);
-    if (cvCtx){ cvCtx.save(); cvCtx.setTransform(1,0,0,1,0,0); cvCtx.globalAlpha=1; cvCtx.fillStyle='#000'; cvCtx.fillRect(0,0,cvCanvas.width,cvCanvas.height); cvCtx.restore(); }
-    if (GL) updateProjUniform();
+  // ——————— Utilities: vectors, matrices, quaternions ——————————————————
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+  function l2(x,y){ return Math.hypot(x,y); }
+  function v3dot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+  function v3len(a){ return Math.hypot(a[0],a[1],a[2]); }
+  function v3norm(out,a){
+    const L = v3len(a)||1; out[0]=a[0]/L; out[1]=a[1]/L; out[2]=a[2]/L; return out;
   }
-  addEventListener('resize', resize);
-  addEventListener('orientationchange', resize);
-
-  // Permission helpers
-  const overlay=qs('#overlay'), permHint=qs('#permHint');
-  function hideOverlay(){
-    overlay.hidden=true; overlay.style.display='none'; // belt & suspenders
+  function v3cross(out,a,b){
+    const x=a[1]*b[2]-a[2]*b[1], y=a[2]*b[0]-a[0]*b[2], z=a[0]*b[1]-a[1]*b[0];
+    out[0]=x; out[1]=y; out[2]=z; return out;
   }
-  function showOverlay(){
-    overlay.hidden=false; overlay.style.display='flex';
+  function qFromAxisAngle(ax,ay,az,ang){
+    const s=Math.sin(ang/2), c=Math.cos(ang/2);
+    const L=Math.hypot(ax,ay,az)||1; ax/=L; ay/=L; az/=L;
+    return [ax*s, ay*s, az*s, c];
   }
-  function withTimeout(promise, ms){
-    return Promise.race([
-      promise,
-      new Promise(res=>setTimeout(()=>res('__timeout__'), ms))
-    ]);
+  function qMul(a,b){ // a*b
+    const ax=a[0], ay=a[1], az=a[2], aw=a[3];
+    const bx=b[0], by=b[1], bz=b[2], bw=b[3];
+    return [
+      aw*bx + ax*bw + ay*bz - az*by,
+      aw*by - ax*bz + ay*bw + az*bx,
+      aw*bz + ax*by - ay*bx + az*bw,
+      aw*bw - ax*bx - ay*by - az*bz
+    ];
   }
-  async function requestDeviceSensors(){
-    const Ori=window.DeviceOrientationEvent, Mot=window.DeviceMotionEvent;
-    const setNotes=t=>qst('#notes',t);
-    // If not secure, don't even try—Safari may hang the promise forever
-    if (!isSecure){
-      setNotes('insecure origin → skipping gate');
-      console.warn('Not secure origin; skipping requestPermission');
-      return 'denied';
-    }
-    try{
-      if (Ori && typeof Ori.requestPermission==='function'){
-        const res = await withTimeout(Ori.requestPermission(), 1500);
-        if (res==='__timeout__'){ setNotes('DeviceOrientation timed out'); return 'denied'; }
-        if (res!=='granted'){ setNotes(`Denied: DeviceOrientation (${res})`); return 'denied'; }
-        if (Mot && typeof Mot.requestPermission==='function'){
-          try { await withTimeout(Mot.requestPermission(), 800); } catch {}
-        }
-        setNotes('permission: iOS orientation'); return 'granted';
-      } else if (Mot && typeof Mot.requestPermission==='function'){
-        const res = await withTimeout(Mot.requestPermission(), 1500);
-        if (res==='__timeout__'){ setNotes('DeviceMotion timed out'); return 'denied'; }
-        if (res!=='granted'){ setNotes(`Denied: DeviceMotion (${res})`); return 'denied'; }
-        setNotes('permission: iOS motion'); return 'granted';
-      } else {
-        setNotes('permission: no gate (assumed)'); return 'granted';
-      }
-    }catch(e){
-      setNotes(`permission error: ${e?.message||'exception'}`); console.warn(e);
-      return 'denied';
-    }
+  function qConj(q){ return [-q[0],-q[1],-q[2],q[3]]; }
+  function qRotateVec(q,v){
+    // Return R(q)*v ; q is world->device here
+    const x=v[0], y=v[1], z=v[2];
+    const qx=q[0], qy=q[1], qz=q[2], qw=q[3];
+    // t = 2 * cross(q.xyz, v)
+    const tx = 2*(qy*z - qz*y);
+    const ty = 2*(qz*x - qx*z);
+    const tz = 2*(qx*y - qy*x);
+    // v' = v + qw*t + cross(q.xyz, t)
+    return [
+      x + qw*tx + (qy*tz - qz*ty),
+      y + qw*ty + (qz*tx - qx*tz),
+      z + qw*tz + (qx*ty - qy*tx),
+    ];
   }
-  async function onAllowMotionClick(){
-    const btn=document.getElementById('btnPerm'); if(btn) btn.textContent='Requesting…';
-    const res=await requestDeviceSensors();
-    if (res==='granted'){ S.sensors.permission='granted'; hideOverlay(); }
-    else {
-      S.sensors.permission='denied';
-      if (permHint) permHint.innerHTML='Proceeding without sensors.<br>Tip: use https or http://localhost (not file://). On iOS: Settings → Safari → “Motion &amp; Orientation Access”.';
-      if (btn) btn.textContent='Allow Motion';
-      // Auto-continue so you aren't stuck
-      hideOverlay();
-    }
+  function qFromYawPitchRoll(yawZ, pitchX, rollY){
+    // Compose world-axes rotations: Rz(yaw) * Rx(pitch) * Ry(roll)
+    const qz = qFromAxisAngle(0,0,1, yawZ);
+    const qx = qFromAxisAngle(1,0,0, pitchX);
+    const qy = qFromAxisAngle(0,1,0, rollY);
+    return qMul(qMul(qz, qx), qy);
   }
-  function onSkipMotionClick(){ S.sensors.permission='denied'; qst('#notes','manual skip → North=up'); hideOverlay(); }
-  window.__allowMotionClick = onAllowMotionClick;
-  window.__skipMotionClick = onSkipMotionClick;
-  function bindOverlayButtons(){
-    const p=document.getElementById('btnPerm'), s=document.getElementById('btnSkip');
-    if (p) p.addEventListener('click', onAllowMotionClick);
-    if (s) s.addEventListener('click', onSkipMotionClick);
-    if (DEBUG){
-      overlay?.addEventListener('click',(e)=>{ console.log('overlay click', e.target?.id); qst('#notes',`overlay click: ${e.target?.id||'overlay'}`);});
-    }
+  function makePerspective(out, fovyDeg, aspect, near, far){
+    const f = 1 / Math.tan((fovyDeg*Math.PI/180)/2);
+    out[0]=f/aspect; out[1]=0; out[2]=0; out[3]=0;
+    out[4]=0; out[5]=f; out[6]=0; out[7]=0;
+    out[8]=0; out[9]=0; out[10]=(far+near)/(near-far); out[11]=-1;
+    out[12]=0; out[13]=0; out[14]=(2*far*near)/(near-far); out[15]=0;
+    return out;
+  }
+  function projectToNDC(p, m){
+    // p: [x,y,z]; return [x_ndc, y_ndc, w] where w>0 if in front
+    const x=p[0], y=p[1], z=p[2];
+    const nx = m[0]*x + m[8]*z;                 // omit terms we know zero
+    const ny = m[5]*y + m[9]*z;
+    const nz = m[10]*z + m[14];
+    const nw = -z; // from standard perspective matrix (m[11] = -1, others 0)
+    const xndc = nx / nw;
+    const yndc = (app.invertY ? -1 : 1) * (ny / nw);
+    return [xndc, yndc, nw, nz];
+  }
+  function ndcToPx(ndcX, ndcY){
+    const px = (ndcX*0.5 + 0.5) * app.width;
+    const py = (1 - (ndcY*0.5 + 0.5)) * app.height;
+    return [px, py];
   }
 
-  // Sensors
+  // ——————— Sensor / Orientation ——————————————————————————————
+  const NORTH_WORLD = new Float32Array([0,1,0]);
+  const tmp = new Float32Array(3), U = new Float32Array(3), V = new Float32Array(3);
+
+  function lowpass(prev, next, a){ return prev + a*(next - prev); }
+  function yawStdIsUnstable(history){
+    if (history.length < 12) return false;
+    let mean = history.reduce((s,v)=>s+v,0)/history.length;
+    let v = history.reduce((s,x)=>{ let d=x-mean; return s+d*d; },0)/history.length;
+    return Math.sqrt(v) > 4; // deg
+  }
+
+  const PermUI = {
+    show(){ el('#overlay-permission').classList.add('show'); },
+    hide(){ el('#overlay-permission').classList.remove('show'); }
+  };
+
+  function radians(deg){ return deg * Math.PI/180; }
+  function degrees(rad){ return rad * 180/Math.PI; }
+
   function setupSensors(){
-    if (NO_SENSORS) return;
-    addEventListener('deviceorientation', (e)=>{
-      const any=e;
-      if (typeof any.webkitCompassHeading==='number' && isFinite(any.webkitCompassHeading)){
-        S.sensors.source='webkitCompass';
-        let yaw=deg2rad(360-any.webkitCompassHeading);
-        applyYPR(yaw, deg2rad((e.beta??0)), deg2rad((e.gamma??0)));
-      } else {
-        S.sensors.source='deviceorientation';
-        applyYPR(deg2rad((e.alpha??0)), deg2rad((e.beta??0)), deg2rad((e.gamma??0)));
+    if (FLAGS.noSensors){
+      app.sensor.enabled = false;
+      app.sensor.source = 'off';
+      return;
+    }
+
+    // Prefer AbsoluteOrientationSensor if available (Android Chrome, modern)
+    let ABS = (window.AbsoluteOrientationSensor || window.OrientationSensor);
+    let sensorObj = null;
+
+    function attachDeviceOrientation(){
+      // iOS & fallback path
+      window.addEventListener('deviceorientation', onDeviceOrientation, { passive:true });
+      app.sensor.enabled = true;
+      app.sensor.source = 'webkit' in window ? 'webkit' : 'alpha';
+      updateHUDSensor();
+    }
+
+    async function requestIOSPermissionIfNeeded(){
+      try{
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+          // iOS 13+
+          PermUI.show();
+          el('#btn-permit').onclick = async ()=>{
+            try{
+              const res = await DeviceOrientationEvent.requestPermission();
+              app.sensor.havePermission = (res === 'granted');
+              if (app.sensor.havePermission) {
+                PermUI.hide();
+                attachDeviceOrientation();
+              } else {
+                PermUI.hide(); // run with defaults
+              }
+            } catch(e){ PermUI.hide(); console.warn('Permission error', e); }
+          };
+        } else {
+          // No permission gate
+          attachDeviceOrientation();
+        }
+      } catch(e){ console.warn(e); attachDeviceOrientation(); }
+    }
+
+    function startAbsoluteSensor(){
+      try{
+        sensorObj = new ABS({ frequency: 60, referenceFrame: 'device' });
+        sensorObj.addEventListener('reading', ()=>{
+          // sensorObj.quaternion maps device→world; we need world→device (conjugate)
+          const qdw = [sensorObj.quaternion[0], sensorObj.quaternion[1], sensorObj.quaternion[2], sensorObj.quaternion[3]];
+          const qwd = qConj(qdw);
+          // Rotate NORTH into device frame
+          const Nd = qRotateVec(qwd, NORTH_WORLD);
+          v3norm(app.Nd, Nd);
+          // Estimate yaw/pitch/roll for HUD only by projecting qwd
+          // Yaw: angle from +Y to Nd in XY plane
+          const yaw = Math.atan2(app.Nd[0], app.Nd[1]); // radians, 0 at North
+          // Pitch: rotation around X (approx by Up component)
+          const pitch = Math.asin(-app.Nd[2]); // heuristic
+          // Roll: not robust from Nd alone; leave 0
+          app.sensor.yawFilt = lowpass(app.sensor.yawFilt, degrees(yaw), app.sensor.alphaLPF);
+          app.sensor.pitchFilt = lowpass(app.sensor.pitchFilt, degrees(pitch), app.sensor.alphaLPF);
+          app.sensor.rollFilt = lowpass(app.sensor.rollFilt, 0, app.sensor.alphaLPF);
+          // Unstable check (yaw variance)
+          app.sensor.yawHistory.push(app.sensor.yawFilt);
+          if (app.sensor.yawHistory.length > 24) app.sensor.yawHistory.shift();
+          app.sensor.unstable = yawStdIsUnstable(app.sensor.yawHistory);
+        });
+        sensorObj.addEventListener('activate', ()=>{ app.sensor.enabled = true; app.sensor.source = 'sensor'; updateHUDSensor(); });
+        sensorObj.addEventListener('error', e=>{
+          console.warn('AbsoluteOrientationSensor error', e.error || e.name);
+          // fallback
+          requestIOSPermissionIfNeeded();
+        });
+        sensorObj.start();
+      }catch(e){
+        console.warn('AbsoluteOrientationSensor not available', e);
+        requestIOSPermissionIfNeeded();
       }
-    }, true);
-    function applyYPR(yaw,pitch,roll){
-      pitch = S.sensors.invertY ? -pitch : pitch;
-      const f=S.sensors.filtered, a=clamp(S.sensors.alpha,0.01,0.5);
-      const uw=unwrapAngle(f.yaw,yaw);
-      f.yaw += a*(uw-f.yaw); f.pitch += a*(pitch-f.pitch); f.roll += a*(roll-f.roll);
-      S.sensors.lastYawSamples.push(uw); if (S.sensors.lastYawSamples.length>15) S.sensors.lastYawSamples.shift();
-      let jitter=0; for(let i=1;i<S.sensors.lastYawSamples.length;i++) jitter+=Math.abs(normAngle(S.sensors.lastYawSamples[i]-S.sensors.lastYawSamples[i-1]));
-      S.sensors.compassUnstable=(jitter/Math.max(1,(S.sensors.lastYawSamples.length-1)))>deg2rad(2.0);
+    }
+
+    function onDeviceOrientation(ev){
+      // Prefer webkitCompassHeading when available (iOS)
+      let headingDeg = (typeof ev.webkitCompassHeading === 'number') ? ev.webkitCompassHeading : (typeof ev.alpha === 'number' ? ev.alpha : 0);
+      let pitchDeg = (typeof ev.beta === 'number') ? ev.beta : 0;   // front-back
+      let rollDeg  = (typeof ev.gamma === 'number') ? ev.gamma : 0; // left-right
+
+      // Low-pass
+      app.sensor.headingDeg = lowpass(app.sensor.headingDeg, headingDeg, app.sensor.alphaLPF);
+      app.sensor.pitchDeg   = lowpass(app.sensor.pitchDeg,   pitchDeg,   app.sensor.alphaLPF);
+      app.sensor.rollDeg    = lowpass(app.sensor.rollDeg,    rollDeg,    app.sensor.alphaLPF);
+
+      // Compose world->device quaternion from yaw/pitch/roll (approx)
+      const yawZ   = radians(app.sensor.headingDeg); // 0=North, 90=East
+      const pitchX = radians(app.sensor.pitchDeg);
+      const rollY  = radians(app.sensor.rollDeg);
+      const qwd = qFromYawPitchRoll(yawZ, pitchX, rollY);
+      const Nd = qRotateVec(qwd, NORTH_WORLD);
+      v3norm(app.Nd, Nd);
+
+      app.sensor.yawFilt = app.sensor.headingDeg;
+      app.sensor.pitchFilt = app.sensor.pitchDeg;
+      app.sensor.rollFilt = app.sensor.rollDeg;
+
+      // Unstable compass indicator
+      app.sensor.yawHistory.push(app.sensor.headingDeg);
+      if (app.sensor.yawHistory.length > 24) app.sensor.yawHistory.shift();
+      app.sensor.unstable = yawStdIsUnstable(app.sensor.yawHistory);
+    }
+
+    // Start best available
+    if (ABS && !(/iPad|iPhone|iPod/.test(navigator.userAgent))) {
+      // Android/others first try Generic Sensors
+      startAbsoluteSensor();
+    } else {
+      // iOS / fallback path
+      requestIOSPermissionIfNeeded();
     }
   }
-  function northInDevice(){
-    const f=S.sensors.filtered, R=R_world_to_device(f.yaw,f.pitch,f.roll);
-    const Rt=new Float32Array([R[0],R[3],R[6], R[1],R[4],R[7], R[2],R[5],R[8]]);
-    const Nw=new Float32Array([0,1,0]), Nd=Rt_mul_v(Rt,Nw);
-    if (S.sensors.permission!=='granted' || S.sensors.source==='none') return new Float32Array([0,1,0]);
-    return v3.norm(Nd);
+
+  // ——————— Particles ——————————————————————————————
+  function initParticles(count){
+    app.particles.length = 0;
+    app.dead.length = 0;
+    for (let i=0;i<count;i++){
+      app.particles.push(spawnParticle());
+    }
+    // pre-roll a few frames to seed prev positions
+    for (let i=0;i<3;i++){ integrate(0.016); }
   }
 
-  // Particles
-  function allocParticles(n){ particles=new Float32Array(n*3); velocities=new Float32Array(n*3); ages=new Float32Array(n); lifetimes=new Float32Array(n); }
-  function randomOnBasis(nDir,spread){
-    const up=Math.abs(nDir[2])<0.9?new Float32Array([0,0,1]):new Float32Array([1,0,0]);
-    const t=v3.norm(v3.cross(up,nDir)), b=v3.cross(nDir,t);
-    const a=(Math.random()*2-1)*spread, c=(Math.random()*2-1)*spread;
-    return v3.norm(v3.add(nDir, v3.add(v3.scale(t,a), v3.scale(b,c))));
-  }
-  function spawnParticle(i,Nd,far=60,jitter=S.controls.spread){
-    const n=Nd||new Float32Array([0,1,0]);
-    const dir=randomOnBasis(n,0.2*jitter);
-    const base=v3.scale(n, far+Math.random()*20);
-    const jitterPos=v3.scale(randomOnBasis(n,1.0),(Math.random()*2-1)*12.0);
-    const p=v3.add(base,jitterPos);
-    particles[i*3+0]=p[0]; particles[i*3+1]=p[1]; particles[i*3+2]=p[2];
-    const vm=v3.norm(v3.add(v3.scale(n,-1), v3.scale(dir,0.25)));
-    velocities[i*3+0]=vm[0]; velocities[i*3+1]=vm[1]; velocities[i*3+2]=vm[2];
-    ages[i]=0; lifetimes[i]=2.5+Math.random()*2.0;
-  }
-  function initParticles(n){ allocParticles(n); const Nd=northInDevice(); for(let i=0;i<n;i++){ spawnParticle(i,Nd); ages[i]=Math.random()*lifetimes[i]; } }
+  function spawnParticle(){
+    // Build orthonormal basis around Nd
+    const Nd = app.Nd;
+    const eps = 1e-3;
+    if (Math.abs(Nd[2]) < 0.99) { v3cross(U, Nd, [0,0,1]); }
+    else { v3cross(U, Nd, [1,0,0]); }
+    v3norm(U,U);
+    v3cross(V, Nd, U);
+    v3norm(V,V);
 
-  // WebGL2
-  const VS=`#version 300 es
-  precision highp float;
-  layout(location=0) in vec3 aPos; layout(location=1) in vec3 aVel;
-  out vec2 vCorner; out float vZ;
-  uniform mat4 uProj; uniform float uTrailMul; uniform float uWidthPx; uniform vec2 uViewport;
-  void main(){
-    int vid=gl_VertexID%4;
-    vec2 corner=vec2((vid==1||vid==3)?1.0:-1.0,(vid>=2)?1.0:-1.0);
-    vCorner=corner; vZ=aPos.z;
-    vec3 p0=aPos; vec3 p1=aPos + aVel*0.5;
-    vec4 P0=uProj*vec4(p0,1.0), P1=uProj*vec4(p1,1.0);
-    vec2 ndc0=P0.xy/P0.w, ndc1=P1.xy/P1.w;
-    vec2 dir2d=normalize(ndc1-ndc0+vec2(1e-6));
-    vec2 px2ndc=2.0/uViewport;
-    float widthNdc=uWidthPx*px2ndc.y;
-    float depthFactor=clamp(1.5/max(0.2,vZ),0.0,5.0);
-    float Lpx=uTrailMul*12.0*depthFactor;
-    vec2 longAxis=dir2d, shortAxis=vec2(-dir2d.y,dir2d.x);
-    vec2 ndcOffset=longAxis*(corner.y*(Lpx*px2ndc.y)) + shortAxis*(corner.x*widthNdc);
-    gl_Position=vec4(ndc0+ndcOffset,(P0.z/P0.w),1.0);
-  }`;
-  const FS=`#version 300 es
-  precision highp float; in vec2 vCorner; in float vZ; out vec4 o;
-  void main(){
-    float along=(vCorner.y*0.5+0.5);
-    float across=abs(vCorner.x);
-    float fade=(1.0-across)*smoothstep(0.0,1.0,along);
-    float distFade=clamp(1.5/(0.4+vZ),0.0,1.0);
-    float intensity=fade*distFade;
-    o=vec4(vec3(intensity),intensity);
-  }`;
-  function createProgram(gl,vs,fs){
-    function sh(t,src){ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s);
-      if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)||'shader'); return s; }
-    const p=gl.createProgram(), v=sh(gl.VERTEX_SHADER,vs), f=sh(gl.FRAGMENT_SHADER,fs);
-    gl.attachShader(p,v); gl.attachShader(p,f); gl.linkProgram(p);
-    if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)||'link');
-    gl.deleteShader(v); gl.deleteShader(f); return p;
+    const spread = app.params.spread;
+    const r1 = (Math.random()*2-1);
+    const r2 = (Math.random()*2-1);
+    const jitter = [
+      (r1*U[0] + r2*V[0]) * spread * 5.0,
+      (r1*U[1] + r2*V[1]) * spread * 5.0,
+      (r1*U[2] + r2*V[2]) * spread * 5.0,
+    ];
+
+    const far = app.bounds.far;
+    const near = app.bounds.near;
+    const dist = far * (0.6 + 0.4*Math.random()); // spawn band further away
+    const pos = [
+      Nd[0]*dist + jitter[0],
+      Nd[1]*dist + jitter[1],
+      Math.max(near*1.2, Nd[2]*dist + jitter[2]) // ensure in front
+    ];
+    const prev = pos.slice();
+    const brightness = 0.4 + Math.random()*0.6; // some variation
+    const size = 1 + Math.random()*1.5;
+    return { pos, prev, brightness, size };
   }
+
+  function integrate(dt){
+    // Motion vector: towards camera along -Nᵈ; ensure z moves toward camera (decreasing)
+    const Nd = app.Nd;
+    const v3 = app.NdStrict
+      ? [-Nd[0], -Nd[1], -Nd[2]]
+      : [-Nd[0], -Nd[1], -Math.abs(Nd[2])]; // keep approach toward camera
+
+    // Normalize motion direction to decouple speed from tilt magnitude
+    const L = Math.hypot(v3[0], v3[1], v3[2]) || 1;
+    v3[0]/=L; v3[1]/=L; v3[2]/=L;
+
+    const S = app.params.speed;
+    const near = app.bounds.near, far = app.bounds.far;
+    const maxXY = app.bounds.maxXY;
+
+    for (let i=0;i<app.particles.length;i++){
+      const p = app.particles[i];
+      // Save previous
+      p.prev[0]=p.pos[0]; p.prev[1]=p.pos[1]; p.prev[2]=p.pos[2];
+
+      // Depth-based acceleration cue: faster when near (inverse with z)
+      const z = p.pos[2];
+      const accel = 1.0 + app.params.trailMul * clamp((1.0/(z+0.2)), 0, 3.0);
+
+      p.pos[0] += v3[0] * S * accel * dt;
+      p.pos[1] += v3[1] * S * accel * dt;
+      p.pos[2] += v3[2] * S * accel * dt;
+
+      // Recycle when out of bounds
+      if (p.pos[2] <= near || p.pos[2] > far*1.05 ||
+          Math.abs(p.pos[0]) > maxXY || Math.abs(p.pos[1]) > maxXY) {
+        app.particles[i] = spawnParticle();
+      }
+    }
+  }
+
+  // ——————— WebGL2 pipeline (CPU geometry, additive) ——————————————————
   function glInit(){
-    GL=glCanvas.getContext('webgl2',{antialias:false,premultipliedAlpha:false,alpha:false,desynchronized:true});
-    if(!GL) throw new Error('no webgl2');
-    glProg=createProgram(GL,VS,FS); GL.useProgram(glProg);
-    glBufPos=GL.createBuffer(); glBufVel=GL.createBuffer(); glVAO=GL.createVertexArray(); GL.bindVertexArray(glVAO);
-    GL.bindBuffer(GL.ARRAY_BUFFER,glBufPos); GL.bufferData(GL.ARRAY_BUFFER,particles.byteLength,GL.DYNAMIC_DRAW);
-    GL.enableVertexAttribArray(0); GL.vertexAttribPointer(0,3,GL.FLOAT,false,12,0); GL.vertexAttribDivisor(0,1);
-    GL.bindBuffer(GL.ARRAY_BUFFER,glBufVel); GL.bufferData(GL.ARRAY_BUFFER,velocities.byteLength,GL.DYNAMIC_DRAW);
-    GL.enableVertexAttribArray(1); GL.vertexAttribPointer(1,3,GL.FLOAT,false,12,0); GL.vertexAttribDivisor(1,1);
-    u.uProj=GL.getUniformLocation(glProg,'uProj'); u.uTrailMul=GL.getUniformLocation(glProg,'uTrailMul');
-    u.uWidthPx=GL.getUniformLocation(glProg,'uWidthPx'); u.uTime=GL.getUniformLocation(glProg,'uTime'); u.uViewport=GL.getUniformLocation(glProg,'uViewport');
-    GL.enable(GL.BLEND); GL.blendFunc(GL.ONE,GL.ONE); GL.disable(GL.DEPTH_TEST); GL.clearColor(0,0,0,1);
-    updateProjUniform(); GL.useProgram(glProg); GL.uniform1f(u.uWidthPx,1.25);
-  }
-  function updateProjUniform(){
-    if(!GL) return;
-    const f=1.0/Math.tan(proj.fov/2), a=proj.aspect, n=proj.near, fa=proj.far;
-    const P=new Float32Array([ f/a,0,0,0, 0,f,0,0, 0,0,(fa+n)/(n-fa),-1, 0,0,(2*fa*n)/(n-fa),0 ]);
-    GL.useProgram(glProg); GL.uniformMatrix4fv(u.uProj,false,P);
-  }
-  function glRender(n,timeSec){
-    const gl=GL; gl.viewport(0,0,glCanvas.width,glCanvas.height); gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.useProgram(glProg);
-    gl.uniform1f(u.uTime,timeSec);
-    gl.uniform1f(u.uTrailMul,S.controls.trailMul);
-    gl.uniform2f(u.uViewport,glCanvas.width,glCanvas.height);
-    gl.bindBuffer(gl.ARRAY_BUFFER,glBufPos); gl.bufferSubData(gl.ARRAY_BUFFER,0,particles);
-    gl.bindBuffer(gl.ARRAY_BUFFER,glBufVel); gl.bufferSubData(gl.ARRAY_BUFFER,0,velocities);
-    gl.bindVertexArray(glVAO); gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,n);
+    if (FLAGS.forceCanvas) return false;
+    const canvas = el('#gl');
+    const gl = canvas.getContext('webgl2', { antialias:false, alpha:false, premultipliedAlpha:false, preserveDrawingBuffer:false });
+    if (!gl) return false;
+
+    // Shaders
+    const vsSrc = `#version 300 es
+      layout(location=0) in vec2 a_pos;       // clip-space position
+      layout(location=1) in float a_alpha;    // per-vertex alpha (thickness fade)
+      out float v_alpha;
+      void main(){
+        v_alpha = a_alpha;
+        gl_Position = vec4(a_pos, 0.0, 1.0);
+      }`;
+    const fsSrc = `#version 300 es
+      precision mediump float;
+      in float v_alpha;
+      out vec4 o;
+      void main(){
+        // pure white, additive-ish (driver blend controls final)
+        o = vec4(1.0, 1.0, 1.0, v_alpha);
+      }`;
+
+    function compile(type, src){
+      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(s));
+      }
+      return s;
+    }
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+
+    // Buffers
+    const vbo = gl.createBuffer();
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    const STRIDE = 3*4; // vec2 + float
+    gl.enableVertexAttribArray(0); // a_pos
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, STRIDE, 0);
+    gl.enableVertexAttribArray(1); // a_alpha
+    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, STRIDE, 8);
+    gl.bindVertexArray(null);
+
+    app.gl = gl;
+    app.glRes = { prog, vao, vbo, capacityVerts: 0, vertsUsed: 0 };
+
+    glDisableDepthAndEnableBlend(gl);
+
+    return true;
   }
 
-  // Canvas2D
-  function cvInit(){ cvCtx=cvCanvas.getContext('2d',{alpha:false,desynchronized:true}); cvCtx.fillStyle='#000'; cvCtx.fillRect(0,0,cvCanvas.width,cvCanvas.height); }
-  function projectCanvas2D(x,y,z,fpx){
-    const s=fpx/(fpx+z);
-    const sx=(x*s)*(cvCanvas.height*0.5)+(cvCanvas.width*0.5);
-    const sy=(-y*s)*(cvCanvas.height*0.5)+(cvCanvas.height*0.5);
-    return [sx,sy,s];
+  function glDisableDepthAndEnableBlend(gl){
+    gl.disable(gl.DEPTH_TEST);
+    gl.enable(gl.BLEND);
+    // Additive with some alpha falloff
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.clearColor(0,0,0,1);
   }
-  function cvRender(n){
-    const ctx=cvCtx;
-    ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=S.controls.persistence;
-    ctx.fillStyle='#000'; ctx.fillRect(0,0,cvCanvas.width,cvCanvas.height); ctx.restore();
-    ctx.globalCompositeOperation='lighter'; ctx.lineCap='round';
-    const fpx=clamp((S.height*0.5)/Math.tan(proj.fov/2),200,2000);
-    for(let i=0;i<n;i++){
-      const ix=i*3; const x=particles[ix],y=particles[ix+1],z=particles[ix+2];
-      const vx=velocities[ix],vy=velocities[ix+1],vz=velocities[ix+2];
-      const p0=projectCanvas2D(x,y,z,fpx), p1=projectCanvas2D(x+vx*0.5,y+vy*0.5,z+vz*0.5,fpx);
-      const dx=p1[0]-p0[0], dy=p1[1]-p0[1]; const len=Math.hypot(dx,dy);
-      const dirx=len>1e-3?dx/len:1, diry=len>1e-3?dy/len:0;
-      const L=clamp(S.controls.trailMul*10*(1.5/(0.4+z)),2,120);
-      const w=clamp(1.0*(1.2/(0.5+z)),0.6,2.5);
-      ctx.lineWidth=w*S.dpr; ctx.globalAlpha=clamp(0.15+0.85*(1.5/(0.4+z)),0.2,1.0);
-      ctx.beginPath(); ctx.moveTo(p0[0]-dirx*L,p0[1]-diry*L); ctx.lineTo(p0[0]+dirx*L*0.35,p0[1]+diry*L*0.35);
-      ctx.strokeStyle='#ffffff'; ctx.stroke();
+
+  function glResize(){
+    if (!app.gl) return;
+    const gl = app.gl;
+    const dpr = app.dpr;
+    const w = Math.max(1, Math.floor(innerWidth * dpr));
+    const h = Math.max(1, Math.floor(innerHeight * dpr));
+    const canvas = gl.canvas;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+    }
+    gl.viewport(0,0,w,h);
+  }
+
+  function glDraw(){
+    const gl = app.gl, res = app.glRes;
+    if (!gl) return;
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // Build CPU quad vertex buffer in clip-space with per-vertex alpha
+    // Each particle -> 2 triangles (6 verts); Each vert: (x_ndc, y_ndc, alpha)
+    const count = app.particles.length;
+    const vertsNeeded = count * 6;
+    if (vertsNeeded > res.capacityVerts) {
+      // grow buffer
+      const newCap = Math.ceil(vertsNeeded * 1.3);
+      gl.bindBuffer(gl.ARRAY_BUFFER, res.vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(newCap * 3), gl.DYNAMIC_DRAW);
+      res.capacityVerts = newCap;
+    }
+    const data = new Float32Array(vertsNeeded * 3);
+
+    // Precompute pixel-to-ndc scalers
+    const sx = 2 / app.width;
+    const sy = 2 / app.height;
+
+    let ptr = 0;
+    const f = app.params.trailMul;
+    for (let i=0;i<count;i++){
+      const P = app.particles[i];
+      // Project previous and current positions
+      const pr = projectToNDC(P.prev, app.proj);
+      const cr = projectToNDC(P.pos, app.proj);
+      const x0=pr[0], y0=pr[1], x1=cr[0], y1=cr[1];
+      // Convert to pixels for thickness computation
+      const [px0, py0] = ndcToPx(x0, y0);
+      const [px1, py1] = ndcToPx(x1, y1);
+
+      // Screen-space motion vector
+      let dx = px1 - px0, dy = py1 - py0;
+      const len = Math.max(1, Math.hypot(dx,dy));
+      dx/=len; dy/=len;
+
+      // Trail length & width scaling by proximity
+      const z = P.pos[2];
+      const widthPx = clamp((P.size * (1.2 + 3.5/(z+0.2))), 0.5, 4.5) * app.dpr;
+      const segLenPx = clamp((len * f), 3, 120) * app.dpr;
+
+      // Rebuild endpoints to ensure consistent length (extend backwards for "streak")
+      const ex = px1 - dx*segLenPx;
+      const ey = py1 - dy*segLenPx;
+      const nx = -dy, ny = dx; // normal
+
+      const ox = nx * (widthPx*0.5);
+      const oy = ny * (widthPx*0.5);
+
+      // Two triangles; convert to NDC
+      const A = [ (ex - ox)*sx - 1, 1 - (ey - oy)*sy ];
+      const B = [ (ex + ox)*sx - 1, 1 - (ey + oy)*sy ];
+      const C = [ (px1 + ox)*sx - 1, 1 - (py1 + oy)*sy ];
+      const D = [ (px1 - ox)*sx - 1, 1 - (py1 - oy)*sy ];
+
+      // Alpha / brightness shaping: brighter near, fade tail
+      const baseA = clamp(0.18 + 0.8*(1/(z+0.2)), 0.12, 0.95) * P.brightness;
+      const headA = baseA;
+      const tailA = baseA * 0.45;
+
+      // Triangle 1: A,B,C
+      data[ptr++] = A[0]; data[ptr++] = A[1]; data[ptr++] = tailA;
+      data[ptr++] = B[0]; data[ptr++] = B[1]; data[ptr++] = tailA;
+      data[ptr++] = C[0]; data[ptr++] = C[1]; data[ptr++] = headA;
+      // Triangle 2: A,C,D
+      data[ptr++] = A[0]; data[ptr++] = A[1]; data[ptr++] = tailA;
+      data[ptr++] = C[0]; data[ptr++] = C[1]; data[ptr++] = headA;
+      data[ptr++] = D[0]; data[ptr++] = D[1]; data[ptr++] = headA*0.9;
+    }
+
+    // Upload & draw
+    gl.bindVertexArray(res.vao);
+    gl.useProgram(res.prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, res.vbo);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
+    gl.drawArrays(gl.TRIANGLES, 0, vertsNeeded);
+    res.vertsUsed = vertsNeeded;
+    gl.bindVertexArray(null);
+  }
+
+  // ——————— Canvas2D fallback ——————————————————————————————
+  function c2dInit(){
+    const canvas = el('#c2d');
+    const ctx = canvas.getContext('2d', { alpha:false });
+    app.ctx = ctx;
+    return !!ctx;
+  }
+  function c2dResize(){
+    if (!app.ctx) return;
+    const c = app.ctx.canvas;
+    const w = Math.max(1, Math.floor(innerWidth * app.dpr));
+    const h = Math.max(1, Math.floor(innerHeight * app.dpr));
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    app.ctx.setTransform(1,0,0,1,0,0);
+    app.ctx.scale(1,1); // drawing uses pixel coords directly
+  }
+  function c2dDraw(){
+    const ctx = app.ctx; if (!ctx) return;
+    // motion persistence clear
+    ctx.fillStyle = `rgba(0,0,0,${app.params.persistAlpha})`;
+    ctx.fillRect(0,0,ctx.canvas.width, ctx.canvas.height);
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const f = app.params.trailMul;
+    for (let i=0;i<app.particles.length;i++){
+      const P = app.particles[i];
+      const pr = projectToNDC(P.prev, app.proj);
+      const cr = projectToNDC(P.pos, app.proj);
+      const [x0, y0] = ndcToPx(pr[0], pr[1]);
+      const [x1, y1] = ndcToPx(cr[0], cr[1]);
+      const dx = x1-x0, dy=y1-y0;
+      const len = Math.max(1, Math.hypot(dx,dy));
+      const segLen = clamp((len * f), 3, 120) * app.dpr;
+      const ux = dx/len, uy=dy/len;
+      const sx = x1 - ux*segLen, sy = y1 - uy*segLen;
+
+      const z = P.pos[2];
+      const widthPx = clamp((P.size * (1.4 + 3.8/(z+0.2))), 0.6, 5.5) * app.dpr;
+      const alpha = clamp(0.20 + 0.8*(1/(z+0.2)), 0.12, 0.95) * P.brightness;
+
+      ctx.strokeStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+      ctx.lineWidth = widthPx;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // ——————— Resize, DPR, projection ——————————————————————————————
+  function resize(){
+    const clampDPR = app.params.clampDPR;
+    app.dpr = clamp(window.devicePixelRatio || 1, 1, clampDPR);
+    app.width = Math.max(1, Math.floor(innerWidth * app.dpr));
+    app.height = Math.max(1, Math.floor(innerHeight * app.dpr));
+
+    if (app.gl) glResize();
+    if (app.ctx) c2dResize();
+
+    makePerspective(app.proj, app.params.fovDeg, app.width/app.height, app.bounds.near, app.bounds.far);
+
+    // HUD tags
+    if (app.ui.badgeDPR) app.ui.badgeDPR.textContent = `DPR ${app.dpr.toFixed(2)}`;
+  }
+
+  // ——————— HUD ——————————————————————————————
+  function el(sel){ return document.querySelector(sel); }
+  function setupHUD(){
+    app.ui.hud = el('#hud');
+    if (FLAGS.debug) app.ui.hud.classList.add('show');
+    app.ui.badgePipeline = el('#badge-pipeline');
+    app.ui.badgeDPR = el('#badge-dpr');
+    app.ui.badgeSensor = el('#badge-sensor');
+    app.ui.fps = el('#stat-fps');
+    app.ui.count = el('#stat-count');
+    app.ui.hpr = el('#stat-hpr');
+    app.ui.nd = el('#stat-nd');
+    app.ui.comp = el('#stat-comp');
+    app.ui.unstable = el('#unstable');
+
+    // Controls
+    bindSlider('#ctl-count', app.params.count, v=>{ app.params.count = Math.round(v); resizePoolToCount(); });
+    bindSlider('#ctl-speed', app.params.speed, v=> app.params.speed = v);
+    bindSlider('#ctl-spread', app.params.spread, v=> app.params.spread = v);
+    bindSlider('#ctl-fov', app.params.fovDeg, v=>{ app.params.fovDeg = v; makePerspective(app.proj, app.params.fovDeg, app.width/app.height, app.bounds.near, app.bounds.far); });
+    bindSlider('#ctl-trail', app.params.trailMul, v=> app.params.trailMul = v);
+    bindSlider('#ctl-persist', app.params.persistAlpha, v=> app.params.persistAlpha = v);
+    const strict = el('#ctl-strict'); strict.checked = app.NdStrict; strict.onchange = ()=> app.NdStrict = strict.checked;
+    const invY = el('#ctl-invY'); invY.checked = app.invertY; invY.onchange = ()=> app.invertY = invY.checked;
+  }
+  function bindSlider(sel, init, oninput){
+    const s = el(sel);
+    if (!s) return;
+    s.value = init;
+    s.addEventListener('input', ()=>oninput(parseFloat(s.value)));
+  }
+  function updateHUDStatic(){
+    if (!FLAGS.debug) return;
+    app.ui.badgePipeline.textContent = app.pipeline.toUpperCase();
+  }
+  function updateHUDDynamic(){
+    if (!FLAGS.debug) return;
+    app.ui.fps.textContent = app.fps.toFixed(0);
+    app.ui.count.textContent = String(app.particles.length);
+    app.ui.hpr.textContent = `${app.sensor.yawFilt.toFixed(0)}° / ${app.sensor.pitchFilt.toFixed(0)}° / ${app.sensor.rollFilt.toFixed(0)}°`;
+    app.ui.nd.textContent = `(${app.Nd[0].toFixed(2)}, ${app.Nd[1].toFixed(2)}, ${app.Nd[2].toFixed(2)})`;
+    app.ui.comp.textContent = `${app.sensor.source}`;
+    app.ui.unstable.classList.toggle('show', !!app.sensor.unstable);
+  }
+  function updateHUDSensor(){
+    if (!FLAGS.debug) return;
+    app.ui.badgeSensor.textContent = app.sensor.source;
+  }
+
+  function resizePoolToCount(){
+    const target = clamp(app.params.count, app.adapt.minCount, app.adapt.maxCount);
+    const cur = app.particles.length;
+    if (target > cur){
+      for (let i=0;i<target-cur;i++) app.particles.push(spawnParticle());
+    } else if (target < cur){
+      app.particles.length = target;
     }
   }
 
-  // Loop
-  let rafId=0,lastT=performance.now();
-  function loop(t){
-    if(!S.running) return;
-    const dt=clamp((t-lastT)/1000,0.001,0.05); lastT=t; S.perf.avgDt=lerp(S.perf.avgDt,dt,0.05);
-    const Nd=northInDevice();
-    const baseSpeed=S.controls.speed*(S.reducedMotion?0.6:1.0); const vdt=baseSpeed*dt;
-    for(let i=0;i<countTarget;i++){
-      const ix=i*3; const z=particles[ix+2]; const accel=clamp(1.0+(1.2/Math.max(0.25,z)),1.0,2.5);
-      particles[ix]+=velocities[ix]*vdt*accel; particles[ix+1]+=velocities[ix+1]*vdt*accel; particles[ix+2]+=velocities[ix+2]*vdt*accel;
-      ages[i]+=dt;
-      const close=particles[ix+2]<0.1, tooOld=ages[i]>lifetimes[i];
-      const out=(Math.abs(particles[ix])>120||Math.abs(particles[ix+1])>120||particles[ix+2]>220);
-      if (close||tooOld||out){ spawnParticle(i,Nd); }
-      else if (Math.random()<0.02){
-        const nudge=randomOnBasis(Nd,S.controls.spread*0.05);
-        const v=v3.norm(v3.add(v3.scale(Nd,-1), v3.scale(nudge,0.2)));
-        velocities[ix]=v[0]; velocities[ix+1]=v[1]; velocities[ix+2]=v[2];
+  // ——————— Adaptive performance ——————————————————————————————
+  function adapt(){
+    // Every ~0.5s adjust
+    const now = performance.now();
+    if (now - app.adapt.lastCheck < 500) return;
+    app.adapt.lastCheck = now;
+
+    const M = app.frameTimes.length;
+    if (M < 10) return;
+    const avg = app.frameSum / M; // ms
+
+    // Reduce trail length & blur first (we don't enable bloom), then particle count
+    if (avg > app.adapt.decThresh){
+      if (app.params.trailMul > 6) app.params.trailMul = Math.max(6, Math.round(app.params.trailMul * 0.85));
+      else if (app.particles.length > app.adapt.minCount) {
+        app.params.count = Math.max(app.adapt.minCount, Math.floor(app.particles.length * 0.7));
+        resizePoolToCount();
+      } else if (app.params.fovDeg > 40) {
+        app.params.fovDeg = Math.max(40, Math.floor(app.params.fovDeg - 2));
+        makePerspective(app.proj, app.params.fovDeg, app.width/app.height, app.bounds.near, app.bounds.far);
+      }
+    } else if (avg < app.adapt.incThresh){
+      // Increase gently
+      if (app.particles.length < app.adapt.maxCount){
+        app.params.count = Math.min(app.adapt.maxCount, Math.floor(app.particles.length * 1.15));
+        resizePoolToCount();
       }
     }
-    if (S.pipeline==='webgl') glRender(countTarget,t/1000); else cvRender(countTarget);
-    if (DEBUG){ updateHUD(Nd); adaptPerformance(); }
-    rafId=requestAnimationFrame(loop);
   }
 
-  // Adapt
-  function adaptPerformance(){
-    const avgMs=S.perf.avgDt*1000, now=performance.now();
-    if (now-S.perf.lastAdjustT<500) return;
-    if (avgMs>22){
-      if (S.controls.trailMul>4) S.controls.trailMul=Math.max(4,Math.floor(S.controls.trailMul*0.85));
-      else if (countTarget>400) setCount(Math.max(200,Math.floor(countTarget*0.5)));
-      else if (S.controls.fovDeg<85){ S.controls.fovDeg=Math.min(90,S.controls.fovDeg+4); proj.fov=deg2rad(S.controls.fovDeg); updateProjUniform(); }
-      S.perf.lastAdjustT=now;
-    } else if (avgMs<14){
-      if (countTarget<5000) setCount(Math.min(5000,Math.floor(countTarget*1.15)));
-      S.perf.lastAdjustT=now;
+  // ——————— Main loop ——————————————————————————————
+  function tick(t){
+    const now = performance.now();
+    const dt = clamp((now - app.last)/1000, 0, 0.05);
+    app.last = now;
+
+    // pause handling
+    if (app.paused){
+      app.last = performance.now();
+      requestAnimationFrame(tick);
+      return;
     }
-  }
 
-  // HUD
-  function updateHUD(Nd){
-    qst('#fps',(1000/(S.perf.avgDt*1000)).toFixed(0));
-    qst('#dpr',`${S.dpr.toFixed(2)} (int ≤ ${S.maxInternalDpr})`);
-    qst('#pipe',S.pipeline); qst('#pcount',String(countTarget));
-    qst('#sstate',`${S.sensors.permission}/${S.sensors.source}` + (S.sensors.compassUnstable?' (unstable)':''));
-    const f=S.sensors.filtered; qst('#ypr',`${rad2deg(f.yaw).toFixed(0)}° / ${rad2deg(f.pitch).toFixed(0)}° / ${rad2deg(f.roll).toFixed(0)}°`);
-    qst('#csrc',S.sensors.source);
-    qst('#nd',`[${Nd[0].toFixed(2)}, ${Nd[1].toFixed(2)}, ${Nd[2].toFixed(2)}]`);
-    if (S.sensors.permission!=='granted' && qs('#notes').textContent==='—') qst('#notes','Sensors off → North=up');
-  }
-  function bindControls(){
-    const c=S.controls;
-    const ui={count:'#ctlCount',speed:'#ctlSpeed',spread:'#ctlSpread',fov:'#ctlFov',trail:'#ctlTrail',persist:'#ctlPersist',invertY:'#ctlInvertY'};
-    qs(ui.count).value=c.count; qs(ui.speed).value=c.speed; qs(ui.spread).value=c.spread;
-    qs(ui.fov).value=c.fovDeg; qs(ui.trail).value=c.trailMul; qs(ui.persist).value=c.persistence; qs(ui.invertY).checked=S.sensors.invertY;
-    qs(ui.count).addEventListener('input', e=>setCount(+e.target.value));
-    qs(ui.speed).addEventListener('input', e=>c.speed=+e.target.value);
-    qs(ui.spread).addEventListener('input', e=>c.spread=+e.target.value);
-    qs(ui.fov).addEventListener('input', e=>{ c.fovDeg=+e.target.value; proj.fov=deg2rad(c.fovDeg); updateProjUniform(); });
-    qs(ui.trail).addEventListener('input', e=>c.trailMul=+e.target.value);
-    qs(ui.persist).addEventListener('input', e=>c.persistence=+e.target.value);
-    qs(ui.invertY).addEventListener('change', e=>{ S.sensors.invertY=e.target.checked; });
-  }
-  function setCount(n){
-    countTarget=n|0; initParticles(countTarget);
-    if (GL){
-      GL.bindBuffer(GL.ARRAY_BUFFER,glBufPos); GL.bufferData(GL.ARRAY_BUFFER,particles.byteLength,GL.DYNAMIC_DRAW);
-      GL.bindBuffer(GL.ARRAY_BUFFER,glBufVel); GL.bufferData(GL.ARRAY_BUFFER,velocities.byteLength,GL.DYNAMIC_DRAW);
+    // integrate & draw
+    integrate(dt);
+    if (app.gl){ glDraw(); }
+    else if (app.ctx){ c2dDraw(); }
+
+    // stats
+    const ft = (performance.now() - now);
+    app.frameTimes.push(ft);
+    app.frameSum += ft;
+    if (app.frameTimes.length > app.adapt.timeWindow){
+      app.frameSum -= app.frameTimes.shift();
     }
-    if (DEBUG) qs('#ctlCount').value=countTarget;
+    const avg = app.frameSum / app.frameTimes.length;
+    app.fps = 1000 / avg;
+
+    updateHUDDynamic();
+    adapt();
+
+    requestAnimationFrame(tick);
   }
 
-  // Visibility
-  addEventListener('visibilitychange', ()=>{ if(document.hidden){ S.running=false; cancelAnimationFrame(rafId); } else { S.running=true; lastT=performance.now(); rafId=requestAnimationFrame(loop); } });
-
-  // Init
+  // ——————— Lifecycle ——————————————————————————————
   function init(){
-    S.dpr=Math.min(devicePixelRatio||1,3);
-    if (DEBUG) qs('#hud').style.display='block';
+    setupHUD();
+
+    // pick pipeline
+    const okGL = glInit();
+    if (okGL){
+      app.pipeline = 'webgl';
+      el('#c2d').style.display = 'none';
+    } else {
+      c2dInit();
+      app.pipeline = 'canvas';
+      el('#gl').style.display = 'none';
+    }
+    updateHUDStatic();
+
+    // sensors
+    setupSensors();
+
+    // DPR & projection
     resize();
+    addEventListener('resize', onResize, { passive:true });
+    addEventListener('orientationchange', onResize, { passive:true });
+    addEventListener('visibilitychange', ()=>{
+      app.paused = document.hidden;
+      // smooth resume
+      app.last = performance.now();
+    });
 
-    let useGl=!FORCE_CANVAS;
-    try{
-      if (useGl){ initParticles(S.controls.count); glInit(); S.pipeline='webgl'; cvCanvas.style.display='none'; }
-    }catch(e){ console.warn('WebGL2 unavailable, fallback to Canvas2D:', e); useGl=false; }
-    if (!useGl){ S.pipeline='canvas'; cvCanvas.style.display='block'; glCanvas.style.display='none'; initParticles(clamp(S.controls.count,700,1500)); cvInit(); }
+    // seed particles based on initial Nd
+    initParticles(chooseInitialCount());
 
-    if (!NO_SENSORS){
-      const gated = (window.DeviceOrientationEvent && typeof window.DeviceOrientationEvent.requestPermission==='function')
-                 || (window.DeviceMotionEvent && typeof window.DeviceMotionEvent.requestPermission==='function');
-      // Show overlay only if a gate exists AND we're in a secure context; otherwise proceed.
-      if (gated && isSecure) showOverlay(); else { S.sensors.permission='granted'; hideOverlay(); }
-      setupSensors();
-    } else { S.sensors.permission='denied'; hideOverlay(); }
+    // start loop
+    requestAnimationFrame(tick);
 
-    bindControls();
-    bindOverlayButtons();
-
-    lastT=performance.now();
-    requestAnimationFrame(loop);
+    // Telemetry (debug only)
+    if (FLAGS.debug){
+      console.log('[telemetry]', {
+        pipeline: app.pipeline, dpr: app.dpr,
+        gentle: app.gentle, flags: FLAGS
+      });
+    }
   }
 
-  if (document.readyState==='complete' || document.readyState==='interactive') init();
-  else document.addEventListener('DOMContentLoaded', init, { once:true });
+  function chooseInitialCount(){
+    // Device class heuristic from UA + DPR + pipeline
+    const midTier = (app.dpr <= 2 && 'ontouchstart' in window);
+    const highTier = (app.dpr > 2 || !('ontouchstart' in window)) && app.pipeline === 'webgl';
+    if (FLAGS.forceCanvas) return 900;
+    if (highTier) return clamp(2200, app.adapt.minCount, app.adapt.maxCount);
+    if (midTier) return clamp(1500, app.adapt.minCount, app.adapt.maxCount);
+    return 1100;
+  }
+
+  function onResize(){
+    // Fade-to-black during buffer rebuild (visual guard)
+    if (app.gl){
+      app.gl.clearColor(0,0,0,1);
+      app.gl.clear(app.gl.COLOR_BUFFER_BIT);
+    } else if (app.ctx){
+      app.ctx.fillStyle = '#000';
+      app.ctx.fillRect(0,0,app.ctx.canvas.width, app.ctx.canvas.height);
+    }
+    resize();
+  }
+
+  // ——————— Boot ——————————————————————————————
+  init();
+
+  // ——————— README (quick) ——————————————————————————————
+  /*
+  README — Snowflakes Through Windshield (North-Locked)
+
+  ▶ Run: Open this HTML file directly in a modern mobile browser.
+     - Default uses WebGL2; add ?forceCanvas=1 to force Canvas2D.
+     - Debug HUD: add ?debug=1  (sliders + telemetry).
+     - Axis helper: ?invertY=1 flips projection Y if a stack inverts it.
+     - Sensors off: ?noSensors=1 (North=up fallback).
+     - Strict math: ?strictNd=1 uses full −Nᵈ including z (flakes may move away when North is behind).
+     - Bloom: flag reserved; not enabled to keep perf headroom.
+
+  Sensors & Permissions:
+     - iOS shows a one-tap “Enable Motion & Compass” gate. If denied/unavailable, effect runs with North=up.
+     - Sources: WebKit compass (preferred) → Generic Sensor API (quaternion) → deviceorientation alpha.
+     - Low-pass filter α=0.15; heading jitter detection (debug-only indicator).
+
+  Coordinates:
+     - World axes: X=East, Y=North, Z=Up; fixed North N=(0,1,0).
+     - Compute Nᵈ by rotating N with world→device quaternion.
+     - Particle motion p += v * dt, v ≈ −Nᵈ but with z forced toward camera unless ?strictNd=1.
+       (This ensures “approach” while preserving on-screen North direction.)
+
+  Rendering:
+     - WebGL2: CPU-built quads per particle (6 verts) → additive blending (ONE, ONE_MINUS_SRC_ALPHA).
+       Length scales with screen-space velocity & proximity; brightness rises when near.
+     - Canvas2D fallback: draw motion lines prev→curr with width & alpha scaled by depth.
+       Motion-persistence clear via rgba(0,0,0,α).
+
+  Performance:
+     - Target 60fps on mid-tier phones; adaptive scaler:
+       if avgFrameTime >22ms for 0.5s → shorten trails then reduce count (−30%);
+       if <14ms → +15% particles, up to cap. DPR clamped ≤2.
+     - Respects prefers-reduced-motion with gentler defaults.
+
+  Debug HUD (when ?debug=1):
+     - Sliders: Count, Speed, Spread, FOV, Trail x, Persistence α; toggles Strict −Nᵈ, Invert Y.
+     - Live: fps, DPR, pipeline, heading/pitch/roll, Nᵈ, compass source, “unstable” flag.
+
+  Edge Cases:
+     - Orientation/resize rebuilds projection; fade clears during rebuild.
+     - Background tab pauses loop; delta clamped on resume to prevent spikes.
+
+  QA Tips:
+     - Rotate phone: flow remains aligned to real North (top of screen ~ North in device space).
+     - Indoors compass noise shows “unstable” in HUD only.
+     - Portrait/landscape both supported.
+  */
 
 })();
 </script>
-
-<!-- README (inline)
-Setup
-- Serve via https or http://localhost (avoid file:// on iOS). ?debug=1 for HUD. Flags: ?forceCanvas, ?invertY, ?noSensors.
-- iOS: tap “Allow Motion”. If permission API hangs/denies, app now proceeds automatically without sensors.
-Sensors
-- Prefers webkitCompassHeading; otherwise deviceorientation alpha/beta/gamma. Low-pass α=0.15, yaw unwrapped.
-Frames
-- World X=East, Y=North, Z=Up. N=(0,1,0). Nᵈ = Rᵀ·N. Motion p = p − Nᵈ·v·dt. Camera +Z.
-Adaptive
-- If >22 ms: reduce trail → halve count → widen FOV. If <14 ms: +15% count (≤5000). Internal DPR ≤2.0.
--->
 </body>
 </html>
