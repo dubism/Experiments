@@ -70,11 +70,9 @@
   "use strict";
   const showErr=(m)=>{const n=document.getElementById('err'); n.textContent=String(m); n.style.display='block'; console.error(m);};
 
-  // ——— Feature flags ———
   const qp=new URLSearchParams(location.search);
   const FLAGS={debug:qp.get('debug')==='1',forceCanvas:qp.get('forceCanvas')==='1',invertY:qp.get('invertY')==='1',noSensors:qp.get('noSensors')==='1'};
 
-  // ——— State ———
   const app={
     dpr:1,width:1,height:1,paused:document.hidden,
     pipeline:'webgl', now:performance.now(), last:performance.now(),
@@ -93,7 +91,6 @@
   const gentle=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if(gentle){ app.params.speed=Math.max(10, app.params.speed*0.5); app.params.trailMul=Math.max(8, Math.round(app.params.trailMul*0.6)); }
 
-  // ——— Utils ———
   const el=(s)=>document.querySelector(s);
   const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
   const radians=(d)=>d*Math.PI/180, degrees=(r)=>r*180/Math.PI;
@@ -108,7 +105,6 @@
   }
   const NORTH_WORLD=[0,1,0];
 
-  // ——— Sensors ———
   function showOverlay(){el('#overlay').classList.add('show');}
   function hideOverlay(){el('#overlay').classList.remove('show');}
   function setupSensors(){
@@ -159,7 +155,6 @@
     if(ABS && !(/iPad|iPhone|iPod/.test(navigator.userAgent))){ startABS(); } else { gateIOS(); }
   }
 
-  // ——— Instances ———
   function buildInstances(targetCount){
     const s=app.params.spacing, R=app.params.radius, pts=[];
     for(let x=-R;x<=R;x+=s) for(let z=-R;z<=R;z+=s) if((x*x+z*z)<=R*R*1.15)
@@ -172,33 +167,35 @@
     for(let i=0;i<N;i++){ app.instances.xz[i*2]=pts[i][0]; app.instances.xz[i*2+1]=pts[i][1]; app.instances.seed[i]=Math.random()*1000; }
   }
 
-  // ——— Projection helpers ———
   function fovToScale(fovDeg, aspect){ const f=1/Math.tan(0.5*radians(fovDeg)); return [f/aspect, f]; }
 
-  // =====================================================================
   // =======================  WEBGL2 PIPELINE  ============================
-  // =====================================================================
   function glInit(){
     if(FLAGS.forceCanvas) return false;
     const canvas=el('#gl');
     const gl=canvas.getContext('webgl2',{antialias:false,alpha:false,premultipliedAlpha:false,preserveDrawingBuffer:false});
     if(!gl) return false;
 
-    // Robust frustum clipping in VS (Liang–Barsky against 6 planes)
+    // NOTE: explicit highp in BOTH shaders + highp uniforms (Safari WebGL2 requirement)
     const vs=`#version 300 es
+    precision highp float;
+    precision highp int;
+
     layout(location=0) in vec2 aXZ;
     layout(location=1) in float aSeed;
     layout(location=2) in vec2 aSide;  // (-1/+1 across, 0/1 along)
 
-    uniform mat3 uView3;
-    uniform float uNear,uFar;
-    uniform vec2 uPx2NDC;    // 2/viewport
-    uniform float uAx,uAy;   // proj scales
-    uniform float uWidthPx;
+    uniform highp mat3  uView3;
+    uniform highp float uNear,uFar;
+    uniform highp vec2  uPx2NDC;    // 2/viewport
+    uniform highp float uAx,uAy;    // proj scales
+    uniform highp float uWidthPx;
 
-    out float vU, vSeed, vDepth, vAlive;
+    out highp float vU;
+    out highp float vSeed;
+    out highp float vDepth;
+    out highp float vAlive;
 
-    // Half-space: n·p + c >= 0. Return updated [t0,t1] and alive flag.
     void clipPlane(in vec3 n, in float c, in vec3 p0, in vec3 d, inout float t0, inout float t1, inout bool alive){
       float num = dot(n,p0)+c;
       float den = dot(n,d);
@@ -216,17 +213,9 @@
     }
 
     void main(){
-      // Line in view: p(t)=p0v + t*dv
       vec3 p0v = uView3 * vec3(aXZ.x, 0.0, aXZ.y);
       vec3 dv  = uView3 * vec3(0.0, 1.0, 0.0);
 
-      // Frustum planes in view space (camera +Z)
-      // Near:  z - near >= 0  => n=(0,0,1), c=-near
-      // Far:   far - z  >= 0  => n=(0,0,-1), c=far
-      // Left:  z + ax*x >= 0  => n=( uAx, 0, 1), c=0
-      // Right: z - ax*x >= 0  => n=(-uAx, 0, 1), c=0
-      // Bottom:z + ay*y >= 0  => n=(0, uAy, 1), c=0
-      // Top:   z - ay*y >= 0  => n=(0,-uAy, 1), c=0
       float t0 = -1e8, t1 = 1e8; bool alive = true;
       clipPlane(vec3(0.0,0.0, 1.0), -uNear, p0v, dv, t0, t1, alive);
       clipPlane(vec3(0.0,0.0,-1.0),  uFar , p0v, dv, t0, t1, alive);
@@ -235,7 +224,6 @@
       clipPlane(vec3(0.0, uAy,1.0),  0.0  , p0v, dv, t0, t1, alive);
       clipPlane(vec3(0.0,-uAy,1.0),  0.0  , p0v, dv, t0, t1, alive);
 
-      // Build endpoints even if dead; mark vAlive to zero out alpha
       vec3 Pn = p0v + t0*dv;
       vec3 Pf = p0v + t1*dv;
 
@@ -244,8 +232,8 @@
       vec2 tdir = normalize(ndcF - ndcN + vec2(1e-6));
       vec2 nperp = vec2(-tdir.y, tdir.x);
 
-      float side = aSide.x;  // -1/+1
-      float along = aSide.y; // 0/1
+      float side = aSide.x;
+      float along = aSide.y;
       vec2 ndc = mix(ndcN, ndcF, along) + nperp * side * uWidthPx * uPx2NDC;
 
       gl_Position = vec4(ndc, 0.0, 1.0);
@@ -257,11 +245,25 @@
     }`;
 
     const fs=`#version 300 es
-    precision mediump float;
-    in float vU, vSeed, vDepth, vAlive;
+    precision highp float;
+    precision highp int;
+
+    in highp float vU;
+    in highp float vSeed;
+    in highp float vDepth;
+    in highp float vAlive;
     out vec4 o;
-    uniform float uTime,uSpeed,uTrailX,uNear;
-    float band(float x, float w){ float d=abs(fract(x)-0.5); return smoothstep(0.5, 0.5 - w, d); }
+
+    uniform highp float uTime;
+    uniform highp float uSpeed;
+    uniform highp float uTrailX;
+    uniform highp float uNear;
+
+    float band(float x, float w){
+      float d=abs(fract(x)-0.5);
+      return smoothstep(0.5, 0.5 - w, d);
+    }
+
     void main(){
       if (vAlive < 0.5) { discard; }
       float s = vU*uTrailX + uTime*uSpeed + vSeed;
@@ -281,7 +283,6 @@
       if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ throw new Error(gl.getProgramInfoLog(prog)); }
     }catch(e){ showErr('WebGL shader error:\n'+e.message); return false; }
 
-    // VAO + buffers
     const vao=gl.createVertexArray(); gl.bindVertexArray(vao);
     const bufXZ=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufXZ);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(0,1);
@@ -356,13 +357,10 @@
     gl.bindVertexArray(null);
   }
 
-  // =====================================================================
   // =======================  Canvas2D Fallback  ==========================
-  // =====================================================================
   function c2dInit(){ const c=el('#c2d'); const ctx=c.getContext('2d',{alpha:false}); if(!ctx) return false; app.ctx=ctx; return true; }
   function c2dResize(){ if(!app.ctx) return; const c=app.ctx.canvas; const w=Math.max(1,Math.floor(innerWidth*app.dpr)), h=Math.max(1,Math.floor(innerHeight*app.dpr)); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } }
 
-  // Clip infinite line p(t)=p0 + t*d to frustum (same planes as GL). Return [t0,t1,alive].
   function clipLineFrustum(p0,d,near,far,ax,ay){
     let t0=-1e8, t1=1e8; let alive=true;
     function plane(n,c){ const num=n[0]*p0[0]+n[1]*p0[1]+n[2]*p0[2]+c; const den=n[0]*d[0]+n[1]*d[1]+n[2]*d[2];
@@ -374,6 +372,7 @@
     plane([0, ay,1], 0);    plane([0,-ay,1], 0);
     return [t0,t1,alive];
   }
+
   function c2dDraw(tSec){
     const ctx=app.ctx; if(!ctx) return;
     const near=0.6, far=60.0; const [ax,ay]=fovToScale(app.params.fovDeg, app.width/app.height);
@@ -381,7 +380,6 @@
     const mul3=(m,v)=>[ m[0]*v[0]+m[1]*v[1]+m[2]*v[2], m[3]*v[0]+m[4]*v[1]+m[5]*v[2], m[6]*v[0]+m[7]*v[1]+m[8]*v[2] ];
     const proj=(p)=>{ const z=Math.max(p[2],1e-3); let x=ax*p[0]/z, y=ay*p[1]/z; if(app.invertY) y=-y; return [ (x*0.5+0.5)*app.width, (1-(y*0.5+0.5))*app.height ]; };
 
-    // persistence clear
     ctx.fillStyle=`rgba(0,0,0,${app.params.persistAlpha})`;
     ctx.fillRect(0,0,ctx.canvas.width, ctx.canvas.height);
     ctx.globalCompositeOperation='lighter'; ctx.lineCap='round'; ctx.lineJoin='round';
@@ -394,7 +392,7 @@
       const Pf=[p0[0]+tB*d[0], p0[1]+tB*d[1], p0[2]+tB*d[2]];
       const [xn,yn]=proj(Pn), [xf,yf]=proj(Pf);
 
-      const dx=xf-xn, dy=yf-yn, len=Math.hypot(dx,dy)||1, ux=dx/len, uy=dy/len;
+      const dx=xf-xn, dy=yf-yn, len=Math.hypot(dx,dy)||1;
       const uFront=( (app.params.trailMul*0.03) + (tSec*app.params.speed) + seed )%1;
       const uBack=Math.max(0, uFront - (app.params.trailMul/120));
       const xA=xn+dx*uBack, yA=yn+dy*uBack, xB=xn+dx*uFront, yB=yn+dy*uFront;
@@ -409,7 +407,6 @@
     ctx.globalCompositeOperation='source-over';
   }
 
-  // ——— HUD ———
   function setupHUD(){
     app.ui.hud=el('#hud'); if(FLAGS.debug) app.ui.hud.classList.add('show');
     app.ui.badgePipeline=el('#badge-pipeline'); app.ui.badgeDPR=el('#badge-dpr'); app.ui.badgeSensor=el('#badge-sensor');
@@ -432,7 +429,6 @@
   }
   function updateHUDSensor(){ if(FLAGS.debug) el('#badge-sensor').textContent=app.sensor.source; }
 
-  // ——— Resize / DPR ———
   function resize(){
     app.dpr=clamp(window.devicePixelRatio||1,1,app.params.clampDPR);
     app.width =Math.max(1, Math.floor(innerWidth * app.dpr));
@@ -449,7 +445,6 @@
   }
   function rebuildInstances(){ const N=clamp(app.params.countHint,app.adapt.minCount,app.adapt.maxCount); buildInstances(N); if(app.gl) glUploadInstances(); }
 
-  // ——— Adaptive perf ———
   function adapt(){
     const now=performance.now(); if(now-app.adapt.lastCheck<500) return; app.adapt.lastCheck=now;
     const M=app.frameTimes.length; if(M<10) return; const avg=app.frameSum/M;
@@ -462,7 +457,6 @@
     }
   }
 
-  // ——— Main loop ———
   function tick(){
     const now=performance.now(); const dt=clamp((now-app.last)/1000,0,0.05); app.last=now; if(app.paused){ requestAnimationFrame(tick); return; }
     const tSec=now*0.001;
@@ -475,7 +469,6 @@
     requestAnimationFrame(tick);
   }
 
-  // ——— Boot ———
   function init(){
     try{
       setupHUD();
@@ -487,7 +480,7 @@
       resize(); addEventListener('resize',resize,{passive:true}); addEventListener('orientationchange',resize,{passive:true});
       addEventListener('visibilitychange',()=>{ app.paused=document.hidden; app.last=performance.now(); });
 
-      app.view3f.set(app.view3); // seed
+      app.view3f.set(app.view3);
       app.params.countHint=chooseInitialCount(); rebuildInstances();
       requestAnimationFrame(tick);
 
@@ -496,14 +489,10 @@
   }
   init();
 
-  // ——— README (quick) ———
-  /*
-   Fixes for your “blank screen”:
-   - Lines are now clipped against LEFT/RIGHT/TOP/BOTTOM + NEAR/FAR frustum planes.
-     Works even when dv.z≈0 (Y parallel to view); you’ll always see a comb of lines.
-   - WebGL mat3 uniform uses a Float32Array (app.view3f) to avoid Safari type errors.
-   - On-screen error panel shows shader/uniform/init issues if any.
-   Flags: ?debug=1, ?forceCanvas=1, ?invertY=1, ?noSensors=1
+  /* README:
+     - Fix: highp precision in both shaders; highp uniforms (uNear etc.) → resolves iOS error.
+     - Robust frustum clipping keeps lines visible in all orientations.
+     - Flags: ?debug=1, ?forceCanvas=1, ?invertY=1, ?noSensors=1
   */
 })();
 </script>
