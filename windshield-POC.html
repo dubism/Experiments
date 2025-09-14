@@ -3,25 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Snowflakes / Stars — Vanishing Point Field</title>
+<title>Snow/Stars — From TRUE North (sensor-locked)</title>
 <style>
-  :root{ --bg:#000; --fg:#e8eef5; --muted:#9aa1ad; --accent:#5ac8fa; }
+  :root{ --bg:#000; --fg:#e8eef5 }
   html,body{height:100%;margin:0}
   body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
   canvas{display:block;width:100vw;height:100svh;touch-action:none}
   .hud{position:fixed;left:12px;top:10px;padding:.35rem .5rem;border-radius:.5rem;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);font-weight:600;letter-spacing:.02em;color:var(--fg);user-select:none;pointer-events:none}
   .hud .small{display:block;opacity:.7;font-weight:500;font-size:.8em}
-  /* iOS permission nudge (only shown if absolutely needed) */
   #perm{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)}
   #perm button{appearance:none;border:0;border-radius:.75rem;padding:.8rem 1rem;background:#fff;color:#000;font-weight:700}
 </style>
 </head>
 <body>
-  <canvas id="stage" aria-hidden="true"></canvas>
-  <div class="hud" id="hud">
-    <span class="small">Direction</span>
-    <span id="dirTxt">North</span>
-  </div>
+  <canvas id="stage"></canvas>
+  <div class="hud"><span class="small">Stream from</span><span id="dirTxt">North</span></div>
   <div id="perm"><button id="permBtn">Enable motion sensors</button></div>
 <script>
 (() => {
@@ -31,153 +27,181 @@
   const perm = document.getElementById('perm');
   const permBtn = document.getElementById('permBtn');
 
-  // DPR-aware sizing
-  let DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  // Size/DPR
+  let DPR = Math.max(1, Math.min(3, devicePixelRatio||1));
   let W=0,H=0,CX=0,CY=0;
   function resize(){
-    DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-    const cssW = Math.max(1, Math.round(window.innerWidth));
-    const cssH = Math.max(1, Math.round(window.innerHeight));
-    canvas.width = Math.floor(cssW * DPR);
-    canvas.height = Math.floor(cssH * DPR);
-    canvas.style.width = cssW + 'px';
-    canvas.style.height = cssH + 'px';
-    W = canvas.width; H = canvas.height; CX = W*0.5; CY = H*0.5;
+    DPR = Math.max(1, Math.min(3, devicePixelRatio||1));
+    const cssW = Math.max(1, Math.round(innerWidth));
+    const cssH = Math.max(1, Math.round(innerHeight));
+    canvas.width = Math.floor(cssW*DPR);
+    canvas.height = Math.floor(cssH*DPR);
+    canvas.style.width = cssW+'px';
+    canvas.style.height = cssH+'px';
+    W=canvas.width; H=canvas.height; CX=W*0.5; CY=H*0.5;
   }
-  addEventListener('resize', resize, { passive:true });
+  addEventListener('resize', resize, {passive:true});
   resize();
 
-  // ------------------------------------------------------------------------------------------
-  // SENSOR PIPELINE
-  // ------------------------------------------------------------------------------------------
-  let headingDeg = 0; // 0° = North; clockwise
-  let pitchDeg = 0;   // forward/back tilt
-  let rollDeg = 0;    // left/right tilt
-
+  // ---------------------------------------------
+  // SENSOR FUSION (yaw/heading, pitch, roll)
+  // World axes: X=East, Y=North, Z=Up.
+  // We want a fixed world vector N=(0,1,0) (North).
+  // Convert world->device rotation R using yaw(heading), pitch(beta), roll(gamma) and get
+  // N in device coords: Nd = R^T * N. Then make particles move along -Nd.
+  // This locks the stream to geographic North regardless of phone attitude.
+  // ---------------------------------------------
+  let headingDeg = 0, pitchDeg = 0, rollDeg = 0;
   function bearingToText(b){
-    b = (b%360+360)%360;
-    const names = ['North','NNE','NE','ENE','East','ESE','SE','SSE','South','SSW','SW','WSW','West','WNW','NW','NNW'];
-    return names[Math.round(b/22.5)%16];
+    b=(b%360+360)%360;const n=['North','NNE','NE','ENE','East','ESE','SE','SSE','South','SSW','SW','WSW','West','WNW','NW','NNW'];
+    return n[Math.round(b/22.5)%16];
   }
-  function updateHUD(){ dirTxt.textContent = bearingToText(headingDeg); }
+  function updateHUD(){ dirTxt.textContent = 'North'; }
 
   function handleDO(e){
-    const { alpha, beta, gamma } = e;
-    if (typeof alpha === 'number' && isFinite(alpha)) headingDeg = (360 - alpha + 90) % 360; // compass-ish
-    if (typeof beta === 'number' && isFinite(beta)) pitchDeg = beta;
-    if (typeof gamma === 'number' && isFinite(gamma)) rollDeg = gamma;
+    const {alpha, beta, gamma} = e; // alpha:z (0..360), beta:x (-180..180), gamma:y (-90..90)
+    if (isFinite(alpha)) headingDeg = (360 - alpha) % 360; // convert to CW from North approx
+    if (isFinite(beta))  pitchDeg = beta;
+    if (isFinite(gamma)) rollDeg = gamma;
     updateHUD();
   }
 
-  // Try permissions only when the platform requires it (iOS 13+)
   async function ensureMotionPermission(){
     try{
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
-        perm.style.display = 'flex';
+        perm.style.display='flex';
         permBtn.onclick = async () => {
           try{
             const res = await DeviceOrientationEvent.requestPermission();
-            if (res === 'granted'){
-              addEventListener('deviceorientation', handleDO, true);
-              perm.style.display = 'none';
-            }
-          }catch(_){/* ignore */}
+            if (res==='granted'){ addEventListener('deviceorientation', handleDO, true); perm.style.display='none'; }
+          }catch{}
         };
       } else {
-        // Non-iOS: just listen
         addEventListener('deviceorientation', handleDO, true);
       }
-    }catch(_){/* ignore */}
+    }catch{}
   }
   ensureMotionPermission();
   updateHUD();
 
-  // ------------------------------------------------------------------------------------------
-  // STARFIELD ENGINE (true 3D -> perspective -> vanishing point)
-  // Robust even with zero sensors.
-  // ------------------------------------------------------------------------------------------
-  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const COUNT = isMobile ? 600 : 1200;
-  const FOV = 450; // larger = weaker perspective
-  const SPEED = 1.3; // base z velocity units/s
-  const stars = new Float32Array(COUNT * 3); // x,y,z in normalized cube [-1,1]
+  // ---------------------------------------------
+  // MATH HELPERS
+  // ---------------------------------------------
+  function deg2rad(d){return d*Math.PI/180}
+  function clamp(v,a,b){return v<a?a:v>b?b:v}
 
-  function rnd(){ return Math.random()*2-1; }
-  function respawn(i){
-    const idx = i*3;
-    // Spawn near the center so streaks originate at vanishing point
-    const r = Math.pow(Math.random(), 2) * 0.25; // bias towards small radius
-    const t = Math.random()*Math.PI*2;
-    stars[idx]   = Math.cos(t)*r;
-    stars[idx+1] = Math.sin(t)*r;
-    stars[idx+2] = 1.0; // far away; moves towards 0
+  // Rotation matrix world->device from yaw(Z), pitch(X), roll(Y).
+  function rotWorldToDevice(yawDeg, pitchDeg, rollDeg){
+    const z = deg2rad(yawDeg);
+    const x = deg2rad(pitchDeg);
+    const y = deg2rad(rollDeg);
+    const cz=Math.cos(z), sz=Math.sin(z);
+    const cx=Math.cos(x), sx=Math.sin(x);
+    const cy=Math.cos(y), sy=Math.sin(y);
+    // Rz(z) * Rx(x) * Ry(y)  (intrinsic Z-X-Y composition approx for DeviceOrientation)
+    const Rz = [ cz,-sz,0,  sz,cz,0,  0,0,1 ];
+    const Rx = [ 1,0,0,  0,cx,-sx,  0,sx,cx ];
+    const Ry = [ cy,0,sy,  0,1,0,  -sy,0,cy ];
+    const Rzx = mul3(Rz,Rx); return mul3(Rzx,Ry);
   }
-  for (let i=0;i<COUNT;i++) respawn(i);
+  function mul3(A,B){
+    const r=new Array(9);
+    for(let rI=0;rI<3;rI++) for(let c=0;c<3;c++){
+      r[rI*3+c]=A[rI*3+0]*B[0*3+c]+A[rI*3+1]*B[1*3+c]+A[rI*3+2]*B[2*3+c];
+    }
+    return r;
+  }
+  function mul3Tv(R, v){ // R^T * v
+    return [ R[0]*v[0]+R[3]*v[1]+R[6]*v[2], R[1]*v[0]+R[4]*v[1]+R[7]*v[2], R[2]*v[0]+R[5]*v[1]+R[8]*v[2] ];
+  }
+  function norm(v){ const m=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/m,v[1]/m,v[2]/m]; }
+  function cross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]] }
 
+  // ---------------------------------------------
+  // STARFIELD: stream from fixed WORLD North
+  // ---------------------------------------------
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const COUNT = isMobile ? 700 : 1500;
+  const stars = new Float32Array(COUNT*3); // device-space positions
+  const SPEED = 12; // units/s along -Nd
+  const FAR = 40, NEAR = 0.6; // depth range in device space (z forward)
+  const SPREAD = 0.7; // angular spread around Nd
+  const F = 900; // focal length in px
+
+  // Spawn around Nd direction at depth ~FAR, with small perpendicular jitter.
+  function spawn(i, Nd){
+    const idx=i*3;
+    // Build orthonormal basis (U,V,Nd)
+    let tmp = Math.abs(Nd[1])<0.9 ? [0,1,0] : [1,0,0];
+    let U = norm(cross(tmp, Nd));
+    let V = norm(cross(Nd, U));
+    const r = (Math.random()**1.5) * SPREAD; // tighter near axis
+    const t = Math.random()*Math.PI*2;
+    const jitter = [ U[0]*r*Math.cos(t) + V[0]*r*Math.sin(t),
+                     U[1]*r*Math.cos(t) + V[1]*r*Math.sin(t),
+                     U[2]*r*Math.cos(t) + V[2]*r*Math.sin(t) ];
+    // Start far away along +Nd (so motion -Nd travels towards camera)
+    stars[idx]   = Nd[0]*FAR + jitter[0];
+    stars[idx+1] = Nd[1]*FAR + jitter[1];
+    stars[idx+2] = Nd[2]*FAR + jitter[2];
+  }
+
+  // Initial fill with default Nd = from North using neutral attitude
   let last = performance.now();
+  let Rwd = rotWorldToDevice(0,0,0);
+  let Nd = norm(mul3Tv(Rwd, [0,1,0])); // world North in device coords
+  for (let i=0;i<COUNT;i++) spawn(i, Nd);
 
   function loop(now){
-    const dt = Math.min(0.035, (now - last)/1000);
-    last = now;
+    const dt = Math.min(0.035, (now-last)/1000); last=now;
 
-    // Compute transforms
-    const rot = (headingDeg||0) * Math.PI/180; // rotate around Z to align with heading
-    const cosR = Math.cos(rot), sinR = Math.sin(rot);
+    // Update transform and Nd from current sensors
+    Rwd = rotWorldToDevice(headingDeg, pitchDeg, rollDeg);
+    Nd = norm(mul3Tv(Rwd, [0,1,0])); // fixed world North -> device coords
 
-    // Shift vanishing point subtly with tilt
-    const vpX = CX + (rollDeg/45) * (W*0.06);
-    const vpY = CY + (pitchDeg/45) * (H*0.06);
-
-    // Motion blur / persistence
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    // Motion blur
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='rgba(0,0,0,0.5)';
     ctx.fillRect(0,0,W,H);
 
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = '#fff';
-    ctx.lineCap = 'round';
+    ctx.globalCompositeOperation='lighter';
+    ctx.strokeStyle='#fff';
+    ctx.lineCap='round';
 
+    // Camera looks down +Z. Project with perspective to screen.
     for (let i=0;i<COUNT;i++){
-      const idx = i*3;
-      let x = stars[idx];
-      let y = stars[idx+1];
-      let z = stars[idx+2];
+      const idx=i*3;
+      let x=stars[idx], y=stars[idx+1], z=stars[idx+2];
 
-      // Previous projected screen point
-      const pz = z + 0.001;
-      const pp = FOV / (FOV + pz*W*0.5);
-      const px = (x*cosR - y*sinR) * pp * W + vpX;
-      const py = (x*sinR + y*cosR) * pp * W + vpY;
+      // Previous screen point
+      const pz=z; const inv=F/(F + pz*DPR);
+      const px = x*inv*DPR + CX;
+      const py = -y*inv*DPR + CY; // y up on screen
 
-      // Advance towards viewer
-      z -= (SPEED + z*0.8) * dt; // accelerate as it approaches
+      // Advance along -Nd (towards camera)
+      x -= Nd[0]*SPEED*dt;
+      y -= Nd[1]*SPEED*dt;
+      z -= Nd[2]*SPEED*dt;
 
-      // Current projection
-      const p = FOV / (FOV + z*W*0.5);
-      const sx = (x*cosR - y*sinR) * p * W + vpX;
-      const sy = (x*sinR + y*cosR) * p * W + vpY;
+      // Current screen point
+      const inv2=F/(F + z*DPR);
+      const sx = x*inv2*DPR + CX;
+      const sy = -y*inv2*DPR + CY;
 
-      // Line width grows with approach speed
-      const w = Math.max(0.6*DPR, Math.min(4*DPR, (1 - z) * 2));
-      ctx.lineWidth = w;
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(sx, sy);
-      ctx.stroke();
+      // Stroke width grows as it approaches
+      const w = Math.max(0.6*DPR, Math.min(4*DPR, (FAR - z)*0.06));
+      ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(sx,sy); ctx.stroke();
 
-      // Off-screen or passed camera => respawn
-      if (z <= 0.02 || sx < -20 || sx > W+20 || sy < -20 || sy > H+20){
-        respawn(i);
-      } else {
-        stars[idx+2] = z;
-      }
+      // Recycle if passed camera or off-screen or too near
+      const off = (z<NEAR || sx<-50 || sx>W+50 || sy<-50 || sy>H+50);
+      if (off){ spawn(i, Nd); }
+      else { stars[idx]=x; stars[idx+1]=y; stars[idx+2]=z; }
     }
 
     requestAnimationFrame(loop);
   }
 
-  // Initialize clear
-  ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
   requestAnimationFrame(loop);
 })();
 </script>
