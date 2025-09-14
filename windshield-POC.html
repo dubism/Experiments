@@ -3,27 +3,26 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Snow/Stars — From TRUE North (sensor-locked)</title>
+<title>Snow/Stars — Stream From TRUE North (sensor-locked)</title>
 <style>
   :root{ --bg:#000; --fg:#e8eef5 }
   html,body{height:100%;margin:0}
   body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
   canvas{display:block;width:100vw;height:100svh;touch-action:none}
-  .hud{position:fixed;left:12px;top:10px;padding:.35rem .5rem;border-radius:.5rem;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);font-weight:600;letter-spacing:.02em;color:var(--fg);user-select:none;pointer-events:none}
-  .hud .small{display:block;opacity:.7;font-weight:500;font-size:.8em}
+  .hud{position:fixed;left:12px;top:10px;padding:.35rem .5rem;border-radius:.75rem;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);font-weight:700;letter-spacing:.02em;color:var(--fg);user-select:none;pointer-events:none}
+  .hud .small{display:block;opacity:.7;font-weight:600;font-size:.8em}
   #perm{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6)}
-  #perm button{appearance:none;border:0;border-radius:.75rem;padding:.8rem 1rem;background:#fff;color:#000;font-weight:700}
+  #perm button{appearance:none;border:0;border-radius:.9rem;padding:.9rem 1.1rem;background:#fff;color:#000;font-weight:800}
 </style>
 </head>
 <body>
   <canvas id="stage"></canvas>
-  <div class="hud"><span class="small">Stream from</span><span id="dirTxt">North</span></div>
+  <div class="hud"><span class="small">Stream from</span><span>North</span></div>
   <div id="perm"><button id="permBtn">Enable motion sensors</button></div>
 <script>
 (() => {
   const canvas = document.getElementById('stage');
   const ctx = canvas.getContext('2d', { alpha:false, desynchronized:true });
-  const dirTxt = document.getElementById('dirTxt');
   const perm = document.getElementById('perm');
   const permBtn = document.getElementById('permBtn');
 
@@ -45,25 +44,20 @@
 
   // ---------------------------------------------
   // SENSOR FUSION (yaw/heading, pitch, roll)
-  // World axes: X=East, Y=North, Z=Up.
-  // We want a fixed world vector N=(0,1,0) (North).
-  // Convert world->device rotation R using yaw(heading), pitch(beta), roll(gamma) and get
-  // N in device coords: Nd = R^T * N. Then make particles move along -Nd.
-  // This locks the stream to geographic North regardless of phone attitude.
+  // World axes: X=East, Y=North, Z=Up. Stream is from world North.
   // ---------------------------------------------
   let headingDeg = 0, pitchDeg = 0, rollDeg = 0;
-  function bearingToText(b){
-    b=(b%360+360)%360;const n=['North','NNE','NE','ENE','East','ESE','SE','SSE','South','SSW','SW','WSW','West','WNW','NW','NNW'];
-    return n[Math.round(b/22.5)%16];
-  }
-  function updateHUD(){ dirTxt.textContent = 'North'; }
 
   function handleDO(e){
     const {alpha, beta, gamma} = e; // alpha:z (0..360), beta:x (-180..180), gamma:y (-90..90)
-    if (isFinite(alpha)) headingDeg = (360 - alpha) % 360; // convert to CW from North approx
+    // Prefer WebKit true compass when available
+    if (typeof e.webkitCompassHeading === 'number' && isFinite(e.webkitCompassHeading)) {
+      headingDeg = e.webkitCompassHeading; // 0=North, CW
+    } else if (isFinite(alpha)) {
+      headingDeg = (360 - alpha) % 360; // fallback mapping
+    }
     if (isFinite(beta))  pitchDeg = beta;
     if (isFinite(gamma)) rollDeg = gamma;
-    updateHUD();
   }
 
   async function ensureMotionPermission(){
@@ -82,71 +76,55 @@
     }catch{}
   }
   ensureMotionPermission();
-  updateHUD();
 
   // ---------------------------------------------
   // MATH HELPERS
   // ---------------------------------------------
-  function deg2rad(d){return d*Math.PI/180}
-  function clamp(v,a,b){return v<a?a:v>b?b:v}
-
-  // Rotation matrix world->device from yaw(Z), pitch(X), roll(Y).
+  const TAU = Math.PI*2;
+  const deg2rad = d=>d*Math.PI/180;
+  const norm = v=>{const m=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/m,v[1]/m,v[2]/m];};
+  const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+  function mul3(A,B){const r=new Array(9);for(let rI=0;rI<3;rI++)for(let c=0;c<3;c++)r[rI*3+c]=A[rI*3+0]*B[0*3+c]+A[rI*3+1]*B[1*3+c]+A[rI*3+2]*B[2*3+c];return r}
+  function mul3Tv(R,v){return [ R[0]*v[0]+R[3]*v[1]+R[6]*v[2], R[1]*v[0]+R[4]*v[1]+R[7]*v[2], R[2]*v[0]+R[5]*v[1]+R[8]*v[2] ];}
   function rotWorldToDevice(yawDeg, pitchDeg, rollDeg){
-    const z = deg2rad(yawDeg);
-    const x = deg2rad(pitchDeg);
-    const y = deg2rad(rollDeg);
+    // Intrinsic Z (yaw/heading), X (pitch), Y (roll)
+    const z=deg2rad(yawDeg), x=deg2rad(pitchDeg), y=deg2rad(rollDeg);
     const cz=Math.cos(z), sz=Math.sin(z);
     const cx=Math.cos(x), sx=Math.sin(x);
     const cy=Math.cos(y), sy=Math.sin(y);
-    // Rz(z) * Rx(x) * Ry(y)  (intrinsic Z-X-Y composition approx for DeviceOrientation)
-    const Rz = [ cz,-sz,0,  sz,cz,0,  0,0,1 ];
-    const Rx = [ 1,0,0,  0,cx,-sx,  0,sx,cx ];
-    const Ry = [ cy,0,sy,  0,1,0,  -sy,0,cy ];
-    const Rzx = mul3(Rz,Rx); return mul3(Rzx,Ry);
+    const Rz=[cz,-sz,0, sz,cz,0, 0,0,1];
+    const Rx=[1,0,0, 0,cx,-sx, 0,sx,cx];
+    const Ry=[cy,0,sy, 0,1,0, -sy,0,cy];
+    return mul3(mul3(Rz,Rx),Ry);
   }
-  function mul3(A,B){
-    const r=new Array(9);
-    for(let rI=0;rI<3;rI++) for(let c=0;c<3;c++){
-      r[rI*3+c]=A[rI*3+0]*B[0*3+c]+A[rI*3+1]*B[1*3+c]+A[rI*3+2]*B[2*3+c];
-    }
-    return r;
-  }
-  function mul3Tv(R, v){ // R^T * v
-    return [ R[0]*v[0]+R[3]*v[1]+R[6]*v[2], R[1]*v[0]+R[4]*v[1]+R[7]*v[2], R[2]*v[0]+R[5]*v[1]+R[8]*v[2] ];
-  }
-  function norm(v){ const m=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/m,v[1]/m,v[2]/m]; }
-  function cross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]] }
 
   // ---------------------------------------------
-  // STARFIELD: stream from fixed WORLD North
+  // STARFIELD: true-North stream with STRONG perspective & long streaks
   // ---------------------------------------------
   const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const COUNT = isMobile ? 700 : 1500;
+  const COUNT = isMobile ? 1200 : 2200;
   const stars = new Float32Array(COUNT*3); // device-space positions
-  const SPEED = 12; // units/s along -Nd
-  const FAR = 40, NEAR = 0.6; // depth range in device space (z forward)
-  const SPREAD = 0.7; // angular spread around Nd
-  const F = 900; // focal length in px
+  const FAR = 90, NEAR = 0.8;     // depth range
+  const SPEED = 28;               // world-units/s along -Nd (higher = more streak)
+  const SPREAD = 0.9;             // angular spread around Nd
+  const F = 950;                  // focal length px (smaller => stronger perspective)
 
-  // Spawn around Nd direction at depth ~FAR, with small perpendicular jitter.
   function spawn(i, Nd){
     const idx=i*3;
-    // Build orthonormal basis (U,V,Nd)
+    // Orthonormal frame around Nd
     let tmp = Math.abs(Nd[1])<0.9 ? [0,1,0] : [1,0,0];
     let U = norm(cross(tmp, Nd));
     let V = norm(cross(Nd, U));
-    const r = (Math.random()**1.5) * SPREAD; // tighter near axis
-    const t = Math.random()*Math.PI*2;
-    const jitter = [ U[0]*r*Math.cos(t) + V[0]*r*Math.sin(t),
-                     U[1]*r*Math.cos(t) + V[1]*r*Math.sin(t),
-                     U[2]*r*Math.cos(t) + V[2]*r*Math.sin(t) ];
-    // Start far away along +Nd (so motion -Nd travels towards camera)
+    const r = (Math.random()**1.4) * SPREAD; // tighter near axis
+    const t = Math.random()*TAU;
+    const jitter=[ U[0]*r*Math.cos(t)+V[0]*r*Math.sin(t),
+                   U[1]*r*Math.cos(t)+V[1]*r*Math.sin(t),
+                   U[2]*r*Math.cos(t)+V[2]*r*Math.sin(t) ];
     stars[idx]   = Nd[0]*FAR + jitter[0];
     stars[idx+1] = Nd[1]*FAR + jitter[1];
     stars[idx+2] = Nd[2]*FAR + jitter[2];
   }
 
-  // Initial fill with default Nd = from North using neutral attitude
   let last = performance.now();
   let Rwd = rotWorldToDevice(0,0,0);
   let Nd = norm(mul3Tv(Rwd, [0,1,0])); // world North in device coords
@@ -155,45 +133,53 @@
   function loop(now){
     const dt = Math.min(0.035, (now-last)/1000); last=now;
 
-    // Update transform and Nd from current sensors
+    // Update North vector from sensors
     Rwd = rotWorldToDevice(headingDeg, pitchDeg, rollDeg);
-    Nd = norm(mul3Tv(Rwd, [0,1,0])); // fixed world North -> device coords
+    Nd = norm(mul3Tv(Rwd, [0,1,0]));
 
-    // Motion blur
+    // Motion persistence: lower alpha to keep long tails
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillStyle='rgba(0,0,0,0.18)';
     ctx.fillRect(0,0,W,H);
 
     ctx.globalCompositeOperation='lighter';
     ctx.strokeStyle='#fff';
     ctx.lineCap='round';
 
-    // Camera looks down +Z. Project with perspective to screen.
     for (let i=0;i<COUNT;i++){
       const idx=i*3;
       let x=stars[idx], y=stars[idx+1], z=stars[idx+2];
 
-      // Previous screen point
-      const pz=z; const inv=F/(F + pz*DPR);
-      const px = x*inv*DPR + CX;
-      const py = -y*inv*DPR + CY; // y up on screen
+      // Project previous
+      const inv1 = F/(F + z*DPR);
+      const px = x*inv1*DPR + CX;
+      const py = y*inv1*DPR + CY; // NOTE: flipped to fix up/down
 
-      // Advance along -Nd (towards camera)
+      // Physics: move along -Nd
       x -= Nd[0]*SPEED*dt;
       y -= Nd[1]*SPEED*dt;
       z -= Nd[2]*SPEED*dt;
 
-      // Current screen point
-      const inv2=F/(F + z*DPR);
+      // Project current
+      const inv2 = F/(F + z*DPR);
       const sx = x*inv2*DPR + CX;
-      const sy = -y*inv2*DPR + CY;
+      const sy = y*inv2*DPR + CY;
 
-      // Stroke width grows as it approaches
-      const w = Math.max(0.6*DPR, Math.min(4*DPR, (FAR - z)*0.06));
-      ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(sx,sy); ctx.stroke();
+      // Screen-space delta
+      const dx = sx - px;
+      const dy = sy - py;
 
-      // Recycle if passed camera or off-screen or too near
-      const off = (z<NEAR || sx<-50 || sx>W+50 || sy<-50 || sy>H+50);
+      // TRAIL BOOST: extend streak backwards proportional to proximity
+      const depthFactor = Math.max(0, Math.min(1, 1 - (z/FAR))); // 0 far → 1 near
+      const k = 6 + depthFactor*24; // longer when near
+      const tx = sx - dx * k;
+      const ty = sy - dy * k;
+
+      const w = Math.max(0.7*DPR, Math.min(4.5*DPR, 0.6 + depthFactor*3.6));
+      ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(sx,sy); ctx.stroke();
+
+      // Recycle
+      const off = (z<NEAR || sx<-80 || sx>W+80 || sy<-80 || sy>H+80);
       if (off){ spawn(i, Nd); }
       else { stars[idx]=x; stars[idx+1]=y; stars[idx+2]=z; }
     }
