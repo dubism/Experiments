@@ -1,0 +1,1 @@
+// Full inline script would be placed here from the HTML block.
