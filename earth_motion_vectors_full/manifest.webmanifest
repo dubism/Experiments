@@ -1,0 +1,9 @@
+{
+  "name": "Earth Motion Vectors",
+  "short_name": "Vectors",
+  "display": "standalone",
+  "start_url": "./index.html",
+  "background_color": "#0b121a",
+  "theme_color": "#0b121a",
+  "icons": []
+}

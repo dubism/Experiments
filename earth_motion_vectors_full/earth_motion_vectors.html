@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Earth Motion Vectors — Lean Static App</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="sky" aria-label="Sky dome"></canvas>
+
+  <!-- HUD (tap anywhere to hide/show) -->
+  <div id="hudLayer" role="region" aria-label="Technical HUD">
+    <div class="panel" id="statusPanel">
+      <div class="grid">
+        <div class="k">Coords</div><div class="v" id="coord">--</div>
+        <div class="k">UTC</div><div class="v" id="utc">--</div>
+        <div class="k">JD(UTC)</div><div class="v" id="jdU">--</div>
+        <div class="k">JD(TT)</div><div class="v" id="jdT">--</div>
+        <div class="k">ERA</div><div class="v" id="era">--</div>
+        <div class="k">ε (obliq)</div><div class="v" id="eps">--</div>
+        <div class="k">λ☉</div><div class="v" id="lam">--</div>
+        <div class="k">Compass ACC</div><div class="v" id="acc">--</div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div id="legend" class="row">
+          <span class="item"><span class="dot spin"></span>Spin axis</span>
+          <span class="item"><span class="dot orbit"></span>Orbital vel</span>
+          <span class="item"><span class="dot lsr"></span>Galactic LSR</span>
+          <span class="item"><span class="dot apex"></span>Solar apex</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="vectorsPanel">
+      <div class="grid">
+        <div class="k">Spin alt/az</div><div class="v" id="spinAA">--</div>
+        <div class="k">Orbit alt/az</div><div class="v" id="orbAA">--</div>
+        <div class="k">LSR alt/az</div><div class="v" id="lsrAA">--</div>
+        <div class="k">Apex alt/az</div><div class="v" id="apxAA">--</div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="sunLock">Sun-lock</button>
+        <label><input type="checkbox" id="trueNorth" checked> True North</label>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint">Tap anywhere to toggle HUD</div>
+
+  <!-- Permission overlay (required on iOS for motion sensors) -->
+  <div id="permOverlay" class="overlay">
+    <div class="card">
+      <h2>Enable Sensors</h2>
+      <p>This app needs motion/orientation and location to render the sky vectors.</p>
+      <div class="row">
+        <button id="enableMotion">Enable Motion</button>
+        <button id="enableGeo">Enable Location</button>
+      </div>
+      <p class="fine">Tip: Serve over HTTPS for sensor access. In Safari iOS 13+, you must tap “Enable Motion”.</p>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
