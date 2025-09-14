@@ -3,701 +3,580 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Snowflakes Through Windshield — North-Locked</title>
-<meta name="theme-color" content="#000000" />
+<title>North-Locked Hyperdrive — Infinite Y-Lines (WebGL2 + Canvas2D)</title>
+<meta name="theme-color" content="#000"/>
 <style>
   :root{
-    --hud-bg: rgba(10,10,12,.72);
-    --hud-fg: #e8e8ea;
+    --hud-bg: rgba(12,12,14,.72);
+    --hud-fg: #f0f0f2;
     --hud-accent: #9ad1ff;
   }
-  html,body { margin:0; height:100%; background:#000; color:#fff; }
-  body { overflow:hidden; touch-action:none; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif; }
-  #app { position:fixed; inset:0; display:grid; grid-template-rows: 1fr; }
-  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
-  #overlay-permission {
-    position:absolute; inset:0; display:none; place-items:center; background:rgba(0,0,0,.8); color:#fff; z-index:10;
+  html,body{margin:0;height:100%;background:#000;color:#fff}
+  body{overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Inter,Roboto,sans-serif}
+  #gl,#c2d{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #c2d{display:none}
+  #overlay{
+    position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.85);z-index:10
   }
-  #overlay-permission.show { display:grid; }
-  #overlay-permission button {
-    padding:.9rem 1.1rem; border:1px solid #666; background:#111; color:#fff; border-radius:.8rem; font-weight:600;
+  #overlay.show{display:grid}
+  #overlay button{
+    padding:.9rem 1.2rem;border:1px solid #666;background:#111;color:#fff;border-radius:.8rem;font-weight:700
   }
-  #hud {
-    position:fixed; right: env(safe-area-inset-right); top: calc(env(safe-area-inset-top) + 8px);
-    background:var(--hud-bg); color:var(--hud-fg); border:1px solid #2b2b32; padding:.75rem; border-radius:12px;
-    z-index: 20; min-width: 260px; backdrop-filter: blur(10px);
-    display:none;
+  #hud{
+    position:fixed;right:calc(env(safe-area-inset-right) + 10px);top:calc(env(safe-area-inset-top) + 10px);
+    background:var(--hud-bg);color:var(--hud-fg);border:1px solid #2b2b32;border-radius:12px;padding:.75rem 1rem;min-width:260px;
+    z-index:15;display:none;backdrop-filter:blur(10px)
   }
-  #hud.show { display:block; }
-  #hud h2 { margin:0 0 .5rem; font-size:14px; font-weight:700; letter-spacing:.02em; color:#fff; }
-  #hud .row { display:grid; grid-template-columns: 1fr auto; align-items:center; gap:.5rem; font-size:12px; margin:.25rem 0; }
-  #hud .row > span.value { color: var(--hud-accent); font-variant-numeric: tabular-nums; }
-  #hud details { margin-top:.25rem; }
-  #hud input[type=range] { width: 170px; }
-  #tiny {
-    position:fixed; left: calc(env(safe-area-inset-left) + 8px); bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-size:11px; color:#aaa; opacity:.8; z-index:5; user-select:none;
-  }
-  .badge { display:inline-block; padding:.15rem .4rem; border:1px solid #3a3a44; border-radius:.5rem; margin-left:.35rem; }
-  #unstable { color:#ffcc66; display:none; }
-  #unstable.show { display:inline; }
-  @media (prefers-reduced-motion: reduce) {
-    #tiny::after { content: " · gentle"; }
+  #hud.show{display:block}
+  #hud h2{margin:0 0 .6rem;font-size:14px;color:#fff}
+  #hud .row{display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:center;font-size:12px;margin:.25rem 0}
+  #hud input[type=range]{width:170px}
+  .badge{display:inline-block;border:1px solid #3a3a44;border-radius:.5rem;padding:.1rem .4rem;margin-left:.35rem;font-size:11px}
+  #tiny{position:fixed;left:calc(env(safe-area-inset-left)+8px);bottom:calc(env(safe-area-inset-bottom)+8px);font-size:11px;color:#aaa;opacity:.9}
+  @media (prefers-reduced-motion: reduce){
+    #tiny::after{content:" · gentle"}
   }
 </style>
 </head>
 <body>
-  <div id="app">
-    <canvas id="gl"></canvas>
-    <canvas id="c2d"></canvas>
-    <div id="overlay-permission" aria-hidden="true">
-      <div style="text-align:center; max-width:320px;">
-        <p style="opacity:.9; margin:0 0 .75rem;">Motion access is needed to lock flow to real North.</p>
-        <button id="btn-permit">Enable Motion & Compass</button>
-        <p style="opacity:.6; margin:.6rem 0 0; font-size:.9rem;">If denied, effect still runs with North = up.</p>
-      </div>
+  <canvas id="gl"></canvas>
+  <canvas id="c2d"></canvas>
+
+  <div id="overlay" aria-hidden="true">
+    <div style="text-align:center;max-width:320px">
+      <p style="opacity:.9;margin:0 0 .75rem">Motion/compass access is needed to lock flow to real North.</p>
+      <button id="btn-permit">Enable Motion & Compass</button>
+      <p style="opacity:.6;margin:.6rem 0 0;font-size:.9rem">If denied, effect still runs with North = up.</p>
     </div>
-    <div id="hud" role="region" aria-label="Debug HUD">
-      <h2>Snowflakes — Debug
-        <span class="badge" id="badge-pipeline">–</span>
-        <span class="badge" id="badge-dpr">DPR</span>
-        <span class="badge" id="badge-sensor">–</span>
-      </h2>
-      <div class="row"><span>fps</span><span class="value" id="stat-fps">–</span></div>
-      <div class="row"><span>particles</span><span class="value" id="stat-count">–</span></div>
-      <div class="row"><span>heading / pitch / roll</span><span class="value" id="stat-hpr">–</span></div>
-      <div class="row"><span>North vec (device)</span><span class="value" id="stat-nd">–</span></div>
-      <div class="row"><span>compass</span><span class="value" id="stat-comp">– <span id="unstable">unstable</span></span></div>
-      <details>
-        <summary style="cursor:pointer; margin-top:.25rem;">Controls</summary>
-        <div class="row"><label>Count</label><input id="ctl-count" type="range" min="200" max="5000" step="50"></div>
-        <div class="row"><label>Speed</label><input id="ctl-speed" type="range" min="1" max="100" step="1"></div>
-        <div class="row"><label>Spread</label><input id="ctl-spread" type="range" min="0.1" max="2.5" step="0.05"></div>
-        <div class="row"><label>FOV (°)</label><input id="ctl-fov" type="range" min="35" max="90" step="1"></div>
-        <div class="row"><label>Trail x</label><input id="ctl-trail" type="range" min="1" max="50" step="1"></div>
-        <div class="row"><label>Persistence α</label><input id="ctl-persist" type="range" min="0.08" max="0.35" step="0.01"></div>
-        <div class="row"><label>Strict −Nᵈ (z)</label><input id="ctl-strict" type="checkbox"></div>
-        <div class="row"><label>Invert Y proj</label><input id="ctl-invY" type="checkbox"></div>
-      </details>
-    </div>
-    <div id="tiny">Direction: North</div>
   </div>
+
+  <div id="hud" role="region" aria-label="Debug HUD">
+    <h2>North-Locked Hyperdrive
+      <span class="badge" id="badge-pipeline">–</span>
+      <span class="badge" id="badge-dpr">DPR</span>
+      <span class="badge" id="badge-sensor">–</span>
+    </h2>
+    <div class="row"><span>fps</span><span id="stat-fps">–</span></div>
+    <div class="row"><span>instances</span><span id="stat-count">–</span></div>
+    <div class="row"><span>heading / pitch / roll</span><span id="stat-hpr">–</span></div>
+    <div class="row"><span>Nd (device)</span><span id="stat-nd">–</span></div>
+    <details>
+      <summary style="cursor:pointer;margin-top:.25rem">Controls</summary>
+      <div class="row"><label>Count</label><input id="ctl-count" type="range" min="300" max="6000" step="50"></div>
+      <div class="row"><label>Speed</label><input id="ctl-speed" type="range" min="1" max="100" step="1"></div>
+      <div class="row"><label>Spacing</label><input id="ctl-space" type="range" min="0.6" max="2.5" step="0.05"></div>
+      <div class="row"><label>FOV (°)</label><input id="ctl-fov" type="range" min="35" max="90" step="1"></div>
+      <div class="row"><label>Trail x</label><input id="ctl-trail" type="range" min="4" max="60" step="1"></div>
+      <div class="row"><label>Width (px)</label><input id="ctl-width" type="range" min="0.6" max="4.0" step="0.1"></div>
+      <div class="row"><label>Persist α (Canvas)</label><input id="ctl-persist" type="range" min="0.08" max="0.35" step="0.01"></div>
+      <div class="row"><label>Invert Y</label><input id="ctl-invY" type="checkbox"></div>
+    </details>
+  </div>
+
+  <div id="tiny">Direction: North</div>
 
 <script>
 (function(){
   "use strict";
 
-  // ——————— Feature flags via query params ——————————————————————————————
+  // —————————————————— Feature flags / query params ——————————————————
   const qp = new URLSearchParams(location.search);
   const FLAGS = {
     debug: qp.get('debug') === '1',
     forceCanvas: qp.get('forceCanvas') === '1',
     invertY: qp.get('invertY') === '1',
-    noSensors: qp.get('noSensors') === '1',
-    strictNd: qp.get('strictNd') === '1',
-    bloom: qp.get('bloom') === '1', // reserved, not applied (guarded)
+    noSensors: qp.get('noSensors') === '1'
   };
 
-  // ——————— Globals & central state ——————————————————————————————
+  // —————————————————— Central state ——————————————————
   const app = {
     dpr: 1,
-    width: 0, height: 0,
+    width: 1, height: 1,
     paused: document.hidden,
     pipeline: 'webgl', // or 'canvas'
-    now: performance.now(),
-    last: performance.now(),
-    frameTimes: [],
-    frameSum: 0,
-    fps: 0,
-    // Parameters (live-tunable)
+    now: performance.now(), last: performance.now(),
+    frameTimes: [], frameSum: 0, fps: 0,
+
     params: {
-      count: 1600,
-      speed: 40,           // world-units/s base
-      spread: 0.6,         // angular jitter
-      fovDeg: 55,          // vertical FOV
-      trailMul: 12,        // trail visual multiplier
-      persistAlpha: 0.14,  // canvas2D screen decay
+      // visual
+      speed: 40,           // band slide speed
+      trailMul: 16,        // band length multiplier (screen-space)
+      widthPx: 1.6,        // base line width (px)
+      fovDeg: 55,          // vertical FOV (deg)
+      persistAlpha: 0.14,  // canvas persistence clear
       clampDPR: 2.0,
+      // field
+      spacing: 1.1,        // grid spacing in world units
+      radius: 42,          // population radius in world units
+      countHint: 2200
     },
-    // Limits & adapt
-    adapt: {
-      minCount: 700,
-      maxCount: 5000,
-      timeWindow: 24, // frames
-      incThresh: 14, // ms
-      decThresh: 22, // ms
-      lastCheck: 0
-    },
-    // Sensor state (filtered)
+
+    adapt: { timeWindow: 24, incThresh: 14, decThresh: 22, lastCheck: 0, minCount: 600, maxCount: 6000 },
+
     sensor: {
-      enabled: false,
-      havePermission: false,
-      source: 'none',     // 'webkit', 'alpha', 'sensor', 'none'
-      headingDeg: 0,
-      pitchDeg: 0,
-      rollDeg: 0,
+      enabled: false, havePermission: false, source: 'none',
+      headingDeg: 0, pitchDeg: 0, rollDeg: 0,
       yawFilt: 0, pitchFilt: 0, rollFilt: 0,
-      alphaLPF: 0.15,
-      unstable: false,
-      yawHistory: [],
+      aLPF: 0.15
     },
-    // Orientation / math
-    Nd: new Float32Array([0,1,0]), // North vector in device/camera space
-    NdStrict: false, // whether to include Nd.z in motion or clamp toward camera
+
     invertY: !!FLAGS.invertY,
-    // Particles
-    particles: [],
-    dead: [], // stack of free indices
-    bounds: { near: 0.6, far: 60, maxXY: 40 },
-    // Matrices
-    proj: new Float32Array(16),
-    // WebGL
-    gl: null,
-    glRes: null,
-    // Canvas2D
+
+    // math / orientation
+    Nd: new Float32Array([0,1,0]), // North in device/view space (for HUD)
+    view3: [1,0,0, 0,1,0, 0,0,1],  // 3x3 world->view rotation (row-major)
+
+    // instances (world XZ positions + seed)
+    instances: { xz: null, seed: null, count: 0, capacity: 0 },
+
+    // GL
+    gl: null, glRes: null,
+
+    // Canvas2D fallback
     ctx: null,
-    // Reduced motion
-    gentle: window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-    // UI refs
+
+    // UI
     ui: {}
   };
 
-  if (app.gentle) {
-    app.params.speed = Math.max(8, app.params.speed * 0.5);
-    app.params.trailMul = Math.max(4, Math.round(app.params.trailMul * 0.6));
-  }
-  if (FLAGS.strictNd) app.NdStrict = true;
+  // reduced motion
+  const gentle = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (gentle){ app.params.speed = Math.max(10, app.params.speed*0.5); app.params.trailMul = Math.max(8, Math.round(app.params.trailMul*0.6)); }
 
-  // ——————— Utilities: vectors, matrices, quaternions ——————————————————
-  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-  function l2(x,y){ return Math.hypot(x,y); }
+  // —————————————————— Utils ——————————————————
+  const el = (s)=>document.querySelector(s);
+  const clamp = (v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+  const radians = (d)=>d*Math.PI/180;
+  const degrees = (r)=>r*180/Math.PI;
+
   function v3dot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
   function v3len(a){ return Math.hypot(a[0],a[1],a[2]); }
-  function v3norm(out,a){
-    const L = v3len(a)||1; out[0]=a[0]/L; out[1]=a[1]/L; out[2]=a[2]/L; return out;
-  }
-  function v3cross(out,a,b){
-    const x=a[1]*b[2]-a[2]*b[1], y=a[2]*b[0]-a[0]*b[2], z=a[0]*b[1]-a[1]*b[0];
-    out[0]=x; out[1]=y; out[2]=z; return out;
-  }
-  function qFromAxisAngle(ax,ay,az,ang){
-    const s=Math.sin(ang/2), c=Math.cos(ang/2);
-    const L=Math.hypot(ax,ay,az)||1; ax/=L; ay/=L; az/=L;
-    return [ax*s, ay*s, az*s, c];
-  }
-  function qMul(a,b){ // a*b
-    const ax=a[0], ay=a[1], az=a[2], aw=a[3];
-    const bx=b[0], by=b[1], bz=b[2], bw=b[3];
-    return [
-      aw*bx + ax*bw + ay*bz - az*by,
-      aw*by - ax*bz + ay*bw + az*bx,
-      aw*bz + ax*by - ay*bx + az*bw,
-      aw*bw - ax*bx - ay*by - az*bz
-    ];
-  }
+  function v3norm(o,a){ const L=v3len(a)||1; o[0]=a[0]/L; o[1]=a[1]/L; o[2]=a[2]/L; return o; }
+
+  // Quaternion helpers
+  function qFromAxisAngle(ax,ay,az,ang){ const s=Math.sin(ang/2), c=Math.cos(ang/2); const L=Math.hypot(ax,ay,az)||1; ax/=L; ay/=L; az/=L; return [ax*s,ay*s,az*s,c]; }
+  function qMul(a,b){ const [ax,ay,az,aw]=a,[bx,by,bz,bw]=b; return [ aw*bx+ax*bw+ay*bz-az*by, aw*by-ax*bz+ay*bw+az*bx, aw*bz+ax*by-ay*bx+az*bw, aw*bw-ax*bx-ay*by-az*bz ]; }
   function qConj(q){ return [-q[0],-q[1],-q[2],q[3]]; }
+  function qFromYPR(yawZ,pitchX,rollY){ return qMul(qMul(qFromAxisAngle(0,0,1,yawZ), qFromAxisAngle(1,0,0,pitchX)), qFromAxisAngle(0,1,0,rollY)); }
   function qRotateVec(q,v){
-    // Return R(q)*v ; q is world->device here
-    const x=v[0], y=v[1], z=v[2];
-    const qx=q[0], qy=q[1], qz=q[2], qw=q[3];
-    // t = 2 * cross(q.xyz, v)
-    const tx = 2*(qy*z - qz*y);
-    const ty = 2*(qz*x - qx*z);
-    const tz = 2*(qx*y - qy*x);
-    // v' = v + qw*t + cross(q.xyz, t)
+    const [qx,qy,qz,qw]=q; const [x,y,z]=v;
+    const tx=2*(qy*z-qz*y), ty=2*(qz*x-qx*z), tz=2*(qx*y-qy*x);
+    return [ x + qw*tx + (qy*tz - qz*ty), y + qw*ty + (qz*tx - qx*tz), z + qw*tz + (qx*ty - qy*tx) ];
+  }
+  function mat3FromQuat(q){
+    const [x,y,z,w]=q; const xx=x*x, yy=y*y, zz=z*z; const xy=x*y, xz=x*z, yz=y*z; const wx=w*x, wy=w*y, wz=w*z;
     return [
-      x + qw*tx + (qy*tz - qz*ty),
-      y + qw*ty + (qz*tx - qx*tz),
-      z + qw*tz + (qx*ty - qy*tx),
+      1-2*(yy+zz), 2*(xy - wz), 2*(xz + wy),
+      2*(xy + wz), 1-2*(xx+zz), 2*(yz - wx),
+      2*(xz - wy), 2*(yz + wx), 1-2*(xx+yy)
     ];
   }
-  function qFromYawPitchRoll(yawZ, pitchX, rollY){
-    // Compose world-axes rotations: Rz(yaw) * Rx(pitch) * Ry(roll)
-    const qz = qFromAxisAngle(0,0,1, yawZ);
-    const qx = qFromAxisAngle(1,0,0, pitchX);
-    const qy = qFromAxisAngle(0,1,0, rollY);
-    return qMul(qMul(qz, qx), qy);
-  }
-  function makePerspective(out, fovyDeg, aspect, near, far){
-    const f = 1 / Math.tan((fovyDeg*Math.PI/180)/2);
-    out[0]=f/aspect; out[1]=0; out[2]=0; out[3]=0;
-    out[4]=0; out[5]=f; out[6]=0; out[7]=0;
-    out[8]=0; out[9]=0; out[10]=(far+near)/(near-far); out[11]=-1;
-    out[12]=0; out[13]=0; out[14]=(2*far*near)/(near-far); out[15]=0;
-    return out;
-  }
-  function projectToNDC(p, m){
-    // p: [x,y,z]; return [x_ndc, y_ndc, w] where w>0 if in front
-    const x=p[0], y=p[1], z=p[2];
-    const nx = m[0]*x + m[8]*z;                 // omit terms we know zero
-    const ny = m[5]*y + m[9]*z;
-    const nz = m[10]*z + m[14];
-    const nw = -z; // from standard perspective matrix (m[11] = -1, others 0)
-    const xndc = nx / nw;
-    const yndc = (app.invertY ? -1 : 1) * (ny / nw);
-    return [xndc, yndc, nw, nz];
-  }
-  function ndcToPx(ndcX, ndcY){
-    const px = (ndcX*0.5 + 0.5) * app.width;
-    const py = (1 - (ndcY*0.5 + 0.5)) * app.height;
-    return [px, py];
-  }
 
-  // ——————— Sensor / Orientation ——————————————————————————————
-  const NORTH_WORLD = new Float32Array([0,1,0]);
-  const tmp = new Float32Array(3), U = new Float32Array(3), V = new Float32Array(3);
+  // —————————————————— Sensors & permission (iOS gate) ——————————————————
+  const NORTH_WORLD = [0,1,0];
 
-  function lowpass(prev, next, a){ return prev + a*(next - prev); }
-  function yawStdIsUnstable(history){
-    if (history.length < 12) return false;
-    let mean = history.reduce((s,v)=>s+v,0)/history.length;
-    let v = history.reduce((s,x)=>{ let d=x-mean; return s+d*d; },0)/history.length;
-    return Math.sqrt(v) > 4; // deg
-  }
-
-  const PermUI = {
-    show(){ el('#overlay-permission').classList.add('show'); },
-    hide(){ el('#overlay-permission').classList.remove('show'); }
-  };
-
-  function radians(deg){ return deg * Math.PI/180; }
-  function degrees(rad){ return rad * 180/Math.PI; }
+  function showOverlay(){ el('#overlay').classList.add('show'); }
+  function hideOverlay(){ el('#overlay').classList.remove('show'); }
 
   function setupSensors(){
-    if (FLAGS.noSensors){
-      app.sensor.enabled = false;
-      app.sensor.source = 'off';
-      return;
-    }
+    if (FLAGS.noSensors){ app.sensor.source='off'; app.sensor.enabled=false; return; }
 
-    // Prefer AbsoluteOrientationSensor if available (Android Chrome, modern)
     let ABS = (window.AbsoluteOrientationSensor || window.OrientationSensor);
     let sensorObj = null;
 
-    function attachDeviceOrientation(){
-      // iOS & fallback path
-      window.addEventListener('deviceorientation', onDeviceOrientation, { passive:true });
+    function attachDO(){
+      window.addEventListener('deviceorientation', onDO, {passive:true});
       app.sensor.enabled = true;
-      app.sensor.source = 'webkit' in window ? 'webkit' : 'alpha';
+      app.sensor.source = ('webkitCompassHeading' in window) ? 'webkit' : 'alpha';
       updateHUDSensor();
     }
 
-    async function requestIOSPermissionIfNeeded(){
-      try{
-        if (typeof DeviceOrientationEvent !== 'undefined' &&
-            typeof DeviceOrientationEvent.requestPermission === 'function') {
-          // iOS 13+
-          PermUI.show();
-          el('#btn-permit').onclick = async ()=>{
-            try{
-              const res = await DeviceOrientationEvent.requestPermission();
-              app.sensor.havePermission = (res === 'granted');
-              if (app.sensor.havePermission) {
-                PermUI.hide();
-                attachDeviceOrientation();
-              } else {
-                PermUI.hide(); // run with defaults
-              }
-            } catch(e){ PermUI.hide(); console.warn('Permission error', e); }
-          };
-        } else {
-          // No permission gate
-          attachDeviceOrientation();
-        }
-      } catch(e){ console.warn(e); attachDeviceOrientation(); }
-    }
-
-    function startAbsoluteSensor(){
-      try{
-        sensorObj = new ABS({ frequency: 60, referenceFrame: 'device' });
-        sensorObj.addEventListener('reading', ()=>{
-          // sensorObj.quaternion maps device→world; we need world→device (conjugate)
-          const qdw = [sensorObj.quaternion[0], sensorObj.quaternion[1], sensorObj.quaternion[2], sensorObj.quaternion[3]];
-          const qwd = qConj(qdw);
-          // Rotate NORTH into device frame
-          const Nd = qRotateVec(qwd, NORTH_WORLD);
-          v3norm(app.Nd, Nd);
-          // Estimate yaw/pitch/roll for HUD only by projecting qwd
-          // Yaw: angle from +Y to Nd in XY plane
-          const yaw = Math.atan2(app.Nd[0], app.Nd[1]); // radians, 0 at North
-          // Pitch: rotation around X (approx by Up component)
-          const pitch = Math.asin(-app.Nd[2]); // heuristic
-          // Roll: not robust from Nd alone; leave 0
-          app.sensor.yawFilt = lowpass(app.sensor.yawFilt, degrees(yaw), app.sensor.alphaLPF);
-          app.sensor.pitchFilt = lowpass(app.sensor.pitchFilt, degrees(pitch), app.sensor.alphaLPF);
-          app.sensor.rollFilt = lowpass(app.sensor.rollFilt, 0, app.sensor.alphaLPF);
-          // Unstable check (yaw variance)
-          app.sensor.yawHistory.push(app.sensor.yawFilt);
-          if (app.sensor.yawHistory.length > 24) app.sensor.yawHistory.shift();
-          app.sensor.unstable = yawStdIsUnstable(app.sensor.yawHistory);
-        });
-        sensorObj.addEventListener('activate', ()=>{ app.sensor.enabled = true; app.sensor.source = 'sensor'; updateHUDSensor(); });
-        sensorObj.addEventListener('error', e=>{
-          console.warn('AbsoluteOrientationSensor error', e.error || e.name);
-          // fallback
-          requestIOSPermissionIfNeeded();
-        });
-        sensorObj.start();
-      }catch(e){
-        console.warn('AbsoluteOrientationSensor not available', e);
-        requestIOSPermissionIfNeeded();
+    async function gateIOS(){
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+        showOverlay();
+        el('#btn-permit').onclick = async ()=>{
+          try{
+            const res = await DeviceOrientationEvent.requestPermission();
+            app.sensor.havePermission = (res==='granted');
+          }catch{}
+          hideOverlay();
+          attachDO();
+        };
+      }else{
+        attachDO();
       }
     }
 
-    function onDeviceOrientation(ev){
-      // Prefer webkitCompassHeading when available (iOS)
+    function startABS(){ // Android/modern
+      try{
+        sensorObj = new ABS({frequency:60, referenceFrame:'device'});
+        sensorObj.addEventListener('reading', ()=>{
+          const qdw = sensorObj.quaternion;               // device->world
+          const qwd = qConj(qdw);                         // world->device
+          app.view3 = mat3FromQuat(qwd);                  // world->view rotation
+          const Nd = qRotateVec(qwd, NORTH_WORLD);        // North in device/view
+          v3norm(app.Nd, Nd);
+          // HUD approximate YPR
+          const yaw = Math.atan2(app.Nd[0], app.Nd[1]);
+          app.sensor.yawFilt = app.sensor.yawFilt + app.sensor.aLPF*(degrees(yaw)-app.sensor.yawFilt);
+          app.sensor.pitchFilt = app.sensor.pitchFilt + app.sensor.aLPF*(degrees(Math.asin(-app.Nd[2]))-app.sensor.pitchFilt);
+          app.sensor.rollFilt = app.sensor.rollFilt + app.sensor.aLPF*(0 - app.sensor.rollFilt);
+        });
+        sensorObj.addEventListener('activate', ()=>{ app.sensor.enabled=true; app.sensor.source='sensor'; updateHUDSensor(); });
+        sensorObj.addEventListener('error', ()=>{ gateIOS(); });
+        sensorObj.start();
+      }catch{ gateIOS(); }
+    }
+
+    function onDO(ev){
       let headingDeg = (typeof ev.webkitCompassHeading === 'number') ? ev.webkitCompassHeading : (typeof ev.alpha === 'number' ? ev.alpha : 0);
-      let pitchDeg = (typeof ev.beta === 'number') ? ev.beta : 0;   // front-back
-      let rollDeg  = (typeof ev.gamma === 'number') ? ev.gamma : 0; // left-right
+      let pitchDeg = (typeof ev.beta === 'number') ? ev.beta : 0;
+      let rollDeg  = (typeof ev.gamma === 'number') ? ev.gamma : 0;
 
-      // Low-pass
-      app.sensor.headingDeg = lowpass(app.sensor.headingDeg, headingDeg, app.sensor.alphaLPF);
-      app.sensor.pitchDeg   = lowpass(app.sensor.pitchDeg,   pitchDeg,   app.sensor.alphaLPF);
-      app.sensor.rollDeg    = lowpass(app.sensor.rollDeg,    rollDeg,    app.sensor.alphaLPF);
+      // low-pass
+      app.sensor.headingDeg += app.sensor.aLPF*(headingDeg - app.sensor.headingDeg);
+      app.sensor.pitchDeg   += app.sensor.aLPF*(pitchDeg - app.sensor.pitchDeg);
+      app.sensor.rollDeg    += app.sensor.aLPF*(rollDeg  - app.sensor.rollDeg);
 
-      // Compose world->device quaternion from yaw/pitch/roll (approx)
-      const yawZ   = radians(app.sensor.headingDeg); // 0=North, 90=East
-      const pitchX = radians(app.sensor.pitchDeg);
-      const rollY  = radians(app.sensor.rollDeg);
-      const qwd = qFromYawPitchRoll(yawZ, pitchX, rollY);
+      // world->device quaternion
+      const qwd = qFromYPR(radians(app.sensor.headingDeg), radians(app.sensor.pitchDeg), radians(app.sensor.rollDeg));
+      app.view3 = mat3FromQuat(qwd);
       const Nd = qRotateVec(qwd, NORTH_WORLD);
       v3norm(app.Nd, Nd);
 
       app.sensor.yawFilt = app.sensor.headingDeg;
       app.sensor.pitchFilt = app.sensor.pitchDeg;
       app.sensor.rollFilt = app.sensor.rollDeg;
-
-      // Unstable compass indicator
-      app.sensor.yawHistory.push(app.sensor.headingDeg);
-      if (app.sensor.yawHistory.length > 24) app.sensor.yawHistory.shift();
-      app.sensor.unstable = yawStdIsUnstable(app.sensor.yawHistory);
     }
 
-    // Start best available
-    if (ABS && !(/iPad|iPhone|iPod/.test(navigator.userAgent))) {
-      // Android/others first try Generic Sensors
-      startAbsoluteSensor();
-    } else {
-      // iOS / fallback path
-      requestIOSPermissionIfNeeded();
+    if (ABS && !(/iPad|iPhone|iPod/.test(navigator.userAgent))){
+      startABS();
+    }else{
+      gateIOS();
     }
   }
 
-  // ——————— Particles ——————————————————————————————
-  function initParticles(count){
-    app.particles.length = 0;
-    app.dead.length = 0;
-    for (let i=0;i<count;i++){
-      app.particles.push(spawnParticle());
-    }
-    // pre-roll a few frames to seed prev positions
-    for (let i=0;i<3;i++){ integrate(0.016); }
-  }
-
-  function spawnParticle(){
-    // Build orthonormal basis around Nd
-    const Nd = app.Nd;
-    const eps = 1e-3;
-    if (Math.abs(Nd[2]) < 0.99) { v3cross(U, Nd, [0,0,1]); }
-    else { v3cross(U, Nd, [1,0,0]); }
-    v3norm(U,U);
-    v3cross(V, Nd, U);
-    v3norm(V,V);
-
-    const spread = app.params.spread;
-    const r1 = (Math.random()*2-1);
-    const r2 = (Math.random()*2-1);
-    const jitter = [
-      (r1*U[0] + r2*V[0]) * spread * 5.0,
-      (r1*U[1] + r2*V[1]) * spread * 5.0,
-      (r1*U[2] + r2*V[2]) * spread * 5.0,
-    ];
-
-    const far = app.bounds.far;
-    const near = app.bounds.near;
-    const dist = far * (0.6 + 0.4*Math.random()); // spawn band further away
-    const pos = [
-      Nd[0]*dist + jitter[0],
-      Nd[1]*dist + jitter[1],
-      Math.max(near*1.2, Nd[2]*dist + jitter[2]) // ensure in front
-    ];
-    const prev = pos.slice();
-    const brightness = 0.4 + Math.random()*0.6; // some variation
-    const size = 1 + Math.random()*1.5;
-    return { pos, prev, brightness, size };
-  }
-
-  function integrate(dt){
-    // Motion vector: towards camera along -Nᵈ; ensure z moves toward camera (decreasing)
-    const Nd = app.Nd;
-    const v3 = app.NdStrict
-      ? [-Nd[0], -Nd[1], -Nd[2]]
-      : [-Nd[0], -Nd[1], -Math.abs(Nd[2])]; // keep approach toward camera
-
-    // Normalize motion direction to decouple speed from tilt magnitude
-    const L = Math.hypot(v3[0], v3[1], v3[2]) || 1;
-    v3[0]/=L; v3[1]/=L; v3[2]/=L;
-
-    const S = app.params.speed;
-    const near = app.bounds.near, far = app.bounds.far;
-    const maxXY = app.bounds.maxXY;
-
-    for (let i=0;i<app.particles.length;i++){
-      const p = app.particles[i];
-      // Save previous
-      p.prev[0]=p.pos[0]; p.prev[1]=p.pos[1]; p.prev[2]=p.pos[2];
-
-      // Depth-based acceleration cue: faster when near (inverse with z)
-      const z = p.pos[2];
-      const accel = 1.0 + app.params.trailMul * clamp((1.0/(z+0.2)), 0, 3.0);
-
-      p.pos[0] += v3[0] * S * accel * dt;
-      p.pos[1] += v3[1] * S * accel * dt;
-      p.pos[2] += v3[2] * S * accel * dt;
-
-      // Recycle when out of bounds
-      if (p.pos[2] <= near || p.pos[2] > far*1.05 ||
-          Math.abs(p.pos[0]) > maxXY || Math.abs(p.pos[1]) > maxXY) {
-        app.particles[i] = spawnParticle();
+  // —————————————————— Instances (grid of world-Y infinite lines) ——————————————————
+  function buildInstances(targetCount){
+    // Lay out grid in XZ around origin, jitter slightly
+    const spacing = app.params.spacing;
+    const R = app.params.radius;
+    const pts = [];
+    for (let x=-R; x<=R; x+=spacing){
+      for (let z=-R; z<=R; z+=spacing){
+        if ((x*x + z*z) <= R*R*1.15){ // disk-ish
+          pts.push([x + (Math.random()-0.5)*0.15*spacing, z + (Math.random()-0.5)*0.15*spacing]);
+        }
       }
     }
+    // Shuffle and clamp to targetCount
+    for (let i=pts.length-1;i>0;i--){ const j=(Math.random()* (i+1))|0; const t=pts[i]; pts[i]=pts[j]; pts[j]=t; }
+    const N = Math.min(targetCount, pts.length);
+
+    // (Re)allocate buffers
+    app.instances.count = N;
+    app.instances.capacity = N;
+    app.instances.xz = new Float32Array(N*2);
+    app.instances.seed = new Float32Array(N);
+    for (let i=0;i<N;i++){
+      app.instances.xz[i*2+0] = pts[i][0];
+      app.instances.xz[i*2+1] = pts[i][1];
+      app.instances.seed[i] = Math.random()*1000.0;
+    }
   }
 
-  // ——————— WebGL2 pipeline (CPU geometry, additive) ——————————————————
+  // —————————————————— Projection helpers (shared) ——————————————————
+  // We use +Z forward. Compute NDC directly: x_ndc = (x * ax)/z ; y_ndc = (y * ay)/z.
+  function fovToScale(fovDeg, aspect){ // returns (ax, ay)
+    const f = 1/Math.tan(0.5 * radians(fovDeg));
+    return [f/aspect, f]; // ax, ay
+  }
+
+  // —————————————————— WebGL2 pipeline ——————————————————
   function glInit(){
     if (FLAGS.forceCanvas) return false;
     const canvas = el('#gl');
-    const gl = canvas.getContext('webgl2', { antialias:false, alpha:false, premultipliedAlpha:false, preserveDrawingBuffer:false });
+    const gl = canvas.getContext('webgl2', {antialias:false, alpha:false, premultipliedAlpha:false, preserveDrawingBuffer:false});
     if (!gl) return false;
 
-    // Shaders
-    const vsSrc = `#version 300 es
-      layout(location=0) in vec2 a_pos;       // clip-space position
-      layout(location=1) in float a_alpha;    // per-vertex alpha (thickness fade)
-      out float v_alpha;
-      void main(){
-        v_alpha = a_alpha;
-        gl_Position = vec4(a_pos, 0.0, 1.0);
-      }`;
-    const fsSrc = `#version 300 es
-      precision mediump float;
-      in float v_alpha;
-      out vec4 o;
-      void main(){
-        // pure white, additive-ish (driver blend controls final)
-        o = vec4(1.0, 1.0, 1.0, v_alpha);
-      }`;
+    // Shaders (project to NDC manually for +Z forward; depth disabled)
+    const vs = `#version 300 es
+    layout(location=0) in vec2 aXZ;     // instance: (x0,z0)
+    layout(location=1) in float aSeed;  // instance: seed
+    layout(location=2) in vec2 aSide;   // per-vertex: (-1/+1 across, 0/1 along)
 
-    function compile(type, src){
-      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-        throw new Error(gl.getShaderInfoLog(s));
-      }
+    uniform mat3 uView3;        // world->view rotation
+    uniform float uNear, uFar;  // clip planes in view +Z
+    uniform vec2 uPx2NDC;       // 2/viewportPx
+    uniform float uAx, uAy;     // projection scales (ax, ay)
+    uniform float uWidthPx;     // base width in px
+
+    out float vU;
+    out float vSeed;
+    out float vDepth;
+
+    // Project view-space point to NDC (camera looks +Z)
+    vec2 projToNDC(vec3 p){
+      float z = max(p.z, 1e-3); // in front
+      return vec2(uAx * p.x / z, uAy * p.y / z);
+    }
+
+    void main(){
+      // A point on the infinite Y-line and its direction in VIEW space
+      vec3 p0v = uView3 * vec3(aXZ.x, 0.0, aXZ.y);
+      vec3 dv  = uView3 * vec3(0.0, 1.0, 0.0);
+
+      // Intersections with near/far planes (z=near, z=far)
+      float dz = abs(dv.z) < 1e-5 ? (dv.z<0.0?-1e-5:1e-5) : dv.z;
+      float tN = (uNear - p0v.z) / dz;
+      float tF = (uFar  - p0v.z) / dz;
+      if (tN > tF){ float tmp=tN; tN=tF; tF=tmp; }
+
+      vec3 Pn = p0v + tN * dv;
+      vec3 Pf = p0v + tF * dv;
+
+      // Endpoints in NDC
+      vec2 ndcN = projToNDC(Pn);
+      vec2 ndcF = projToNDC(Pf);
+
+      // Tangent & normal in NDC (screen-space)
+      vec2 tdir = normalize(ndcF - ndcN + vec2(1e-6));
+      vec2 nperp = vec2(-tdir.y, tdir.x);
+
+      float side = aSide.x;  // -1 or +1
+      float along = aSide.y; // 0 (near) or 1 (far)
+
+      vec2 ndc = mix(ndcN, ndcF, along) + nperp * side * uWidthPx * uPx2NDC;
+      if (float(${FLAGS.invertY ? 1 : 0}) > 0.5) ndc.y = -ndc.y;
+
+      // Convert NDC to clip for rasterization (depth off)
+      gl_Position = vec4(ndc, 0.0, 1.0);
+
+      vU = along;
+      vSeed = aSeed;
+      vDepth = mix(Pn.z, Pf.z, along);
+    }`;
+
+    const fs = `#version 300 es
+    precision mediump float;
+    in float vU;
+    in float vSeed;
+    in float vDepth;
+    out vec4 o;
+
+    uniform float uTime;
+    uniform float uSpeed;
+    uniform float uTrailX;
+    uniform float uNear;
+
+    // Soft triangular pulse
+    float band(float x, float w){
+      float d = abs(fract(x) - 0.5);
+      return smoothstep(0.5, 0.5 - w, d);
+    }
+
+    void main(){
+      float s = vU * uTrailX + uTime * uSpeed + vSeed;
+      float pulse = band(s, 0.12) * 0.85 + band(s*1.7 + 0.31, 0.085) * 0.6;
+
+      float nearK = clamp(uNear / max(vDepth, 1e-3), 0.0, 4.0);
+      float alpha = clamp(0.08 + 0.26 * nearK, 0.10, 0.98) * pulse;
+
+      o = vec4(1.0,1.0,1.0, alpha);
+    }`;
+
+    function compile(t,src){
+      const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s);
+      if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ throw new Error(gl.getShaderInfoLog(s)); }
       return s;
     }
     const prog = gl.createProgram();
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc));
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ throw new Error(gl.getProgramInfoLog(prog)); }
 
-    // Buffers
-    const vbo = gl.createBuffer();
+    // Buffers / VAO
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    const STRIDE = 3*4; // vec2 + float
-    gl.enableVertexAttribArray(0); // a_pos
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, STRIDE, 0);
-    gl.enableVertexAttribArray(1); // a_alpha
-    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, STRIDE, 8);
+
+    // per-instance: aXZ (loc0)
+    const bufXZ = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufXZ);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(0, 1);
+
+    // per-instance: aSeed (loc1)
+    const bufSeed = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufSeed);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(1, 1);
+
+    // per-vertex: aSide (loc2) — 4-vertex strip per instance
+    const bufSide = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufSide);
+    const quad = new Float32Array([
+      -1, 0,  +1, 0,  -1, 1,  +1, 1
+    ]);
+    gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(2, 0);
+
     gl.bindVertexArray(null);
 
-    app.gl = gl;
-    app.glRes = { prog, vao, vbo, capacityVerts: 0, vertsUsed: 0 };
-
-    glDisableDepthAndEnableBlend(gl);
-
-    return true;
-  }
-
-  function glDisableDepthAndEnableBlend(gl){
+    // State
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
-    // Additive with some alpha falloff
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.clearColor(0,0,0,1);
+
+    app.gl = gl;
+    app.glRes = {
+      prog, vao, bufXZ, bufSeed, bufSide,
+      u: {
+        uView3: gl.getUniformLocation(prog, "uView3"),
+        uNear: gl.getUniformLocation(prog, "uNear"),
+        uFar: gl.getUniformLocation(prog, "uFar"),
+        uPx2NDC: gl.getUniformLocation(prog, "uPx2NDC"),
+        uAx: gl.getUniformLocation(prog, "uAx"),
+        uAy: gl.getUniformLocation(prog, "uAy"),
+        uWidthPx: gl.getUniformLocation(prog, "uWidthPx"),
+        uTime: gl.getUniformLocation(prog, "uTime"),
+        uSpeed: gl.getUniformLocation(prog, "uSpeed"),
+        uTrailX: gl.getUniformLocation(prog, "uTrailX")
+      }
+    };
+    return true;
   }
 
   function glResize(){
     if (!app.gl) return;
     const gl = app.gl;
-    const dpr = app.dpr;
-    const w = Math.max(1, Math.floor(innerWidth * dpr));
-    const h = Math.max(1, Math.floor(innerHeight * dpr));
-    const canvas = gl.canvas;
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w; canvas.height = h;
-    }
+    const w = Math.max(1, Math.floor(innerWidth * app.dpr));
+    const h = Math.max(1, Math.floor(innerHeight * app.dpr));
+    if (gl.canvas.width !== w || gl.canvas.height !== h){ gl.canvas.width=w; gl.canvas.height=h; }
     gl.viewport(0,0,w,h);
   }
 
-  function glDraw(){
-    const gl = app.gl, res = app.glRes;
-    if (!gl) return;
-    gl.clear(gl.COLOR_BUFFER_BIT);
+  function glUploadInstances(){
+    const gl = app.gl, R = app.glRes; if(!gl) return;
+    gl.bindVertexArray(R.vao);
 
-    // Build CPU quad vertex buffer in clip-space with per-vertex alpha
-    // Each particle -> 2 triangles (6 verts); Each vert: (x_ndc, y_ndc, alpha)
-    const count = app.particles.length;
-    const vertsNeeded = count * 6;
-    if (vertsNeeded > res.capacityVerts) {
-      // grow buffer
-      const newCap = Math.ceil(vertsNeeded * 1.3);
-      gl.bindBuffer(gl.ARRAY_BUFFER, res.vbo);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(newCap * 3), gl.DYNAMIC_DRAW);
-      res.capacityVerts = newCap;
-    }
-    const data = new Float32Array(vertsNeeded * 3);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R.bufXZ);
+    gl.bufferData(gl.ARRAY_BUFFER, app.instances.xz, gl.DYNAMIC_DRAW);
 
-    // Precompute pixel-to-ndc scalers
-    const sx = 2 / app.width;
-    const sy = 2 / app.height;
+    gl.bindBuffer(gl.ARRAY_BUFFER, R.bufSeed);
+    gl.bufferData(gl.ARRAY_BUFFER, app.instances.seed, gl.DYNAMIC_DRAW);
 
-    let ptr = 0;
-    const f = app.params.trailMul;
-    for (let i=0;i<count;i++){
-      const P = app.particles[i];
-      // Project previous and current positions
-      const pr = projectToNDC(P.prev, app.proj);
-      const cr = projectToNDC(P.pos, app.proj);
-      const x0=pr[0], y0=pr[1], x1=cr[0], y1=cr[1];
-      // Convert to pixels for thickness computation
-      const [px0, py0] = ndcToPx(x0, y0);
-      const [px1, py1] = ndcToPx(x1, y1);
-
-      // Screen-space motion vector
-      let dx = px1 - px0, dy = py1 - py0;
-      const len = Math.max(1, Math.hypot(dx,dy));
-      dx/=len; dy/=len;
-
-      // Trail length & width scaling by proximity
-      const z = P.pos[2];
-      const widthPx = clamp((P.size * (1.2 + 3.5/(z+0.2))), 0.5, 4.5) * app.dpr;
-      const segLenPx = clamp((len * f), 3, 120) * app.dpr;
-
-      // Rebuild endpoints to ensure consistent length (extend backwards for "streak")
-      const ex = px1 - dx*segLenPx;
-      const ey = py1 - dy*segLenPx;
-      const nx = -dy, ny = dx; // normal
-
-      const ox = nx * (widthPx*0.5);
-      const oy = ny * (widthPx*0.5);
-
-      // Two triangles; convert to NDC
-      const A = [ (ex - ox)*sx - 1, 1 - (ey - oy)*sy ];
-      const B = [ (ex + ox)*sx - 1, 1 - (ey + oy)*sy ];
-      const C = [ (px1 + ox)*sx - 1, 1 - (py1 + oy)*sy ];
-      const D = [ (px1 - ox)*sx - 1, 1 - (py1 - oy)*sy ];
-
-      // Alpha / brightness shaping: brighter near, fade tail
-      const baseA = clamp(0.18 + 0.8*(1/(z+0.2)), 0.12, 0.95) * P.brightness;
-      const headA = baseA;
-      const tailA = baseA * 0.45;
-
-      // Triangle 1: A,B,C
-      data[ptr++] = A[0]; data[ptr++] = A[1]; data[ptr++] = tailA;
-      data[ptr++] = B[0]; data[ptr++] = B[1]; data[ptr++] = tailA;
-      data[ptr++] = C[0]; data[ptr++] = C[1]; data[ptr++] = headA;
-      // Triangle 2: A,C,D
-      data[ptr++] = A[0]; data[ptr++] = A[1]; data[ptr++] = tailA;
-      data[ptr++] = C[0]; data[ptr++] = C[1]; data[ptr++] = headA;
-      data[ptr++] = D[0]; data[ptr++] = D[1]; data[ptr++] = headA*0.9;
-    }
-
-    // Upload & draw
-    gl.bindVertexArray(res.vao);
-    gl.useProgram(res.prog);
-    gl.bindBuffer(gl.ARRAY_BUFFER, res.vbo);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
-    gl.drawArrays(gl.TRIANGLES, 0, vertsNeeded);
-    res.vertsUsed = vertsNeeded;
     gl.bindVertexArray(null);
   }
 
-  // ——————— Canvas2D fallback ——————————————————————————————
+  function glDraw(tSec){
+    const gl = app.gl, R = app.glRes; if(!gl) return;
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(R.prog);
+    gl.bindVertexArray(R.vao);
+
+    const near = 0.6, far = 60.0;
+    const [ax, ay] = fovToScale(app.params.fovDeg, app.width/app.height);
+
+    // uniforms
+    gl.uniformMatrix3fv(R.u.uView3, false, app.view3);
+    gl.uniform1f(R.u.uNear, near);
+    gl.uniform1f(R.u.uFar, far);
+    gl.uniform2f(R.u.uPx2NDC, 2/app.width, 2/app.height);
+    gl.uniform1f(R.u.uAx, ax);
+    gl.uniform1f(R.u.uAy, ay);
+    gl.uniform1f(R.u.uWidthPx, app.params.widthPx * app.dpr);
+    gl.uniform1f(R.u.uTime, tSec);
+    gl.uniform1f(R.u.uSpeed, app.params.speed);
+    gl.uniform1f(R.u.uTrailX, app.params.trailMul);
+
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, app.instances.count);
+
+    gl.bindVertexArray(null);
+  }
+
+  // —————————————————— Canvas2D fallback ——————————————————
   function c2dInit(){
-    const canvas = el('#c2d');
-    const ctx = canvas.getContext('2d', { alpha:false });
+    const c = el('#c2d');
+    const ctx = c.getContext('2d', {alpha:false});
+    if (!ctx) return false;
     app.ctx = ctx;
-    return !!ctx;
+    return true;
   }
   function c2dResize(){
     if (!app.ctx) return;
     const c = app.ctx.canvas;
     const w = Math.max(1, Math.floor(innerWidth * app.dpr));
     const h = Math.max(1, Math.floor(innerHeight * app.dpr));
-    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-    app.ctx.setTransform(1,0,0,1,0,0);
-    app.ctx.scale(1,1); // drawing uses pixel coords directly
+    if (c.width !== w || c.height !== h){ c.width=w; c.height=h; }
   }
-  function c2dDraw(){
-    const ctx = app.ctx; if (!ctx) return;
-    // motion persistence clear
+  function c2dDraw(tSec){
+    const ctx = app.ctx; if(!ctx) return;
+    const near = 0.6, far = 60.0;
+    const [ax, ay] = fovToScale(app.params.fovDeg, app.width/app.height);
+    const px2ndc = [2/app.width, 2/app.height];
+
+    // persistence clear
     ctx.fillStyle = `rgba(0,0,0,${app.params.persistAlpha})`;
     ctx.fillRect(0,0,ctx.canvas.width, ctx.canvas.height);
 
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const f = app.params.trailMul;
-    for (let i=0;i<app.particles.length;i++){
-      const P = app.particles[i];
-      const pr = projectToNDC(P.prev, app.proj);
-      const cr = projectToNDC(P.pos, app.proj);
-      const [x0, y0] = ndcToPx(pr[0], pr[1]);
-      const [x1, y1] = ndcToPx(cr[0], cr[1]);
-      const dx = x1-x0, dy=y1-y0;
-      const len = Math.max(1, Math.hypot(dx,dy));
-      const segLen = clamp((len * f), 3, 120) * app.dpr;
-      const ux = dx/len, uy=dy/len;
-      const sx = x1 - ux*segLen, sy = y1 - uy*segLen;
 
-      const z = P.pos[2];
-      const widthPx = clamp((P.size * (1.4 + 3.8/(z+0.2))), 0.6, 5.5) * app.dpr;
-      const alpha = clamp(0.20 + 0.8*(1/(z+0.2)), 0.12, 0.95) * P.brightness;
+    const V = app.view3;
+    function mul3(m, v){ return [ m[0]*v[0]+m[1]*v[1]+m[2]*v[2], m[3]*v[0]+m[4]*v[1]+m[5]*v[2], m[6]*v[0]+m[7]*v[1]+m[8]*v[2] ]; }
+    function proj(p){ const z=Math.max(p[2],1e-3); let x=ax*p[0]/z, y=ay*p[1]/z; if(app.invertY) y=-y; return [ (x*0.5+0.5)*app.width, (1-(y*0.5+0.5))*app.height ]; }
+
+    for (let i=0;i<app.instances.count;i++){
+      const x0 = app.instances.xz[i*2+0], z0 = app.instances.xz[i*2+1];
+      const seed = app.instances.seed[i];
+
+      const p0v = mul3(V, [x0,0,z0]);
+      const dv  = mul3(V, [0,1,0]);
+
+      const dz = Math.abs(dv[2])<1e-5 ? (dv[2]<0?-1e-5:1e-5) : dv[2];
+      let tN = (near - p0v[2]) / dz;
+      let tF = (far  - p0v[2]) / dz;
+      if (tN > tF){ const tmp=tN; tN=tF; tF=tmp; }
+
+      const Pn = [p0v[0]+tN*dv[0], p0v[1]+tN*dv[1], p0v[2]+tN*dv[2]];
+      const Pf = [p0v[0]+tF*dv[0], p0v[1]+tF*dv[1], p0v[2]+tF*dv[2]];
+      const [xn,yn] = proj(Pn);
+      const [xf,yf] = proj(Pf);
+
+      const dx = xf-xn, dy = yf-yn;
+      const len = Math.hypot(dx,dy) || 1;
+      const ux = dx/len, uy = dy/len;
+
+      // Pulse front position along [0..1]
+      const uFront = ( (app.params.trailMul * 0.03) + (tSec*app.params.speed) + seed ) % 1;
+      const uBack  = Math.max(0, uFront - (app.params.trailMul/120)); // ~length in [0..1]
+
+      const xA = xn + dx*uBack,  yA = yn + dy*uBack;
+      const xB = xn + dx*uFront, yB = yn + dy*uFront;
+
+      // thickness & alpha by "near" depth (at B)
+      const zB = Pn[2] + (Pf[2]-Pn[2])*uFront;
+      const widthPx = clamp((app.params.widthPx * (1.2 + 3.5/(zB+0.2))) * app.dpr, 0.6*app.dpr, 6.0*app.dpr);
+      const alpha = clamp(0.18 + 0.26 * (near/Math.max(zB,1e-3)), 0.12, 0.95);
 
       ctx.strokeStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
       ctx.lineWidth = widthPx;
+
       ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(x1, y1);
+      ctx.moveTo(xA, yA);
+      ctx.lineTo(xB, yB);
       ctx.stroke();
     }
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  // ——————— Resize, DPR, projection ——————————————————————————————
-  function resize(){
-    const clampDPR = app.params.clampDPR;
-    app.dpr = clamp(window.devicePixelRatio || 1, 1, clampDPR);
-    app.width = Math.max(1, Math.floor(innerWidth * app.dpr));
-    app.height = Math.max(1, Math.floor(innerHeight * app.dpr));
-
-    if (app.gl) glResize();
-    if (app.ctx) c2dResize();
-
-    makePerspective(app.proj, app.params.fovDeg, app.width/app.height, app.bounds.near, app.bounds.far);
-
-    // HUD tags
-    if (app.ui.badgeDPR) app.ui.badgeDPR.textContent = `DPR ${app.dpr.toFixed(2)}`;
-  }
-
-  // ——————— HUD ——————————————————————————————
-  function el(sel){ return document.querySelector(sel); }
+  // —————————————————— HUD ——————————————————
   function setupHUD(){
-    app.ui.hud = el('#hud');
-    if (FLAGS.debug) app.ui.hud.classList.add('show');
+    app.ui.hud = el('#hud'); if (FLAGS.debug) app.ui.hud.classList.add('show');
     app.ui.badgePipeline = el('#badge-pipeline');
     app.ui.badgeDPR = el('#badge-dpr');
     app.ui.badgeSensor = el('#badge-sensor');
@@ -705,110 +584,96 @@
     app.ui.count = el('#stat-count');
     app.ui.hpr = el('#stat-hpr');
     app.ui.nd = el('#stat-nd');
-    app.ui.comp = el('#stat-comp');
-    app.ui.unstable = el('#unstable');
 
-    // Controls
-    bindSlider('#ctl-count', app.params.count, v=>{ app.params.count = Math.round(v); resizePoolToCount(); });
+    bindSlider('#ctl-count', app.params.countHint, v=>{ app.params.countHint = Math.round(v); rebuildInstances(); });
     bindSlider('#ctl-speed', app.params.speed, v=> app.params.speed = v);
-    bindSlider('#ctl-spread', app.params.spread, v=> app.params.spread = v);
-    bindSlider('#ctl-fov', app.params.fovDeg, v=>{ app.params.fovDeg = v; makePerspective(app.proj, app.params.fovDeg, app.width/app.height, app.bounds.near, app.bounds.far); });
+    bindSlider('#ctl-space', app.params.spacing, v=>{ app.params.spacing = v; rebuildInstances(); });
+    bindSlider('#ctl-fov', app.params.fovDeg, v=>{ app.params.fovDeg = v; resize(); });
     bindSlider('#ctl-trail', app.params.trailMul, v=> app.params.trailMul = v);
+    bindSlider('#ctl-width', app.params.widthPx, v=> app.params.widthPx = v);
     bindSlider('#ctl-persist', app.params.persistAlpha, v=> app.params.persistAlpha = v);
-    const strict = el('#ctl-strict'); strict.checked = app.NdStrict; strict.onchange = ()=> app.NdStrict = strict.checked;
     const invY = el('#ctl-invY'); invY.checked = app.invertY; invY.onchange = ()=> app.invertY = invY.checked;
   }
-  function bindSlider(sel, init, oninput){
-    const s = el(sel);
-    if (!s) return;
-    s.value = init;
-    s.addEventListener('input', ()=>oninput(parseFloat(s.value)));
-  }
+  function bindSlider(sel, init, oninput){ const s=el(sel); if(!s) return; s.value=init; s.addEventListener('input', ()=>oninput(parseFloat(s.value))); }
   function updateHUDStatic(){
-    if (!FLAGS.debug) return;
+    if(!FLAGS.debug) return;
     app.ui.badgePipeline.textContent = app.pipeline.toUpperCase();
+    app.ui.badgeDPR.textContent = `DPR ${app.dpr.toFixed(2)}`;
   }
   function updateHUDDynamic(){
-    if (!FLAGS.debug) return;
+    if(!FLAGS.debug) return;
     app.ui.fps.textContent = app.fps.toFixed(0);
-    app.ui.count.textContent = String(app.particles.length);
+    app.ui.count.textContent = String(app.instances.count);
     app.ui.hpr.textContent = `${app.sensor.yawFilt.toFixed(0)}° / ${app.sensor.pitchFilt.toFixed(0)}° / ${app.sensor.rollFilt.toFixed(0)}°`;
     app.ui.nd.textContent = `(${app.Nd[0].toFixed(2)}, ${app.Nd[1].toFixed(2)}, ${app.Nd[2].toFixed(2)})`;
-    app.ui.comp.textContent = `${app.sensor.source}`;
-    app.ui.unstable.classList.toggle('show', !!app.sensor.unstable);
   }
-  function updateHUDSensor(){
-    if (!FLAGS.debug) return;
-    app.ui.badgeSensor.textContent = app.sensor.source;
+  function updateHUDSensor(){ if(FLAGS.debug) el('#badge-sensor').textContent = app.sensor.source; }
+
+  // —————————————————— Resize / DPR / Instances ——————————————————
+  function resize(){
+    app.dpr = clamp(window.devicePixelRatio||1, 1, app.params.clampDPR);
+    app.width = Math.max(1, Math.floor(innerWidth * app.dpr));
+    app.height= Math.max(1, Math.floor(innerHeight* app.dpr));
+    if (app.gl) glResize(); else if (app.ctx) c2dResize();
+    updateHUDStatic();
   }
 
-  function resizePoolToCount(){
-    const target = clamp(app.params.count, app.adapt.minCount, app.adapt.maxCount);
-    const cur = app.particles.length;
-    if (target > cur){
-      for (let i=0;i<target-cur;i++) app.particles.push(spawnParticle());
-    } else if (target < cur){
-      app.particles.length = target;
-    }
+  function chooseInitialCount(){
+    const highTier = (!!app.gl && app.dpr>=2);
+    const midTier = (!!app.gl && app.dpr<2) || (!!app.ctx);
+    if (FLAGS.forceCanvas) return 1000;
+    if (highTier) return clamp(app.params.countHint, 1800, app.adapt.maxCount);
+    if (midTier) return clamp(app.params.countHint, 1200, app.adapt.maxCount);
+    return 900;
   }
 
-  // ——————— Adaptive performance ——————————————————————————————
+  function rebuildInstances(){
+    const N = clamp(app.params.countHint, app.adapt.minCount, app.adapt.maxCount);
+    buildInstances(N);
+    if (app.gl) glUploadInstances();
+  }
+
+  // —————————————————— Adaptive performance ——————————————————
   function adapt(){
-    // Every ~0.5s adjust
     const now = performance.now();
     if (now - app.adapt.lastCheck < 500) return;
     app.adapt.lastCheck = now;
 
-    const M = app.frameTimes.length;
-    if (M < 10) return;
-    const avg = app.frameSum / M; // ms
+    const M = app.frameTimes.length; if (M < 10) return;
+    const avg = app.frameSum / M;
 
-    // Reduce trail length & blur first (we don't enable bloom), then particle count
     if (avg > app.adapt.decThresh){
-      if (app.params.trailMul > 6) app.params.trailMul = Math.max(6, Math.round(app.params.trailMul * 0.85));
-      else if (app.particles.length > app.adapt.minCount) {
-        app.params.count = Math.max(app.adapt.minCount, Math.floor(app.particles.length * 0.7));
-        resizePoolToCount();
-      } else if (app.params.fovDeg > 40) {
-        app.params.fovDeg = Math.max(40, Math.floor(app.params.fovDeg - 2));
-        makePerspective(app.proj, app.params.fovDeg, app.width/app.height, app.bounds.near, app.bounds.far);
+      if (app.params.trailMul > 8) app.params.trailMul = Math.max(8, Math.round(app.params.trailMul*0.85));
+      else if (app.instances.count > app.adapt.minCount){
+        app.params.countHint = Math.max(app.adapt.minCount, Math.floor(app.instances.count*0.75));
+        rebuildInstances();
+      } else if (app.params.widthPx > 1.0) {
+        app.params.widthPx = Math.max(1.0, app.params.widthPx*0.9);
       }
-    } else if (avg < app.adapt.incThresh){
-      // Increase gently
-      if (app.particles.length < app.adapt.maxCount){
-        app.params.count = Math.min(app.adapt.maxCount, Math.floor(app.particles.length * 1.15));
-        resizePoolToCount();
+    }else if (avg < app.adapt.incThresh){
+      if (app.instances.count < app.adapt.maxCount){
+        app.params.countHint = Math.min(app.adapt.maxCount, Math.floor(app.instances.count*1.15));
+        rebuildInstances();
       }
     }
   }
 
-  // ——————— Main loop ——————————————————————————————
-  function tick(t){
+  // —————————————————— Main loop ——————————————————
+  function tick(){
     const now = performance.now();
     const dt = clamp((now - app.last)/1000, 0, 0.05);
     app.last = now;
+    if (app.paused){ requestAnimationFrame(tick); return; }
 
-    // pause handling
-    if (app.paused){
-      app.last = performance.now();
-      requestAnimationFrame(tick);
-      return;
-    }
+    const tSec = now * 0.001;
 
-    // integrate & draw
-    integrate(dt);
-    if (app.gl){ glDraw(); }
-    else if (app.ctx){ c2dDraw(); }
+    if (app.gl) glDraw(tSec); else if (app.ctx) c2dDraw(tSec);
 
-    // stats
-    const ft = (performance.now() - now);
-    app.frameTimes.push(ft);
-    app.frameSum += ft;
-    if (app.frameTimes.length > app.adapt.timeWindow){
-      app.frameSum -= app.frameTimes.shift();
-    }
-    const avg = app.frameSum / app.frameTimes.length;
-    app.fps = 1000 / avg;
+    // fps
+    const ft = performance.now() - now;
+    app.frameTimes.push(ft); app.frameSum += ft;
+    if (app.frameTimes.length > app.adapt.timeWindow){ app.frameSum -= app.frameTimes.shift(); }
+    app.fps = 1000 / (app.frameSum / app.frameTimes.length);
 
     updateHUDDynamic();
     adapt();
@@ -816,124 +681,50 @@
     requestAnimationFrame(tick);
   }
 
-  // ——————— Lifecycle ——————————————————————————————
+  // —————————————————— Lifecycle ——————————————————
   function init(){
     setupHUD();
-
     // pick pipeline
     const okGL = glInit();
-    if (okGL){
-      app.pipeline = 'webgl';
-      el('#c2d').style.display = 'none';
-    } else {
-      c2dInit();
-      app.pipeline = 'canvas';
-      el('#gl').style.display = 'none';
-    }
+    if (okGL){ app.pipeline = 'webgl'; el('#c2d').style.display='none'; }
+    else { c2dInit(); app.pipeline='canvas'; el('#gl').style.display='none'; }
     updateHUDStatic();
 
     // sensors
     setupSensors();
 
-    // DPR & projection
+    // DPR / size
     resize();
-    addEventListener('resize', onResize, { passive:true });
-    addEventListener('orientationchange', onResize, { passive:true });
-    addEventListener('visibilitychange', ()=>{
-      app.paused = document.hidden;
-      // smooth resume
-      app.last = performance.now();
-    });
+    addEventListener('resize', resize, {passive:true});
+    addEventListener('orientationchange', resize, {passive:true});
+    addEventListener('visibilitychange', ()=>{ app.paused = document.hidden; app.last = performance.now(); });
 
-    // seed particles based on initial Nd
-    initParticles(chooseInitialCount());
+    // instances
+    app.params.countHint = chooseInitialCount();
+    rebuildInstances();
 
     // start loop
     requestAnimationFrame(tick);
 
-    // Telemetry (debug only)
     if (FLAGS.debug){
-      console.log('[telemetry]', {
-        pipeline: app.pipeline, dpr: app.dpr,
-        gentle: app.gentle, flags: FLAGS
-      });
+      console.log('[telemetry]', {pipeline: app.pipeline, dpr: app.dpr, flags: FLAGS});
     }
   }
 
-  function chooseInitialCount(){
-    // Device class heuristic from UA + DPR + pipeline
-    const midTier = (app.dpr <= 2 && 'ontouchstart' in window);
-    const highTier = (app.dpr > 2 || !('ontouchstart' in window)) && app.pipeline === 'webgl';
-    if (FLAGS.forceCanvas) return 900;
-    if (highTier) return clamp(2200, app.adapt.minCount, app.adapt.maxCount);
-    if (midTier) return clamp(1500, app.adapt.minCount, app.adapt.maxCount);
-    return 1100;
-  }
-
-  function onResize(){
-    // Fade-to-black during buffer rebuild (visual guard)
-    if (app.gl){
-      app.gl.clearColor(0,0,0,1);
-      app.gl.clear(app.gl.COLOR_BUFFER_BIT);
-    } else if (app.ctx){
-      app.ctx.fillStyle = '#000';
-      app.ctx.fillRect(0,0,app.ctx.canvas.width, app.ctx.canvas.height);
-    }
-    resize();
-  }
-
-  // ——————— Boot ——————————————————————————————
   init();
 
-  // ——————— README (quick) ——————————————————————————————
+  // —————————————————— README (quick) ——————————————————
   /*
-  README — Snowflakes Through Windshield (North-Locked)
-
-  ▶ Run: Open this HTML file directly in a modern mobile browser.
-     - Default uses WebGL2; add ?forceCanvas=1 to force Canvas2D.
-     - Debug HUD: add ?debug=1  (sliders + telemetry).
-     - Axis helper: ?invertY=1 flips projection Y if a stack inverts it.
-     - Sensors off: ?noSensors=1 (North=up fallback).
-     - Strict math: ?strictNd=1 uses full −Nᵈ including z (flakes may move away when North is behind).
-     - Bloom: flag reserved; not enabled to keep perf headroom.
-
-  Sensors & Permissions:
-     - iOS shows a one-tap “Enable Motion & Compass” gate. If denied/unavailable, effect runs with North=up.
-     - Sources: WebKit compass (preferred) → Generic Sensor API (quaternion) → deviceorientation alpha.
-     - Low-pass filter α=0.15; heading jitter detection (debug-only indicator).
-
-  Coordinates:
-     - World axes: X=East, Y=North, Z=Up; fixed North N=(0,1,0).
-     - Compute Nᵈ by rotating N with world→device quaternion.
-     - Particle motion p += v * dt, v ≈ −Nᵈ but with z forced toward camera unless ?strictNd=1.
-       (This ensures “approach” while preserving on-screen North direction.)
-
-  Rendering:
-     - WebGL2: CPU-built quads per particle (6 verts) → additive blending (ONE, ONE_MINUS_SRC_ALPHA).
-       Length scales with screen-space velocity & proximity; brightness rises when near.
-     - Canvas2D fallback: draw motion lines prev→curr with width & alpha scaled by depth.
-       Motion-persistence clear via rgba(0,0,0,α).
-
-  Performance:
-     - Target 60fps on mid-tier phones; adaptive scaler:
-       if avgFrameTime >22ms for 0.5s → shorten trails then reduce count (−30%);
-       if <14ms → +15% particles, up to cap. DPR clamped ≤2.
-     - Respects prefers-reduced-motion with gentler defaults.
-
-  Debug HUD (when ?debug=1):
-     - Sliders: Count, Speed, Spread, FOV, Trail x, Persistence α; toggles Strict −Nᵈ, Invert Y.
-     - Live: fps, DPR, pipeline, heading/pitch/roll, Nᵈ, compass source, “unstable” flag.
-
-  Edge Cases:
-     - Orientation/resize rebuilds projection; fade clears during rebuild.
-     - Background tab pauses loop; delta clamped on resume to prevent spikes.
-
-  QA Tips:
-     - Rotate phone: flow remains aligned to real North (top of screen ~ North in device space).
-     - Indoors compass noise shows “unstable” in HUD only.
-     - Portrait/landscape both supported.
+   North-Locked Hyperdrive (Infinite World-Y Lines)
+   - World axes: X=East, Y=North, Z=Up. Infinite lines are (x0, t, z0) parallel to +Y.
+   - View is derived from device attitude; camera looks +Z. We project to NDC analytically (no depth test).
+   - WebGL2: instanced quad per world line; fragment shader creates moving bright bands.
+   - Canvas2D fallback: draws a single moving sub-segment per line; motion-persistence clear via α fill.
+   - Sensors: Generic Sensor API (Android/modern) → deviceorientation (iOS/fallback) with iOS permission overlay.
+   - Flags: ?debug=1 (HUD), ?forceCanvas=1, ?invertY=1, ?noSensors=1
+   - Adaptive: trims trail length → instance count → width if frame budget exceeded; scales up if headroom.
+   - Accessibility: respects prefers-reduced-motion (gentler speed/trails).
   */
-
 })();
 </script>
 </body>
