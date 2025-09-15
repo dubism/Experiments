@@ -88,14 +88,9 @@ const rad=(d)=>d*Math.PI/180, deg=(r)=>r*180/Math.PI;
 const showErr=(m)=>{ const n=el('#err'); n.textContent=String(m); n.style.display='block'; console.error(m); };
 const gentle = matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* Angle helpers (fixes NORTH SNAP) */
+/* Angle helpers */
 const norm360 = d => { d = d % 360; return d < 0 ? d + 360 : d; };
-const shortestDeg = (to, from) => { // result in (-180, 180]
-  let d = norm360(to) - norm360(from);
-  if (d > 180) d -= 360;
-  if (d <= -180) d += 360;
-  return d;
-};
+const shortestDeg = (to, from) => { let d = norm360(to) - norm360(from); if (d > 180) d -= 360; if (d <= -180) d += 360; return d; };
 const smoothAngleDeg = (current, target, alpha) => current + alpha * shortestDeg(target, current);
 
 /* ===== math ===== */
@@ -137,7 +132,7 @@ if(gentle){ app.params.speed=Math.max(10, app.params.speed*0.5); app.params.trai
 /* ===== projection ===== */
 function fovToScale(fovDeg, aspect){ const ay=1/Math.tan(0.5*rad(fovDeg)); return [ ay/aspect, ay ]; }
 
-/* ===== sensors (with smooth yaw + inverted pitch) ===== */
+/* ===== sensors (wrap-smooth yaw, CCW conversion; pitch fixed) ===== */
 function showOverlay(){ el('#overlay').classList.add('show'); }
 function hideOverlay(){ el('#overlay').classList.remove('show'); }
 
@@ -154,16 +149,17 @@ function setupSensors(){
     } else { a.push(yawDeg); app.sensor.compState='ok'; }
   }
 
+  // ---- Quaternion path (Android Generic Sensor etc.) ----
   function deriveFromQuaternion(qdw){
     const qwd = qConj(qdw); // world->view
-    // North in view space
     const Nd = mul3(mat3FromQuat(qwd), NORTH);
     v3norm(app.Nd, Nd);
-    // yaw from Nd (0..360), pitch from Nd; **invert pitch sign**
-    const yawDeg = norm360(deg(Math.atan2(app.Nd[0], app.Nd[1])));
+    // Yaw target = CCW math angle = -atan2(Nx, Ny) mapped to 0..360
+    const yawTarget = norm360( -deg(Math.atan2(app.Nd[0], app.Nd[1])) );
+    // Pitch: keep the "fixed" sense you liked (invert once)
     const pitchDegRaw = deg(Math.asin(-app.Nd[2]));
-    app.sensor.yawFilt   = smoothAngleDeg(app.sensor.yawFilt, yawDeg, app.sensor.aLPF);
-    app.sensor.pitchFilt += app.sensor.aLPF * ((-pitchDegRaw) - app.sensor.pitchFilt); // flipped
+    app.sensor.yawFilt   = smoothAngleDeg(app.sensor.yawFilt, yawTarget, app.sensor.aLPF);
+    app.sensor.pitchFilt += app.sensor.aLPF * ((-pitchDegRaw) - app.sensor.pitchFilt);
     const rollDeg = app.sensor.allowRoll ? app.sensor.rollFilt : 0;
 
     const qView = qFromYPR(rad(app.sensor.yawFilt), rad(app.sensor.pitchFilt), rad(rollDeg));
@@ -180,14 +176,15 @@ function setupSensors(){
     try{ sensorObj.start(); }catch{ gateIOS(); }
   }
 
+  // ---- DeviceOrientation path (iOS webkitCompassHeading, generic alpha/beta/gamma) ----
   function onDO(ev){
     const hasWK = typeof ev.webkitCompassHeading==='number';
-    const hd = hasWK ? ev.webkitCompassHeading : (typeof ev.alpha==='number'? ev.alpha : 0); // 0..360
+    const headingCW = hasWK ? ev.webkitCompassHeading : (typeof ev.alpha==='number'? ev.alpha : 0); // 0..360, CW from North
+    const yawTarget = norm360(360 - headingCW); // convert to CCW math yaw
     const pd = (typeof ev.beta==='number') ? ev.beta : 0;    // degrees
     const rd = (typeof ev.gamma==='number') ? ev.gamma : 0;  // degrees
-    // Wrap-aware yaw; **invert pitch sign**
-    app.sensor.yawFilt   = smoothAngleDeg(app.sensor.yawFilt, norm360(hd), app.sensor.aLPF);
-    app.sensor.pitchFilt += app.sensor.aLPF * ((-pd) - app.sensor.pitchFilt);
+    app.sensor.yawFilt   = smoothAngleDeg(app.sensor.yawFilt, yawTarget, app.sensor.aLPF);
+    app.sensor.pitchFilt += app.sensor.aLPF * ((-pd) - app.sensor.pitchFilt); // keep up/down fixed
     app.sensor.rollFilt  += app.sensor.aLPF * (rd - app.sensor.rollFilt);
 
     const rollDeg = app.sensor.allowRoll ? app.sensor.rollFilt : 0;
