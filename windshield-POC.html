@@ -90,7 +90,7 @@ const rad=(d)=>d*Math.PI/180, deg=(r)=>r*180/Math.PI;
 const showErr=(m)=>{ const n=el('#err'); n.textContent=String(m); n.style.display='block'; console.error(m); };
 const gentle = matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* Angle helpers (wrap-safe smoothing + limited step) */
+/* ===== angle helpers (wrap-safe + bounded step) ===== */
 const norm360 = d => { d = d % 360; return d < 0 ? d + 360 : d; };
 const shortestDeg = (to, from) => { let d = norm360(to) - norm360(from); if (d > 180) d -= 360; if (d <= -180) d += 360; return d; };
 function smoothAngleDegLimited(current, target, alpha, maxStep){
@@ -99,21 +99,21 @@ function smoothAngleDegLimited(current, target, alpha, maxStep){
   return current + alpha * step;
 }
 
-/* Yaw reliability — freeze / down-weight when heading is ill-defined near vertical tilt */
-function yawReliabilityFromNd(nd){ // nd = North in view coords (normalized)
-  const h = Math.hypot(nd[0], nd[1]); // projection length on view XY
-  // Below ~0.12 (very close to straight up/down) -> unreliable (0)
-  // Above ~0.35 -> fully reliable (1). Smooth ramp between.
-  const lo=0.12, hi=0.35;
-  return clamp((h - lo) / (hi - lo), 0, 1);
+/* ===== yaw reliability near gimbal (phone flat) ===== */
+function yawReliabilityFromNd(nd){ // from quaternion path
+  const h = Math.hypot(nd[0], nd[1]); // XY projection length of North in view
+  // soft floor (no 0) to avoid freezes; soft ceiling at 1
+  const lo=0.10, hi=0.40;
+  return clamp((h - lo) / (hi - lo), 0, 1) * 0.9 + 0.1;
 }
-function yawReliabilityFromPitchDeg(absPitch){ // fallback for DO path without quaternion
-  // absPitch≈90° (flat) -> 0, absPitch≤60° -> 1
-  const lo=60, hi=88; // degrees
-  return clamp((hi - absPitch) / (hi - lo), 0, 1);
+function yawReliabilityFromPitchDeg(absPitch){ // for deviceorientation path
+  // absPitch≈90° flat -> low reliability; ≤60° -> high reliability
+  const lo=60, hi=88;
+  const r = clamp((hi - absPitch) / (hi - lo), 0, 1);
+  return r*0.9 + 0.1;
 }
 
-/* ===== math ===== */
+/* ===== minimal linalg / quats ===== */
 function v3norm(out,a){ const L=Math.hypot(a[0],a[1],a[2])||1; out[0]=a[0]/L; out[1]=a[1]/L; out[2]=a[2]/L; return out; }
 function qAxisAngle(ax,ay,az,ang){ const L=Math.hypot(ax,ay,az)||1, s=Math.sin(ang/2), c=Math.cos(ang/2); return [(ax/L)*s,(ay/L)*s,(az/L)*s,c]; }
 function qMul(a,b){ const [ax,ay,az,aw]=a,[bx,by,bz,bw]=b;
@@ -125,9 +125,9 @@ function mat3FromQuat(q){ const [x,y,z,w]=q, xx=x*x,yy=y*y,zz=z*z, xy=x*y,xz=x*z
   return [1-2*(yy+zz),2*(xy-wz),2*(xz+wy), 2*(xy+wz),1-2*(xx+zz),2*(yz-wx), 2*(xz-wy),2*(yz+wx),1-2*(xx+yy)];
 }
 function mul3(m,v){ return [ m[0]*v[0]+m[1]*v[1]+m[2]*v[2], m[3]*v[0]+m[4]*v[1]+m[5]*v[2], m[6]*v[0]+m[7]*v[1]+m[8]*v[2] ]; }
-const NORTH=[0,1,0];
+const NORTH=[0,1,0], UP=[0,0,1];
 
-/* ===== app ===== */
+/* ===== app state ===== */
 const app={
   dpr:1,w:1,h:1, paused:document.hidden,
   pipeline:'webgl',
@@ -137,7 +137,7 @@ const app={
     enabled:false, source:'none', havePermission:false,
     yawFilt:0, pitchFilt:0, rollFilt:0, aLPF:0.15,
     allowRoll: FLAGS.allowRoll,
-    yawHistory:[], compState:'ok'
+    yawInit:false, yawHistory:[], compState:'ok'
   },
   Nd:new Float32Array([0,1,0]),
   view3:[1,0,0, 0,1,0, 0,0,1],
@@ -152,7 +152,7 @@ if(gentle){ app.params.speed=Math.max(10, app.params.speed*0.5); app.params.trai
 /* ===== projection ===== */
 function fovToScale(fovDeg, aspect){ const ay=1/Math.tan(0.5*rad(fovDeg)); return [ ay/aspect, ay ]; }
 
-/* ===== sensors (wrap-smooth yaw, CCW conversion; pitch fixed; singularity handling) ===== */
+/* ===== sensors (robust yaw smoothing, preserve roll on ABS; roll optional on DO) ===== */
 function showOverlay(){ el('#overlay').classList.add('show'); }
 function hideOverlay(){ el('#overlay').classList.remove('show'); }
 
@@ -160,78 +160,89 @@ function setupSensors(){
   if(FLAGS.noSensors){ app.sensor.source='off'; app.sensor.enabled=false; updateHUDSensor(); return; }
   const ABS = (window.AbsoluteOrientationSensor||window.OrientationSensor);
 
-  function updateCompassNoise(yawDeg){
-    const a=app.sensor.yawHistory;
-    if(a.length){ a.push(yawDeg); if(a.length>32) a.shift();
-      const deltas=[]; for(let i=1;i<a.length;i++) deltas.push(Math.abs(shortestDeg(a[i],a[i-1])));
-      const mean = deltas.reduce((s,v)=>s+v,0)/(deltas.length||1);
-      app.sensor.compState = (mean>5) ? 'unstable' : 'ok';
-    } else { a.push(yawDeg); app.sensor.compState='ok'; }
+  function updateCompassNoise(yawDeg, weight=1){
+    if(weight<=0) return;
+    const a=app.sensor.yawHistory; a.push(yawDeg); if(a.length>32) a.shift();
+    if(a.length<2){ app.sensor.compState='ok'; return; }
+    const deltas=[]; for(let i=1;i<a.length;i++) deltas.push(Math.abs(shortestDeg(a[i],a[i-1])));
+    const mean = deltas.reduce((s,v)=>s+v,0)/deltas.length;
+    app.sensor.compState = (mean>5) ? 'unstable' : 'ok';
   }
 
-  // ---- Quaternion path (Android Generic Sensor etc.) ----
+  // ---- ABS (quaternion) path ----
   function deriveFromQuaternion(qdw){
     const qwd = qConj(qdw); // world->view
     const V = mat3FromQuat(qwd);
-    const Nd = mul3(V, NORTH);
-    v3norm(app.Nd, Nd);
 
-    // Yaw target = CCW math angle = -atan2(Nx, Ny) mapped to 0..360
-    const yawTarget = norm360( -deg(Math.atan2(app.Nd[0], app.Nd[1])) );
-    // Pitch (keep corrected sense: invert once)
-    const pitchDegRaw = deg(Math.asin(-app.Nd[2]));
+    // North/Up in view
+    const Nd = mul3(V, NORTH); v3norm(app.Nd, Nd);
+    const Upv = mul3(V, UP);
 
-    // Reliability from Nd projection (near-vertical => unreliable)
+    // math yaw (CCW) from Nd; reliability from Nd XY magnitude
+    const yawCurrent = norm360( -deg(Math.atan2(app.Nd[0], app.Nd[1])) );
     const rel = yawReliabilityFromNd(app.Nd);
-    const aYaw = app.sensor.aLPF * rel;           // down-weight yaw when unreliable
-    const maxStep = 8;                            // deg per update cap (prevents sudden jumps)
+    const aYaw = app.sensor.aLPF * rel;
+    const maxStep = 5;
 
-    // Smooth yaw (freeze when rel ~ 0)
-    app.sensor.yawFilt = smoothAngleDegLimited(app.sensor.yawFilt, yawTarget, aYaw, maxStep);
-    // Pitch smoothing (normal)
-    app.sensor.pitchFilt += app.sensor.aLPF * ((-pitchDegRaw) - app.sensor.pitchFilt);
+    if(!app.sensor.yawInit){ app.sensor.yawFilt = yawCurrent; app.sensor.yawInit=true; }
+    app.sensor.yawFilt = smoothAngleDegLimited(app.sensor.yawFilt, yawCurrent, aYaw, maxStep);
 
-    const rollDeg = app.sensor.allowRoll ? app.sensor.rollFilt : 0;
-    const qView = qFromYPR(rad(app.sensor.yawFilt), rad(app.sensor.pitchFilt), rad(rollDeg));
-    app.view3 = mat3FromQuat(qView); app.view3f.set(app.view3);
-    updateCompassNoise(app.sensor.yawFilt);
+    // Compose correction around VIEW Z to align current yaw to smoothed yaw
+    const deltaYaw = rad(shortestDeg(app.sensor.yawFilt, yawCurrent));
+    let rollCorr = 0;
+    if(!app.sensor.allowRoll){
+      // remove roll by aligning projected world up to +Y (view up)
+      rollCorr = -Math.atan2(Upv[0], Upv[1]);
+    }
+    const qZ = qAxisAngle(0,0,1, deltaYaw + rollCorr);
+    const qView = qMul(qZ, qwd); // apply in view space
+    const M = mat3FromQuat(qView);
+    app.view3 = M; app.view3f.set(M);
+
+    // pitch for HUD only (derived from Nd; inverted so "tilt up" moves up)
+    const pitchDeg = -deg(Math.asin(-app.Nd[2]));
+    app.sensor.pitchFilt += app.sensor.aLPF * (pitchDeg - app.sensor.pitchFilt);
+
+    // derive roll for HUD (angle of Upv in XY)
+    const rollDeg = deg(Math.atan2(Upv[0], Upv[1]));
+    app.sensor.rollFilt += app.sensor.aLPF * (rollDeg - app.sensor.rollFilt);
+
+    updateCompassNoise(app.sensor.yawFilt, rel);
+    app.sensor.enabled=true; app.sensor.source='sensor'; updateHUDSensor();
   }
 
   function startABS(){
     let sensorObj;
     try{ sensorObj=new ABS({frequency:60, referenceFrame:'screen'}); }catch{ try{ sensorObj=new ABS({frequency:60, referenceFrame:'device'}); }catch{} }
     if(!sensorObj){ gateIOS(); return; }
-    sensorObj.addEventListener('reading', ()=>{ deriveFromQuaternion(sensorObj.quaternion); app.sensor.enabled=true; app.sensor.source='sensor'; updateHUDSensor(); });
+    sensorObj.addEventListener('reading', ()=>{ deriveFromQuaternion(sensorObj.quaternion); });
     sensorObj.addEventListener('error', ()=>{ gateIOS(); });
     try{ sensorObj.start(); }catch{ gateIOS(); }
   }
 
-  // ---- DeviceOrientation path (iOS webkitCompassHeading, generic alpha/beta/gamma) ----
+  // ---- DeviceOrientation (iOS / generic) ----
   function onDO(ev){
     const hasWK = typeof ev.webkitCompassHeading==='number';
-    const headingCW = hasWK ? ev.webkitCompassHeading : (typeof ev.alpha==='number'? ev.alpha : 0); // 0..360, CW from North
+    const headingCW = hasWK ? ev.webkitCompassHeading : (typeof ev.alpha==='number'? ev.alpha : 0); // 0..360 CW from North
     const yawTarget = norm360(360 - headingCW); // convert to CCW math yaw
+    const pd = (typeof ev.beta==='number') ? ev.beta : 0;    // pitch
+    const rd = (typeof ev.gamma==='number') ? ev.gamma : 0;  // roll
 
-    const pd = (typeof ev.beta==='number') ? ev.beta : 0;    // pitch degrees
-    const rd = (typeof ev.gamma==='number') ? ev.gamma : 0;  // roll degrees
-
-    // Reliability from pitch (near-flat -> unreliable)
     const rel = yawReliabilityFromPitchDeg(Math.abs(pd));
     const aYaw = app.sensor.aLPF * rel;
-    const maxStep = 8;
+    const maxStep = 5;
 
-    // Smooth yaw (wrap-safe, limited step)
+    if(!app.sensor.yawInit){ app.sensor.yawFilt = yawTarget; app.sensor.yawInit=true; }
     app.sensor.yawFilt   = smoothAngleDegLimited(app.sensor.yawFilt, yawTarget, aYaw, maxStep);
-    // Pitch: keep "look up/down" fixed (invert once)
-    app.sensor.pitchFilt += app.sensor.aLPF * ((-pd) - app.sensor.pitchFilt);
+    app.sensor.pitchFilt += app.sensor.aLPF * ((-pd) - app.sensor.pitchFilt); // keep "tilt up" -> up
     app.sensor.rollFilt  += app.sensor.aLPF * (rd - app.sensor.rollFilt);
 
     const rollDeg = app.sensor.allowRoll ? app.sensor.rollFilt : 0;
     const qView = qFromYPR(rad(app.sensor.yawFilt), rad(app.sensor.pitchFilt), rad(rollDeg));
-    app.view3 = mat3FromQuat(qView); app.view3f.set(app.view3);
+    const M = mat3FromQuat(qView); app.view3 = M; app.view3f.set(M);
 
-    const NdNow = mul3(app.view3, NORTH); v3norm(app.Nd, NdNow);
-    updateCompassNoise(app.sensor.yawFilt);
+    const NdNow = mul3(M, NORTH); v3norm(app.Nd, NdNow);
+    updateCompassNoise(app.sensor.yawFilt, rel);
 
     app.sensor.enabled=true; app.sensor.source = hasWK ? 'webkit' : 'alpha'; updateHUDSensor();
   }
