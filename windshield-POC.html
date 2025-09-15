@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>North-Locked Hyperdrive — WebGL2 + Canvas2D Fallback</title>
+<title>North-Locked Hyperdrive — WebGL2 + Canvas2D</title>
 <meta name="theme-color" content="#000"/>
 <style>
   :root{ --hud-bg: rgba(12,12,14,.72); --hud-fg:#f6f6f8; --hud-br:#2b2b32; }
@@ -33,7 +33,6 @@
   <canvas id="gl"></canvas>
   <canvas id="c2d"></canvas>
 
-  <!-- iOS permission overlay -->
   <div id="overlay" aria-hidden="true">
     <div class="card">
       <p style="opacity:.9;margin:.3rem 0 .8rem">To lock the flow to real world <b>North</b>, we need motion/compass access.</p>
@@ -42,7 +41,6 @@
     </div>
   </div>
 
-  <!-- Debug HUD -->
   <div id="hud" role="region" aria-label="Debug HUD">
     <h2>North-Locked Hyperdrive
       <span class="badge" id="badge-pipeline">–</span>
@@ -75,7 +73,7 @@
 (function(){
 "use strict";
 
-/* ========= utilities ========= */
+/* ===== utils ===== */
 const el = (s)=>document.querySelector(s);
 const qp = new URLSearchParams(location.search);
 const FLAGS = {
@@ -90,177 +88,138 @@ const rad=(d)=>d*Math.PI/180, deg=(r)=>r*180/Math.PI;
 const showErr=(m)=>{ const n=el('#err'); n.textContent=String(m); n.style.display='block'; console.error(m); };
 const gentle = matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ========= math helpers (vectors/quats/mats) ========= */
+/* Angle helpers (fixes NORTH SNAP) */
+const norm360 = d => { d = d % 360; return d < 0 ? d + 360 : d; };
+const shortestDeg = (to, from) => { // result in (-180, 180]
+  let d = norm360(to) - norm360(from);
+  if (d > 180) d -= 360;
+  if (d <= -180) d += 360;
+  return d;
+};
+const smoothAngleDeg = (current, target, alpha) => current + alpha * shortestDeg(target, current);
+
+/* ===== math ===== */
 function v3norm(out,a){ const L=Math.hypot(a[0],a[1],a[2])||1; out[0]=a[0]/L; out[1]=a[1]/L; out[2]=a[2]/L; return out; }
-function qAxisAngle(ax,ay,az,ang){ const L=Math.hypot(ax,ay,az)||1, s=Math.sin(ang/2), c=Math.cos(ang/2); return [ (ax/L)*s,(ay/L)*s,(az/L)*s, c ]; }
+function qAxisAngle(ax,ay,az,ang){ const L=Math.hypot(ax,ay,az)||1, s=Math.sin(ang/2), c=Math.cos(ang/2); return [(ax/L)*s,(ay/L)*s,(az/L)*s,c]; }
 function qMul(a,b){ const [ax,ay,az,aw]=a,[bx,by,bz,bw]=b;
   return [ aw*bx+ax*bw+ay*bz-az*by, aw*by-ax*bz+ay*bw+az*bx, aw*bz+ax*by-ay*bx+az*bw, aw*bw-ax*bx-ay*by-az*bz ];
 }
 function qConj(q){ return [-q[0],-q[1],-q[2],q[3]]; }
-function qFromYPR(yawZ,pitchX,rollY){ // order: Z then X then Y
-  return qMul( qMul(qAxisAngle(0,0,1,yawZ), qAxisAngle(1,0,0,pitchX)), qAxisAngle(0,1,0,rollY) );
-}
-function qRotateVec(q,v){ const [qx,qy,qz,qw]=q,[x,y,z]=v; // optimized
-  const tx=2*(qy*z-qz*y), ty=2*(qz*x-qx*z), tz=2*(qx*y-qy*x);
-  return [ x+qw*tx+(qy*tz-qz*ty), y+qw*ty+(qz*tx-qx*tz), z+qw*tz+(qx*ty-qy*tx) ];
-}
+function qFromYPR(yawZ,pitchX,rollY){ return qMul( qMul(qAxisAngle(0,0,1,yawZ), qAxisAngle(1,0,0,pitchX)), qAxisAngle(0,1,0,rollY) ); }
 function mat3FromQuat(q){ const [x,y,z,w]=q, xx=x*x,yy=y*y,zz=z*z, xy=x*y,xz=x*z,yz=y*z, wx=w*x,wy=w*y,wz=w*z;
   return [1-2*(yy+zz),2*(xy-wz),2*(xz+wy), 2*(xy+wz),1-2*(xx+zz),2*(yz-wx), 2*(xz-wy),2*(yz+wx),1-2*(xx+yy)];
 }
 function mul3(m,v){ return [ m[0]*v[0]+m[1]*v[1]+m[2]*v[2], m[3]*v[0]+m[4]*v[1]+m[5]*v[2], m[6]*v[0]+m[7]*v[1]+m[8]*v[2] ]; }
 const NORTH=[0,1,0];
 
-/* ========= app state ========= */
+/* ===== app ===== */
 const app={
   dpr:1,w:1,h:1, paused:document.hidden,
   pipeline:'webgl',
-  // params
   params:{ speed:40, trailMul:16, widthPx:1.6, fovDeg:55, persistAlpha:0.14, clampDPR:2.0, spacing:1.1, radius:42, countHint:2200 },
   adapt:{ window:24, incThresh:14, decThresh:22, minCount:600, maxCount:6000, lastCheck:0 },
-  // sensor
   sensor:{
     enabled:false, source:'none', havePermission:false,
-    yaw:0,pitch:0,roll:0, yawFilt:0,pitchFilt:0,rollFilt:0, aLPF:0.15,
+    yawFilt:0, pitchFilt:0, rollFilt:0, aLPF:0.15,
     allowRoll: FLAGS.allowRoll,
-    yawDeltas:[], compState:'ok'
+    yawHistory:[], compState:'ok'
   },
-  // orientation / view
   Nd:new Float32Array([0,1,0]),
   view3:[1,0,0, 0,1,0, 0,0,1],
   view3f:new Float32Array(9),
-  // instances
   instances:{xz:null,seed:null,count:0},
-  // GL
-  gl:null, glRes:null,
-  // Canvas2D
-  ctx:null,
-  // perf
+  gl:null, glRes:null, ctx:null,
   frameTimes:[], frameSum:0, fps:0, last:performance.now(),
-  // UI
   ui:{}
 };
 if(gentle){ app.params.speed=Math.max(10, app.params.speed*0.5); app.params.trailMul=Math.max(8, Math.round(app.params.trailMul*0.6)); }
 
-/* ========= projection helpers ========= */
+/* ===== projection ===== */
 function fovToScale(fovDeg, aspect){ const ay=1/Math.tan(0.5*rad(fovDeg)); return [ ay/aspect, ay ]; }
 
-/* ========= sensors ========= */
+/* ===== sensors (with smooth yaw + inverted pitch) ===== */
 function showOverlay(){ el('#overlay').classList.add('show'); }
 function hideOverlay(){ el('#overlay').classList.remove('show'); }
 
 function setupSensors(){
   if(FLAGS.noSensors){ app.sensor.source='off'; app.sensor.enabled=false; updateHUDSensor(); return; }
-
   const ABS = (window.AbsoluteOrientationSensor||window.OrientationSensor);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-
-  // Roll suppression by reconstructing q from yaw/pitch (roll=0 unless allowed)
-  function deriveViewFromQuaternion(qdw){
-    // qdw: device->world; we need world->view (device) = conj
-    const qwd = qConj(qdw);
-    const Nd = qRotateVec(qwd, NORTH); v3norm(app.Nd, Nd);
-    // yaw from Nd projects North into view XY: atan2(x,y)
-    let yaw = Math.atan2(app.Nd[0], app.Nd[1]);
-    let pitch = Math.asin(-app.Nd[2]); // look up/down to keep Nd.z mapping
-    // low-pass
-    app.sensor.yawFilt += app.sensor.aLPF * (deg(yaw) - app.sensor.yawFilt);
-    app.sensor.pitchFilt += app.sensor.aLPF * (deg(pitch) - app.sensor.pitchFilt);
-    // roll (suppressed by default)
-    let roll = 0;
-    if(app.sensor.allowRoll){
-      // crude roll estimate: align world up projected onto view plane with +Y
-      // (optional; simplest keep 0)
-      roll = app.sensor.rollFilt;
-    }
-    const qView = qFromYPR(rad(app.sensor.yawFilt), rad(app.sensor.pitchFilt), rad(roll));
-    app.view3 = mat3FromQuat(qView);
-    app.view3f.set(app.view3);
-    updateCompassNoise(app.sensor.yawFilt);
-  }
 
   function updateCompassNoise(yawDeg){
-    const a = app.sensor.yawDeltas;
-    if(a.length>0){
-      let d = yawDeg - a[a.length-1].yaw;
-      // unwrap
-      if(d>180) d-=360; if(d<-180) d+=360;
-      a.push({yaw:yawDeg, dy:Math.abs(d)});
-    }else a.push({yaw:yawDeg, dy:0});
-    if(a.length>32) a.shift();
-    const mean = a.reduce((s,v)=>s+v.dy,0)/a.length;
-    app.sensor.compState = (mean>5) ? 'unstable' : 'ok';
+    const a=app.sensor.yawHistory;
+    if(a.length){ const d=Math.abs(shortestDeg(yawDeg, a[a.length-1])); a.push(yawDeg); if(a.length>32) a.shift();
+      const deltas=[]; for(let i=1;i<a.length;i++) deltas.push(Math.abs(shortestDeg(a[i],a[i-1])));
+      const mean = deltas.reduce((s,v)=>s+v,0)/(deltas.length||1);
+      app.sensor.compState = (mean>5) ? 'unstable' : 'ok';
+    } else { a.push(yawDeg); app.sensor.compState='ok'; }
+  }
+
+  function deriveFromQuaternion(qdw){
+    const qwd = qConj(qdw); // world->view
+    // North in view space
+    const Nd = mul3(mat3FromQuat(qwd), NORTH);
+    v3norm(app.Nd, Nd);
+    // yaw from Nd (0..360), pitch from Nd; **invert pitch sign**
+    const yawDeg = norm360(deg(Math.atan2(app.Nd[0], app.Nd[1])));
+    const pitchDegRaw = deg(Math.asin(-app.Nd[2]));
+    app.sensor.yawFilt   = smoothAngleDeg(app.sensor.yawFilt, yawDeg, app.sensor.aLPF);
+    app.sensor.pitchFilt += app.sensor.aLPF * ((-pitchDegRaw) - app.sensor.pitchFilt); // flipped
+    const rollDeg = app.sensor.allowRoll ? app.sensor.rollFilt : 0;
+
+    const qView = qFromYPR(rad(app.sensor.yawFilt), rad(app.sensor.pitchFilt), rad(rollDeg));
+    app.view3 = mat3FromQuat(qView); app.view3f.set(app.view3);
+    updateCompassNoise(app.sensor.yawFilt);
   }
 
   function startABS(){
     let sensorObj;
-    try{
-      sensorObj = new ABS({frequency:60, referenceFrame:'screen'});
-    }catch{
-      try{ sensorObj = new ABS({frequency:60, referenceFrame:'device'}); }catch{}
-    }
+    try{ sensorObj=new ABS({frequency:60, referenceFrame:'screen'}); }catch{ try{ sensorObj=new ABS({frequency:60, referenceFrame:'device'}); }catch{} }
     if(!sensorObj){ gateIOS(); return; }
-    sensorObj.addEventListener('reading', ()=>{
-      const q = sensorObj.quaternion;
-      deriveViewFromQuaternion(q);
-      app.sensor.enabled = true; app.sensor.source='sensor'; updateHUDSensor();
-    });
+    sensorObj.addEventListener('reading', ()=>{ deriveFromQuaternion(sensorObj.quaternion); app.sensor.enabled=true; app.sensor.source='sensor'; updateHUDSensor(); });
     sensorObj.addEventListener('error', ()=>{ gateIOS(); });
     try{ sensorObj.start(); }catch{ gateIOS(); }
   }
 
   function onDO(ev){
-    const hasWebKit = typeof ev.webkitCompassHeading==='number';
-    const hd = hasWebKit ? ev.webkitCompassHeading : (typeof ev.alpha==='number' ? ev.alpha : 0);
-    const pd = (typeof ev.beta==='number') ? ev.beta : 0;
-    const rd = (typeof ev.gamma==='number') ? ev.gamma : 0;
-    // EMA
-    app.sensor.yaw += app.sensor.aLPF * (hd - app.sensor.yaw);
-    app.sensor.pitch += app.sensor.aLPF * (pd - app.sensor.pitch);
-    app.sensor.roll += app.sensor.aLPF * (rd - app.sensor.roll);
-    // Use yaw/pitch; roll optional
-    app.sensor.yawFilt = app.sensor.yaw;
-    app.sensor.pitchFilt = app.sensor.pitch;
-    app.sensor.rollFilt = app.sensor.allowRoll ? app.sensor.roll : 0;
+    const hasWK = typeof ev.webkitCompassHeading==='number';
+    const hd = hasWK ? ev.webkitCompassHeading : (typeof ev.alpha==='number'? ev.alpha : 0); // 0..360
+    const pd = (typeof ev.beta==='number') ? ev.beta : 0;    // degrees
+    const rd = (typeof ev.gamma==='number') ? ev.gamma : 0;  // degrees
+    // Wrap-aware yaw; **invert pitch sign**
+    app.sensor.yawFilt   = smoothAngleDeg(app.sensor.yawFilt, norm360(hd), app.sensor.aLPF);
+    app.sensor.pitchFilt += app.sensor.aLPF * ((-pd) - app.sensor.pitchFilt);
+    app.sensor.rollFilt  += app.sensor.aLPF * (rd - app.sensor.rollFilt);
 
-    const qView = qFromYPR(rad(app.sensor.yawFilt), rad(app.sensor.pitchFilt), rad(app.sensor.rollFilt));
-    app.view3 = mat3FromQuat(qView);
-    app.view3f.set(app.view3);
+    const rollDeg = app.sensor.allowRoll ? app.sensor.rollFilt : 0;
+    const qView = qFromYPR(rad(app.sensor.yawFilt), rad(app.sensor.pitchFilt), rad(rollDeg));
+    app.view3 = mat3FromQuat(qView); app.view3f.set(app.view3);
+
     const Nd = mul3(app.view3, NORTH); v3norm(app.Nd, Nd);
     updateCompassNoise(app.sensor.yawFilt);
 
-    app.sensor.enabled=true; app.sensor.source = hasWebKit ? 'webkit' : 'alpha'; updateHUDSensor();
+    app.sensor.enabled=true; app.sensor.source = hasWK ? 'webkit' : 'alpha'; updateHUDSensor();
   }
 
-  function attachDO(){
-    window.addEventListener('deviceorientation', onDO, {passive:true});
-  }
-
+  function attachDO(){ window.addEventListener('deviceorientation', onDO, {passive:true}); }
   function gateIOS(){
     if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
       showOverlay();
       el('#btn-permit').onclick = async ()=>{
-        try{ const res = await DeviceOrientationEvent.requestPermission(); app.sensor.havePermission=(res==='granted'); }
-        catch(e){ console.warn(e); }
+        try{ const res=await DeviceOrientationEvent.requestPermission(); app.sensor.havePermission=(res==='granted'); }catch(e){ console.warn(e); }
         hideOverlay(); attachDO();
       };
-    }else{
-      attachDO();
-    }
+    }else{ attachDO(); }
   }
 
-  if(!FLAGS.noSensors){
-    if(ABS && !(/iPad|iPhone|iPod/.test(navigator.userAgent))){ startABS(); }
-    else { gateIOS(); }
-  }
+  if(ABS && !(/iPad|iPhone|iPod/.test(navigator.userAgent))){ startABS(); } else { gateIOS(); }
 }
 
-/* ========= instances ========= */
+/* ===== instances ===== */
 function buildInstances(targetCount){
   const s=app.params.spacing, R=app.params.radius, pts=[];
   for(let x=-R;x<=R;x+=s) for(let z=-R;z<=R;z+=s)
     if((x*x+z*z) <= R*R*1.15)
       pts.push([x+(Math.random()-0.5)*0.15*s, z+(Math.random()-0.5)*0.15*s]);
-  // shuffle
   for(let i=pts.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=pts[i]; pts[i]=pts[j]; pts[j]=t; }
   const N=Math.min(targetCount, pts.length);
   app.instances.count=N;
@@ -269,23 +228,23 @@ function buildInstances(targetCount){
   for(let i=0;i<N;i++){ app.instances.xz[i*2]=pts[i][0]; app.instances.xz[i*2+1]=pts[i][1]; app.instances.seed[i]=Math.random()*1000; }
 }
 
-/* ========= WebGL2 pipeline ========= */
+/* ===== WebGL2 ===== */
 function glInit(){
   if(FLAGS.forceCanvas) return false;
-  const canvas = el('#gl');
-  const gl = canvas.getContext('webgl2',{antialias:false,alpha:false,premultipliedAlpha:false,preserveDrawingBuffer:false});
+  const canvas=el('#gl');
+  const gl=canvas.getContext('webgl2',{antialias:false,alpha:false,premultipliedAlpha:false,preserveDrawingBuffer:false});
   if(!gl) return false;
 
-  const vs = `#version 300 es
+  const vs=`#version 300 es
   precision highp float; precision highp int;
   layout(location=0) in vec2 aXZ;
   layout(location=1) in float aSeed;
-  layout(location=2) in vec2 aSide; // (-1/+1 across, 0/1 along)
+  layout(location=2) in vec2 aSide;
 
   uniform highp mat3  uView3;
   uniform highp float uNear,uFar;
-  uniform highp vec2  uPx2NDC; // 2/viewport
-  uniform highp float uAx,uAy; // proj scales
+  uniform highp vec2  uPx2NDC;
+  uniform highp float uAx,uAy;
   uniform highp float uWidthPx;
   uniform bool uInvertY;
 
@@ -302,16 +261,13 @@ function glInit(){
     if (den > 0.0) { if (t > t0) t0=t; } else { if (t < t1) t1=t; }
     if (t0 > t1) alive=false;
   }
-
   vec2 projNDC(vec3 p){
     float z = max(p.z, 1e-3);
     vec2 ndc = vec2(uAx*p.x/z, uAy*p.y/z);
     if(uInvertY) ndc.y = -ndc.y;
     return ndc;
   }
-
   void main(){
-    // world->view
     vec3 p0v = uView3 * vec3(aXZ.x, 0.0, aXZ.y);
     vec3 dv  = uView3 * vec3(0.0, 1.0, 0.0);
 
@@ -331,8 +287,8 @@ function glInit(){
     vec2 tdir = normalize(ndcF - ndcN + vec2(1e-6));
     vec2 nperp = vec2(-tdir.y, tdir.x);
 
-    float side = aSide.x;  // -1/+1
-    float along = aSide.y; // 0..1
+    float side = aSide.x;
+    float along = aSide.y;
     vec2 ndc = mix(ndcN, ndcF, along) + nperp * side * uWidthPx * uPx2NDC;
 
     gl_Position = vec4(ndc, 0.0, 1.0);
@@ -343,7 +299,7 @@ function glInit(){
     vAlive = alive ? 1.0 : 0.0;
   }`;
 
-  const fs = `#version 300 es
+  const fs=`#version 300 es
   precision highp float; precision highp int;
   in highp float vU;
   in highp float vSeed;
@@ -357,7 +313,6 @@ function glInit(){
     float d=abs(fract(x)-0.5);
     return smoothstep(0.5, 0.5 - w, d);
   }
-
   void main(){
     if(vAlive < 0.5) discard;
     float s = vU*uTrailX + uTime*uSpeed + vSeed;
@@ -414,101 +369,63 @@ function glInit(){
   }};
   return true;
 }
-
-function glResize(){
-  if(!app.gl) return;
-  const gl=app.gl;
-  const w=Math.max(1, Math.floor(innerWidth*app.dpr));
-  const h=Math.max(1, Math.floor(innerHeight*app.dpr));
-  if(gl.canvas.width!==w||gl.canvas.height!==h){ gl.canvas.width=w; gl.canvas.height=h; }
-  gl.viewport(0,0,w,h);
-}
-
-function glUploadInstances(){
-  const gl=app.gl, R=app.glRes; if(!gl) return;
+function glResize(){ if(!app.gl) return; const gl=app.gl; const w=Math.max(1,Math.floor(innerWidth*app.dpr)), h=Math.max(1,Math.floor(innerHeight*app.dpr));
+  if(gl.canvas.width!==w||gl.canvas.height!==h){ gl.canvas.width=w; gl.canvas.height=h; } gl.viewport(0,0,w,h); }
+function glUploadInstances(){ const gl=app.gl,R=app.glRes; if(!gl) return;
   gl.bindVertexArray(R.vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, R.bufXZ); gl.bufferData(gl.ARRAY_BUFFER, app.instances.xz, gl.DYNAMIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, R.bufSeed); gl.bufferData(gl.ARRAY_BUFFER, app.instances.seed, gl.DYNAMIC_DRAW);
   gl.bindVertexArray(null);
 }
-
 function glDraw(tSec){
-  const gl=app.gl, R=app.glRes; if(!gl) return;
+  const gl=app.gl,R=app.glRes; if(!gl) return;
   gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.useProgram(R.prog);
-  gl.bindVertexArray(R.vao);
-
-  const near=0.6, far=60.0;
-  const [ax,ay]=fovToScale(app.params.fovDeg, app.w/app.h);
-
-  gl.uniformMatrix3fv(R.u.uView3, false, app.view3f);
-  gl.uniform1f(R.u.uNear, near);
-  gl.uniform1f(R.u.uFar, far);
-  gl.uniform2f(R.u.uPx2NDC, 2/app.w, 2/app.h);
-  gl.uniform1f(R.u.uAx, ax);
-  gl.uniform1f(R.u.uAy, ay);
+  gl.useProgram(R.prog); gl.bindVertexArray(R.vao);
+  const near=0.6, far=60.0; const [ax,ay]=fovToScale(app.params.fovDeg, app.w/app.h);
+  gl.uniformMatrix3fv(R.u.uView3,false,app.view3f);
+  gl.uniform1f(R.u.uNear,near); gl.uniform1f(R.u.uFar,far);
+  gl.uniform2f(R.u.uPx2NDC,2/app.w,2/app.h);
+  gl.uniform1f(R.u.uAx,ax); gl.uniform1f(R.u.uAy,ay);
   gl.uniform1f(R.u.uWidthPx, app.params.widthPx*app.dpr);
-  gl.uniform1f(R.u.uTime, tSec);
-  gl.uniform1f(R.u.uSpeed, app.params.speed);
-  gl.uniform1f(R.u.uTrailX, app.params.trailMul);
-  gl.uniform1i(R.u.uInvertY, (FLAGS.invertY||el('#ctl-invY')?.checked)?1:0);
-
-  gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, app.instances.count);
+  gl.uniform1f(R.u.uTime,tSec); gl.uniform1f(R.u.uSpeed,app.params.speed);
+  gl.uniform1f(R.u.uTrailX,app.params.trailMul);
+  gl.uniform1i(R.u.uInvertY,(FLAGS.invertY||el('#ctl-invY')?.checked)?1:0);
+  gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,app.instances.count);
   gl.bindVertexArray(null);
 }
 
-/* ========= Canvas2D fallback ========= */
+/* ===== Canvas2D fallback ===== */
 function c2dInit(){ const c=el('#c2d'); const ctx=c.getContext('2d',{alpha:false}); if(!ctx) return false; app.ctx=ctx; return true; }
 function c2dResize(){ if(!app.ctx) return; const c=app.ctx.canvas; const w=Math.max(1,Math.floor(innerWidth*app.dpr)), h=Math.max(1,Math.floor(innerHeight*app.dpr)); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } }
-
-// Clip infinite line against 6 planes (view frustum)
 function clipLineFrustum(p0,d,near,far,ax,ay){
-  let t0=-1e8, t1=1e8, alive=true;
-  function plane(nx,ny,nz,c){
-    const num=nx*p0[0]+ny*p0[1]+nz*p0[2]+c;
-    const den=nx*d[0] +ny*d[1] +nz*d[2];
+  let t0=-1e8,t1=1e8,alive=true;
+  function plane(nx,ny,nz,c){ const num=nx*p0[0]+ny*p0[1]+nz*p0[2]+c; const den=nx*d[0]+ny*d[1]+nz*d[2];
     if(Math.abs(den)<1e-6){ if(num<0) alive=false; return; }
-    const t=-num/den;
-    if(den>0){ if(t>t0) t0=t; } else { if(t<t1) t1=t; }
-    if(t0>t1) alive=false;
-  }
-  plane(0,0, 1,-near); plane(0,0,-1, far);
-  plane( ax,0,1,0);    plane(-ax,0,1,0);
-  plane(0, ay,1,0);    plane(0,-ay,1,0);
+    const t=-num/den; if(den>0){ if(t>t0) t0=t; } else { if(t<t1) t1=t; } if(t0>t1) alive=false; }
+  plane(0,0, 1,-near); plane(0,0,-1, far); plane( ax,0,1,0); plane(-ax,0,1,0); plane(0, ay,1,0); plane(0,-ay,1,0);
   return [t0,t1,alive];
 }
-
 function c2dDraw(tSec){
   const ctx=app.ctx; if(!ctx) return;
-  const near=0.6, far=60.0;
-  const [ax,ay]=fovToScale(app.params.fovDeg, app.w/app.h);
-  const V=app.view3;
-
+  const near=0.6, far=60.0; const [ax,ay]=fovToScale(app.params.fovDeg, app.w/app.h); const V=app.view3;
   const proj=(p)=>{ const z=Math.max(p[2],1e-3); let x=ax*p[0]/z, y=ay*p[1]/z; if(FLAGS.invertY||el('#ctl-invY')?.checked) y=-y;
     return [ (x*0.5+0.5)*app.w, (1-(y*0.5+0.5))*app.h ];
   };
-
-  // persistence clear
-  ctx.fillStyle=`rgba(0,0,0,${app.params.persistAlpha})`;
-  ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  ctx.fillStyle=`rgba(0,0,0,${app.params.persistAlpha})`; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
   ctx.globalCompositeOperation='lighter'; ctx.lineCap='round'; ctx.lineJoin='round';
-
   for(let i=0;i<app.instances.count;i++){
     const x0=app.instances.xz[i*2], z0=app.instances.xz[i*2+1], seed=app.instances.seed[i];
-    const p0=mul3(V,[x0,0,z0]), d =mul3(V,[0,1,0]);
+    const p0=mul3(V,[x0,0,z0]), d=mul3(V,[0,1,0]);
     const [tA,tB,alive]=clipLineFrustum(p0,d,near,far,ax,ay); if(!alive) continue;
     const Pn=[p0[0]+tA*d[0], p0[1]+tA*d[1], p0[2]+tA*d[2]];
     const Pf=[p0[0]+tB*d[0], p0[1]+tB*d[1], p0[2]+tB*d[2]];
     const [xn,yn]=proj(Pn), [xf,yf]=proj(Pf);
-
     const dx=xf-xn, dy=yf-yn;
-    const len=Math.hypot(dx,dy)||1;
-    const uFront = ( (app.params.trailMul*0.03) + (tSec*app.params.speed) + seed )%1;
-    const uBack  = Math.max(0, uFront - (app.params.trailMul/120));
+    const uFront=( (app.params.trailMul*0.03)+(tSec*app.params.speed)+seed )%1;
+    const uBack=Math.max(0, uFront-(app.params.trailMul/120));
     const xA=xn+dx*uBack, yA=yn+dy*uBack, xB=xn+dx*uFront, yB=yn+dy*uFront;
-
     const zB=Pn[2]+(Pf[2]-Pn[2])*uFront;
-    const widthPx=clamp((app.params.widthPx*(1.2+3.5/(zB+0.2))) * app.dpr, 0.6*app.dpr, 6.0*app.dpr);
+    const widthPx=clamp((app.params.widthPx*(1.2+3.5/(zB+0.2)))*app.dpr, 0.6*app.dpr, 6.0*app.dpr);
     const alpha=clamp(0.18 + 0.26*(near/Math.max(zB,1e-3)), 0.12, 0.95);
     ctx.strokeStyle=`rgba(255,255,255,${alpha.toFixed(3)})`; ctx.lineWidth=widthPx;
     ctx.beginPath(); ctx.moveTo(xA,yA); ctx.lineTo(xB,yB); ctx.stroke();
@@ -516,7 +433,7 @@ function c2dDraw(tSec){
   ctx.globalCompositeOperation='source-over';
 }
 
-/* ========= HUD ========= */
+/* ===== HUD ===== */
 function setupHUD(){
   app.ui.hud=el('#hud'); if(FLAGS.debug) app.ui.hud.classList.add('show');
   app.ui.badgePipeline=el('#badge-pipeline'); app.ui.badgeDPR=el('#badge-dpr'); app.ui.badgeSensor=el('#badge-sensor');
@@ -528,47 +445,41 @@ function setupHUD(){
   bindSlider('#ctl-trail', app.params.trailMul, v=> app.params.trailMul=v);
   bindSlider('#ctl-width', app.params.widthPx, v=> app.params.widthPx=v);
   bindSlider('#ctl-persist', app.params.persistAlpha, v=> app.params.persistAlpha=v);
-  const invY=el('#ctl-invY'); invY.checked=FLAGS.invertY; invY.onchange=()=>{};
-  const roll=el('#ctl-roll'); roll.checked=FLAGS.allowRoll; roll.onchange=()=>{ app.sensor.allowRoll = roll.checked; };
+  const invY=el('#ctl-invY'); invY.checked=FLAGS.invertY;
+  const roll=el('#ctl-roll'); roll.checked=FLAGS.allowRoll; roll.onchange=()=>{ app.sensor.allowRoll=roll.checked; };
 }
 function bindSlider(sel,init,oninput){ const s=el(sel); if(!s) return; s.value=init; s.addEventListener('input',()=>oninput(parseFloat(s.value))); }
-function updateHUDStatic(){ if(!FLAGS.debug) return;
-  app.ui.badgePipeline.textContent=app.pipeline.toUpperCase();
-  app.ui.badgeDPR.textContent=`DPR ${app.dpr.toFixed(2)}`;
-}
+function updateHUDStatic(){ if(!FLAGS.debug) return; app.ui.badgePipeline.textContent=app.pipeline.toUpperCase(); app.ui.badgeDPR.textContent=`DPR ${app.dpr.toFixed(2)}`; }
 function updateHUDDynamic(){ if(!FLAGS.debug) return;
   app.ui.fps.textContent=app.fps.toFixed(0);
   app.ui.count.textContent=String(app.instances.count);
   app.ui.hpr.textContent=`${app.sensor.yawFilt.toFixed(0)}° / ${app.sensor.pitchFilt.toFixed(0)}° / ${(app.sensor.allowRoll?app.sensor.rollFilt:0).toFixed(0)}°`;
   app.ui.nd.textContent=`(${app.Nd[0].toFixed(2)}, ${app.Nd[1].toFixed(2)}, ${app.Nd[2].toFixed(2)})`;
-  app.ui.comp.textContent = app.sensor.compState;
+  app.ui.comp.textContent=app.sensor.compState;
 }
 function updateHUDSensor(){ if(FLAGS.debug) el('#badge-sensor').textContent=app.sensor.source; }
 
-/* ========= resize / DPR ========= */
+/* ===== resize / DPR ===== */
 function resize(){
-  app.dpr = clamp(window.devicePixelRatio||1, 1, app.params.clampDPR);
-  app.w = Math.max(1, Math.floor(innerWidth  * app.dpr));
-  app.h = Math.max(1, Math.floor(innerHeight * app.dpr));
+  app.dpr=clamp(window.devicePixelRatio||1,1,app.params.clampDPR);
+  app.w=Math.max(1,Math.floor(innerWidth*app.dpr));
+  app.h=Math.max(1,Math.floor(innerHeight*app.dpr));
   if(app.gl) glResize(); else if(app.ctx) c2dResize();
   updateHUDStatic();
 }
 function chooseInitialCount(){
   if(FLAGS.forceCanvas) return 1000;
-  const highGL = !!app.gl && app.dpr>=2;
-  if(highGL) return clamp(app.params.countHint, 1800, app.adapt.maxCount);
-  if(!!app.gl) return clamp(app.params.countHint, 1200, app.adapt.maxCount);
+  const highGL=!!app.gl && app.dpr>=2;
+  if(highGL) return clamp(app.params.countHint,1800,app.adapt.maxCount);
+  if(!!app.gl) return clamp(app.params.countHint,1200,app.adapt.maxCount);
   return 900;
 }
-function rebuildInstances(){ const N=clamp(app.params.countHint, app.adapt.minCount, app.adapt.maxCount); buildInstances(N); if(app.gl) glUploadInstances(); }
+function rebuildInstances(){ const N=clamp(app.params.countHint,app.adapt.minCount,app.adapt.maxCount); buildInstances(N); if(app.gl) glUploadInstances(); }
 
-/* ========= adaptive perf ========= */
+/* ===== adapt ===== */
 function adapt(){
-  const now=performance.now();
-  if(now-app.adapt.lastCheck<500) return;
-  app.adapt.lastCheck=now;
-  const M=app.frameTimes.length; if(M<10) return;
-  const avg=app.frameSum/M;
+  const now=performance.now(); if(now-app.adapt.lastCheck<500) return; app.adapt.lastCheck=now;
+  const M=app.frameTimes.length; if(M<10) return; const avg=app.frameSum/M;
   if(avg>app.adapt.decThresh){
     if(app.params.trailMul>8) app.params.trailMul=Math.max(8,Math.round(app.params.trailMul*0.85));
     else if(app.instances.count>app.adapt.minCount){ app.params.countHint=Math.max(app.adapt.minCount,Math.floor(app.instances.count*0.75)); rebuildInstances(); }
@@ -578,61 +489,36 @@ function adapt(){
   }
 }
 
-/* ========= main loop ========= */
+/* ===== loop ===== */
 function tick(now){
-  const dt = clamp((now - app.last)/1000, 0, 0.05); app.last=now;
-  if(!app.paused){
-    const tSec = now*0.001;
-    if(app.gl) glDraw(tSec); else if(app.ctx) c2dDraw(tSec);
-  }
-  const ft = performance.now()-now;
-  app.frameTimes.push(ft); app.frameSum+=ft;
-  if(app.frameTimes.length>app.adapt.window){ app.frameSum-=app.frameTimes.shift(); }
-  app.fps = 1000/(app.frameSum/Math.max(1,app.frameTimes.length));
-  updateHUDDynamic(); adapt();
+  const dt = clamp((now-app.last)/1000,0,0.05); app.last=now;
+  if(!app.paused){ const tSec=now*0.001; if(app.gl) glDraw(tSec); else if(app.ctx) c2dDraw(tSec); }
+  const ft=performance.now()-now; app.frameTimes.push(ft); app.frameSum+=ft; if(app.frameTimes.length>app.adapt.window){ app.frameSum-=app.frameTimes.shift(); }
+  app.fps=1000/(app.frameSum/Math.max(1,app.frameTimes.length)); updateHUDDynamic(); adapt();
   requestAnimationFrame(tick);
 }
 
-/* ========= boot ========= */
+/* ===== init ===== */
 function init(){
   try{
     setupHUD();
-    const okGL = glInit();
+    const okGL=glInit();
     if(okGL){ app.pipeline='webgl'; el('#c2d').style.display='none'; }
-    else{
-      if(!c2dInit()){ showErr('Neither WebGL2 nor Canvas2D available.'); return; }
-      app.pipeline='canvas'; el('#gl').style.display='none';
-    }
+    else { if(!c2dInit()){ showErr('Neither WebGL2 nor Canvas2D available.'); return; } app.pipeline='canvas'; el('#gl').style.display='none'; }
     updateHUDStatic();
     setupSensors();
-    resize(); addEventListener('resize', resize, {passive:true}); addEventListener('orientationchange', resize, {passive:true});
-    addEventListener('visibilitychange', ()=>{ app.paused=document.hidden; app.last=performance.now(); });
+    resize(); addEventListener('resize',resize,{passive:true}); addEventListener('orientationchange',resize,{passive:true});
+    addEventListener('visibilitychange',()=>{ app.paused=document.hidden; app.last=performance.now(); });
 
-    // reduced motion gentle defaults
-    if(gentle){ app.params.speed = Math.max(8, Math.round(app.params.speed*0.5)); app.params.trailMul = Math.max(8, Math.round(app.params.trailMul*0.6)); }
+    if(gentle){ app.params.speed=Math.max(8,Math.round(app.params.speed*0.5)); app.params.trailMul=Math.max(8,Math.round(app.params.trailMul*0.6)); }
 
-    // seed view + instances
     app.view3f.set(app.view3);
-    app.params.countHint = chooseInitialCount();
-    rebuildInstances();
-
+    app.params.countHint=chooseInitialCount(); rebuildInstances();
     requestAnimationFrame(tick);
-
-    if(FLAGS.debug){ console.log('[telemetry]', {pipeline:app.pipeline, dpr:app.dpr, flags:FLAGS}); }
-  }catch(e){ showErr('Init error:\n'+(e && e.message ? e.message : e)); }
+    if(FLAGS.debug){ console.log('[telemetry]',{pipeline:app.pipeline,dpr:app.dpr,flags:FLAGS}); }
+  }catch(e){ showErr('Init error:\n'+(e&&e.message?e.message:e)); }
 }
 init();
-
-/* ========= README (inline) =========
-- World ENU, lines along +Y (North). View is camera +Z.
-- Robust 6-plane frustum clipping in VS/JS to avoid blank frames at edge orientations.
-- Highp in both shaders (Safari-safe). Mat3 uniform uses Float32Array.
-- Sensors: Generic Sensor (screen frame) preferred; iOS gate -> DeviceOrientation with webkitCompassHeading.
-- Roll suppressed by default; enable with ?roll=1 or HUD checkbox.
-- Adaptive perf: reduce trail -> count -> width, DPR clamp <= 2.0.
-- Fallback: Canvas2D with motion persistence clear and additive strokes.
-- Flags: ?debug=1, ?forceCanvas=1, ?invertY=1, ?noSensors=1, ?roll=1
-==================================== */
 })();
 </script>
 </body>
