@@ -1,862 +1,290 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Italian Brainrot Prompt Builder — realistic animated characters</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Emoji → Character Prompt Builder (Non-Humanoid)</title>
+<meta name="color-scheme" content="light dark" />
 <style>
-  :root{
-    --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
-    --ring2:#00000012; --shadow:0 8px 24px #0000001e,0 2px 8px #00000012;
-    --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
-    --ease:cubic-bezier(.2,.8,.2,1);
-    --shake-ampl:0; --blur:0px;
+  :root {
+    --bg: Canvas; --fg: CanvasText; --muted: color-mix(in lch, var(--fg) 50%, transparent);
+    --accent: #5a7cff; --gap: 12px; --radius: 12px; --ring: 2px solid color-mix(in lch, var(--accent) 70%, white 30%);
   }
-  @property --shake-ampl{syntax:'<number>';initial-value:0;inherits:false}
-  @property --blur{syntax:'<length>';initial-value:0px;inherits:false}
-
-  html,body{height:100%;margin:0}
-  body{
-    background:
-      radial-gradient(60vmax 60vmax at 15% 10%, var(--t1), transparent 60%),
-      radial-gradient(70vmax 60vmax at 85% 20%, var(--t2), transparent 60%),
-      radial-gradient(60vmax 70vmax at 20% 85%, var(--t3), transparent 60%),
-      radial-gradient(70vmax 70vmax at 80% 85%, var(--t4), transparent 60%),
-      conic-gradient(from 0deg at 50% 50%, #e9f3ff, #ffe9f7, #e9fff6, #f7f3ff, #e9f3ff);
-    background-attachment:fixed; animation:hue 24s linear infinite alternate;
-    overflow:hidden; -webkit-tap-highlight-color:transparent;
-    user-select:none; color:#0a0b0d;
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
+  * { box-sizing: border-box }
+  html, body { height: 100%; }
+  body {
+    margin: 0; font: 16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    color: var(--fg); background: var(--bg);
+    min-height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                         calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+    display: grid; grid-template-rows: auto 1fr auto; gap: var(--gap);
   }
-  @keyframes hue{to{filter:hue-rotate(12deg) saturate(1.05)}}
-
-  .stage{
-    position:fixed; inset:0;
-    display:grid; grid-template-rows:1fr auto auto;
-    gap:10px; padding:10px 12px calc(env(safe-area-inset-bottom,16px) + 6px);
+  header, footer { padding: 12px 16px; }
+  header h1 { margin: 0 0 4px 0; font-weight: 650; font-size: 1.05rem; }
+  header p { margin: 0; color: var(--muted); font-size: .92rem; }
+  .grid {
+    display: grid; gap: var(--gap);
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    padding: 0 16px;
   }
-
-  /* ---------- Bowl ---------- */
-  .centerWrap{ display:grid; place-items:center; min-height:0 }
-  .cauldron-wrap{
-    position:relative; width:min(64vmin,520px); aspect-ratio:1;
-    display:grid; place-items:center;
+  .card {
+    border: 1px solid color-mix(in lch, var(--fg) 12%, transparent);
+    border-radius: var(--radius);
+    padding: 12px; display: grid; gap: 8px; align-content: start;
+    background: color-mix(in lch, var(--bg) 96%, var(--fg) 4%);
+    cursor: pointer; position: relative;
   }
-  @media (max-height:740px){ .cauldron-wrap{ width:min(56vmin,460px); } }
-  @media (max-height:640px){ .cauldron-wrap{ width:min(50vmin,420px); } }
-
-  .cauldron{
-    position:relative; width:100%; height:100%; border-radius:50%;
-    background:radial-gradient(120% 120% at 70% 30%, #ffffffc0, #ffffff60 45%, #ffffff30 60%, #ffffff12 75%, #ffffff06 100%);
-    box-shadow:var(--shadow-strong), inset 0 1px 0 #ffffffa0, inset 0 -20px 60px #0000000b;
-    outline:1px solid var(--ring2);
-    overflow:hidden; display:grid; place-items:center;
+  .card:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in lch, var(--accent) 40%, transparent); }
+  .emojis { font-size: 1.65rem; line-height: 1; }
+  .title { font-weight: 650; }
+  .meta { color: var(--muted); font-size: .85rem; }
+  .out {
+    padding: 12px 16px; display: grid; gap: 8px;
+    border-top: 1px solid color-mix(in lch, var(--fg) 12%, transparent);
   }
-  .ring{ position:absolute; inset:6%; border-radius:50%; border:1px dashed #00000018; outline:1px solid #ffffff90; outline-offset:-1px; box-shadow:inset 0 0 0 6px #ffffff10; pointer-events:none }
-  .cauldron.over{ box-shadow:0 0 0 12px #00c8ff30, var(--shadow-strong) }
-
-  .brew{ position:absolute; inset:0; border-radius:50%; overflow:hidden; filter:blur(var(--blur)) saturate(1.06); }
-  .liquid, .beams { position:absolute; inset:10%; border-radius:50%; pointer-events:none; }
-  .liquid{
-    opacity:.25;
-    background:
-      radial-gradient(40% 60% at 30% 30%, #ffffffd0, #ffffff10 70%),
-      conic-gradient(from 0deg, #bffbe7 0 40%, #dfe8ff 40% 70%, #ffdff2 70% 100%);
-    mix-blend-mode:soft-light; filter:saturate(1.05);
+  textarea {
+    width: 100%; min-height: 9lh; resize: vertical; font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    border-radius: 10px; padding: 10px; border: 1px solid color-mix(in lch, var(--fg) 18%, transparent);
+    background: color-mix(in lch, var(--bg) 96%, var(--fg) 4%);
   }
-  .beams{ opacity:0; }
-
-  /* ===== States ===== */
-  @keyframes suspensePulse { 0%{transform:scale(1)} 50%{transform:scale(1.02)} 100%{transform:scale(1)} }
-  .suspense .cauldron{ animation:suspensePulse 500ms ease-in-out infinite; }
-
-  .cauldron.req-blip::after{
-    content:""; position:absolute; inset:5%; border-radius:50%;
-    box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset;
-    animation:reqPulse 320ms cubic-bezier(.2,.8,.2,1) both;
-    pointer-events:none;
+  .toolbar {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    border-top: 1px dashed color-mix(in lch, var(--fg) 15%, transparent); padding-top: 8px; margin-top: 2px;
   }
-  @keyframes reqPulse {
-    0%{ box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset; }
-    70%{ box-shadow:0 0 0 12px #00c8ff00, 0 0 40px #00c8ff66 inset; }
-    100%{ box-shadow:0 0 0 18px #00c8ff00, 0 0 0 #00c8ff00 inset; }
+  .btn {
+    appearance: none; border: 1px solid color-mix(in lch, var(--fg) 18%, transparent);
+    background: color-mix(in lch, var(--bg) 90%, var(--fg) 10%);
+    padding: 8px 12px; border-radius: 999px; font-weight: 600; cursor: pointer;
   }
-
-  @keyframes breatheSpin { 0%{transform:scale(.992) rotate(-.8deg)} 50%{transform:scale(1.008) rotate(.8deg)} 100%{transform:scale(.992) rotate(-.8deg)} }
-  .waiting .brew{ animation: breatheSpin 2.4s ease-in-out infinite; }
-  @keyframes swirl{to{transform:rotate(360deg)}}
-  .waiting .liquid{ opacity:.9; animation:swirl 3.6s linear infinite; }
-  @keyframes beams{to{transform:rotate(-360deg)}}
-  .waiting .beams{ opacity:.8; animation:beams 2.6s linear infinite; filter:blur(6px); }
-  @keyframes rampVars { from{ --shake-ampl:0; --blur:0px; } to{ --shake-ampl:1; --blur:3px; } }
-  .waiting{ animation: rampVars 3s ease-in-out forwards; }
-  @keyframes shake-linear{
-    0%  { transform: translate( calc( 0px * var(--shake-ampl)),  calc( 0px * var(--shake-ampl))); }
-    12% { transform: translate( calc( 2px * var(--shake-ampl)),  calc(-2px * var(--shake-ampl))); }
-    25% { transform: translate( calc(-2px * var(--shake-ampl)),  calc( 2px * var(--shake-ampl))); }
-    37% { transform: translate( calc( 2px * var(--shake-ampl)),  calc( 2px * var(--shake-ampl))); }
-    50% { transform: translate( calc(-2px * var(--shake-ampl)),  calc(-2px * var(--shake-ampl))); }
-    62% { transform: translate( calc( 1px * var(--shake-ampl)),  calc(-1px * var(--shake-ampl))); }
-    75% { transform: translate( calc(-1px * var(--shake-ampl)),  calc( 1px * var(--shake-ampl))); }
-    87% { transform: translate( calc( 1px * var(--shake-ampl)),  calc( 1px * var(--shake-ampl))); }
-    100%{ transform: translate( calc( 0px * var(--shake-ampl)),  calc( 0px * var(--shake-ampl))); }
-  }
-  .waiting .cauldron-wrap{ animation:shake-linear 700ms linear infinite; }
-
-  .freeze .cauldron-wrap,
-  .freeze .cauldron,
-  .freeze .brew,
-  .freeze .liquid,
-  .freeze .beams{ animation:none !important }
-  .freeze .beams{ opacity:0 !important }
-  .freeze .cauldron.req-blip::after{ display:none !important }
-
-  /* Image */
-  .image-wrap{ position:absolute; inset:0; border-radius:50%; overflow:hidden; z-index:10; }
-  .result-img{
-    width:100%; height:100%; object-fit:cover; display:block;
-    opacity:0; transform:scale(.2);
-    transition:opacity .6s var(--ease), transform .9s cubic-bezier(.22,1.2,.22,1);
-    pointer-events:auto; -webkit-touch-callout:default; user-select:none;
-  }
-  .result-img.revealed{ opacity:1; transform:scale(1) }
-
-  /* Layers */
-  .overlay{ position:absolute; inset:0; z-index:30; }
-  .seeds{ position:fixed; inset:0; z-index:25; pointer-events:none; }
-
-  .seed,.chip,.plus,.cancel{
-    width:56px; height:56px; border-radius:50%;
-    display:grid; place-items:center; user-select:none;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffcc, #ffffff9a 60%, #ffffff7a 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffc8, 0 0 0 1px #0001;
-    touch-action:none;
-  }
-  .seed{ position:absolute; transform:translate(-50%,-50%); pointer-events:auto; animation:float var(--dur,9s) ease-in-out infinite var(--delay,0s); }
-  @keyframes float{
-    0%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))} 
-    50%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px))}
-    100%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))}
-  }
-  .seed .e{font-size:36px}
-
-  .placed{
-    position:absolute; width:12vmin; max-width:80px; aspect-ratio:1; border-radius:50%;
-    display:grid; place-items:center; cursor:grab; pointer-events:auto;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
-    transform:translate(-50%,-50%) scale(1);
-    transition:transform .25s var(--ease), opacity .25s var(--ease), box-shadow .2s var(--ease);
-    touch-action:none;
-  }
-  .placed:active{ transform:translate(-50%,-50%) scale(.95); box-shadow:0 0 0 2px #00c8ff33, var(--shadow) }
-  .placed .e{font-size:clamp(34px, 9vmin, 64px)}
-  .placed.dropin{ animation:drop .38s var(--ease) }
-  @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
-
-  .waitPulse{ animation:chipPulse 1.8s ease-in-out infinite; }
-  @keyframes chipPulse{
-    0%  { transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
-    50% { transform:translate(calc(-50% + var(--ix,0px)), calc(-50% + var(--iy,0px))) scale(.94); opacity:.9 }
-    100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
-  }
-
-  /* ---------- Buttons ---------- */
-  .footer{
-    display:flex; gap:14px; align-items:center; justify-content:center;
-    padding-top:2px;
-  }
-  .circle-btn{ width:72px; height:72px; min-width:72px; min-height:72px; border-radius:50%; display:grid; place-items:center; cursor:pointer; user-select:none; touch-action:manipulation; }
-  @media (max-height:640px){ .circle-btn{ width:64px; height:64px; min-width:64px; min-height:64px; } }
-  .plus{ transition:transform .18s var(--ease); }
-  .plus:active{ transform:scale(.96) }
-
-  /* ---------- Carousel (story points) ---------- */
-  .kindWrap{ display:grid; place-items:center; }
-  .kindShell{
-    width:min(92vw, 820px);
-    background:linear-gradient(180deg,#ffffffee,#f6fbffee);
-    border:1px solid #ffffffcc; border-radius:18px;
-    box-shadow:
-      0 20px 36px rgba(0,0,0,.18),
-      0 2px 0 rgba(255,255,255,.7) inset,
-      0 -10px 30px rgba(0,0,0,.06) inset;
-    backdrop-filter:saturate(1.05) blur(8px);
-    transform:perspective(1000px) rotateX(6deg);
-  }
-  .kindRail{
-    display:flex; gap:16px; padding:12px 20px;
-    overflow-x:auto; overflow-y:hidden;
-    scroll-snap-type:x mandatory; scroll-snap-stop:always;
-    -webkit-overflow-scrolling:touch;
-    touch-action:pan-x;
-    overscroll-beavior-x:contain; overscroll-behavior-y:none;
-  }
-  .kindRail::-webkit-scrollbar{display:none}
-  .spacer{ flex:0 0 50vw; }
-  .kchip{
-    flex:0 0 auto; width:64px; height:64px; border-radius:50%;
-    display:grid; place-items:center; scroll-snap-align:center;
-    background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%);
-    box-shadow:var(--shadow), inset 0 1px 0 #ffffff;
-    transform:translateZ(0) scale(.9);
-    transition:transform .18s var(--ease), filter .18s var(--ease), box-shadow .18s var(--ease);
-    position:relative; touch-action:manipulation;
-  }
-  .kchip .e{font-size:34px}
-  .kchip:active{ transform:scale(.86) }
-  .kchip.active{
-    transform:scale(1.32) translateZ(20px);
-    box-shadow:0 22px 48px rgba(100,150,255,.30), 0 0 0 2px #ffffff inset, 0 0 0 10px #a6d1ff66;
-    filter:saturate(1.25);
-  }
-  .kchip.active::after{
-    content:""; position:absolute; inset:-22%; border-radius:50%;
-    background:conic-gradient(#b8f0ff66, #e9d0ff66, #b8f0ff66);
-    mix-blend-mode:overlay; animation:shine 4s linear infinite; pointer-events:none;
-  }
-  @keyframes shine{to{transform:rotate(360deg)}}
+  .btn:active { transform: translateY(1px); }
+  .select { padding: 8px 10px; border-radius: 10px; border: 1px solid color-mix(in lch, var(--fg) 18%, transparent); background: transparent; }
+  .toggle { display: inline-flex; gap: 6px; align-items: center; }
+  .sr { position: absolute; left: -9999px; }
 </style>
 </head>
 <body>
-  <div class="stage">
+  <header>
+    <h1>Emoji → Character Prompt Builder</h1>
+    <p>Click a group. UI shows emoji clusters; the generated prompt is a single, vivid, <strong>non-humanoid</strong> character built only from those animals/objects.</p>
+  </header>
 
-    <!-- Bowl -->
-    <div class="centerWrap">
-      <div class="seeds" id="seeds"></div>
-      <div class="cauldron-wrap" id="cauldronWrap">
-        <div class="cauldron" id="cauldron" aria-busy="false">
-          <div class="ring"></div>
-          <div class="brew">
-            <div class="liquid" aria-hidden="true"></div>
-            <div class="beams" aria-hidden="true"></div>
-            <div class="image-wrap">
-              <img id="image" class="result-img" alt="" draggable="false"/>
-            </div>
-          </div>
-        </div>
-        <div class="overlay" id="overlay"></div>
-      </div>
+  <main>
+    <section id="grid" class="grid" aria-label="Character groups"></section>
+  </main>
+
+  <section class="out" aria-live="polite" aria-atomic="true">
+    <label for="variant" class="sr">Variant</label>
+    <select id="variant" class="select">
+      <option value="idle">Idle / portrait</option>
+      <option value="action">Action / in environment</option>
+      <option value="macro">Macro / material study</option>
+    </select>
+    <label class="toggle"><input id="negOn" type="checkbox" checked /> Append non-humanoid constraints</label>
+    <div class="toolbar">
+      <button id="copy" class="btn">Copy prompt</button>
+      <button id="shuffle" class="btn">Shuffle group</button>
     </div>
+    <textarea id="prompt" placeholder="Select a group above to generate…"></textarea>
+  </section>
 
-    <!-- Buttons -->
-    <div class="footer">
-      <button class="circle-btn plus" id="openPicker" aria-label="add"><span class="e">➕</span></button>
-      <button class="circle-btn cancel" id="cancel" aria-label="reset"><span class="e">❌</span></button>
-    </div>
-
-    <!-- Story-point Carousel -->
-    <div class="kindWrap">
-      <div class="kindShell">
-        <div class="kindRail" id="kindRail"><div class="spacer"></div><div class="spacer"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <emoji-picker id="picker"></emoji-picker>
+  <footer><small class="meta">Tip: Prompts avoid any human traits by design—no clothing, no hands, no upright posture, no faces with human proportions.</small></footer>
 
 <script>
-/* ---------- Data (Italian brainrot roster → emoji inventory + roles) ---------- */
-/* MUST: on-screen emoji include ALL from the roster + extra randoms; prompts never contain emoji, only descriptions. */
+(function init(){
+  "use strict";
 
-const ROSTER_EMOJIS = [
-  // Core roster shorthands (unique set)
-  "🦈","👟","3️⃣","🩰","☕","👗","🐊","✈️","💣","🪿","🚢","🌵","🐘","🩴","⏳","🐒","🌳","🥁","🐟","💪","👑","🌊","🐫","🧊","👞","🦒","🍉","👢","🪐","🐄","⚡️","🦍","🍌","🐱","🍣","🦫","🕶️","🤠","🐹","🥥","🏝️","🍊","😐","🚽","🪵","🪘","🌙",
-  // Extended roster
-  "🍟","🍐","🍓","🎶","🦅","🦖","🍇","🤖","🌀","🥤","🔁","🧪","✨","🧩","📜"
-];
-// Extra randoms (kept small to avoid crowding; all have fallbacks)
-const EXTRA_RANDOM = ["🎈","🧤","🧢","🪖","👒","🧥","🧦","🧲","🧱","🔧","🪚","🔨","🧭","🧠","🦷","🦴"];
-
-/* ==== Semantic dictionary: description (words only, no emoji) + default body role ==== */
-/* Roles: head, torso, arms, legs, feet, eyes, hat, wings, tail, hands (held items), clothing, aura, environment, extra */
-const EMOJI_DICT = new Map([
-  ["🦈",{desc:"shark head and upper body", role:"head"}],
-  ["👟",{desc:"athletic shoes as footwear on both feet", role:"feet"}],
-  ["3️⃣",{desc:"tripod stance with a third supporting limb", role:"legs"}],
-  ["🩰",{desc:"ballet shoes on both feet", role:"feet"}],
-  ["☕",{desc:"cappuccino cup used as the head", role:"head"}],
-  ["👗",{desc:"dress covering the torso", role:"clothing"}],
-  ["🐊",{desc:"crocodile head and torso", role:"head"}],
-  ["✈️",{desc:"aircraft wings attached to the back", role:"wings"}],
-  ["💣",{desc:"bomb held in the hands", role:"hands"}],
-  ["🪿",{desc:"goose head", role:"head"}],
-  ["🚢",{desc:"ship hull used as the main body", role:"torso"}],
-  ["🌵",{desc:"cactus skin texture covering the body", role:"torso"}],
-  ["🐘",{desc:"elephant head with trunk", role:"head"}],
-  ["🩴",{desc:"flip-flops on both feet", role:"feet"}],
-  ["⏳",{desc:"hourglass as a time aura", role:"aura"}],
-  ["🐒",{desc:"monkey head and torso", role:"head"}],
-  ["🌳",{desc:"tree trunk legs", role:"legs"}],
-  ["🥁",{desc:"drum carried at the waist", role:"hands"}],
-  ["🐟",{desc:"fish head and torso", role:"head"}],
-  ["💪",{desc:"muscular arms", role:"arms"}],
-  ["👑",{desc:"crown worn on the head", role:"hat"}],
-  ["🌊",{desc:"sea water environment", role:"environment"}],
-  ["🐫",{desc:"camel body", role:"torso"}],
-  ["🧊",{desc:"refrigerator chest cavity door", role:"torso"}],
-  ["👞",{desc:"work shoes as footwear", role:"feet"}],
-  ["🦒",{desc:"giraffe head and long neck", role:"head"}],
-  ["🍉",{desc:"watermelon used as the torso", role:"torso"}],
-  ["👢",{desc:"boots as footwear", role:"feet"}],
-  ["🪐",{desc:"saturn ring encircling the torso", role:"torso"}],
-  ["🐄",{desc:"cow head and torso", role:"head"}],
-  ["⚡️",{desc:"electric aura around the body", role:"aura"}],
-  ["🦍",{desc:"ape head", role:"head"}],
-  ["🍌",{desc:"banana-shaped torso", role:"torso"}],
-  ["🐱",{desc:"cat head", role:"head"}],
-  ["🍣",{desc:"sushi block used as torso", role:"torso"}],
-  ["🦫",{desc:"beaver head", role:"head"}],
-  ["🕶️",{desc:"dark sunglasses as eyes", role:"eyes"}],
-  ["🤠",{desc:"cowboy hat on the head", role:"hat"}],
-  ["🐹",{desc:"small rodent head used as a ferret or capybara stand-in", role:"head"}],
-  ["🥥",{desc:"coconut used as the torso", role:"torso"}],
-  ["🏝️",{desc:"tropical island environment", role:"environment"}],
-  ["🍊",{desc:"orange used as the head", role:"head"}],
-  ["😐",{desc:"neutral facial expression applied to the face", role:"eyes"}],
-  ["🚽",{desc:"toilet used as the main body", role:"torso"}],
-  ["🪵",{desc:"wooden body planks", role:"torso"}],
-  ["🪘",{desc:"hand drum used as a handheld prop", role:"hands"}],
-  ["🌙",{desc:"crescent moon night environment", role:"environment"}],
-  ["🍟",{desc:"french fries texture layered on the torso", role:"torso"}],
-  ["🍐",{desc:"pear shaped torso", role:"torso"}],
-  ["🍓",{desc:"strawberry used as the head", role:"head"}],
-  ["🎶",{desc:"floating musical notes in the scene", role:"environment"}],
-  ["🦅",{desc:"falcon wings attached to the back", role:"wings"}],
-  ["🦖",{desc:"dinosaur tail attached to the hips", role:"tail"}],
-  ["🍇",{desc:"bunch of grapes making up the torso", role:"torso"}],
-  ["🤖",{desc:"robotic exoskeleton over the body", role:"clothing"}],
-  ["🌀",{desc:"blender-like swirling torso", role:"torso"}],
-  ["🥤",{desc:"plastic cup used as the torso", role:"torso"}],
-  ["🔁",{desc:"looping motif aura around the character", role:"aura"}],
-  ["🧪",{desc:"glass tank torso", role:"torso"}],
-  ["✨",{desc:"sparkling particles around the subject", role:"aura"}],
-  ["🧩",{desc:"puzzle motif in the background", role:"environment"}],
-  ["📜",{desc:"scrolls and lore papers in the environment", role:"environment"}],
-  // extras (lightweight defaults)
-  ["🎈",{desc:"balloon as a handheld prop", role:"hands"}],
-  ["🧤",{desc:"gloves on the hands", role:"clothing"}],
-  ["🧢",{desc:"cap on the head", role:"hat"}],
-  ["🪖",{desc:"helmet on the head", role:"hat"}],
-  ["👒",{desc:"wide-brim hat on the head", role:"hat"}],
-  ["🧥",{desc:"jacket over the torso", role:"clothing"}],
-  ["🧦",{desc:"socks on the feet", role:"feet"}],
-  ["🧲",{desc:"magnet handheld prop", role:"hands"}],
-  ["🧱",{desc:"brick texture in the environment", role:"environment"}],
-  ["🔧",{desc:"wrench in hand", role:"hands"}],
-  ["🪚",{desc:"saw in hand", role:"hands"}],
-  ["🔨",{desc:"hammer in hand", role:"hands"}],
-  ["🧭",{desc:"compass as accessory", role:"hands"}],
-  ["🧠",{desc:"visible brain under a translucent dome", role:"head"}],
-  ["🦷",{desc:"oversized tooth held in hand", role:"hands"}],
-  ["🦴",{desc:"bone handheld prop", role:"hands"}],
-]);
-
-/* Story-point chips: relationship/family, actions, environments, emotions. Style NEVER changes. */
-const KIND_EMOJIS = [
-  "💞","👪","💔","⚔️","🤝","🍼",
-  "🏃‍♂️","🛡️",
-  "🏠","🏙️","🌲","🌊",
-  "😊","🤬","😱","😔"
-];
-
-let activeKind=null;
-
-/* ---------- DOM ---------- */
-const cauldron=document.getElementById('cauldron');
-const overlay=document.getElementById('overlay');
-const imageEl=document.getElementById('image');
-const seedsEl=document.getElementById('seeds');
-const cancelBtn=document.getElementById('cancel');
-const picker=document.getElementById('picker');
-const kindRail=document.getElementById('kindRail');
-
-/* ---------- State ---------- */
-let seeds=[]; let placed=[]; let dragging=null; let snapTimer=null; let lastActiveKind=null;
-let sparkTimer=null;
-let requestTimer=null;
-let interactingCount=0;
-let queuedChange=false;
-let genSerial=0, latestSerial=0;
-let currentObjectURL=null;
-
-/* ===== Global “freeze while touching” ===== */
-function beginInteraction(){ interactingCount++; if(interactingCount===1){ document.body.classList.add('freeze'); cancelSuspense(); } }
-function endInteraction(){
-  if(interactingCount>0){ interactingCount--; }
-  if(interactingCount===0){
-    document.body.classList.remove('freeze');
-    if(queuedChange){ queuedChange=false; armSuspenseAndRequest(); }
-  }
-}
-addEventListener('pointerdown', beginInteraction, true);
-addEventListener('pointerup',   endInteraction, true);
-addEventListener('pointercancel', endInteraction, true);
-addEventListener('lostpointercapture', endInteraction, true);
-
-/* ===== Suspense / request ===== */
-function cancelSuspense(){
-  if(requestTimer){ clearTimeout(requestTimer); requestTimer=null; }
-  document.body.classList.remove('suspense');
-}
-function armSuspenseAndRequest(){
-  document.body.classList.add('suspense');
-  document.body.classList.remove('waiting');
-  cauldron.classList.remove('req-blip');
-  cauldron.setAttribute('aria-busy','false');
-  if(requestTimer) clearTimeout(requestTimer);
-  requestTimer=setTimeout(fireRequest, 500);
-}
-function scheduleRelevantChange(){
-  if(interactingCount>0){ queuedChange=true; cancelSuspense(); return; }
-  armSuspenseAndRequest();
-}
-function fireRequest(){
-  requestTimer=null;
-  cauldron.classList.add('req-blip');
-  setTimeout(()=>cauldron.classList.remove('req-blip'), 340);
-  startWaiting();
-  imageEl.classList.remove('revealed');
-  if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
-  generateNow();
-}
-
-/* ===== Waiting visuals ===== */
-function startWaiting(){
-  document.body.classList.remove('suspense');
-  document.body.classList.add('waiting');
-  cauldron.setAttribute('aria-busy','true');
-
-  const bowl=cauldron.getBoundingClientRect(); const cx=50, cy=50;
-  for(const p of placed){
-    const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) continue;
-    const dxPct=(cx-p.x)*0.12, dyPct=(cy-p.y)*0.12;
-    const ix=dxPct/100*bowl.width, iy=dyPct/100*bowl.height;
-    node.style.setProperty('--ix', ix.toFixed(2)+'px'); node.style.setProperty('--iy', iy.toFixed(2)+'px');
-    node.classList.add('waitPulse');
-  }
-  clearInterval(sparkTimer);
-  sparkTimer=setInterval(spawnSparks, 260);
-}
-function stopWaiting(){
-  document.body.classList.remove('waiting','suspense');
-  cauldron.classList.remove('req-blip');
-  cauldron.setAttribute('aria-busy','false');
-  clearInterval(sparkTimer);
-  document.documentElement.style.setProperty('--shake-ampl','0');
-  document.documentElement.style.setProperty('--blur','0px');
-}
-function spawnSparks(){
-  const r=cauldron.getBoundingClientRect();
-  const center={x:r.left+r.width/2, y:r.top+r.height/2};
-  for(let i=0;i<5;i++){
-    const s=document.createElement('div');
-    s.style.position='fixed'; s.style.left=center.x+'px'; s.style.top=center.y+'px';
-    s.style.width='10px'; s.style.height='10px'; s.style.borderRadius='50%'; s.style.background='#fff';
-    s.style.boxShadow='0 0 16px #9ff4db, 0 0 4px #fff inset'; s.style.opacity='0'; s.style.pointerEvents='none';
-    s.animate([
-      {transform:'translate(0,0) scale(.6)', opacity:0},
-      {opacity:.95, offset:.08},
-      {transform:`translate(${(Math.cos(Math.random()*Math.PI*2)*r.width*0.22).toFixed(1)}px, ${(Math.sin(Math.random()*Math.PI*2)*r.width*0.22).toFixed(1)}px) scale(0)`, opacity:0}
-    ],{duration:900+Math.random()*400, easing:'var(--ease)', fill:'forwards'});
-    document.body.appendChild(s); setTimeout(()=>s.remove(),1200);
-  }
-}
-
-/* ===== Seeds (floating pickables) ===== */
-function rect(el){ const r=el.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}; }
-function initSeeds(){
-  const vw=window.innerWidth, vh=window.innerHeight;
-  const bowl   = rect(cauldron);
-  const rail   = rect(kindRail);
-  const footer = rect(document.querySelector('.footer'));
-  const avoid = [
-    { left:bowl.left-24,   top:bowl.top-24,   right:bowl.right+24,   bottom:bowl.bottom+24 },
-    { left:footer.left-12, top:footer.top-12, right:footer.right+12, bottom:footer.bottom+12 },
-    { left:rail.left-12,   top:rail.top-12,   right:rail.right+12,   bottom:rail.bottom+12 }
-  ];
-  const CHIP_R = 28, PAD = 16, MIN_D  = CHIP_R*2 + 14;
-
-  // include ALL roster emojis + some extras, and dedupe
-  const START_EMOJIS = Array.from(new Set([...ROSTER_EMOJIS, ...EXTRA_RANDOM]));
-
-  function hitsAvoid(x,y){
-    return avoid.some(a => x > a.left-CHIP_R && x < a.right+CHIP_R && y > a.top-CHIP_R && y < a.bottom+CHIP_R);
-  }
-  function farEnough(x,y){ for(const p of seeds){ if(Math.hypot(x-p.x, y-p.y) < MIN_D) return false; } return true; }
-
-  seeds = []; let i = 0, attempts = 0, maxAttempts = 9000;
-  while (i < START_EMOJIS.length && attempts++ < maxAttempts){
-    const x = PAD + Math.random()*(vw - PAD*2);
-    const y = PAD + Math.random()*(vh - PAD*2);
-    if (hitsAvoid(x,y)) continue; if (!farEnough(x,y)) continue;
-    seeds.push({ id:crypto.randomUUID(), emoji: START_EMOJIS[i++], x, y });
-  }
-}
-let resizeT;
-window.addEventListener('resize', () => {
-  clearTimeout(resizeT);
-  resizeT = setTimeout(()=>{ if (placed.length===0){ initSeeds(); renderSeeds(); } }, 120);
-});
-function renderSeeds(){
-  seedsEl.innerHTML='';
-  for(const s of seeds){
-    const n=document.createElement('button'); n.className='seed';
-    n.style.left=s.x+'px'; n.style.top=s.y+'px';
-    n.style.setProperty('--delay', `${(-Math.random()*6).toFixed(2)}s`);
-    n.style.setProperty('--dur', `${(7+Math.random()*4).toFixed(2)}s`);
-    n.style.setProperty('--fx', `${(Math.random()*14-7).toFixed(1)}px`);
-    n.style.setProperty('--fy', `${(Math.random()*8-4).toFixed(1)}px`);
-    n.dataset.id=s.id; n.innerHTML=`<span class="e">${s.emoji}</span>`;
-    n.addEventListener('pointerdown', e=>startDragSeed(e,s.id));
-    seedsEl.appendChild(n);
-  }
-}
-
-/* ===== Picker ===== */
-document.getElementById('openPicker').addEventListener('click',()=>picker.open());
-picker.addEventListener('emoji-pick',e=>{
-  const emo=e.detail.emoji; const pos=spotInsideBowl();
-  placed.push({id:crypto.randomUUID(), emoji:emo, x:pos.x, y:pos.y});
-  renderPlaced(true);
-  scheduleRelevantChange();
-});
-
-/* ===== Dragging (seeds → bowl; placed inside bowl) ===== */
-function startDragSeed(ev,id){
-  ev.preventDefault();
-  const idx=seeds.findIndex(s=>s.id===id); if(idx<0) return;
-  const node=[...seedsEl.children].find(n=>n.dataset.id===id);
-  if(node) node.style.visibility='hidden';
-  const ghost=makeGhost(seeds[idx].emoji);
-  dragging={type:'seed', idx, emoji:seeds[idx].emoji, ghostEl:ghost, originalEl:node};
-  pointerMove(ev);
-  addEventListener('pointermove', pointerMove);
-  addEventListener('pointerup', pointerUp, {once:true});
-}
-function startDragPlaced(ev,id){
-  ev.preventDefault();
-  const idx=placed.findIndex(p=>p.id===id); if(idx<0) return;
-  const node=overlay.querySelector(`.placed[data-id="${id}"]`);
-  if(node) node.style.visibility='hidden';
-  const ghost=makeGhost(placed[idx].emoji);
-  dragging={type:'placed', idx, emoji:placed[idx].emoji, ghostEl:ghost, originalEl:node, start:{x:placed[idx].x,y:placed[idx].y}};
-  pointerMove(ev);
-  addEventListener('pointermove', pointerMove);
-  addEventListener('pointerup', pointerUp, {once:true});
-}
-function makeGhost(emoji){
-  const g=document.createElement('div'); g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
-  g.style.transform='translate(-50%,-50%) scale(1.0)'; g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
-  g.innerHTML=`<span class="e" style="font-size:36px">${emoji}</span>`;
-  document.body.appendChild(g); return g;
-}
-function pointerMove(ev){
-  if(!dragging) return;
-  dragging.ghostEl.style.left=ev.clientX+'px'; dragging.ghostEl.style.top=ev.clientY+'px';
-  const {inside}=coordsInCauldron(ev.clientX,ev.clientY);
-  dragging.ghostEl.style.transform=`translate(-50%,-50%) scale(${inside?1.26:1.04})`;
-  cauldron.classList.toggle('over',inside);
-}
-function pointerUp(ev){
-  if(!dragging) return cleanupDrag();
-  const {inside,px,py}=coordsInCauldron(ev.clientX,ev.clientY); cauldron.classList.remove('over');
-
-  if(dragging.type==='seed'){
-    if(inside){
-      placed.push({id:crypto.randomUUID(), emoji:dragging.emoji, x:px, y:py});
-      renderPlaced(true);
-      if(dragging.idx>=0){ seeds.splice(dragging.idx,1); renderSeeds(); }
-      scheduleRelevantChange();
-    }else{
-      if(dragging.originalEl) dragging.originalEl.style.visibility='';
-    }
-  }else{
-    if(inside){
-      placed[dragging.idx].x=px; placed[dragging.idx].y=py; renderPlaced(false);
-      scheduleRelevantChange();
-    }else{
-      const screenX=ev.clientX, screenY=ev.clientY;
-      seeds.push({ id:crypto.randomUUID(), emoji:dragging.emoji, x:screenX, y:screenY });
-      placed.splice(dragging.idx,1);
-      renderPlaced(false); renderSeeds();
-      scheduleRelevantChange();
-    }
-  }
-  cleanupDrag();
-}
-function cleanupDrag(){
-  removeEventListener('pointermove', pointerMove);
-  if(dragging?.ghostEl) dragging.ghostEl.remove();
-  if(dragging?.originalEl) dragging.originalEl.style.visibility='';
-  dragging=null;
-}
-
-/* ===== Placed render ===== */
-function renderPlaced(playDrop=false){
-  overlay.innerHTML='';
-  for(const p of placed){
-    const n=document.createElement('div'); n.className='placed'; n.dataset.id=p.id;
-    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.emoji}</span>`;
-    if(playDrop) n.classList.add('dropin');
-    n.addEventListener('pointerdown', e=>startDragPlaced(e,p.id));
-    overlay.appendChild(n);
-  }
-}
-
-/* ===== Carousel (story points) ===== */
-function buildKindRail(){
-  KIND_EMOJIS.forEach(k=>{
-    const b=document.createElement('button'); b.className='kchip'; b.dataset.kind=k;
-    b.innerHTML=`<span class="e">${k}</span>`; b.addEventListener('click',()=>centerChip(b));
-    kindRail.insertBefore(b, kindRail.lastElementChild);
-  });
-  setTimeout(()=>centerChip(kindRail.querySelector('.kchip')),0);
-  kindRail.addEventListener('scroll', onRailScroll, {passive:true});
-  requestAnimationFrame(updateActiveChipVisual);
-}
-function centerChip(chip){
-  const R=kindRail.getBoundingClientRect(), C=chip.getBoundingClientRect();
-  kindRail.scrollBy({left:(C.left+C.width/2)-(R.left+R.width/2), behavior:'smooth'});
-}
-function onRailScroll(){
-  updateActiveChipVisual();
-  if(snapTimer) clearTimeout(snapTimer);
-  snapTimer=setTimeout(()=>{
-    const active=getActiveChip(); if(!active) return;
-    const k=active.dataset.kind; activeKind=k;
-    if(lastActiveKind!==k){ lastActiveKind=k; scheduleRelevantChange(); }
-    centerChip(active);
-  },180);
-}
-function getActiveChip(){ const R=kindRail.getBoundingClientRect(), cx=R.left+R.width/2; let best=null, d=1e9;
-  for(const chip of kindRail.querySelectorAll('.kchip')){ const r=chip.getBoundingClientRect(), c=r.left+r.width/2, dd=Math.abs(c-cx); if(dd<d){d=dd; best=chip;} }
-  return best;
-}
-function updateActiveChipVisual(){ const a=getActiveChip(); for(const c of kindRail.querySelectorAll('.kchip')) c.classList.toggle('active', c===a); }
-
-/* ===== Geometry ===== */
-function coordsInCauldron(cx,cy){
-  const r=cauldron.getBoundingClientRect(); const mx=cx-(r.left+r.width/2); const my=cy-(r.top+r.height/2);
-  const inside=Math.hypot(mx,my)<=r.width/2;
-  const px=((mx+r.width/2)/r.width)*100; const py=((my+r.height/2)/r.height)*100;
-  return {inside, px:Math.max(6,Math.min(94,px)), py:Math.max(6,Math.min(94,py))};
-}
-function spotInsideBowl(){
-  const r=cauldron.getBoundingClientRect(); let tries=0;
-  while(tries++<300){ const px=8+Math.random()*84, py=8+Math.random()*84;
-    const cx=r.left+px/100*r.width, cy=r.top+py/100*r.height;
-    if(Math.hypot(cx-(r.left+r.width/2),cy-(r.top+r.height/2))<r.width/2-40) return {x:px,y:py};
-  } return {x:50,y:50};
-}
-
-/* ===== Prompt assembly (ALWAYS realistic animated characters) ===== */
-
-/* Fixed style block — do not vary across story points */
-const FIXED_STYLE = "Realistic animated characters with a high-end 3D animated-film look, soft global illumination, coherent materials, cinematic depth of field, single consistent visual style across all scenes, no text or watermarks.";
-
-/* Story presets: relationship/family, actions, environments, heightened emotions */
-function storyPreset(kind){
-  switch(kind){
-    case "💞": return {story:"a tender reunion between close partners", action:"a gentle embrace", environment:"a neutral open plaza", emotion:"deep affection"};
-    case "👪": return {story:"a family moment of care between parent and child", action:"protective hug", environment:"cozy home interior", emotion:"warmth and safety"};
-    case "💔": return {story:"a difficult separation", action:"turning away from each other", environment:"quiet empty street", emotion:"heartbreak and regret"};
-    case "⚔️": return {story:"a rivalry standoff", action:"tense face-off", environment:"abandoned arena", emotion:"determination"};
-    case "🤝": return {story:"former rivals choosing to cooperate", action:"synchronised teamwork pose", environment:"industrial catwalk", emotion:"trust building"};
-    case "🍼": return {story:"caretaker soothing a smaller companion", action:"gentle rocking motion", environment:"dim nursery corner", emotion:"protective tenderness"};
-    case "🏃‍♂️": return {story:"a dynamic chase", action:"sprinting and vaulting", environment:"narrow alley", emotion:"urgent adrenaline"};
-    case "🛡️": return {story:"holding the line together", action:"defensive formation", environment:"city gate at night", emotion:"bravery under pressure"};
-    case "🏠": return {story:"everyday domestic life", action:"preparing breakfast", environment:"sunlit kitchen", emotion:"quiet contentment"};
-    case "🏙️": return {story:"meeting in the big city", action:"crosswalk encounter", environment:"neon urban street", emotion:"anticipation"};
-    case "🌲": return {story:"life in the woodland", action:"trail walking", environment:"misty forest", emotion:"calm wonder"};
-    case "🌊": return {story:"seaside chapter", action:"wading through shallow surf", environment:"windy beach", emotion:"freedom"};
-    case "😊": return {story:"celebration after success", action:"jumping and cheering", environment:"confetti-strewn stage", emotion:"joy"};
-    case "🤬": return {story:"heated argument", action:"pointing and shouting", environment:"cramped hideout", emotion:"anger"};
-    case "😱": return {story:"sudden revelation", action:"stumbling back in shock", environment:"echoing hall", emotion:"awe and fear"};
-    case "😔": return {story:"quiet farewell", action:"slow walk in opposite directions", environment:"train platform", emotion:"melancholy"};
-    default: return {story:"neutral encounter", action:"standing together", environment:"simple open space", emotion:"balanced focus"};
-  }
-}
-
-/* Assign descriptions + body roles for placed tokens */
-function infoForEmoji(ch){
-  if(EMOJI_DICT.has(ch)) return EMOJI_DICT.get(ch);
-  // minimal fallback: describe as small handheld prop to satisfy body assignment requirement
-  return {desc:"small handheld prop matching the theme", role:"hands"};
-}
-
-/* Build the character construction sentence ensuring roles are explicit */
-function buildCharacterConstruction(){
-  const buckets = {
-    head:[], torso:[], arms:[], legs:[], feet:[], eyes:[], hat:[], wings:[], tail:[], hands:[], clothing:[], aura:[], environment:[], extra:[]
+  /** ---------- Core state ---------- */
+  const state = {
+    groups: [
+      {
+        id: "forest-ember-fox",
+        name: "Forest Ember-Fox",
+        emojis: "🦊🍂🌲",
+        imagery:
+`A small fox-shaped creature woven from curled copper leaves and pine needles; fur is layered foliage with ember-glow veins like lit coals at dusk; eyes are glossy seed-pods; tail is a rustling plume of maple blades; body plan is strictly fox-quadruped, low to the ground, leaf-pads for paws; faint ash dust trails when it trots.`,
+        variants: {
+          idle: "Calm, curled on a moss patch beneath conifers at golden hour; gentle leaf-rustle; soft particulate embers floating; shallow depth of field.",
+          action: "Bounding between tree roots through a dim cedar forest, scattering sparks of leaf-embers; motion streaks from the tail; airborne needles around it.",
+          macro: "Extreme close-up on the leaf-fur surface: serrated edges, vein lattices glowing, dew droplets refracting tiny pine silhouettes."
+        }
+      },
+      {
+        id: "ocean-post-dolphin",
+        name: "Ocean Post-Dolphin",
+        emojis: "🐬🌊📫",
+        imagery:
+`A streamlined dolphin form sculpted from sea-glass and wave foam; dorsal fin carries a lacquered mailbox-shell fused organically into the spine; flanks show translucent aqua with trapped bubbles; eyes are smooth obsidian pebbles; body plan is pure dolphin—no limbs beyond fins; foam trails arc along the body.`,
+        variants: {
+          idle: "Hovering just below the surface, mailbox-shell slightly ajar with drifting parchment; caustic light ripples across sea-glass skin.",
+          action: "Leaping through a spray tunnel, depositing a ribboned message into a coral slot; droplets suspended mid-air like pearls.",
+          macro: "Close crop on the sea-glass texture with micro-bubbles and edge frosting; tiny salt crystals glitter on the mailbox hinge."
+        }
+      },
+      {
+        id: "desert-compass-gecko",
+        name: "Desert Compass-Gecko",
+        emojis: "🦎🏜️🧭",
+        imagery:
+`A squat gecko built from sun-baked ceramic tiles; on its back, an inlaid brass compass rose is part of the scales; eyes are polished agate discs; belly is cracked clay; movement leaves faint compass-point imprints; strictly reptile stance on splayed toes, tail curled like a sundial gnomon.`,
+        variants: {
+          idle: "Resting on warm sandstone, heat shimmer above; a thin dust film on the brass inlay catches light.",
+          action: "Skittering up a dune face, compass rose rotating minutely as grains cascade; wind-carved ripples blur behind.",
+          macro: "Macro of the brass inlay meeting ceramic scales; oxidization greens in crevices; micro-cracks in clay belly."
+        }
+      },
+      {
+        id: "mountain-anvil-goat",
+        name: "Mountain Anvil-Goat",
+        emojis: "🐐⛰️⚒️",
+        imagery:
+`A sure-footed goat composed of basalt plates; horns are forged iron with hammer marks; a compact anvil forms the chest; hooves are spark-flecked steel; eyes are tiny furnace ports glowing low; anatomy is goat-accurate, quadrupedal and heavy, with soot at joints.`,
+        variants: {
+          idle: "Poised on a granite ledge in cold blue daylight; breath plumes; iron horns catch a rim light.",
+          action: "Climbing a near-vertical scree with metallic clinks; a brief hoof strike sends a star of sparks.",
+          macro: "Basalt plate interface with rivulet of rust from an iron rivet; crystalline inclusions glitter."
+        }
+      },
+      {
+        id: "city-recycler-raccoon",
+        name: "City Recycler-Raccoon",
+        emojis: "🦝🏙️♻️",
+        imagery:
+`A raccoon silhouette assembled from stacked cardboard, clear PET shards, and crushed aluminum; tail rings alternate corrugation and can; eyes are bottle-glass circles; a recycling glyph is cut through the flank layers; stance is crouched raccoon—low, nimble, street-level.`,
+        variants: {
+          idle: "Under a sodium streetlamp beside neatly bundled paper; soft reflections on PET shards; distant skyline bokeh.",
+          action: "Darting along an alley, collecting stray caps and tabs into a torso compartment; motion blur of tail rings.",
+          macro: "Close on corrugation waves and can seam textures; tiny scuffs and print fragments visible."
+        }
+      },
+      {
+        id: "polar-wrench-penguin",
+        name: "Polar Wrench-Penguin",
+        emojis: "🐧❄️🔧",
+        imagery:
+`A penguin body carved from packed snow and matte onyx; a slender wrench is naturally integrated along the flank like a lateral bone; beak is dark volcanic glass; flippers edged with frost; gait is classic penguin waddle with compressed snow squeaks.`,
+        variants: {
+          idle: "Standing on blue ice beside a snow-buried tool cache; overcast diffuse light; faint spindrift.",
+          action: "Sliding belly-first over ice, wrench-bone glinting; powder spray arches behind.",
+          macro: "Macro of snow crystal lattices merging into smooth onyx surface; tiny rime along edges."
+        }
+      }
+    ],
+    idx: 0,
+    variant: "idle",
+    negOn: true
   };
-  for(const p of placed){
-    const info = infoForEmoji(p.emoji);
-    (buckets[info.role] || buckets.extra).push(info.desc);
+
+  /** ---------- Constraints appended to keep it non-humanoid ---------- */
+  const NON_HUMANOID =
+    "Depict strictly as the described animal/object body plan. No humanoid anatomy, no upright biped stance, no clothing, no hands/fingers/thumbs, no human facial features, no logos or text.";
+
+  /** ---------- Pure compute ---------- */
+  function composePrompt(group, variantKey, negOn) {
+    const variant = group.variants[variantKey] ?? group.variants.idle;
+    const base =
+`Character: ${group.name}
+Emojis (UI only): ${group.emojis}
+
+Imagery:
+${group.imagery}
+
+Scene note:
+${variant}
+
+Rendering notes: natural materials, coherent physical lighting, clean silhouette, high readability.`;
+    return negOn ? `${base}\n\nConstraints: ${NON_HUMANOID}` : base;
   }
 
-  const lines = [];
-  if(buckets.head.length)   lines.push(`Head: ${Array.from(new Set(buckets.head)).join(", ")}.`);
-  if(buckets.torso.length)  lines.push(`Torso: ${Array.from(new Set(buckets.torso)).join(", ")}.`);
-  if(buckets.arms.length)   lines.push(`Arms: ${Array.from(new Set(buckets.arms)).join(", ")}.`);
-  if(buckets.legs.length)   lines.push(`Legs: ${Array.from(new Set(buckets.legs)).join(", ")}.`);
-  if(buckets.feet.length)   lines.push(`Feet: ${Array.from(new Set(buckets.feet)).join(", ")}.`);
-  if(buckets.eyes.length)   lines.push(`Eyes/face details: ${Array.from(new Set(buckets.eyes)).join(", ")}.`);
-  if(buckets.hat.length)    lines.push(`Headwear: ${Array.from(new Set(buckets.hat)).join(", ")}.`);
-  if(buckets.wings.length)  lines.push(`Back attachments: ${Array.from(new Set(buckets.wings)).join(", ")}.`);
-  if(buckets.tail.length)   lines.push(`Tail: ${Array.from(new Set(buckets.tail)).join(", ")}.`);
-  if(buckets.clothing.length) lines.push(`Clothing: ${Array.from(new Set(buckets.clothing)).join(", ")}.`);
-  if(buckets.hands.length)  lines.push(`Items in hands: ${Array.from(new Set(buckets.hands)).join(", ")}.`);
-  if(buckets.aura.length)   lines.push(`Auras, effects, and energies: ${Array.from(new Set(buckets.aura)).join(", ")}.`);
-  if(buckets.environment.length) lines.push(`Environment elements: ${Array.from(new Set(buckets.environment)).join(", ")}.`);
+  /** ---------- Render ---------- */
+  const $grid   = document.getElementById("grid");
+  const $prompt = document.getElementById("prompt");
+  const $variant= document.getElementById("variant");
+  const $negOn  = document.getElementById("negOn");
+  const $copy   = document.getElementById("copy");
+  const $shuffle= document.getElementById("shuffle");
 
-  // Guarantee that every placed token is explicitly used
-  if(!lines.length) lines.push("Use all listed components as literal body parts or held items.");
-
-  return lines.join(" ");
-}
-
-function assertNoEmoji(text){
-  const prop=/[\p{Extended_Pictographic}\uFE0F]/u;
-  const range=/[\u2190-\u2BFF\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u;
-  if(prop.test(text)||range.test(text)) throw new Error("Prompt contains emoji glyphs.");
-}
-
-/* Build the final prompt (style fixed; story varies; every emoji gets a role assignment) */
-function buildPrompt(){
-  const story = storyPreset(activeKind);
-  const construction = buildCharacterConstruction();
-
-  const textParts = [
-    `${FIXED_STYLE}`,
-    `Story point: ${story.story}. Action: ${story.action}. Setting: ${story.environment}. Dominant emotion: ${story.emotion}.`,
-    `Character construction (use exactly as specified; all listed elements must appear): ${construction}`,
-    `Keep proportions coherent and physically plausible. Render as a single frame with consistent materials and lighting. No typographic glyphs; interpret all items as real-world objects or anatomical parts, not icons.`
-  ];
-  const text = textParts.join(" ");
-  assertNoEmoji(text);
-  return text;
-}
-
-/* ===== Generator ===== */
-async function callPollinations(prompt){
-  assertNoEmoji(prompt);
-  const url="https://image.pollinations.ai/prompt/"+encodeURIComponent(prompt)+"?width=768&height=768";
-  const res=await fetch(url,{mode:"cors"}); if(!res.ok) throw new Error('Pollinations error');
-  const blob=await res.blob(); return URL.createObjectURL(blob);
-}
-async function generateNow(){
-  const serial=++genSerial; latestSerial=serial;
-  const prompt=buildPrompt();
-  try{
-    const imgURL=await callPollinations(prompt);
-    if(serial!==latestSerial) return;
-    if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} }
-    currentObjectURL=imgURL;
-    imageEl.src=imgURL;
-    imageEl.onload=()=>{
-      if(serial!==latestSerial) return;
-      stopWaiting();
-      arrangeOnRim();
-      requestAnimationFrame(()=> imageEl.classList.add('revealed'));
-    };
-  }catch(e){
-    console.warn(e);
-    stopWaiting();
+  function renderGrid() {
+    // Minimal reflow; surgical diff for cards
+    const frag = document.createDocumentFragment();
+    state.groups.forEach((g, i) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "card";
+      card.dataset.i = String(i);
+      card.innerHTML = `
+        <div class="emojis" aria-hidden="true">${g.emojis}</div>
+        <div class="title">${g.name}</div>
+        <div class="meta">${Object.keys(g.variants).length} variants</div>`;
+      frag.appendChild(card);
+    });
+    $grid.replaceChildren(frag);
   }
-}
 
-/* ===== Arrange on rim after reveal ===== */
-function arrangeOnRim(){
-  if(!placed.length) return;
-  const cx=50, cy=50, r=44;
-  placed.forEach(p=>{
-    const node=overlay.querySelector(`.placed[data-id="${p.id}"]`); if(!node) return;
-    node.classList.remove('waitPulse');
-    let dx=p.x-cx, dy=p.y-cy, len=Math.hypot(dx,dy); if(len<0.0001){ dx=1; dy=0; len=1; }
-    const ux=dx/len, uy=dy/len, tx=cx + ux*r, ty=cy + uy*r;
-    node.animate([
-      {left:p.x+'%', top:p.y+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1},
-      {left:tx+'%', top:ty+'%', transform:'translate(-50%,-50%) scale(.96)', opacity:1}
-    ],{duration:560, easing:'cubic-bezier(.2,.8,.2,1)'});
-    p.x=tx; p.y=ty; node.style.left=p.x+'%'; node.style.top=p.y+'%';
+  function updateOutput() {
+    const g = state.groups[state.idx];
+    const txt = composePrompt(g, state.variant, state.negOn);
+    $prompt.value = txt;
+  }
+
+  /** ---------- Event delegation ---------- */
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+
+    // Group card
+    const btn = t.closest(".card");
+    if (btn && btn.dataset.i) {
+      const i = Math.max(0, Math.min(state.groups.length - 1, Number(btn.dataset.i)));
+      state.idx = i;
+      updateOutput();
+      return;
+    }
+
+    // Copy
+    if (t === $copy) {
+      const didCopy = copyText($prompt.value);
+      if (!didCopy) {
+        $prompt.select();
+        alert("Clipboard API unavailable here. Text selected—copy manually.");
+      }
+      return;
+    }
+
+    // Shuffle
+    if (t === $shuffle) {
+      state.idx = Math.floor(Math.random() * state.groups.length);
+      updateOutput();
+      return;
+    }
+  }, { passive: true });
+
+  // Centralized change handlers
+  document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t === $variant) {
+      state.variant = $variant.value;
+      updateOutput();
+    }
+    if (t === $negOn) {
+      state.negOn = $negOn.checked;
+      updateOutput();
+    }
   });
-}
 
-/* ===== Init & Reset ===== */
-window.addEventListener('load',()=>{ buildKindRail(); resetApp(true); });
-function resetApp(){
-  if(currentObjectURL){ try{ URL.revokeObjectURL(currentObjectURL); }catch{} currentObjectURL=null; }
-  imageEl.classList.remove('revealed'); imageEl.removeAttribute('src');
-  placed=[]; overlay.innerHTML='';
-  document.body.classList.remove('waiting','suspense','freeze');
-  cauldron.classList.remove('req-blip');
-  cauldron.setAttribute('aria-busy','false');
-  if(requestTimer){ clearTimeout(requestTimer); requestTimer=null; }
-  clearInterval(sparkTimer);
-  initSeeds(); renderSeeds(); renderPlaced(false);
-}
-document.getElementById('cancel').addEventListener('click', ()=>resetApp());
+  /** ---------- Clipboard (user gesture required) ---------- */
+  function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch(_) {}
+    return false;
+  }
 
-/* ===== Helpers ===== */
-function spotInsideBowl(){
-  const r=cauldron.getBoundingClientRect(); let tries=0;
-  while(tries++<300){ const px=8+Math.random()*84, py=8+Math.random()*84;
-    const cx=r.left+px/100*r.width, cy=r.top+py/100*r.height;
-    if(Math.hypot(cx-(r.left+r.width/2),cy-(r.top+r.height/2))<r.width/2-40) return {x:px,y:py};
-  } return {x:50,y:50};
-}
-</script>
-
-<script>
-/* ======= Custom <emoji-picker> ======= */
-customElements.define('emoji-picker', class extends HTMLElement {
-  #s=this.attachShadow({mode:'closed'}); #data; #cat='all';
-  constructor(){ super();
-    this.#s.innerHTML=`<style>
-      :host{all:initial}
-      .p{position:fixed; inset:auto 0 0 0; margin:auto; width:min(860px,96vw); height:min(72vh,760px);
-        background:linear-gradient(180deg, #ffffffcc, #f6fbffcc); border:1px solid #ffffffa0; border-radius:18px;
-        box-shadow:0 16px 48px rgba(0,0,0,.2), 0 1px 0 rgba(255,255,255,.6) inset; backdrop-filter: blur(12px) saturate(1.05);
-        display:grid; grid-template-rows:auto 1fr; opacity:0; transform:translateY(24px) scale(.98); pointer-events:none;
-        transition:opacity 180ms cubic-bezier(.2,.7,.2,1), transform 260ms cubic-bezier(.2,.8,.2,1); z-index:99999}
-      .show{opacity:1; transform:translateY(0) scale(1); pointer-events:auto}
-      .bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px;
-        background:linear-gradient(180deg,#ffffffee,#f7fbffee); border-bottom:1px solid #ffffffaa; border-top-left-radius:18px; border-top-right-radius:18px;}
-      .tabs{display:flex; gap:8px; overflow:auto; padding:0 4px}
-      .t,.close{width:42px; height:42px; border-radius:999px; border:1px solid #ffffffc4;
-        background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f0f6ff 70%); box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 #ffffff; cursor:pointer; display:grid; place-items:center;}
-      .scroller{position:relative; overflow:auto; padding:12px; border-bottom-left-radius:18px; border-bottom-right-radius:18px;}
-      .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(48px,1fr)); gap:10px; align-content:start}
-      .cell{display:grid; place-items:center; height:54px; border-radius:12px; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f3f7ff 70%); border:1px solid #ffffffc8; box-shadow:0 1px 0 #ffffff inset;}
-      .emo{font-size:34px; line-height:1}
-    </style>
-    <div class="p">
-      <div class="bar"><div class="tabs"></div><button class="close" title="Close">✖️</button></div>
-      <div class="scroller"><div class="grid"></div></div>
-    </div>`;
-  }
-  connectedCallback(){
-    this.r={root:this.#s.querySelector('.p'),tabs:this.#s.querySelector('.tabs'),grid:this.#s.querySelector('.grid'),scroll:this.#s.querySelector('.scroller'),close:this.#s.querySelector('.close')};
-    this.#data=this.#catalog(); this.#tabs(); this.#set('all');
-    this.r.close.addEventListener('click',()=>this.close());
-  }
-  open(){ this.r.root.classList.add('show'); }
-  close(){ this.r.root.classList.remove('show'); }
-  #tabs(){ this.r.tabs.innerHTML=''; for(const [id,cat] of Object.entries(this.#data)){ const b=document.createElement('button'); b.className='t'; b.dataset.id=id; b.innerHTML=`<span style="font-size:20px">${cat.icon}</span>`; b.onclick=()=>this.#set(id); this.r.tabs.appendChild(b);} }
-  #set(id){ this.#cat=id; this.r.grid.innerHTML=''; for(const ch of this.#data[id].items){ const btn=document.createElement('button'); btn.className='cell'; btn.innerHTML=\`<span class="emo">\${ch}</span>\`; btn.onclick=()=>{ this.dispatchEvent(new CustomEvent('emoji-pick',{detail:{emoji:ch},bubbles:true,composed:true})); this.close(); }; this.r.grid.appendChild(btn);} }
-  #catalog(){
-    const SKA=0x1F3FB, SKB=0x1F3FF;
-    const blocks=[[0x1F600,0x1F64F],[0x1F300,0x1F5FF],[0x1F680,0x1F6FF],[0x1F900,0x1F9FF],[0x1FA70,0x1FAFF],[0x2600,0x26FF],[0x2700,0x27BF]];
-    const pict=[]; for(const [a,b] of blocks){ for(let cp=a; cp<=b; cp++){ if(cp>=SKA&&cp<=SKB) continue; const ch=String.fromCodePoint(cp); if(!(/\s/.test(ch))) pict.push(ch);} }
-    // Give quick access tabs
-    return {
-      all:{icon:"🧭",items:pict},
-      animals:{icon:"🐾",items:pict.filter(c=>/[\u{1F400}-\u{1F43E}\u{1F980}-\u{1F9AE}]/u.test(c))},
-      things:{icon:"🎒",items:pict.filter(c=>/[\u{1F300}-\u{1F6FF}\u{1FA70}-\u{1FAFF}]/u.test(c))}
-    };
-  }
-});
+  // Initial render
+  renderGrid();
+})();
 </script>
 </body>
 </html>
