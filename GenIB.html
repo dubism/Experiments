@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Italian Brainrot — character-group prompt builder (realistic animated characters)</title>
+<title>Italian Brainrot — character groups (3-emoji iso-triangle) — realistic animated</title>
 <style>
   :root{
     --t1:#7fd1ff40; --t2:#ff86d640; --t3:#7dffcc40; --t4:#b59bff40;
@@ -11,6 +11,7 @@
     --shadow-strong:0 14px 40px #00000026,0 4px 16px #0000001f;
     --ease:cubic-bezier(.2,.8,.2,1);
     --shake-ampl:0; --blur:0px;
+    --chip-size:clamp(56px, 12vmin, 88px);   /* fix: force perfect circle, avoid ellipse */
   }
   @property --shake-ampl{syntax:'<number>';initial-value:0;inherits:false}
   @property --blur{syntax:'<length>';initial-value:0px;inherits:false}
@@ -74,7 +75,6 @@
     content:""; position:absolute; inset:5%; border-radius:50%;
     box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset;
     animation:reqPulse 320ms cubic-bezier(.2,.8,.2,1) both;
-    pointer-events:none;
   }
   @keyframes reqPulse {
     0%{ box-shadow:0 0 0 0 #00c8ff66, 0 0 30px #00c8ff44 inset; }
@@ -138,20 +138,17 @@
     50%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px) - 6px))}
     100%{transform:translate(calc(-50% + var(--fx,0px)), calc(-50% + var(--fy,0px)))}
   }
-  .seed .e{font-size:22px; line-height:1.05; display:inline-block}
 
   .placed{
-    position:absolute; width:12vmin; max-width:88px; aspect-ratio:1; border-radius:50%;
+    position:absolute; width:var(--chip-size); height:var(--chip-size); border-radius:50%;
     display:grid; place-items:center; cursor:grab; pointer-events:auto;
     background:radial-gradient(120% 120% at 30% 30%, #ffffffc0, #ffffff80 60%, #ffffff50 100%);
     box-shadow:var(--shadow), inset 0 1px 0 #ffffffb8;
     transform:translate(-50%,-50%) scale(1);
     transition:transform .25s var(--ease), opacity .25s var(--ease), box-shadow .2s var(--ease);
     touch-action:none;
-    padding:2px 6px; text-align:center;
   }
   .placed:active{ transform:translate(-50%,-50%) scale(.95); box-shadow:0 0 0 2px #00c8ff33, var(--shadow) }
-  .placed .e{font-size:clamp(15px, 3.6vmin, 22px); line-height:1.05; display:inline-block}
   .placed.dropin{ animation:drop .38s var(--ease) }
   @keyframes drop{0%{transform:translate(-50%,-50%) scale(.72)}70%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
 
@@ -161,6 +158,17 @@
     50% { transform:translate(calc(-50% + var(--ix,0px)), calc(-50% + var(--iy,0px))) scale(.94); opacity:.9 }
     100%{ transform:translate(calc(-50% + 0px),   calc(-50% + 0px)) scale(1);    opacity:1 }
   }
+
+  /* triangle composition (exactly three emoji) */
+  .tri{ position:relative; width:100%; height:100%; }
+  .tri .e{ position:absolute; line-height:1; }
+  .placed .tri .e{ font-size:clamp(18px, 3.6vmin, 26px); }
+  .seed   .tri .e{ font-size:20px; }
+  .chip   .tri .e{ font-size:22px; }
+  /* equilateral-ish points */
+  .tri .a{ left:50%; top:22%; transform:translate(-50%,-50%); }
+  .tri .b{ left:28%; top:72%; transform:translate(-50%,-50%); }
+  .tri .c{ left:72%; top:72%; transform:translate(-50%,-50%); }
 
   /* ---------- Buttons ---------- */
   .footer{
@@ -239,8 +247,9 @@
     display:grid; grid-template-rows:auto auto; gap:6px;
     border-radius:14px; border:1px solid #ffffffc8; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #f3f7ff 70%); box-shadow:0 1px 0 #ffffff inset; padding:10px; cursor:pointer;
   }
-  character-picker::part(emojis){font-size:22px; line-height:1.15}
-  character-picker::part(name){font-size:13px; opacity:.8}
+  character-picker::part(emojis){display:grid; place-items:center}
+  character-picker::part(bubble){width:56px; height:56px; border-radius:50%; background:radial-gradient(120% 120% at 30% 30%, #ffffff, #eef5ff 70%); box-shadow:var(--shadow), inset 0 1px 0 #ffffff}
+  character-picker::part(name){font-size:13px; opacity:.8; text-align:center}
 </style>
 </head>
 <body>
@@ -281,89 +290,44 @@
   <character-picker id="charPicker"></character-picker>
 
 <script>
-/* ---------- Character Groups (ALL emojis per character; prompt uses vivid imagery text only) ---------- */
-const EXTRA_RANDOM = ["🎈","🧤","🧢","🪖","👒","🧥","🧦","🧲","🧱","🔧","🪚","🔨","🧭","🧠","🦷","🦴","🪩","🧪","🧯","📎","🧃","🧽"];
-
+/* ---------- Core characters (quality over quantity). Each has EXACTLY three emoji (iso-triangle on chip) ---------- */
 const CHARACTERS = [
   {id:"trallallero", name:"Trallallero Trallalà", emojis:["🦈","👟","3️⃣"],
-    imagery:"A sleek shark whose body stands upright on three limbs like a tripod. Each limb ends in bright athletic sneakers. Gills open and close along the sides, dorsal and caudal fins remain prominent, and the stance is marine rather than humanoid—no human skin or face, only cartilage, fins, and rubber shoes."},
-  {id:"ballerina_cappuccina", name:"Ballerina Cappuccina", emojis:["🩰","☕","👗"],
-    imagery:"A ballet outfit that has come alive: a floating dress and pointe shoes perform precise footwork, while a cappuccino cup sits where a head would be. The crema forms gentle swirls; steam acts as breath. No human flesh—garments and ceramics animate themselves."},
-  {id:"cappuccino_assassino", name:"Cappuccino Assassino", emojis:["☕","🗡️","🕴️"].filter(Boolean), // 🗡️ and 🕴️ implied; shown via extras too
-    imagery:"A hard-edged cappuccino cup as a head atop a tailored suit that moves without a body. Steam forms narrow eyes in the crema. A dagger glints from an empty sleeve. Everything remains object-based—cloth, metal, ceramic—never human."},
-  {id:"espressona_signora", name:"Espressona Signora", emojis:["☕","🖤","🚬","👒"],
-    imagery:"A rich-black espresso cup as the head, perched under a wide hat. A wisp of smoke traces the air from a cigarette holder. The silhouette is couture garments with no person inside—china, fabric, smoke, and lacquered accessories only."},
+   imagery:"A sleek shark standing tripod-style; fins, gills, and cartilage dominate; bright athletic shoes on the three limbs; no human anatomy."},
+  {id:"ballerina_cappuccina", name:"Ballerina Cappuccina", emojis:["☕","🩰","👗"],
+   imagery:"A ballet outfit that moves itself: pointe shoes and dress dance while a cappuccino cup is the head; steam as breath; only garments, ceramic, and vapor."},
+  {id:"cappuccino_assassino", name:"Cappuccino Assassino", emojis:["☕","🗡️","🕴️"],
+   imagery:"A cappuccino cup for a head above a suit that moves without a body; a dagger slides from an empty sleeve; ceramic, cloth, and steel—never skin."},
+  {id:"espressona_signora", name:"Espressona Signora", emojis:["☕","🖤","🚬"],
+   imagery:"Black espresso cup head under a wide hat; a cigarette’s smoke draws the expression; couture attire animates itself—no person within."},
   {id:"bombardiro", name:"Bombardiro Croccodilo", emojis:["🐊","✈️","💣"],
-    imagery:"A crocodile fused with a bomber aircraft: scaly fuselage, hinged jaw as the bomb-bay door, stub wings sprouting from armored shoulders. Bombs nestle along the dorsal ridge. Movement is reptilian with aviation hardware—no pilot, no cockpit glow."},
+   imagery:"Crocodile fused with a bomber aircraft: scaly fuselage, jaw as bomb bay, stub wings on armored shoulders; no cockpit, no pilot."},
   {id:"bombombini", name:"Bombombini Gusini", emojis:["🪿","🚢","💣"],
-    imagery:"A goose-headed carrier ship-creature. A ship hull forms the torso, the prow is a beak, webbed textures ripple along the deck. Depth charges hang like eggs beneath the belly. Waterline scuffs and steel plates, never skin."},
-  {id:"lirili", name:"Lirilì Larilà", emojis:["🌵","🐘","🩴","⏳"],
-    imagery:"A cactus-elephant hybrid: succulent-green hide dotted with spines, an elephant head and trunk, and simple flip-flops on sturdy feet. An hourglass hovers within the ribs like a time organ. Plant and pachyderm—no human anatomy."},
+   imagery:"Goose-headed carrier-creature: ship hull torso, prow as beak, depth charges like eggs; metal plates, wake foam."},
+  {id:"lirili", name:"Lirilì Larilà", emojis:["🌵","🐘","🩴"],
+   imagery:"Cactus-elephant hybrid: succulent hide with spines, elephant head and trunk, flip-flops on sturdy feet; plant and pachyderm only."},
   {id:"brrbrr", name:"Brr Brr Patapim", emojis:["🐒","🌳","🥁"],
-    imagery:"A forest monkey with legs that taper into gnarled tree roots. The trunklike limbs grip soil while a strapped drum at the waist thumps in rhythm. Bark, fur, and raw wood fibers define the look."},
-  {id:"trippi", name:"Trippi Troppi", emojis:["🐟","💪","👑","🌊"],
-    imagery:"A grand ocean fish crowned as a sea-king. Muscular fin-arms bulge near the gills, scales flash oil-slick colors, and foam curls around the body. All anatomy is piscine, strengthened and regal."},
+   imagery:"Forest monkey with tree-root legs; bark textures and fur; a waist-strapped drum beats the rhythm."},
+  {id:"trippi", name:"Trippi Troppi", emojis:["🐟","👑","💪"],
+   imagery:"Regal sea fish crowned; powerful fin-arms near the gills; scales glint oil-slick hues; entirely piscine."},
   {id:"frigo_cammello", name:"Frigo Cammello Buffo Fardello", emojis:["🐫","🧊","👞"],
-    imagery:"A camel whose torso is a glossy refrigerator. Hinged doors open to a frosty interior; condensation pearls on enamel. Sturdy work shoes stamp the dust. Beast of burden fused with kitchen cold."},
-  {id:"giraffa_celeste", name:"Giraffa Celeste", emojis:["🦒","🍉","👢","🪐"],
-    imagery:"A long-necked giraffe with a watermelon for a body, rind-striped and seed-speckled. Boots grip lunar dust while a bubble-visor glints with starlight. Planetary rings faintly orbit the midsection."},
+   imagery:"Camel whose torso is a glossy refrigerator; frosty interior breath; sturdy work shoes stamp dust."},
+  {id:"giraffa_celeste", name:"Giraffa Celeste", emojis:["🦒","🍉","👢"],
+   imagery:"Long-necked giraffe with a watermelon torso; seeds as freckles; boots grip lunar dust beneath a visor sheen."},
   {id:"vacca_saturno", name:"La Vacca Saturno Saturnita", emojis:["🐄","🪐","⚡️"],
-    imagery:"A cow set into a small planet with a shimmering ring. Hooves leave plasma sparks; a storm band crackles like a neon belt. Entirely bovine and planetary—no humanoid features."},
-  {id:"chimp_bananini", name:"Schimpanzini/Chimpanzini Bananini", emojis:["🦍","🍌"],
-    imagery:"A mighty ape head perched on a banana-shaped torso. Peel edges flex like armor plates. Movements are simian but the body is pure fruit and muscle."},
-  {id:"trulimero", name:"Trulimero Trulicina", emojis:["🐟","🐱"],
-    imagery:"A fish-cat chimera: feline skull and whiskers blend into a streamlined fish body with four agile, catlike legs for land. Scales and fur meet along patterned seams."},
-  {id:"pussini_sushini", name:"Pussini Sushini", emojis:["🐱","🍣"],
-    imagery:"A cat assembled from sushi: rice torso banded by seaweed, salmon back that flexes, and a curious feline head. The texture stays culinary—rice grains, nori, and fish sheen."},
-  {id:"tigrullini", name:"Tigrullini Watermelini", emojis:["🐅","🍉"],
-    imagery:"A tiger with a watermelon barrel for a body; stripes echo seed rows. Paws and head remain feline, midsection ripe and heavy."},
+   imagery:"Cow set into a ringed planet; hooves leave ionized sparks; storm bands hum—bovine and planetary."},
+  {id:"chimp_bananini", name:"Chimpanzini Bananini", emojis:["🦍","🍌","✨"],
+   imagery:"Ape head on a banana-shaped torso; peel edges as armor; indestructible, glowing confidence."},
+  {id:"pussini_sushini", name:"Pussini Sushini", emojis:["🐱","🍣","🥢"],
+   imagery:"Cat assembled from sushi: rice body banded by seaweed, salmon back, curious feline head; chopsticks orbit as tools."},
   {id:"bandito_bobritto", name:"Bandito Bobritto", emojis:["🦫","🕶️","🤠"],
-    imagery:"A beaver outlaw with oversized sunglasses as glossy eye surfaces and a tilted cowboy hat. Fur, teeth, and damp tail—no face beneath the shades, just reflective lenses."},
-  {id:"burbaloni", name:"Burbaloni Luliloli", emojis:["🐹","🥥","🏝️"],
-    imagery:"A capybara-like rodent lounging inside a split coconut shell that works as a mobile tub. Island sand clings to the husk; tide marks ring the rim."},
-  {id:"udin", name:"Udin din din dun", emojis:["💪","🍊","😐"],
-    imagery:"A stack of flexing muscle masses shaped like gym equipment, topped by a smooth orange with a neutral glyph-like face. Rubberized sheen, citrus pores—no human skin."},
-  {id:"tob_tobi", name:"Tob Tobi Tob Tob Tobi Tob", emojis:["🚽","🪐"],
-    imagery:"A porcelain throne orbiting miniature planets. The tank hums like a reactor, and the bowl reflects constellations. It waddles on ceramic feet, dignified and absurd."},
+   imagery:"Beaver bandit: reflective sunglasses as eye surfaces and a tilted cowboy hat; damp tail, big incisors."},
   {id:"tung_sahur", name:"Tung Tung Tung Sahur", emojis:["🪵","🪘","🌙"],
-    imagery:"A night watch being made of joined wooden planks; chest is a hand drum that booms at dawn. It carries the rhythm under a crescent moon—entirely timber and leather."},
-
-  /* --- Extended community set --- */
-  {id:"fishano_shoebano", name:"Fishano Shoebano", emojis:["🐟","👟"],
-    imagery:"A streamlined fish balanced on a pair of sporty shoes; fins flick as the sneakers squeak."},
-  {id:"fish_chips_bombardito", name:"Fish & Chips Bombardito", emojis:["🐟","🍟","💣"],
-    imagery:"A fish-body carrier with a crisp-fry texture and a bomb bay tucked beneath the batter."},
-  {id:"ferrito_pearrito", name:"Ferrito Pearrito", emojis:["🐹","🍐"],
-    imagery:"A ferret-like rodent whose torso is a ripe pear; the stem acts as a jaunty tail."},
-  {id:"fragola_la", name:"Fragola La La La", emojis:["🍓","🎶"],
-    imagery:"A singing strawberry with seeds that glow as notes spill from the calyx."},
-  {id:"fridzh_shark", name:"Fridzh Shark", emojis:["🧊","🦈"],
-    imagery:"A freezer-chested shark that exhales mist; ice crystals stud the gills."},
-  {id:"falcosqualus", name:"FalcoSqualus Tyranna Velociraptor", emojis:["🦅","🦈","🦖"],
-    imagery:"A sky predator melding falcon wings, shark head, and raptor tail. Feathers, cartilage, and scaled sinew glide in one body."},
-  {id:"fruttodrillo", name:"Glorbo Fruttodrillo", emojis:["🍇","🐊"],
-    imagery:"A crocodile with a torso formed by clustered grapes; each globe flexes like plated armor."},
-  {id:"camelrino_tazzino", name:"Camelrino Tazzino", emojis:["🐫","☕"],
-    imagery:"A coffee-camel hybrid: hump shaped like a steaming cup dome; aroma trails behind."},
-  {id:"ambatron", name:"Ambatron", emojis:["🤖","⚡️"],
-    imagery:"A compact mech-shell that crackles with contained lightning, plates sliding like shutters."},
-  {id:"frulli_frulla", name:"Frulli Frulla", emojis:["🌀","🥤"],
-    imagery:"A lively blender spirit whose torso is a clear cup with swirling contents, straw twitching as an antenna."},
-  {id:"tralaluli_patraluli", name:"Tralaluli Patraluli", emojis:["🔁","🎶"],
-    imagery:"A looping chant spirit that manifests as rhythmic bands of sound wrapped around a small totem."},
-  {id:"bombinarium", name:"Bombinarium / Nerpinarium", emojis:["🧪","✨"],
-    imagery:"A glass-tank creature that incubates sparkling charges—laboratory apparatus walking on jointed stands."},
-  {id:"tierlist_pack", name:"Tierlist Lore Pack", emojis:["🧩","📜"],
-    imagery:"A background swarm of floating puzzle tiles and aged scrolls, visualizing community lore without text."}
+   imagery:"Night watch being of joined wooden planks; chest is a hand drum that booms at dawn beneath a crescent moon."}
 ];
 
 /* ---- Story-point chips: relationship/family, actions, environments, emotions (style never changes) ---- */
-const KIND_EMOJIS = [
-  "💞","👪","💔","⚔️","🤝","🍼",
-  "🏃‍♂️","🛡️",
-  "🏠","🏙️","🌲","🌊",
-  "😊","🤬","😱","😔"
-];
+const KIND_EMOJIS = ["💞","👪","💔","⚔️","🤝","🍼","🏃‍♂️","🛡️","🏠","🏙️","🌲","🌊","😊","🤬","😱","😔"];
 
 let activeKind=null;
 
@@ -378,7 +342,7 @@ const charPicker=document.getElementById('charPicker');
 
 /* ---------- State ---------- */
 let seeds=[];       // floating character groups
-let placed=[];      // [{id, charId, x, y, showEmojis:string}]
+let placed=[];      // [{id, charId, x, y}]
 let dragging=null; let snapTimer=null; let lastActiveKind=null;
 let sparkTimer=null;
 let requestTimer=null;
@@ -472,10 +436,13 @@ function spawnSparks(){
 
 /* ===== Seeds (floating character groups) ===== */
 function rect(el){ const r=el.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}; }
-function seedLabel(emojis){
-  // include all character emojis + a few random extras for visual noise
-  const extras = EXTRA_RANDOM.sort(()=>Math.random()-0.5).slice(0,2);
-  return [...emojis, ...extras].join("");
+function triHTML(arr){
+  const [a,b,c] = arr;
+  return `<div class="tri" aria-hidden="true">
+    <span class="e a">${a}</span>
+    <span class="e b">${b}</span>
+    <span class="e c">${c}</span>
+  </div>`;
 }
 function initSeeds(){
   const vw=window.innerWidth, vh=window.innerHeight;
@@ -495,13 +462,12 @@ function initSeeds(){
   function farEnough(x,y){ for(const p of seeds){ if(Math.hypot(x-p.x, y-p.y) < MIN_D) return false; } return true; }
 
   seeds = []; let i = 0, attempts = 0, maxAttempts = 9000;
-  const source = CHARACTERS; // one seed per character group
-  while (i < source.length && attempts++ < maxAttempts){
+  while (i < CHARACTERS.length && attempts++ < maxAttempts){
     const x = PAD + Math.random()*(vw - PAD*2);
     const y = PAD + Math.random()*(vh - PAD*2);
     if (hitsAvoid(x,y)) continue; if (!farEnough(x,y)) continue;
-    const ch = source[i++];
-    seeds.push({ id:crypto.randomUUID(), charId:ch.id, emojis:ch.emojis.slice(), label:seedLabel(ch.emojis), x, y });
+    const ch = CHARACTERS[i++];
+    seeds.push({ id:crypto.randomUUID(), charId:ch.id, x, y });
   }
 }
 let resizeT;
@@ -512,13 +478,15 @@ window.addEventListener('resize', () => {
 function renderSeeds(){
   seedsEl.innerHTML='';
   for(const s of seeds){
+    const ch = getCharById(s.charId);
     const n=document.createElement('button'); n.className='seed';
     n.style.left=s.x+'px'; n.style.top=s.y+'px';
     n.style.setProperty('--delay', `${(-Math.random()*6).toFixed(2)}s`);
     n.style.setProperty('--dur', `${(7+Math.random()*4).toFixed(2)}s`);
     n.style.setProperty('--fx', `${(Math.random()*14-7).toFixed(1)}px`);
     n.style.setProperty('--fy', `${(Math.random()*8-4).toFixed(1)}px`);
-    n.dataset.id=s.id; n.innerHTML=`<span class="e" aria-label="${getCharById(s.charId).name}">${s.label}</span>`;
+    n.dataset.id=s.id; n.innerHTML=triHTML(ch.emojis);
+    n.title=ch.name;
     n.addEventListener('pointerdown', e=>startDragSeed(e,s.id));
     seedsEl.appendChild(n);
   }
@@ -529,7 +497,7 @@ document.getElementById('openPicker').addEventListener('click',()=>charPicker.op
 charPicker.addEventListener('character-pick', e=>{
   const ch = getCharById(e.detail.charId); if(!ch) return;
   const pos=spotInsideBowl();
-  placed.push({id:crypto.randomUUID(), charId:ch.id, x:pos.x, y:pos.y, label:seedLabel(ch.emojis)});
+  placed.push({id:crypto.randomUUID(), charId:ch.id, x:pos.x, y:pos.y});
   renderPlaced(true);
   scheduleRelevantChange();
 });
@@ -540,8 +508,9 @@ function startDragSeed(ev,id){
   const idx=seeds.findIndex(s=>s.id===id); if(idx<0) return;
   const node=[...seedsEl.children].find(n=>n.dataset.id===id);
   if(node) node.style.visibility='hidden';
-  const ghost=makeGhost(seeds[idx].label);
-  dragging={type:'seed', idx, charId:seeds[idx].charId, label:seeds[idx].label, ghostEl:ghost, originalEl:node};
+  const ch=getCharById(seeds[idx].charId);
+  const ghost=makeGhost(ch.emojis);
+  dragging={type:'seed', idx, charId:ch.id, ghostEl:ghost, originalEl:node};
   pointerMove(ev);
   addEventListener('pointermove', pointerMove);
   addEventListener('pointerup', pointerUp, {once:true});
@@ -551,16 +520,17 @@ function startDragPlaced(ev,id){
   const idx=placed.findIndex(p=>p.id===id); if(idx<0) return;
   const node=overlay.querySelector(`.placed[data-id="${id}"]`);
   if(node) node.style.visibility='hidden';
-  const ghost=makeGhost(placed[idx].label);
-  dragging={type:'placed', idx, charId:placed[idx].charId, label:placed[idx].label, ghostEl:ghost, originalEl:node, start:{x:placed[idx].x,y:placed[idx].y}};
+  const ch=getCharById(placed[idx].charId);
+  const ghost=makeGhost(ch.emojis);
+  dragging={type:'placed', idx, charId:ch.id, ghostEl:ghost, originalEl:node, start:{x:placed[idx].x,y:placed[idx].y}};
   pointerMove(ev);
   addEventListener('pointermove', pointerMove);
   addEventListener('pointerup', pointerUp, {once:true});
 }
-function makeGhost(label){
-  const g=document.createElement('div'); g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999;
+function makeGhost(emojis){
+  const g=document.createElement('div'); g.className='chip'; g.style.position='fixed'; g.style.zIndex=9999; g.style.borderRadius='50%';
   g.style.transform='translate(-50%,-50%) scale(1.0)'; g.style.boxShadow='var(--shadow-strong), 0 0 0 2px #00c8ff30';
-  g.innerHTML=`<span class="e" style="font-size:22px;line-height:1.05">${label}</span>`;
+  g.innerHTML=triHTML(emojis);
   document.body.appendChild(g); return g;
 }
 function pointerMove(ev){
@@ -576,9 +546,9 @@ function pointerUp(ev){
 
   if(dragging.type==='seed'){
     if(inside){
-      placed.push({id:crypto.randomUUID(), charId:dragging.charId, x:px, y:py, label:dragging.label});
+      placed.push({id:crypto.randomUUID(), charId:dragging.charId, x:px, y:py});
       renderPlaced(true);
-      if(dragging.idx>=0){ seeds.splice(dragging.idx,1); renderSeeds(); }
+      if(Number.isInteger(dragging.idx)){ seeds.splice(dragging.idx,1); renderSeeds(); }
       scheduleRelevantChange();
     }else{
       if(dragging.originalEl) dragging.originalEl.style.visibility='';
@@ -589,7 +559,7 @@ function pointerUp(ev){
       scheduleRelevantChange();
     }else{
       const screenX=ev.clientX, screenY=ev.clientY;
-      seeds.push({ id:crypto.randomUUID(), charId:dragging.charId, emojis:getCharById(dragging.charId).emojis.slice(), label:dragging.label, x:screenX, y:screenY });
+      seeds.push({ id:crypto.randomUUID(), charId:dragging.charId, x:screenX, y:screenY });
       placed.splice(dragging.idx,1);
       renderPlaced(false); renderSeeds();
       scheduleRelevantChange();
@@ -610,7 +580,7 @@ function renderPlaced(playDrop=false){
   for(const p of placed){
     const ch=getCharById(p.charId);
     const n=document.createElement('div'); n.className='placed'; n.dataset.id=p.id; n.title=ch.name;
-    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=`<span class="e">${p.label}</span>`;
+    n.style.left=p.x+'%'; n.style.top=p.y+'%'; n.innerHTML=triHTML(ch.emojis);
     if(playDrop) n.classList.add('dropin');
     n.addEventListener('pointerdown', e=>startDragPlaced(e,p.id));
     overlay.appendChild(n);
@@ -664,14 +634,11 @@ function spotInsideBowl(){
 }
 
 /* ===== Prompt assembly (ALWAYS realistic animated characters; characters ≠ humans) ===== */
-
-/* Fixed style block — do not vary across story points */
 const FIXED_STYLE = "Realistic animated characters with a high-end 3D animated-film look, soft global illumination, coherent physically-based materials, cinematic depth of field, and a single consistent visual style across all scenes. No text or watermarks.";
 
-/* Story presets (style never changes) */
 function storyPreset(kind){
   switch(kind){
-    case "💞": return {story:"a tender reunion between close companions", action:"a gentle embrace-like nuzzle using their own anatomies", environment:"a neutral open plaza", emotion:"deep affection"};
+    case "💞": return {story:"a tender reunion between close companions", action:"a gentle nuzzle using their own anatomies", environment:"a neutral open plaza", emotion:"deep affection"};
     case "👪": return {story:"a protective family moment", action:"one shielding another using bodies and props", environment:"cozy home interior", emotion:"warmth and safety"};
     case "💔": return {story:"a difficult separation", action:"turning away from each other", environment:"quiet empty street", emotion:"heartbreak and regret"};
     case "⚔️": return {story:"a rivalry standoff", action:"tense face-off with poised motion", environment:"abandoned arena", emotion:"determination"};
@@ -691,7 +658,6 @@ function storyPreset(kind){
   }
 }
 
-/* Layout tagging (center / inner / rim) */
 function computeLayout(){
   return placed.map(p=>{
     const dx=p.x-50, dy=p.y-50, dist=Math.hypot(dx,dy);
@@ -702,16 +668,11 @@ function computeLayout(){
     return { id:p.id, char:getCharById(p.charId), xPct:p.x, yPct:p.y, rPct, role, hemiLR, hemiTB };
   });
 }
-
-/* Build vivid character text (no emoji, no humans) */
 function describeCharacter(ch){
-  // Ensure explicit non-human guardrails per character
   const base = ch.imagery;
-  const guard = "Never depict human skin or human facial anatomy; keep anatomy derived strictly from the listed animals, objects, and materials.";
+  const guard = "Absolutely no human facial features or human skin; anatomy and motion derive strictly from the specified animals, objects, and materials.";
   return `${base} ${guard}`;
 }
-
-/* Assemble narrative using groups only */
 function assembleSubjects(layout){
   const roleOrder = {center:0, inner:1, rim:2};
   return [...layout].sort((a,b)=>roleOrder[a.role]-roleOrder[b.role])
@@ -723,26 +684,21 @@ function assembleSubjects(layout){
       return `Environmental or chorus subject on the rim (${hemi}): ${t.char.name}. ${desc}`;
     }).join(' ');
 }
-
 function assertNoEmoji(text){
   const prop=/[\p{Extended_Pictographic}\uFE0F]/u;
   const range=/[\u2190-\u2BFF\u2600-\u27BF\u{1F300}-\u{1FAFF}]/u;
   if(prop.test(text)||range.test(text)) throw new Error("Prompt contains emoji glyphs.");
 }
-
-/* Build the final prompt (style fixed; story varies; characters described vividly) */
 function buildPrompt(){
   const story = storyPreset(activeKind);
   const layout = computeLayout();
   const subjects = assembleSubjects(layout);
-
-  const textParts = [
+  const text = [
     `${FIXED_STYLE}`,
     `Story point: ${story.story}. Action: ${story.action}. Setting: ${story.environment}. Dominant emotion: ${story.emotion}.`,
     `${subjects}`,
-    `Keep bodies and motion non-human: joints, surfaces, and silhouettes must arise from the specified animals and objects only. Coherent proportions and physically plausible materials; one frame; no text or watermarks.`
-  ];
-  const text = textParts.join(" ");
+    `Keep bodies and motion non-human; use only the animals/objects/materials in the descriptions. One frame; coherent proportions and physically plausible materials; no text or watermarks.`
+  ].join(" ");
   assertNoEmoji(text);
   return text;
 }
@@ -824,7 +780,7 @@ function initCharPicker(){
 </script>
 
 <script>
-/* ======= <character-picker> (shows groups of emojis; emits character-pick) ======= */
+/* ======= <character-picker> (3-emoji bubbles; emits character-pick) ======= */
 class CharacterPicker extends HTMLElement{
   static get observedAttributes(){ return ["open"]; }
   #s = this.attachShadow({mode:"open"});
@@ -854,11 +810,18 @@ class CharacterPicker extends HTMLElement{
     if(!this.#grid) return;
     this.#grid.innerHTML='';
     list.forEach(item=>{
-      const extras = EXTRA_RANDOM.sort(()=>Math.random()-0.5).slice(0,2);
-      const label = [...item.emojis, ...extras].join("");
+      const bubble = document.createElement('div');
+      bubble.setAttribute('part','bubble');
+      bubble.innerHTML = `<div class="tri">
+        <span class="e a">${item.emojis[0]}</span>
+        <span class="e b">${item.emojis[1]}</span>
+        <span class="e c">${item.emojis[2]}</span>
+      </div>`;
       const card = document.createElement('button');
       card.setAttribute('part','card');
-      card.innerHTML = `<div part="emojis">${label}</div><div part="name">${item.name}</div>`;
+      const wrap = document.createElement('div'); wrap.setAttribute('part','emojis'); wrap.appendChild(bubble);
+      const name = document.createElement('div'); name.setAttribute('part','name'); name.textContent = item.name;
+      card.appendChild(wrap); card.appendChild(name);
       card.addEventListener('click', ()=>{
         this.dispatchEvent(new CustomEvent('character-pick',{detail:{charId:item.id},bubbles:true,composed:true}));
         this.close();
