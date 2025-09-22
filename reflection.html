@@ -3,88 +3,88 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Concave Mirror • Camera + Device Motion (hardened)</title>
+<title>Concave Mirror • Camera+Sensors with HUD Diagnostics</title>
 <style>
-  :root{--ui-bg:#0b0c10;--ui-fg:#e6e6e6}
-  html,body{margin:0;height:100%;background:#000;color:var(--ui-fg);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  :root{--bg:#0b0c10;--fg:#e6e6e6;--accent:#8fb3ff}
+  html,body{margin:0;height:100%;background:#000;color:var(--fg);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial}
   .wrap{position:fixed;inset:0;display:grid;grid-template-rows:1fr auto}
   canvas{width:100vw;height:100dvh;display:block;touch-action:none}
   .panel{background:rgba(10,12,18,.7);backdrop-filter:blur(8px);border-top:1px solid #222;padding:8px 12px calc(env(safe-area-inset-bottom)+10px);display:grid;gap:10px}
-  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:8px;align-items:center}
-  .grid label{grid-column:span 3;white-space:nowrap}
-  .grid input[type="range"]{grid-column:span 7;width:100%}
-  .grid output{grid-column:span 2;text-align:right;font-variant-numeric:tabular-nums}
-  .row{display:contents}.section{grid-column:1/-1;margin-top:2px;color:#9fb7ff;font-weight:600}
-  .btns{display:flex;gap:8px;justify-content:space-between;align-items:center}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
   button{all:unset;background:#1f2533;color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid #2b3244}
   button:active{transform:translateY(1px)}
+  .toggle{display:flex;gap:10px;align-items:center}
   .hud{position:fixed;left:8px;top:env(safe-area-inset-top,8px);padding:6px 8px;background:rgba(0,0,0,.55);border:1px solid #222;border-radius:6px;font-size:12px;color:#ddd;pointer-events:none;user-select:none}
   .banner{position:fixed;left:0;right:0;top:0;z-index:10;display:none;padding:10px 14px;background:#5c0b0b;color:#ffe9e9;border-bottom:1px solid #7a1a1a;font-size:13px}
   .banner.show{display:block}
-  .inline{display:flex;gap:10px;align-items:center}
-  .dbg{position:fixed;right:8px;top:env(safe-area-inset-top,8px);background:rgba(0,0,0,.55);border:1px solid #222;border-radius:6px;padding:6px;display:flex;gap:6px;align-items:center}
-  .dbg video{width:96px;height:54px;object-fit:cover;background:#111;border-radius:4px}
-  .dbg .txt{font-size:12px;color:#ddd;line-height:1.2}
-  .small{color:#8fb3ff;text-decoration:none;font-size:12px;margin-left:8px}
+  .inspector{position:fixed;right:8px;top:env(safe-area-inset-top,8px);z-index:5;display:grid;gap:6px;max-width:min(48vw,520px)}
+  .card{background:rgba(0,0,0,.55);border:1px solid #222;border-radius:8px;padding:8px}
+  .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-weight:600;color:var(--accent)}
+  .k{color:#a5c6ff}
+  pre{margin:0;font:12px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;word-break:break-word}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .mini video{width:128px;height:72px;object-fit:cover;background:#111;border-radius:6px;border:1px solid #222}
+  .small{color:#8fb3ff;text-decoration:none;font-size:12px}
 </style>
 </head>
 <body>
 <div class="banner" id="banner"></div>
+
 <div class="wrap">
   <canvas id="gl"></canvas>
 
+  <div class="inspector">
+    <div class="card">
+      <div class="head">System / Context</div>
+      <pre id="ctxPre">–</pre>
+    </div>
+    <div class="card">
+      <div class="head">Camera</div>
+      <div class="row mini">
+        <video id="vdbg" playsinline muted></video>
+        <div class="row">
+          <button id="btnTestCam">Test Camera</button>
+          <button id="btnStopCam">Stop Camera</button>
+          <button id="btnSimVid">Simulate Video</button>
+        </div>
+      </div>
+      <pre id="camPre">–</pre>
+    </div>
+    <div class="card">
+      <div class="head">Sensors</div>
+      <div class="row">
+        <button id="btnTestSensors">Test Sensors</button>
+      </div>
+      <pre id="senPre">–</pre>
+    </div>
+  </div>
+
   <div class="panel">
     <div class="btns">
-      <div class="inline">
-        <strong>Concave Mirror • Live Camera Reflection</strong>
-        <label class="inline"><input id="useSensors" type="checkbox" checked>Use sensors</label>
-        <label class="inline"><input id="mirrorVideo" type="checkbox" checked>Mirror video</label>
-        <label class="inline">Mode:
+      <div class="toggle">
+        <strong>Concave Mirror • Live Reflection</strong>
+        <label class="toggle" title="Use motion sensors"><input id="useSensors" type="checkbox" checked>Use sensors</label>
+        <label class="toggle" title="Mirror incoming video"><input id="mirrorVideo" type="checkbox" checked>Mirror video</label>
+        <label class="toggle">Mode:
           <select id="envMode"><option value="0" selected>Planar</option><option value="1">Equirect</option></select>
         </label>
       </div>
-      <div>
-        <button id="enable">Enable camera & sensors</button>
-        <button id="reset">Reset</button>
+      <div class="row">
+        <button id="btnEnableBoth">Enable camera & sensors</button>
+        <button id="btnReset">Reset</button>
         <a class="small" href="#" id="save">Save frame</a>
       </div>
-    </div>
-
-    <div class="grid" id="controls">
-      <div class="section">Simulate motion (fallback / additive)</div>
-      <div class="row"><label>Yaw (°)</label><input id="camYaw" type="range" min="-180" max="180" step="0.1" value="0"><output>0.0</output></div>
-      <div class="row"><label>Pitch (°)</label><input id="camPitch" type="range" min="-89" max="89" step="0.1" value="0"><output>0.0</output></div>
-      <div class="row"><label>Roll (°)</label><input id="camRoll" type="range" min="-180" max="180" step="0.1" value="0"><output>0.0</output></div>
-      <div class="row"><label>FOV (°)</label><input id="fov" type="range" min="20" max="100" step="0.1" value="60"><output>60.0</output></div>
-      <div class="section">Mirror geometry</div>
-      <div class="row"><label>Radius</label><input id="radius" type="range" min="0.2" max="2.0" step="0.01" value="0.8"><output>0.80</output></div>
-      <div class="row"><label>Z pos</label><input id="sphereZ" type="range" min="-2.0" max="2.0" step="0.01" value="0.0"><output>0.00</output></div>
-      <div class="row"><label>Aperture (°)</label><input id="aperture" type="range" min="10" max="180" step="0.5" value="120"><output>120.0</output></div>
-      <div class="row"><label>Reflectivity</label><input id="reflect" type="range" min="0" max="1" step="0.01" value="1"><output>1.00</output></div>
-      <div class="section">UV / env</div>
-      <div class="row"><label>Env Yaw (°)</label><input id="envYaw" type="range" min="-180" max="180" step="0.1" value="0"><output>0.0</output></div>
-      <div class="row"><label>Env Pitch (°)</label><input id="envPitch" type="range" min="-90" max="90" step="0.1" value="0"><output>0.0</output></div>
-      <div class="row"><label>U scale</label><input id="uScale" type="range" min="0.25" max="4.0" step="0.01" value="1"><output>1.00</output></div>
-      <div class="row"><label>V scale</label><input id="vScale" type="range" min="0.25" max="4.0" step="0.01" value="1"><output>1.00</output></div>
-      <div class="row"><label>U offset</label><input id="uOff" type="range" min="-1" max="1" step="0.001" value="0"><output>0.000</output></div>
-      <div class="row"><label>V offset</label><input id="vOff" type="range" min="-1" max="1" step="0.001" value="0"><output>0.000</output></div>
-      <div class="section">Planar tuning</div>
-      <div class="row"><label>Plane dist</label><input id="planeDist" type="range" min="0.3" max="5.0" step="0.01" value="1.2"><output>1.20</output></div>
-      <div class="row"><label>Plane scale</label><input id="planeScale" type="range" min="0.2" max="3.0" step="0.01" value="1"><output>1.00</output></div>
     </div>
   </div>
 
   <div class="hud" id="hud">⏱︎ 0.0 ms • Sensors: off • Camera: off</div>
-  <div class="dbg" id="dbg" style="display:none">
-    <video id="vdbg" playsinline muted></video>
-    <div class="txt" id="dbgTxt">–</div>
-  </div>
 </div>
 
 <script>
 (() => {
   'use strict';
-  // ===== Short helpers =====
+
+  // ------- Helpers -------
   const clamp=(x,a,b)=>Math.min(Math.max(x,a),b);
   const d2r=d=>d*Math.PI/180;
   const smooth=(k,a,b)=>a+k*(b-a);
@@ -92,20 +92,46 @@
   const showBanner=m=>{ banner.textContent=m; banner.classList.add('show'); };
   const clearBanner=()=>{ banner.classList.remove('show'); banner.textContent=''; };
 
-  // ===== Environment sanity checks =====
-  const isSecure = window.isSecureContext || location.protocol==='https:';
-  if(!isSecure) showBanner('This page must be served over HTTPS (or http://localhost) for camera & sensors.');
-
-  if(window.top !== window.self){
-    // inside iframe
-    try{
-      const f = document.createElement('iframe');
-      // just a hint for the host page dev
-      console.log('If embedded, ensure iframe has: allow="camera; accelerometer; gyroscope" and not sandboxed without those.');
-    }catch(_){}
+  // ------- Context HUD -------
+  const ctxPre=document.getElementById('ctxPre');
+  function snapshotContext(){
+    const inIframe = window.top !== window.self;
+    const proto = location.protocol;
+    const isSecure = window.isSecureContext || proto==='https:';
+    const hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    const hasDO = 'DeviceOrientationEvent' in window;
+    const hasPerm = 'permissions' in navigator && typeof navigator.permissions.query==='function';
+    const vis = document.visibilityState;
+    const ua = navigator.userAgent;
+    const so = (screen.orientation && screen.orientation.type)+' @'+((screen.orientation && screen.orientation.angle)||0);
+    return {
+      isSecureContext: isSecure,
+      protocol: proto,
+      topLevel: !inIframe,
+      iframeNote: inIframe ? 'Embed must allow="camera; accelerometer; gyroscope" (no restrictive sandbox)' : '—',
+      hasGetUserMedia: hasGUM,
+      hasDeviceOrientation: hasDO,
+      hasPermissionsAPI: hasPerm,
+      visibility: vis,
+      screenOrientation: so,
+      userAgent: ua
+    };
+  }
+  async function snapshotPermissions(){
+    const out={};
+    if ('permissions' in navigator && navigator.permissions.query){
+      const names=['camera','microphone','accelerometer','gyroscope','magnetometer'];
+      for (const n of names){
+        try{ const st=await navigator.permissions.query({name:n}); out[n]=st.state; }
+        catch{ out[n]='(unsupported)'; }
+      }
+    } else {
+      out.note='Permissions API not available on this browser (expected on Safari).';
+    }
+    return out;
   }
 
-  // ===== WebGL2 =====
+  // ------- WebGL2 init -------
   const canvas=document.getElementById('gl');
   const gl = canvas.getContext('webgl2',{antialias:true,alpha:false,desynchronized:true});
   if(!gl){ alert('WebGL2 required'); return; }
@@ -144,15 +170,16 @@
     vec3 r=reflect(-rd,n); vec3 col=mix(sampleEnv(rd),sampleEnv(r),clamp(u_reflect,0.,1.));
     frag=vec4(col,1);
   }`;
-  function prog(vs,fs){ const s=(t,src)=>{const sh=gl.createShader(t);gl.shaderSource(sh,src);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));return sh;};
+  function makeProgram(vs,fs){
+    const s=(t,src)=>{const sh=gl.createShader(t);gl.shaderSource(sh,src);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));return sh;};
     const p=gl.createProgram(); gl.attachShader(p,s(gl.VERTEX_SHADER,vs)); gl.attachShader(p,s(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p);
-    if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p;}
-  const P=prog(VS,FS); gl.useProgram(P);
-  const U=Object.fromEntries(['u_camPos','u_camR','u_fovTan','u_res','u_c','u_r','u_ap','u_reflect','u_tex','u_uvS','u_uvO','u_envR','u_mode','u_pd','u_ps','u_mirror']
-    .map(n=>[n,gl.getUniformLocation(P,n)]));
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p;
+  }
+  const P=makeProgram(VS,FS); gl.useProgram(P);
+  const U=Object.fromEntries(['u_camPos','u_camR','u_fovTan','u_res','u_c','u_r','u_ap','u_reflect','u_tex','u_uvS','u_uvO','u_envR','u_mode','u_pd','u_ps','u_mirror'].map(n=>[n,gl.getUniformLocation(P,n)]));
   const vao=gl.createVertexArray(); gl.bindVertexArray(vao);
 
-  // Texture (placeholder -> video)
+  // ------- Texture (placeholder / video / simulated) -------
   const tex=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
@@ -161,160 +188,245 @@
   const ph=new Uint8Array([80,80,80, 140,140,140, 140,140,140, 80,80,80]);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,2,2,0,gl.RGB,gl.UNSIGNED_BYTE,ph);
 
-  // State/controls
-  const st={useSensors:true,mirrorVideo:true,envMode:0, camYaw:0,camPitch:0,camRoll:0,fov:60,
-            radius:0.8,sphereZ:0,aperture:120,reflect:1, envYaw:0,envPitch:0,uScale:1,vScale:1,uOff:0,vOff:0,
-            planeDist:1.2,planeScale:1};
-  const ids=['camYaw','camPitch','camRoll','fov','radius','sphereZ','aperture','reflect','envYaw','envPitch','uScale','vScale','uOff','vOff','planeDist','planeScale'];
-  function wireControls(){
-    ids.forEach(id=>{ const el=document.getElementById(id),out=el.nextElementSibling;
-      const up=()=>{ st[id]=Number(el.value); out.textContent=(el.step&&+el.step<.01)?(+el.value).toFixed(3):(el.step&&+el.step<.1)?(+el.value).toFixed(2):(+el.value).toFixed(1); };
-      el.addEventListener('input',up,{passive:true}); up();
-    });
-    document.getElementById('reset').addEventListener('click',()=>{
-      Object.assign(st,{camYaw:0,camPitch:0,camRoll:0,fov:60,radius:0.8,sphereZ:0,aperture:120,reflect:1,envYaw:0,envPitch:0,uScale:1,vScale:1,uOff:0,vOff:0,planeDist:1.2,planeScale:1});
-      ids.forEach(id=>{ const el=document.getElementById(id); el.value=st[id]; el.dispatchEvent(new Event('input')); });
-    });
-    document.getElementById('save').addEventListener('click',(e)=>{e.preventDefault();const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='mirror.png';a.click();});
-    document.getElementById('useSensors').addEventListener('change',e=>st.useSensors=e.target.checked);
-    document.getElementById('mirrorVideo').addEventListener('change',e=>st.mirrorVideo=e.target.checked);
-    document.getElementById('envMode').addEventListener('change',e=>st.envMode=+e.target.value);
+  let useSimulated=false;
+  const simCanvas=document.createElement('canvas');
+  simCanvas.width=640; simCanvas.height=360;
+  const simCtx=simCanvas.getContext('2d');
+
+  function uploadSimulated(t){
+    const w=simCanvas.width,h=simCanvas.height;
+    simCtx.fillStyle='#111'; simCtx.fillRect(0,0,w,h);
+    // moving gradient + grid to make motion obvious
+    const g=simCtx.createLinearGradient(0,0,w,h);
+    g.addColorStop(0, `hsl(${(t*0.03)%360},70%,55%)`);
+    g.addColorStop(1, `hsl(${(t*0.03+120)%360},70%,45%)`);
+    simCtx.fillStyle=g; simCtx.fillRect(0,0,w,h);
+    simCtx.strokeStyle='rgba(255,255,255,.6)'; simCtx.lineWidth=2;
+    const s=30+10*Math.sin(t*0.005);
+    for(let x=0;x<w;x+=s){ simCtx.beginPath(); simCtx.moveTo(x,0); simCtx.lineTo(x,h); simCtx.stroke(); }
+    for(let y=0;y<h;y+=s){ simCtx.beginPath(); simCtx.moveTo(0,y); simCtx.lineTo(w,y); simCtx.stroke(); }
+    gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,0);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,simCanvas);
   }
-  wireControls();
 
-  // DPR/resize
-  function resize(){ const dpr=clamp(window.devicePixelRatio||1,1,3); const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.clientHeight*dpr);
-    if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; gl.viewport(0,0,w,h);} }
-  addEventListener('resize',resize);
+  // ------- Camera plumbing -------
+  const vdbg=document.getElementById('vdbg');
+  vdbg.srcObject=null;
+  let camStream=null, camActive=false, lastCamError='';
+  const camPre=document.getElementById('camPre');
 
-  // Basis helpers
-  function basis(y,p,r){ const cy=Math.cos(d2r(y)),sy=Math.sin(d2r(y)), cp=Math.cos(d2r(p)),sp=Math.sin(d2r(p)), cr=Math.cos(d2r(r)),sr=Math.sin(d2r(r));
-    const Rz=[cr,-sr,0, sr,cr,0, 0,0,1], Rx=[1,0,0, 0,cp,-sp, 0,sp,cp], Ry=[cy,0,sy, 0,1,0, -sy,0,cy];
-    const m=(A,B)=>[A[0]*B[0]+A[1]*B[3]+A[2]*B[6],A[0]*B[1]+A[1]*B[4]+A[2]*B[7],A[0]*B[2]+A[1]*B[5]+A[2]*B[8],
-                    A[3]*B[0]+A[4]*B[3]+A[5]*B[6],A[3]*B[1]+A[4]*B[4]+A[5]*B[7],A[3]*B[2]+A[4]*B[5]+A[5]*B[8],
-                    A[6]*B[0]+A[7]*B[3]+A[8]*B[6],A[6]*B[1]+A[7]*B[4]+A[8]*B[7],A[6]*B[2]+A[7]*B[5]+A[8]*B[8]];
-    return new Float32Array(m(m(Ry,Rx),Rz)); }
-  function envRot(y,p){ const cy=Math.cos(d2r(y)),sy=Math.sin(d2r(y)), cp=Math.cos(d2r(p)),sp=Math.sin(d2r(p));
-    const Ry=[cy,0,sy, 0,1,0, -sy,0,cy], Rx=[1,0,0, 0,cp,-sp, 0,sp,cp];
-    const m=(A,B)=>[A[0]*B[0]+A[1]*B[3]+A[2]*B[6],A[0]*B[1]+A[1]*B[4]+A[2]*B[7],A[0]*B[2]+A[1]*B[5]+A[2]*B[8],
-                    A[3]*B[0]+A[4]*B[3]+A[5]*B[6],A[3]*B[1]+A[4]*B[4]+A[5]*B[7],A[6]*B[0]+A[7]*B[3]+A[8]*B[6],
-                    A[6]*B[1]+A[7]*B[4]+A[8]*B[7],A[6]*B[2]+A[7]*B[5]+A[8]*B[8]];
-    return new Float32Array(m(Ry,Rx)); }
-
-  // ===== Video (front camera) with robust flow =====
-  const vdbg=document.getElementById('vdbg'); const dbg=document.getElementById('dbg'); const dbgTxt=document.getElementById('dbgTxt');
-  const video=document.createElement('video'); video.playsInline=true; video.muted=true; video.autoplay=true;
-  vdbg.playsInline=true; vdbg.muted=true; vdbg.autoplay=true;
-
-  let camActive=false;
   async function startCamera(){
+    lastCamError='';
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      showBanner('Camera API not available in this context (check HTTPS / browser).'); return;
+      lastCamError='getUserMedia not available (need HTTPS or unsupported browser).';
+      showBanner(lastCamError); return;
     }
     try{
-      const constraints={ video:{facingMode:{ideal:'user'}, width:{ideal:1280}, height:{ideal:720}}, audio:false };
-      const stream=await navigator.mediaDevices.getUserMedia(constraints);
-      video.srcObject=stream; vdbg.srcObject=stream; dbg.style.display='flex';
-      await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
-      try{ await video.play(); }catch(e){ /* some browsers need a second user gesture; we still proceed */ }
+      const constraints={ video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}}, audio:false };
+      camStream = await navigator.mediaDevices.getUserMedia(constraints);
+      vdbg.srcObject = camStream;
+      await new Promise(res=>vdbg.addEventListener('loadedmetadata',res,{once:true}));
+      try{ await vdbg.play(); }catch(e){ /* some iOS need second gesture */ }
       camActive=true; clearBanner();
     }catch(err){
-      camActive=false;
-      const name=err&&err.name; const msg=err&&err.message||String(err);
-      if(name==='NotAllowedError') showBanner('Camera permission denied. Reload and allow camera. If embedded, add iframe allow="camera".');
-      else if(name==='NotFoundError') showBanner('No camera found. Try a different device or remove facingMode constraint.');
-      else if(name==='OverconstrainedError') showBanner('Camera constraints not supported. Lower requested width/height.');
-      else showBanner('Camera error: '+msg);
+      camActive=false; camStream=null;
+      lastCamError = (err && (err.name+': '+err.message)) || String(err);
+      showBanner('Camera error — '+lastCamError);
     }
   }
-  function uploadVideo(){ if(camActive && video.readyState>=2){ gl.bindTexture(gl.TEXTURE_2D,tex); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,0); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,video); } }
+  function stopCamera(){
+    if (camStream){ camStream.getTracks().forEach(t=>t.stop()); }
+    camStream=null; camActive=false; vdbg.srcObject=null;
+  }
+  function uploadVideoFrame(){
+    if(!camActive || !vdbg.videoWidth) return;
+    gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,0);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,vdbg);
+  }
 
-  // ===== DeviceOrientation (with timeout + explicit permission) =====
-  let sensorsActive=false, filt={yaw:0,pitch:0,roll:0}, lastDO=0;
+  // ------- Sensors plumbing -------
+  let sensorsActive=false, lastDOts=0, doCount=0;
+  let filt={yaw:0,pitch:0,roll:0};
+  const senPre=document.getElementById('senPre');
+
+  function screenAngleDeg(){ const o=(screen.orientation && screen.orientation.angle)||window.orientation||0; return typeof o==='number'?o:0; }
   function eulerFromDevice(alpha,beta,gamma){
-    // pragmatic mapping + screen orientation handling
-    const s=(screen.orientation && screen.orientation.angle)||window.orientation||0;
-    let yaw=alpha||0, pitch=beta||0, roll=gamma||0;
+    const s=screenAngleDeg(); let yaw=alpha||0, pitch=beta||0, roll=gamma||0;
     if(s===90||s===-270){ const t=pitch; pitch=-roll; roll=t; yaw+=90; }
     else if(s===180||s===-180){ pitch=-pitch; roll=-roll; yaw+=180; }
     else if(s===270||s===-90){ const t=pitch; pitch=roll; roll=-t; yaw-=90; }
     return {yaw,pitch,roll};
   }
-  function onDO(e){ lastDO=performance.now(); const r=eulerFromDevice(e.alpha,e.beta,e.gamma);
-    filt.yaw=smooth(.15,filt.yaw,r.yaw); filt.pitch=smooth(.15,filt.pitch,r.pitch); filt.roll=smooth(.15,filt.roll,r.roll); }
+  function onDO(e){
+    lastDOts = performance.now(); doCount++;
+    const r=eulerFromDevice(e.alpha,e.beta,e.gamma);
+    filt.yaw=smooth(.15,filt.yaw,r.yaw);
+    filt.pitch=smooth(.15,filt.pitch,r.pitch);
+    filt.roll=smooth(.15,filt.roll,r.roll);
+  }
   async function startSensors(){
+    let errText='';
     try{
-      let needIOS = (typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function')
-                 || (typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function');
+      const needIOS = (typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function')
+                   || (typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function');
       if(needIOS){
-        const p1 = (typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission)? await DeviceMotionEvent.requestPermission() : 'granted';
-        const p2 = (typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission)? await DeviceOrientationEvent.requestPermission() : 'granted';
-        if(p1!=='granted' || p2!=='granted') throw new Error('Motion permission denied.');
+        const r1 = (typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission)? await DeviceMotionEvent.requestPermission() : 'granted';
+        const r2 = (typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission)? await DeviceOrientationEvent.requestPermission() : 'granted';
+        if(r1!=='granted' || r2!=='granted') throw new Error('Motion permission denied (iOS).');
       }
       window.addEventListener('deviceorientation', onDO, {passive:true});
       sensorsActive=true; clearBanner();
-      // timeout if no events
-      setTimeout(()=>{ if(sensorsActive && performance.now()-lastDO>5000){ showBanner('No motion events received. iOS: Settings→Safari→Motion & Orientation Access ON.'); }}, 5200);
-    }catch(err){
-      sensorsActive=false; showBanner('Motion sensors unavailable: '+(err&&err.message||err));
-    }
+      setTimeout(()=>{ if(sensorsActive && performance.now()-lastDOts>5000){ showBanner('No DeviceOrientation events received. iOS: Settings → Safari → Motion & Orientation Access = ON.'); }},5200);
+    }catch(err){ sensorsActive=false; errText=(err && (err.name+': '+err.message))||String(err); showBanner('Sensors error — '+errText); }
   }
 
-  // ===== Enable button: must be a user gesture =====
-  document.getElementById('enable').addEventListener('click', async ()=>{
-    clearBanner();
-    if(!isSecure){ showBanner('Enable failed: not a secure context. Use https:// or localhost.'); return; }
-    await startCamera();
-    await startSensors();
-  });
+  // ------- UI wires -------
+  const useSensorsEl=document.getElementById('useSensors');
+  const mirrorEl=document.getElementById('mirrorVideo');
+  const modeEl=document.getElementById('envMode');
+  useSensorsEl.addEventListener('change',()=>{/* state flag read in render */});
+  mirrorEl.addEventListener('change',()=>{/* state flag read in render */});
+  modeEl.addEventListener('change',()=>{/* state flag read in render */});
 
-  // drag-to-orbit fallback
+  document.getElementById('btnEnableBoth').addEventListener('click', async ()=>{
+    clearBanner();
+    await Promise.all([startCamera(), startSensors()]);
+  });
+  document.getElementById('btnTestCam').addEventListener('click', startCamera);
+  document.getElementById('btnStopCam').addEventListener('click', stopCamera);
+  document.getElementById('btnSimVid').addEventListener('click', ()=>{ useSimulated = true; clearBanner(); });
+
+  document.getElementById('btnTestSensors').addEventListener('click', startSensors);
+  document.getElementById('btnReset').addEventListener('click', ()=>{
+    camYaw=camPitch=camRoll=0; fov=60; radius=0.8; sphereZ=0; aperture=120; reflect=1;
+    envYaw=envPitch=0; uScale=vScale=1; uOff=vOff=0; planeDist=1.2; planeScale=1;
+  });
+  document.getElementById('save').addEventListener('click',(e)=>{e.preventDefault();const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='mirror_frame.png';a.click();});
+
+  // ------- Controls state (simple) -------
+  let camYaw=0, camPitch=0, camRoll=0, fov=60;
+  let radius=0.8, sphereZ=0, aperture=120, reflect=1;
+  let envYaw=0, envPitch=0, uScale=1, vScale=1, uOff=0, vOff=0;
+  let planeDist=1.2, planeScale=1;
+
+  // quick sliders for yaw/pitch on drag (fallback)
   { let drag=false,lx=0,ly=0;
     canvas.addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;ly=e.clientY;canvas.setPointerCapture(e.pointerId);});
     canvas.addEventListener('pointerup',e=>{drag=false;canvas.releasePointerCapture(e.pointerId);});
     canvas.addEventListener('pointercancel',()=>drag=false);
-    canvas.addEventListener('pointermove',e=>{ if(!drag) return; const dx=e.clientX-lx,dy=e.clientY-ly; lx=e.clientX; ly=e.clientY;
-      st.camYaw += dx*0.25; st.camPitch = clamp(st.camPitch+dy*0.25,-89,89);
-      const y=document.getElementById('camYaw'), p=document.getElementById('camPitch'); y.value=st.camYaw; y.dispatchEvent(new Event('input')); p.value=st.camPitch; p.dispatchEvent(new Event('input'));
-    },{passive:true});
+    canvas.addEventListener('pointermove',e=>{ if(!drag) return; const dx=e.clientX-lx,dy=e.clientY-ly; lx=e.clientX; ly=e.clientY; camYaw += dx*0.25; camPitch = clamp(camPitch+dy*0.25,-89,89); },{passive:true});
   }
 
-  // ===== Render =====
+  // ------- Math bases -------
+  function basis(y,p,r){
+    const cy=Math.cos(d2r(y)),sy=Math.sin(d2r(y)), cp=Math.cos(d2r(p)),sp=Math.sin(d2r(p)), cr=Math.cos(d2r(r)),sr=Math.sin(d2r(r));
+    const Rz=[cr,-sr,0, sr,cr,0, 0,0,1], Rx=[1,0,0, 0,cp,-sp, 0,sp,cp], Ry=[cy,0,sy, 0,1,0, -sy,0,cy];
+    const m=(A,B)=>[A[0]*B[0]+A[1]*B[3]+A[2]*B[6],A[0]*B[1]+A[1]*B[4]+A[2]*B[7],A[0]*B[2]+A[1]*B[5]+A[2]*B[8],
+                    A[3]*B[0]+A[4]*B[3]+A[5]*B[6],A[3]*B[1]+A[4]*B[4]+A[5]*B[7],A[3]*B[2]+A[4]*B[5]+A[5]*B[8],
+                    A[6]*B[0]+A[7]*B[3]+A[8]*B[6],A[6]*B[1]+A[7]*B[4]+A[8]*B[7],A[6]*B[2]+A[7]*B[5]+A[8]*B[8]];
+    return new Float32Array(m(m(Ry,Rx),Rz));
+  }
+  function envRot(y,p){
+    const cy=Math.cos(d2r(y)),sy=Math.sin(d2r(y)), cp=Math.cos(d2r(p)),sp=Math.sin(d2r(p));
+    const Ry=[cy,0,sy, 0,1,0, -sy,0,cy], Rx=[1,0,0, 0,cp,-sp, 0,sp,cp];
+    const m=(A,B)=>[A[0]*B[0]+A[1]*B[3]+A[2]*B[6],A[0]*B[1]+A[1]*B[4]+A[2]*B[7],A[0]*B[2]+A[1]*B[5]+A[2]*B[8],
+                    A[3]*B[0]+A[4]*B[3]+A[5]*B[6],A[3]*B[1]+A[4]*B[4]+A[5]*B[7],A[6]*B[0]+A[7]*B[3]+A[8]*B[6],
+                    A[6]*B[1]+A[7]*B[4]+A[8]*B[7],A[6]*B[2]+A[7]*B[5]+A[8]*B[8]];
+    return new Float32Array(m(Ry,Rx));
+  }
+
+  // ------- Resize / DPR -------
+  function resize(){ const dpr=clamp(window.devicePixelRatio||1,1,3); const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.clientHeight*dpr);
+    if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; gl.viewport(0,0,w,h);} }
+  addEventListener('resize', resize);
+
+  // ------- Inspector loops -------
+  const camInfo=async()=>{
+    let tracks=[], active=false, caps='(no stream)';
+    if (camStream){
+      tracks = camStream.getVideoTracks().map(t=>({label:t.label,enabled:t.enabled,readyState:t.readyState,muted:t.muted}));
+      active = camStream.active;
+      try{ const s=camStream.getVideoTracks()[0]; if (s) caps = JSON.stringify(s.getSettings()); }catch{}
+    }
+    return {
+      streamActive: active,
+      tracks,
+      videoReadyState: vdbg.readyState,
+      videoSize: `${vdbg.videoWidth||0}×${vdbg.videoHeight||0}`,
+      paused: vdbg.paused,
+      error: lastCamError || '—'
+    };
+  };
+
+  const senInfo=()=>({
+    sensorsActive,
+    lastEventMsAgo: (lastDOts? (performance.now()-lastDOts).toFixed(0): '∞'),
+    eventCount: doCount,
+    filteredEuler: { yaw:+filt.yaw.toFixed(1), pitch:+filt.pitch.toFixed(1), roll:+filt.roll.toFixed(1) },
+  });
+
+  async function refreshInspector(){
+    const ctx = snapshotContext();
+    const perms = await snapshotPermissions();
+    ctxPre.textContent = JSON.stringify({ctx,perms}, null, 2);
+    camPre.textContent = JSON.stringify(await camInfo(), null, 2);
+    senPre.textContent = JSON.stringify(senInfo(), null, 2);
+  }
+  setInterval(refreshInspector, 1000);
+  refreshInspector();
+
+  // ------- Render -------
   const hud=document.getElementById('hud');
+  const useSensorsFlag=()=>document.getElementById('useSensors').checked;
+  const mirrorFlag=()=>document.getElementById('mirrorVideo').checked;
+  const envMode=()=>parseInt(document.getElementById('envMode').value,10);
+
   function render(){
     const t0=performance.now();
     resize();
-    uploadVideo();
 
-    const yaw=(st.useSensors&&sensorsActive?filt.yaw:0)+st.camYaw;
-    const pitch=(st.useSensors&&sensorsActive?filt.pitch:0)+st.camPitch;
-    const roll=(st.useSensors&&sensorsActive?filt.roll:0)+st.camRoll;
+    if (useSimulated) uploadSimulated(performance.now());
+    else uploadVideoFrame();
+
+    // compose yaw/pitch/roll
+    const yaw=(useSensorsFlag() && sensorsActive ? filt.yaw : 0) + camYaw;
+    const pitch=(useSensorsFlag() && sensorsActive ? filt.pitch : 0) + camPitch;
+    const roll=(useSensorsFlag() && sensorsActive ? filt.roll : 0) + camRoll;
 
     gl.useProgram(P);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,tex); gl.uniform1i(U.u_tex,0);
     gl.uniform3fv(U.u_camPos,new Float32Array([0,0,2.2]));
     gl.uniformMatrix3fv(U.u_camR,false,basis(yaw,pitch,roll));
-    gl.uniform1f(U.u_fovTan, Math.tan(d2r(st.fov*.5)));
+    gl.uniform1f(U.u_fovTan, Math.tan(d2r(fov*.5)));
     gl.uniform2f(U.u_res, canvas.width, canvas.height);
-    gl.uniform3f(U.u_c,0,0,st.sphereZ);
-    gl.uniform1f(U.u_r, st.radius);
-    gl.uniform1f(U.u_ap, Math.cos(d2r(clamp(st.aperture,1,179))*.5));
-    gl.uniform1f(U.u_reflect, st.reflect);
-    gl.uniform2f(U.u_uvS, st.uScale, st.vScale);
-    gl.uniform2f(U.u_uvO, st.uOff, st.vOff);
-    gl.uniformMatrix3fv(U.u_envR,false,envRot(st.envYaw,st.envPitch));
-    gl.uniform1i(U.u_mode, st.envMode|0);
-    gl.uniform1f(U.u_pd, st.planeDist);
-    gl.uniform1f(U.u_ps, st.planeScale);
-    gl.uniform1i(U.u_mirror, st.mirrorVideo?1:0);
+    gl.uniform3f(U.u_c,0,0,sphereZ);
+    gl.uniform1f(U.u_r, radius);
+    gl.uniform1f(U.u_ap, Math.cos(d2r(clamp(aperture,1,179))*.5));
+    gl.uniform1f(U.u_reflect, reflect);
+    gl.uniform2f(U.u_uvS, uScale, vScale);
+    gl.uniform2f(U.u_uvO, uOff, vOff);
+    gl.uniformMatrix3fv(U.u_envR,false,envRot(envYaw,envPitch));
+    gl.uniform1i(U.u_mode, envMode());
+    gl.uniform1f(U.u_pd, planeDist);
+    gl.uniform1f(U.u_ps, planeScale);
+    gl.uniform1i(U.u_mirror, mirrorFlag()?1:0);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 
-    const camStr=camActive?'on':'off', sensStr=(st.useSensors?(sensorsActive?'on':'pending'):'off');
+    const camStr=(camActive||useSimulated)? (useSimulated?'sim':'on') : 'off';
+    const sensStr=(useSensorsFlag()?(sensorsActive?'on':'pending'):'off');
     hud.textContent=`⏱︎ ${(performance.now()-t0).toFixed(1)} ms • Sensors: ${sensStr} • Camera: ${camStr}`;
-    dbgTxt.textContent = `video: ${video.videoWidth}×${video.videoHeight} ready=${video.readyState} | sens ts: ${lastDO|0}`;
     requestAnimationFrame(render);
   }
-  resize(); render();
+  render();
+
+  // ------- First context check -------
+  const ctx = snapshotContext();
+  if (!ctx.isSecureContext) showBanner('Not a secure context — use https:// or http://localhost. No prompts will appear without it.');
+  if (window.top !== window.self) {
+    showBanner('Embedded in an iframe. Host must set iframe allow="camera; accelerometer; gyroscope" (and not sandbox without these).');
+  }
 })();
 </script>
 </body>
