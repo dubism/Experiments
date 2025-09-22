@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Concave Mirror • Camera Reflection + Device Motion</title>
+<style>
+  :root{--ui-bg:#0b0c10;--ui-fg:#e6e6e6;--gap:10px}
+  html,body{margin:0;height:100%;background:#000;color:var(--ui-fg);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  .wrap{position:fixed;inset:0;display:grid;grid-template-rows:1fr auto}
+  canvas{width:100vw;height:100dvh;display:block;touch-action:none}
+  .panel{background:color-mix(in oklab,#000 70%,var(--ui-bg) 30%);backdrop-filter:blur(8px);border-top:1px solid #222;padding:8px 12px calc(env(safe-area-inset-bottom)+10px);display:grid;gap:var(--gap)}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:8px;align-items:center}
+  .grid label{grid-column:span 3;white-space:nowrap}
+  .grid input[type="range"]{grid-column:span 7;width:100%}
+  .grid output{grid-column:span 2;text-align:right;font-variant-numeric:tabular-nums}
+  .row{display:contents}
+  .section{grid-column:1 / -1;margin-top:2px;color:#9fb7ff;font-weight:600}
+  .btns{display:flex;gap:8px;justify-content:space-between;align-items:center}
+  button{all:unset;background:#1f2533;color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;border:1px solid #2b3244}
+  button:active{transform:translateY(1px)}
+  .small{color:#8fb3ff;text-decoration:none;font-size:12px;margin-left:8px}
+  .hud{position:fixed;left:8px;top:env(safe-area-inset-top,8px);padding:6px 8px;background:rgba(0,0,0,.5);border:1px solid #222;border-radius:6px;font-size:12px;color:#ddd;pointer-events:none;user-select:none}
+  .inline{display:flex;gap:10px;align-items:center}
+  .inline input[type="checkbox"]{transform:translateY(1px)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="gl"></canvas>
+
+  <div class="panel">
+    <div class="btns">
+      <div class="inline">
+        <strong>Concave Mirror • Live Camera Reflection</strong>
+        <label class="inline" title="Use motion sensors to drive camera"><input id="useSensors" type="checkbox" checked>Use sensors</label>
+        <label class="inline" title="Mirror the incoming video (typical for front cameras)"><input id="mirrorVideo" type="checkbox" checked>Mirror video</label>
+        <label class="inline" title="Select planar (camera-like) or equirect (360°) environment mapping">
+          Mode:
+          <select id="envMode">
+            <option value="0" selected>Planar</option>
+            <option value="1">Equirectangular</option>
+          </select>
+        </label>
+      </div>
+      <div>
+        <button id="enable">Enable camera & sensors</button>
+        <button id="reset">Reset</button>
+        <a class="small" href="#" id="save">Save frame</a>
+      </div>
+    </div>
+
+    <div class="grid" id="controls">
+      <div class="section">Simulate motion (fallback / additive)</div>
+      <div class="row"><label for="camYaw">Yaw (°)</label><input id="camYaw" type="range" min="-180" max="180" step="0.1" value="0"><output>0.0</output></div>
+      <div class="row"><label for="camPitch">Pitch (°)</label><input id="camPitch" type="range" min="-89" max="89" step="0.1" value="0"><output>0.0</output></div>
+      <div class="row"><label for="camRoll">Roll (°)</label><input id="camRoll" type="range" min="-180" max="180" step="0.1" value="0"><output>0.0</output></div>
+      <div class="row"><label for="fov">FOV (°)</label><input id="fov" type="range" min="20" max="100" step="0.1" value="60"><output>60.0</output></div>
+
+      <div class="section">Mirror geometry</div>
+      <div class="row"><label for="radius">Radius</label><input id="radius" type="range" min="0.2" max="2.0" step="0.01" value="0.8"><output>0.80</output></div>
+      <div class="row"><label for="sphereZ">Z pos</label><input id="sphereZ" type="range" min="-2.0" max="2.0" step="0.01" value="0.0"><output>0.00</output></div>
+      <div class="row"><label for="aperture">Aperture (°)</label><input id="aperture" type="range" min="10" max="180" step="0.5" value="120"><output>120.0</output></div>
+      <div class="row"><label for="reflect">Reflectivity</label><input id="reflect" type="range" min="0.0" max="1.0" step="0.01" value="1.0"><output>1.00</output></div>
+
+      <div class="section">Environment mapping (UV)</div>
+      <div class="row"><label for="envYaw">Env Yaw (°)</label><input id="envYaw" type="range" min="-180" max="180" step="0.1" value="0"><output>0.0</output></div>
+      <div class="row"><label for="envPitch">Env Pitch (°)</label><input id="envPitch" type="range" min="-90" max="90" step="0.1" value="0"><output>0.0</output></div>
+      <div class="row"><label for="uScale">U scale</label><input id="uScale" type="range" min="0.25" max="4.0" step="0.01" value="1.0"><output>1.00</output></div>
+      <div class="row"><label for="vScale">V scale</label><input id="vScale" type="range" min="0.25" max="4.0" step="0.01" value="1.0"><output>1.00</output></div>
+      <div class="row"><label for="uOff">U offset</label><input id="uOff" type="range" min="-1.0" max="1.0" step="0.001" value="0.0"><output>0.000</output></div>
+      <div class="row"><label for="vOff">V offset</label><input id="vOff" type="range" min="-1.0" max="1.0" step="0.001" value="0.0"><output>0.000</output></div>
+
+      <div class="section">Planar mode tuning (camera-as-billboard)</div>
+      <div class="row"><label for="planeDist">Plane dist</label><input id="planeDist" type="range" min="0.3" max="5.0" step="0.01" value="1.2"><output>1.20</output></div>
+      <div class="row"><label for="planeScale">Plane scale</label><input id="planeScale" type="range" min="0.2" max="3.0" step="0.01" value="1.0"><output>1.00</output></div>
+    </div>
+  </div>
+
+  <div class="hud" id="hud">⏱︎ 0.0 ms • FPS 0 • Sensors: off • Camera: off</div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ===== Utilities =====
+  const clamp = (x,a,b)=>Math.min(Math.max(x,a),b);
+  const deg2rad = d=>d*Math.PI/180, rad2deg = r=>r*180/Math.PI;
+  const assert = (c,m)=>{ if(!c) throw new Error(m); };
+  const smooth = (k, prev, next)=>prev + k*(next - prev);
+
+  // ===== WebGL2 setup =====
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl2', {antialias:true,alpha:false,desynchronized:true});
+  if(!gl){ alert('WebGL2 required'); return; }
+
+  const quadVS = `#version 300 es
+  precision highp float;
+  const vec2 verts[4]=vec2[4](vec2(-1,-1),vec2(1,-1),vec2(-1,1),vec2(1,1));
+  out vec2 vUV;
+  void main(){ gl_Position=vec4(verts[gl_VertexID],0.0,1.0); vUV=verts[gl_VertexID]*0.5+0.5; }`;
+
+  const quadFS = `#version 300 es
+  precision highp float;
+  in vec2 vUV;
+  out vec4 frag;
+
+  uniform vec3  u_camPos;
+  uniform mat3  u_camR;
+  uniform float u_fovTan;
+  uniform vec2  u_resolution;
+
+  uniform vec3  u_sphereC;
+  uniform float u_sphereR;
+  uniform float u_apertureCos;
+  uniform float u_reflect;
+
+  uniform sampler2D u_env;     // video frame
+  uniform vec2  u_texSize;     // video size
+  uniform vec2  u_uvScale;
+  uniform vec2  u_uvOffset;
+  uniform mat3  u_envR;
+  uniform int   u_envMode;     // 0=planar billboard, 1=equirect
+  uniform float u_planeDist;   // distance to env plane (planar)
+  uniform float u_planeScale;  // scale of env plane
+  uniform int   u_mirrorU;     // mirror horizontally?
+
+  vec2 dirToEquirect(vec3 d){
+    d = normalize(d);
+    float u = atan(d.z, d.x) / (2.0*3.141592653589793) + 0.5;
+    float v = asin(clamp(d.y,-1.0,1.0)) / 3.141592653589793 + 0.5;
+    return vec2(u,v);
+  }
+
+  vec3 rot(mat3 R, vec3 v){ return R*v; }
+
+  // Sample video as either: equirect OR planar billboard facing -Z in env space
+  vec3 sampleEnv(vec3 dir){
+    dir = rot(u_envR, dir); // rotate env
+    vec2 uv;
+    if(u_envMode==1){
+      // equirectangular assumption
+      uv = dirToEquirect(dir);
+    }else{
+      // Planar billboard at Z = -u_planeDist, facing +Z
+      // Ray from origin along 'dir' intersects plane z = -u_planeDist
+      // dir.z should be <0 to hit; otherwise sample edge by clamping
+      float t = (-u_planeDist - 0.0) / max(dir.z, -1e-4);
+      vec3 hit = vec3(0.0) + dir * t; // plane coords
+      // Map x,y to uv using scale; center at (0,0)
+      uv = hit.xy * (0.5/u_planeScale) + 0.5;
+    }
+    // optional mirror in U for front cameras
+    if(u_mirrorU==1){ uv.x = 1.0 - uv.x; }
+    // UV transform + wrap
+    uv = uv * u_uvScale + u_uvOffset;
+    uv = fract(uv);
+    // manual bilinear to avoid precision artifacts (GL_LINEAR also fine)
+    return texture(u_env, uv).rgb;
+  }
+
+  void main(){
+    vec2 ndc = vUV*2.0-1.0;
+    float aspect = u_resolution.x/u_resolution.y;
+    vec3 rd_cam = normalize(vec3(ndc.x*aspect*u_fovTan, -ndc.y*u_fovTan, -1.0));
+    vec3 rd = normalize(u_camR * rd_cam);
+    vec3 ro = u_camPos;
+
+    // Ray-sphere
+    vec3 oc = ro - u_sphereC;
+    float b = dot(oc, rd);
+    float c = dot(oc, oc) - u_sphereR*u_sphereR;
+    float h = b*b - c;
+    if(h < 0.0){ frag = vec4(sampleEnv(rd),1.0); return; }
+    h = sqrt(h);
+    float t = -b - h;
+    if(t < 0.0) t = -b + h;
+    if(t < 0.0){ frag = vec4(sampleEnv(rd),1.0); return; }
+    vec3 p = ro + rd*t;
+
+    vec3 n_out = normalize(p - u_sphereC);
+    vec3 n_in  = -n_out;
+    vec3 vdir = normalize(ro - p);
+    float cosA = dot(n_in, vdir);
+    if(cosA < u_apertureCos){ frag = vec4(sampleEnv(rd),1.0); return; }
+
+    vec3 I = -rd;
+    vec3 r = reflect(I, n_in);
+
+    vec3 col = mix(sampleEnv(rd), sampleEnv(r), clamp(u_reflect,0.0,1.0));
+    frag = vec4(col,1.0);
+  }`;
+
+  function makeProgram(vs,fs){
+    const s = (type,src)=>{ const sh=gl.createShader(type); gl.shaderSource(sh,src); gl.compileShader(sh);
+      if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, s(gl.VERTEX_SHADER,vs));
+    gl.attachShader(prog, s(gl.FRAGMENT_SHADER,fs));
+    gl.linkProgram(prog);
+    if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    return prog;
+  }
+
+  const prog = makeProgram(quadVS, quadFS);
+  gl.useProgram(prog);
+  const loc = Object.fromEntries([
+    'u_camPos','u_camR','u_fovTan','u_resolution',
+    'u_sphereC','u_sphereR','u_apertureCos','u_reflect',
+    'u_env','u_texSize','u_uvScale','u_uvOffset','u_envR','u_envMode','u_planeDist','u_planeScale','u_mirrorU'
+  ].map(n=>[n,gl.getUniformLocation(prog,n)]));
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+
+  // ===== Video texture =====
+  const video = document.createElement('video');
+  video.playsInline = true; video.muted = true; video.autoplay = true;
+  let camActive = false;
+
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+
+  function uploadVideoFrame(){
+    if(!camActive || video.readyState < 2) return;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0); // we mirror via uniform when needed
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,video);
+  }
+
+  // ===== Controls / State =====
+  const state = {
+    useSensors: true, mirrorVideo: true, envMode: 0,
+    camYaw: 0, camPitch: 0, camRoll: 0, fov: 60,
+    radius: 0.8, sphereZ: 0.0, aperture: 120, reflect: 1.0,
+    envYaw: 0, envPitch: 0, uScale: 1.0, vScale: 1.0, uOff: 0.0, vOff: 0.0,
+    planeDist: 1.2, planeScale: 1.0
+  };
+  const ids = ['camYaw','camPitch','camRoll','fov','radius','sphereZ','aperture','reflect','envYaw','envPitch','uScale','vScale','uOff','vOff','planeDist','planeScale'];
+
+  function fmt(el,val){
+    if(el.step && parseFloat(el.step) < 0.01) return Number(val).toFixed(3);
+    if(el.step && parseFloat(el.step) < 0.1) return Number(val).toFixed(2);
+    return Number(val).toFixed(1);
+  }
+  function wireControls(){
+    const controls = document.getElementById('controls');
+    ids.forEach(id=>{
+      const el = document.getElementById(id), out = el.nextElementSibling;
+      const update=()=>{ state[id] = Number(el.value); out.textContent = fmt(el, el.value); };
+      el.addEventListener('input', update, {passive:true}); update();
+    });
+    document.getElementById('reset').addEventListener('click', ()=>{
+      Object.assign(state,{camYaw:0,camPitch:0,camRoll:0,fov:60,radius:0.8,sphereZ:0.0,aperture:120,reflect:1.0,envYaw:0,envPitch:0,uScale:1,vScale:1,uOff:0,vOff:0,planeDist:1.2,planeScale:1.0});
+      ids.forEach(id=>{ const el=document.getElementById(id); el.value=state[id]; el.dispatchEvent(new Event('input')); });
+    });
+    document.getElementById('save').addEventListener('click', (e)=>{ e.preventDefault(); const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download='mirror_frame.png'; a.click(); });
+    const useSensorsEl = document.getElementById('useSensors');
+    const mirrorEl = document.getElementById('mirrorVideo');
+    const modeEl = document.getElementById('envMode');
+    useSensorsEl.addEventListener('change', ()=> state.useSensors = useSensorsEl.checked);
+    mirrorEl.addEventListener('change', ()=> state.mirrorVideo = mirrorEl.checked);
+    modeEl.addEventListener('change', ()=> state.envMode = parseInt(modeEl.value,10));
+  }
+
+  // ===== Resize / DPR =====
+  function resize(){
+    const dpr = clamp(window.devicePixelRatio||1,1,3);
+    const w = Math.max(1, Math.floor(canvas.clientWidth*dpr));
+    const h = Math.max(1, Math.floor(canvas.clientHeight*dpr));
+    if(canvas.width!==w || canvas.height!==h){ canvas.width=w; canvas.height=h; gl.viewport(0,0,w,h); }
+  }
+  window.addEventListener('resize', resize);
+
+  // ===== Sensors (DeviceOrientation) =====
+  let sensorsActive = false;
+  // filtered Euler (deg)
+  let filt = {yaw:0,pitch:0,roll:0};
+  let emaK = 0.15;
+
+  function screenAngleDeg(){
+    const o = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    return (typeof o === 'number') ? o : 0;
+  }
+
+  // Convert DeviceOrientation angles (alpha=z, beta=x, gamma=y) to camera yaw/pitch/roll in world space.
+  function eulerFromDevice(alpha, beta, gamma, screenDeg){
+    // Convert to radians
+    const z = deg2rad(alpha||0), x = deg2rad(beta||0), y = deg2rad(gamma||0);
+    // Device matrix R = Rz(z)*Rx(x)*Ry(y) (intrinsic Z-X-Y)
+    const cz=Math.cos(z), sz=Math.sin(z);
+    const cx=Math.cos(x), sx=Math.sin(x);
+    const cy=Math.cos(y), sy=Math.sin(y);
+    // Multiply: Rz * Rx
+    const m00=cz, m01=-sz, m02=0;
+    const m10=sz, m11= cz, m12=0;
+    const m20= 0,
