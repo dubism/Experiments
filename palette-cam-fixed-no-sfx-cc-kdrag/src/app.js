@@ -7,10 +7,9 @@ import { medianCutKmax } from './algos/mediancut.js';
 import { initCamera, startCamera, getSource, getVideoElement, getPhotoBitmap, computeSquareCrop, currentPhotoSrcRect, drawPhotoPreview } from './core/camera.js';
 import { initControls } from './ui/controls.js';
 import { initComposite } from './features/composite.js';
-import { initManualPicker } from './features/manualPicker.js'; // <-- [ADD]
+import { initManualPicker } from './features/manualPicker.js';
 
 // --- Element Querying ---
-// Find all necessary DOM elements once and store them in a central object.
 const elements = {
   video: $('#video'), frozenCanvas: $('#frozenCanvas'), status: $('#status'),
   fps: $('#fps'), res: $('#res'), swatches: $('#swatches'), gradient: $('#gradient'),
@@ -20,6 +19,9 @@ const elements = {
   zoomSlider: $('#zoom'), zoomMinus: $('#zoomMinus'), zoomPlus: $('#zoomPlus'),
   freezeBtn: $('#freezeBtn'), compositeOverlay: $('#compositeOverlay'),
   compositeCanvas: $('#compositeCanvas'), compositeImg: $('#compositeImg'),
+  compositeActions: $('#compositeActions'), exportModeBtn: $('#exportModeBtn'),
+  exportAlgoBtn: $('#exportAlgoBtn'), regenerateBtn: $('#regenerateBtn'),
+  shareSaveBtn: $('#shareSaveBtn'), downloadBtn: $('#downloadBtn'),
   unfreezeBtn: $('#unfreezeBtn'), ccWrap: $('#ccWrap'), cc: $('#cc'),
   algoName: $('#algoName'), pressShield: $('#pressShield'), camError: $('#camError'),
   offCanvas: $('#off'), srcCamera: $('#srcCamera'), srcPhoto: $('#srcPhoto'),
@@ -30,6 +32,9 @@ const elements = {
 // --- Application State ---
 const state = {
   algo: 'kmeans',
+  exportMode: 'existing',
+  exportAlgo: 'kmeans',
+  posterSeed: 0,
   K: +elements.kRange.value,
   procWidth: +elements.sizeRange.value,
   throttleN: 40,
@@ -39,11 +44,11 @@ const state = {
 
 // --- Constants & Labels ---
 const ALGOS = ['kmeans', 'hist', 'mediancut'];
-const ALGO_LABELS = { kmeans: 'K-Means (LAB)', hist: 'Histogram', mediancut: 'Median-cut' };
+const ALGO_LABELS = { kmeans: 'K-Means (OKLab)', hist: 'Histogram', mediancut: 'Median-cut (OKLab)' };
 const ALGO_COPY = {
-  kmeans: 'K-Means (LAB): groups similar colors in human-perceived space.',
-  hist: 'Histogram: picks colors that appear most often with simple smoothing.',
-  mediancut: 'Median-cut: slices the color range into balanced boxes.'
+  kmeans: 'K-Means (OKLab): clusters colors in a perceptual color space for more natural palettes.',
+  hist: 'Histogram: picks dominant colors and averages the real source pixels inside each selected bin.',
+  mediancut: 'Median-cut (OKLab): splits the perceptual color range into balanced boxes.'
 };
 const TH_MIN = 1, TH_MAX = 150;
 const sliderToN = v => Math.max(TH_MIN, Math.min(TH_MAX, Math.round(TH_MIN * Math.exp((v / 100) * Math.log(TH_MAX / TH_MIN)))));
@@ -68,14 +73,14 @@ function renderPalette(pal, skipClear = false) {
     pal.forEach(rgb => {
       const d = document.createElement('div');
       d.className = 'swatch';
-      d.style.background = `rgb(${rgb.join(',')})`;
+      d.style.background = `rgb(${rgb.map(v => Math.round(v)).join(',')})`;
       elements.swatches.appendChild(d);
     });
   }
 
   elements.gradient.hidden = !showGrad || !pal.length;
   if (showGrad && pal.length) {
-    const stops = pal.map(rgb => `rgb(${rgb.join(',')})`).join(', ');
+    const stops = pal.map(rgb => `rgb(${rgb.map(v => Math.round(v)).join(',')})`).join(', ');
     elements.gradient.style.background = `linear-gradient(90deg, ${stops})`;
   }
 }
@@ -120,12 +125,28 @@ new ResizeObserver(() => {
 // --- Main Processing Loop ---
 let frameCounter = 0, lastT = performance.now(), fps = 0, skipCounter = 0;
 const offCtx = elements.offCanvas.getContext('2d', { willReadFrequently: true });
+offCtx.imageSmoothingEnabled = true;
+offCtx.imageSmoothingQuality = 'high';
+
 function samplePixels(imgData, stride) {
   const d = imgData.data, n = d.length, out = [];
   for (let i = 0; i < n; i += 4 * stride) {
     if (d[i + 3] >= 250) out.push([d[i], d[i + 1], d[i + 2]]);
   }
   return out;
+}
+
+function ensureOffscreenSize(size) {
+  if (elements.offCanvas.width !== size || elements.offCanvas.height !== size) {
+    elements.offCanvas.width = size;
+    elements.offCanvas.height = size;
+  }
+}
+
+function computePalette(pixels) {
+  if (state.algo === 'kmeans') return kmeansKmax(pixels, state.KMAX);
+  if (state.algo === 'hist') return histogramKmax(pixels, state.KMAX);
+  return medianCutKmax(pixels, state.KMAX);
 }
 
 function tick(now) {
@@ -140,36 +161,29 @@ function tick(now) {
   }
   frameCounter++;
 
-  // Always prep the offscreen canvas and draw the current source
-  elements.offCanvas.width = state.procWidth;
-  elements.offCanvas.height = state.procWidth;
+  const size = Math.max(32, state.procWidth | 0);
+  ensureOffscreenSize(size);
 
   if (getSource() === 'camera' && getVideoElement()?.readyState >= 2) {
     const { sx, sy, sw, sh } = computeSquareCrop();
     if (sw > 0) {
-      offCtx.drawImage(getVideoElement(), sx, sy, sw, sh, 0, 0, state.procWidth, state.procWidth);
+      offCtx.drawImage(getVideoElement(), sx, sy, sw, sh, 0, 0, size, size);
       elements.res.textContent = `${getVideoElement().videoWidth}×${getVideoElement().videoHeight}`;
     }
   } else if (getSource() === 'photo' && getPhotoBitmap()) {
     const { sx, sy, sw, sh } = currentPhotoSrcRect();
-    offCtx.drawImage(getPhotoBitmap(), sx, sy, sw, sh, 0, 0, state.procWidth, state.procWidth);
+    offCtx.drawImage(getPhotoBitmap(), sx, sy, sw, sh, 0, 0, size, size);
     elements.res.textContent = `${Math.round(sw)}×${Math.round(sh)}`;
   } else {
-    offCtx.clearRect(0, 0, state.procWidth, state.procWidth);
+    offCtx.clearRect(0, 0, size, size);
   }
 
   // Throttle ONLY the expensive recompute
   if (--skipCounter <= 0) {
     skipCounter = state.throttleN;
 
-    const pixels = samplePixels(offCtx.getImageData(0, 0, state.procWidth, state.procWidth), 6);
-    if (state.algo === 'kmeans') {
-      state.lastPaletteKmax = kmeansKmax(pixels, state.KMAX);
-    } else if (state.algo === 'hist') {
-      state.lastPaletteKmax = histogramKmax(pixels, state.KMAX);
-    } else {
-      state.lastPaletteKmax = medianCutKmax(pixels, state.KMAX);
-    }
+    const pixels = samplePixels(offCtx.getImageData(0, 0, size, size), 6);
+    state.lastPaletteKmax = computePalette(pixels);
   }
 
   // Always render with the latest available palette and the current K (instant UI)
@@ -190,6 +204,7 @@ function init() {
 
   const setAlgo = (next) => {
     state.algo = next;
+    state.exportAlgo = next;
     elements.algoName.textContent = ALGO_LABELS[state.algo];
     highlightAlgoDesc();
     state.lastPaletteKmax = null;
@@ -226,7 +241,7 @@ function init() {
   });
 
   // Manual Picker wiring
-  initManualPicker(elements, state, offCtx); // <-- [ADD]
+  initManualPicker(elements, state, offCtx);
 
   // Set initial UI values
   elements.kVal.textContent = String(state.K);
