@@ -1,55 +1,82 @@
-export function kmeansKmax(pixels, Kmax){
-  if(!pixels.length) return [];
-  const idxs = Uint32Array.from({length:pixels.length}, (_,i)=>i);
-  let leaves = [{ids:idxs, id:0}];
-  let nextId=1;
+import { rgbToOklab, oklabToRgb, dist2Lab } from './color.js';
 
-  function centroid(ids){
-    let r=0,g=0,b=0; const n=ids.length||ids.byteLength;
-    for(let i=0;i<n;i++){ const p=pixels[ids[i]]; r+=p[0]; g+=p[1]; b+=p[2]; }
-    const inv=1/Math.max(1,n); return [r*inv,g*inv,b*inv];
+function mean(points, ids) {
+  let a = 0, b = 0, c = 0;
+  const n = ids.length;
+  if (!n) return [0, 0, 0];
+  for (let i = 0; i < n; i++) {
+    const p = points[ids[i]];
+    a += p[0]; b += p[1]; c += p[2];
   }
-  function split2(ids){
-    let nr=0,ng=0,nb=0, n=ids.length||ids.byteLength;
-    for(let i=0;i<n;i++){ const p=pixels[ids[i]]; nr+=p[0]; ng+=p[1]; nb+=p[2]; }
-    const mr=nr/n, mg=ng/n, mb=nb/n;
-    let vr=0,vg=0,vb=0;
-    for(let i=0;i<n;i++){ const p=pixels[ids[i]]; const dr=p[0]-mr,dg=p[1]-mg,db=p[2]-mb; vr+=dr*dr; vg+=dg*dg; vb+=db*db; }
-    const axis = (vr>=vg && vr>=vb)?0:((vg>=vb)?1:2);
+  return [a / n, b / n, c / n];
+}
 
-    const c=[mr,mg,mb];
-    const seedA=c.slice(), seedB=c.slice();
-    let A=[], B=[]; let ca=seedA, cb=seedB;
-    for(let it=0; it<3; it++){
-      A.length=0; B.length=0;
-      for(let i=0;i<n;i++){
-        const p=pixels[ids[i]];
-        const da=(p[0]-ca[0])**2 + (p[1]-ca[1])**2 + (p[2]-ca[2])**2;
-        const db=(p[0]-cb[0])**2 + (p[1]-cb[1])**2 + (p[2]-cb[2])**2;
-        (da<=db?A:B).push(ids[i]);
-      }
-      if(A.length===0 || B.length===0){
-        const sorted = Array.from(ids).sort((i1,i2)=>pixels[i1][axis]-pixels[i2][axis]);
-        const mid = sorted.length>>1;
-        A = sorted.slice(0, mid);
-        B = sorted.slice(mid);
-      }
-      ca = centroid(A); cb = centroid(B);
+function rangeAxis(points, ids) {
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < ids.length; i++) {
+    const p = points[ids[i]];
+    for (let a = 0; a < 3; a++) {
+      if (p[a] < lo[a]) lo[a] = p[a];
+      if (p[a] > hi[a]) hi[a] = p[a];
     }
-    return {A:Uint32Array.from(A), B:Uint32Array.from(B), ca, cb};
+  }
+  const r = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+  return (r[0] >= r[1] && r[0] >= r[2]) ? 0 : (r[1] >= r[2] ? 1 : 2);
+}
+
+function seededCentroids(points, ids, K) {
+  if (K <= 1 || ids.length <= 1) return [mean(points, ids)];
+
+  const axis = rangeAxis(points, ids);
+  const sorted = Array.from(ids).sort((i, j) => points[i][axis] - points[j][axis]);
+  const centers = [];
+
+  for (let k = 0; k < K; k++) {
+    const t = K === 1 ? 0.5 : k / (K - 1);
+    const idx = sorted[Math.max(0, Math.min(sorted.length - 1, Math.round(t * (sorted.length - 1))))];
+    centers.push(points[idx].slice());
   }
 
-  while(leaves.length < Kmax){
-    leaves.sort((x,y)=> (y.ids.length - x.ids.length) || (x.id - y.id));
-    const node = leaves.shift();
-    if(!node || node.ids.length<=1){ if(node) leaves.push(node); break; }
-    const {A,B} = split2(node.ids);
-    leaves.push({ids:A, id:nextId++});
-    leaves.push({ids:B, id:nextId++});
+  return centers;
+}
+
+export function kmeansKmax(pixels, Kmax) {
+  if (!pixels.length || Kmax <= 0) return [];
+
+  const K = Math.max(1, Math.min(Kmax | 0, pixels.length));
+  const labs = pixels.map(rgbToOklab);
+  const ids = Uint32Array.from({ length: pixels.length }, (_, i) => i);
+  let centers = seededCentroids(labs, ids, K);
+  let groups = Array.from({ length: K }, () => []);
+
+  for (let iter = 0; iter < 12; iter++) {
+    groups = Array.from({ length: K }, () => []);
+
+    for (let i = 0; i < labs.length; i++) {
+      let best = 0;
+      let bestD = Infinity;
+      for (let k = 0; k < centers.length; k++) {
+        const d = dist2Lab(labs[i], centers[k]);
+        if (d < bestD) { bestD = d; best = k; }
+      }
+      groups[best].push(i);
+    }
+
+    let moved = 0;
+    for (let k = 0; k < K; k++) {
+      if (!groups[k].length) continue;
+      const next = mean(labs, groups[k]);
+      moved += dist2Lab(centers[k], next);
+      centers[k] = next;
+    }
+    if (moved < 1e-8) break;
   }
 
-  const reps = leaves.map(l=>({c:centroid(l.ids), n:l.ids.length, id:l.id}))
-                     .sort((a,b)=> (b.n-a.n) || (a.id-b.id))
-                     .map(o=>o.c);
-  return reps.slice(0, Kmax);
+  return groups
+    .map((ids, i) => ({ c: centers[i], n: ids.length, i }))
+    .filter(o => o.n > 0)
+    .sort((a, b) => (b.n - a.n) || (a.i - b.i))
+    .slice(0, Kmax)
+    .map(o => oklabToRgb(o.c));
 }
