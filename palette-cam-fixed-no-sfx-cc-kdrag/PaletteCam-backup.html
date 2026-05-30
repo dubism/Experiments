@@ -6,10 +6,10 @@
 <title>Live Camera Palette — Freeze Composite</title>
 
 <!-- Styles (with cache-busting) -->
-<link rel="stylesheet" href="styles/base.css?v=1">
-<link rel="stylesheet" href="styles/layout.css?v=1">
-<link rel="stylesheet" href="styles/theme.css?v=1">
-<link rel="stylesheet" href="styles/manualPicker.css?v=1"><!-- ADD -->
+<link rel="stylesheet" href="styles/base.css?v=2">
+<link rel="stylesheet" href="styles/layout.css?v=2">
+<link rel="stylesheet" href="styles/theme.css?v=2">
+<link rel="stylesheet" href="styles/manualPicker.css?v=2">
 </head>
 <body>
   <div class="app">
@@ -28,7 +28,7 @@
     <section id="uiPane" aria-label="UI">
       <div id="palettePane">
         <div class="title">
-          <div id="algoName" class="small">K-Means (LAB)</div>
+          <div id="algoName" class="small">K-Means (OKLab)</div>
           <div class="small">FPS <span id="fps">0</span> · <span id="res">–</span> · <span id="status">Starting…</span></div>
         </div>
         <div class="stack" id="paletteClickable" title="Tap left/right to switch · long-press for controls · drag to change K" draggable="false">
@@ -106,17 +106,24 @@
   <div id="pressShield"></div>
   <div id="camError" role="status"></div>
 
-  <div id="compositeOverlay">
+  <div id="compositeOverlay" role="dialog" aria-modal="true" aria-label="Exported palette image">
     <canvas id="compositeCanvas"></canvas>
-    <img id="compositeImg" alt="Composite preview"/>
-    <div id="lpHint" class="smallhint">Long-press the image to save.</div>
-    <button class="btn cta" id="unfreezeBtn" type="button">UNFREEZE</button>
+    <img id="compositeImg" alt="Composite preview" />
+    <div id="lpHint" class="smallhint">Use Share / Save for Photos. Download saves a PNG file. In poster format, tap the image for a new composition.</div>
+    <div id="compositeActions">
+      <button class="btn" id="exportModeBtn" type="button">FORMAT: CLASSIC</button>
+      <button class="btn" id="exportAlgoBtn" type="button">SAMPLE: K-MEANS</button>
+      <button class="btn" id="regenerateBtn" type="button" hidden>NEW POSTER</button>
+      <button class="btn cta" id="shareSaveBtn" type="button">SHARE / SAVE</button>
+      <button class="btn" id="downloadBtn" type="button">DOWNLOAD PNG</button>
+      <button class="btn" id="unfreezeBtn" type="button">UNFREEZE</button>
+    </div>
   </div>
 
   <canvas id="off"></canvas>
   <canvas id="capFrame"></canvas>
 
   <!-- App (native ES module) -->
-  <script type="module" src="src/app.js?v=1"></script>
+  <script type="module" src="src/app.js?v=2"></script>
 </body>
 </html>
