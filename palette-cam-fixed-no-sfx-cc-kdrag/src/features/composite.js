@@ -8,6 +8,12 @@ import { medianCutKmax } from '../algos/mediancut.js';
 
 const STORY_W = 1080;
 const STORY_H = 1920;
+const EXPORT_ALGOS = ['kmeans', 'hist', 'mediancut'];
+const EXPORT_ALGO_LABELS = {
+  kmeans: 'K-MEANS',
+  hist: 'HISTOGRAM',
+  mediancut: 'MEDIAN-CUT'
+};
 
 function samplePixels(imgData, stride) {
   const d = imgData.data;
@@ -64,25 +70,18 @@ function sortedByLuma(colors) {
   return [...colors].sort((a, b) => luminance(a) - luminance(b));
 }
 
-function pickTextColor(bg, palette) {
-  const sorted = sortedByLuma(palette);
-  if (!sorted.length) return [255, 255, 255];
-  const dark = sorted[0];
-  const light = sorted[sorted.length - 1];
-  return Math.abs(luminance(bg) - luminance(light)) > Math.abs(luminance(bg) - luminance(dark)) ? light : dark;
-}
-
 function canvasToBlob(canvas, type = 'image/png', quality) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not export image.')), type, quality);
   });
 }
 
-function makeFileName(mode) {
+function makeFileName(mode, algo) {
   const d = new Date();
   const pad = n => String(n).padStart(2, '0');
-  const suffix = mode === 'immersive' ? 'immersive-story' : 'classic';
-  return `palette-${suffix}-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.png`;
+  const suffix = mode === 'poster' ? 'poster' : 'classic';
+  const algoName = algo === 'mediancut' ? 'median' : algo;
+  return `palette-${suffix}-${algoName}-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.png`;
 }
 
 function createButton(id, label, className = 'btn') {
@@ -106,8 +105,20 @@ function ensureExportControls(elements) {
 
   let modeBtn = elements.exportModeBtn || overlay.querySelector('#exportModeBtn');
   if (!modeBtn) {
-    modeBtn = createButton('exportModeBtn', 'MODE: EXISTING', 'btn');
+    modeBtn = createButton('exportModeBtn', 'FORMAT: CLASSIC', 'btn');
     actions.appendChild(modeBtn);
+  }
+
+  let exportAlgoBtn = elements.exportAlgoBtn || overlay.querySelector('#exportAlgoBtn');
+  if (!exportAlgoBtn) {
+    exportAlgoBtn = createButton('exportAlgoBtn', 'SAMPLE: K-MEANS', 'btn');
+    actions.appendChild(exportAlgoBtn);
+  }
+
+  let regenerateBtn = elements.regenerateBtn || overlay.querySelector('#regenerateBtn');
+  if (!regenerateBtn) {
+    regenerateBtn = createButton('regenerateBtn', 'NEW POSTER', 'btn');
+    actions.appendChild(regenerateBtn);
   }
 
   let shareSaveBtn = elements.shareSaveBtn || overlay.querySelector('#shareSaveBtn');
@@ -126,12 +137,16 @@ function ensureExportControls(elements) {
 
   elements.compositeActions = actions;
   elements.exportModeBtn = modeBtn;
+  elements.exportAlgoBtn = exportAlgoBtn;
+  elements.regenerateBtn = regenerateBtn;
   elements.shareSaveBtn = shareSaveBtn;
   elements.downloadBtn = downloadBtn;
 }
 
-function ensureExportModeControl(elements, state) {
+function ensureExportPanelControls(elements, state) {
   state.exportMode = state.exportMode || 'existing';
+  state.exportAlgo = state.exportAlgo || state.algo || 'kmeans';
+  state.posterSeed = state.posterSeed || 0;
 
   let field = elements.cc?.querySelector('#exportModeField');
   if (!field && elements.cc) {
@@ -140,19 +155,39 @@ function ensureExportModeControl(elements, state) {
     field.className = 'field';
     field.innerHTML = `
       <div class="field-head">
-        <span class="label">Output image</span>
-        <span class="value" id="exportModeVal">Existing</span>
+        <span class="label">Output format</span>
+        <span class="value" id="exportModeVal">Classic</span>
       </div>
       <div class="field-body">
-        <button type="button" class="btn wide" id="exportModeCcBtn">Toggle immersive story</button>
+        <button type="button" class="btn wide" id="exportModeCcBtn">Switch to poster</button>
       </div>
       <div class="divider"></div>
     `;
     elements.cc.appendChild(field);
   }
 
+  let algoField = elements.cc?.querySelector('#exportAlgoField');
+  if (!algoField && elements.cc) {
+    algoField = document.createElement('div');
+    algoField.id = 'exportAlgoField';
+    algoField.className = 'field';
+    algoField.innerHTML = `
+      <div class="field-head">
+        <span class="label">Export sampling</span>
+        <span class="value" id="exportAlgoVal">K-MEANS</span>
+      </div>
+      <div class="field-body">
+        <button type="button" class="btn wide" id="exportAlgoCcBtn">Switch sampling algorithm</button>
+      </div>
+      <div class="divider"></div>
+    `;
+    elements.cc.appendChild(algoField);
+  }
+
   elements.exportModeVal = field?.querySelector('#exportModeVal') || null;
   elements.exportModeCcBtn = field?.querySelector('#exportModeCcBtn') || null;
+  elements.exportAlgoVal = algoField?.querySelector('#exportAlgoVal') || null;
+  elements.exportAlgoCcBtn = algoField?.querySelector('#exportAlgoCcBtn') || null;
 }
 
 function downloadBlob(blob, filename) {
@@ -176,8 +211,14 @@ async function shareBlob(blob, filename) {
   return false;
 }
 
-function computeFreezeHexesFromCrop(cropImg, sx, sy, sw, sh, state) {
-  const { procWidth, algo, K, KMAX } = state;
+function computePaletteForAlgo(pixels, algo, KMAX) {
+  if (algo === 'hist') return histogramKmax(pixels, KMAX);
+  if (algo === 'mediancut') return medianCutKmax(pixels, KMAX);
+  return kmeansKmax(pixels, KMAX);
+}
+
+function computeFreezeHexesFromCrop(cropImg, sx, sy, sw, sh, state, algo = state.exportAlgo || state.algo || 'kmeans') {
+  const { procWidth, K, KMAX } = state;
   const w = Math.max(32, procWidth | 0);
   const work = document.createElement('canvas');
   work.width = w;
@@ -189,11 +230,7 @@ function computeFreezeHexesFromCrop(cropImg, sx, sy, sw, sh, state) {
   ctx.drawImage(cropImg, sx, sy, sw, sh, 0, 0, w, w);
 
   const pixels = samplePixels(ctx.getImageData(0, 0, w, w), 2);
-  let pal;
-  if (algo === 'kmeans') pal = kmeansKmax(pixels, KMAX);
-  else if (algo === 'hist') pal = histogramKmax(pixels, KMAX);
-  else pal = medianCutKmax(pixels, KMAX);
-
+  const pal = computePaletteForAlgo(pixels, algo, KMAX);
   return padToK(pal.slice(0, Math.min(K, pal.length)).map(rgbToHexLower), K);
 }
 
@@ -279,116 +316,114 @@ function drawExistingComposite(ctx, hiCap, hexes, elements) {
   }
 }
 
-function drawRoundedImage(ctx, img, x, y, size, radius) {
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + size, y, x + size, y + size, radius);
-  ctx.arcTo(x + size, y + size, x, y + size, radius);
-  ctx.arcTo(x, y + size, x, y, radius);
-  ctx.arcTo(x, y, x + size, y, radius);
-  ctx.closePath();
-  ctx.clip();
-  ctx.drawImage(img, 0, 0, img.width, img.height, x, y, size, size);
-  ctx.restore();
-}
-
-function fillStripe(ctx, colors, y, h, inset = 0, reverse = false) {
+function fillStripe(ctx, colors, x, y, w, h, vertical = false, reverse = false) {
   const arr = reverse ? [...colors].reverse() : colors;
-  const w = STORY_W - inset * 2;
   const n = Math.max(1, arr.length);
   for (let i = 0; i < n; i++) {
-    const x0 = inset + Math.round((i / n) * w);
-    const x1 = inset + Math.round(((i + 1) / n) * w);
     ctx.fillStyle = arr[i];
-    ctx.fillRect(x0, y, Math.max(1, x1 - x0), h);
+    if (vertical) {
+      const y0 = y + Math.round((i / n) * h);
+      const y1 = y + Math.round(((i + 1) / n) * h);
+      ctx.fillRect(x, y0, w, Math.max(1, y1 - y0));
+    } else {
+      const x0 = x + Math.round((i / n) * w);
+      const x1 = x + Math.round(((i + 1) / n) * w);
+      ctx.fillRect(x0, y, Math.max(1, x1 - x0), h);
+    }
   }
 }
 
-function drawImmersiveStory(ctx, hiCap, hexes, elements) {
-  const palette = padToK(hexes.slice(), Math.max(6, hexes.length)).map(hexToRgb);
-  const sorted = sortedByLuma(palette);
+function hardGradient(ctx, colors, x0, y0, x1, y1) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  const n = Math.max(1, colors.length - 1);
+  colors.forEach((hex, i) => g.addColorStop(i / n, hex));
+  return g;
+}
+
+function drawSquareImage(ctx, img, x, y, size) {
+  ctx.drawImage(img, 0, 0, img.width, img.height, x, y, size, size);
+}
+
+function drawPosterComposite(ctx, hiCap, hexes, elements, seed = 0) {
+  const hexPalette = padToK(hexes.slice(), Math.max(6, hexes.length));
+  const rgbPalette = hexPalette.map(hexToRgb);
+  const sorted = sortedByLuma(rgbPalette);
   const dark = sorted[0];
   const light = sorted[sorted.length - 1];
   const mid = sorted[(sorted.length / 2) | 0];
-  const hexPalette = palette.map(rgbToHexLower);
 
   elements.compositeCanvas.width = STORY_W;
   elements.compositeCanvas.height = STORY_H;
 
-  const bg = ctx.createLinearGradient(0, 0, STORY_W, STORY_H);
-  palette.forEach((c, i) => bg.addColorStop(i / Math.max(1, palette.length - 1), rgbCss(mix(c, light, 0.1))));
+  const variant = Math.abs(seed | 0) % 5;
+  const rotated = hexPalette.map((_, i) => hexPalette[(i + variant) % hexPalette.length]);
+  const reverse = variant % 2 === 1;
+  const bg = hardGradient(
+    ctx,
+    reverse ? rotated.slice().reverse() : rotated,
+    variant % 3 === 0 ? 0 : STORY_W,
+    0,
+    variant % 3 === 1 ? 0 : STORY_W,
+    STORY_H
+  );
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, STORY_W, STORY_H);
 
-  fillStripe(ctx, hexPalette, 56, 48, 72, false);
-  fillStripe(ctx, hexPalette, 124, 24, 116, true);
+  const wash = mix(light, mid, 0.34);
+  ctx.fillStyle = rgbCss(wash, 0.22);
+  ctx.fillRect(0, 0, STORY_W, STORY_H);
 
-  const outer = 928;
-  const x = Math.round((STORY_W - outer) / 2);
-  const y = 246;
-  const frameBands = 7;
-  const band = 18;
-  for (let i = 0; i < frameBands; i++) {
-    ctx.fillStyle = hexPalette[i % hexPalette.length];
-    ctx.fillRect(x + i * band, y + i * band, outer - i * band * 2, outer - i * band * 2);
-  }
-  const imagePad = frameBands * band;
-  drawRoundedImage(ctx, hiCap, x + imagePad, y + imagePad, outer - imagePad * 2, 34);
+  const imageSizes = [760, 820, 700, 860, 780];
+  const imageX = [96, 164, 72, 148, 248][variant];
+  const imageY = [250, 310, 430, 228, 360][variant];
+  const imageSize = imageSizes[variant];
 
-  const panelX = 72;
-  const panelY = 1214;
-  const panelW = STORY_W - panelX * 2;
-  const panelH = 520;
-  ctx.fillStyle = rgbCss(mix(mid, light, 0.18), 0.95);
-  ctx.fillRect(panelX, panelY, panelW, panelH);
-
-  let rowY = panelY + 40;
-  if (elements.rectChk.checked) {
-    fillStripe(ctx, hexPalette, rowY, 128, panelX + 28, false);
-    rowY += 162;
-  }
+  const slabColor = rgbCss(mix(mid, light, 0.12), 0.92);
+  const slabX = [0, 90, 0, 360, 0][variant];
+  const slabY = [176, 210, 330, 160, 260][variant];
+  const slabW = [STORY_W, 900, 760, 720, 820][variant];
+  const slabH = [980, 920, 780, 1080, 940][variant];
+  ctx.fillStyle = slabColor;
+  ctx.fillRect(slabX, slabY, slabW, slabH);
 
   if (elements.gradChk.checked) {
-    const grad = ctx.createLinearGradient(panelX + 28, 0, panelX + panelW - 28, 0);
-    hexPalette.forEach((hex, i) => grad.addColorStop(i / Math.max(1, hexPalette.length - 1), hex));
-    ctx.fillStyle = grad;
-    ctx.fillRect(panelX + 28, rowY, panelW - 56, 96);
-    rowY += 136;
+    const gradX = [72, 0, 690, 72, 0][variant];
+    const gradY = [1280, 1260, 160, 1220, 1340][variant];
+    const gradW = [936, STORY_W, 250, 860, STORY_W][variant];
+    const gradH = [210, 240, 1150, 170, 180][variant];
+    ctx.fillStyle = hardGradient(ctx, rotated, gradX, gradY, gradX + gradW, gradY + gradH);
+    ctx.fillRect(gradX, gradY, gradW, gradH);
   }
 
-  const tileGap = 14;
-  const cols = Math.min(5, hexPalette.length);
-  const tileW = Math.floor((panelW - 56 - tileGap * (cols - 1)) / cols);
-  const tileH = 96;
-  const tileY = Math.min(rowY, panelY + panelH - tileH - 42);
-  hexPalette.slice(0, cols).forEach((hex, i) => {
-    ctx.fillStyle = hex;
-    ctx.fillRect(panelX + 28 + i * (tileW + tileGap), tileY, tileW, tileH);
-  });
+  drawSquareImage(ctx, hiCap, imageX, imageY, imageSize);
 
-  const labelBg = mix(dark, light, 0.24);
-  const labelText = pickTextColor(labelBg, palette);
-  ctx.fillStyle = rgbCss(labelBg, 0.92);
-  ctx.fillRect(72, STORY_H - 112, STORY_W - 144, 54);
-  ctx.font = '24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = rgbCss(labelText);
-  ctx.fillText('IMMERSIVE STORY · 1080 × 1920', STORY_W / 2, STORY_H - 85);
+  if (elements.rectChk.checked) {
+    const stripY = [1570, 1510, 1320, 1520, 118][variant];
+    const stripH = [178, 140, 210, 126, 190][variant];
+    fillStripe(ctx, rotated, 72, stripY, 936, stripH, false, variant % 2 === 0);
+
+    const sideX = [0, 904, 0, 0, 902][variant];
+    fillStripe(ctx, rotated, sideX, 0, 178, STORY_H, true, variant % 2 === 1);
+  }
+
+  // Final sharp accent line: sampled colors only, no labels, no black.
+  const accent = rgbCss(mix(dark, light, 0.18));
+  ctx.fillStyle = accent;
+  if (variant % 2 === 0) ctx.fillRect(72, 1780, 936, 32);
+  else ctx.fillRect(64, 126, 32, 1668);
 }
 
-async function renderCompositePNG(hiCap, hexes, elements, exportState, mode) {
+async function renderCompositePNG(hiCap, hexes, elements, exportState, mode, algo, seed) {
   const canvas = elements.compositeCanvas;
   const ctx = canvas.getContext('2d', { alpha: false });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  if (mode === 'immersive') drawImmersiveStory(ctx, hiCap, hexes, elements);
+  if (mode === 'poster') drawPosterComposite(ctx, hiCap, hexes, elements, seed);
   else drawExistingComposite(ctx, hiCap, hexes, elements);
 
   const blob = await canvasToBlob(canvas, 'image/png');
-  const filename = makeFileName(mode);
+  const filename = makeFileName(mode, algo);
 
   if (exportState.objectUrl) URL.revokeObjectURL(exportState.objectUrl);
   exportState.objectUrl = URL.createObjectURL(blob);
@@ -402,33 +437,64 @@ async function renderCompositePNG(hiCap, hexes, elements, exportState, mode) {
 
 export function initComposite(elements, state, statusUpdater, toast) {
   ensureExportControls(elements);
-  ensureExportModeControl(elements, state);
+  ensureExportPanelControls(elements, state);
 
   const exportState = { blob: null, filename: '', objectUrl: '', hiCap: null, hexes: null };
 
   const syncModeUI = () => {
-    const immersive = state.exportMode === 'immersive';
-    if (elements.exportModeBtn) elements.exportModeBtn.textContent = immersive ? 'MODE: IMMERSIVE' : 'MODE: EXISTING';
-    if (elements.exportModeVal) elements.exportModeVal.textContent = immersive ? 'Immersive story' : 'Existing';
-    if (elements.exportModeCcBtn) elements.exportModeCcBtn.textContent = immersive ? 'Toggle to existing' : 'Toggle to immersive story';
+    const poster = state.exportMode === 'poster';
+    const algoLabel = EXPORT_ALGO_LABELS[state.exportAlgo] || EXPORT_ALGO_LABELS.kmeans;
+
+    if (elements.exportModeBtn) elements.exportModeBtn.textContent = poster ? 'FORMAT: POSTER' : 'FORMAT: CLASSIC';
+    if (elements.exportModeVal) elements.exportModeVal.textContent = poster ? 'Poster' : 'Classic';
+    if (elements.exportModeCcBtn) elements.exportModeCcBtn.textContent = poster ? 'Switch to classic' : 'Switch to poster';
+
+    if (elements.exportAlgoBtn) elements.exportAlgoBtn.textContent = `SAMPLE: ${algoLabel}`;
+    if (elements.exportAlgoVal) elements.exportAlgoVal.textContent = algoLabel;
+
+    if (elements.regenerateBtn) elements.regenerateBtn.hidden = !poster;
   };
 
-  const rerender = async () => {
-    if (!exportState.hiCap || !exportState.hexes) return;
+  const recomputeHexes = () => {
+    if (!exportState.hiCap) return;
+    exportState.hexes = computeFreezeHexesFromCrop(exportState.hiCap, 0, 0, exportState.hiCap.width, exportState.hiCap.height, state, state.exportAlgo);
+  };
+
+  const rerender = async ({ recompute = false, regenerate = false } = {}) => {
+    if (!exportState.hiCap) return;
+    if (recompute || !exportState.hexes) recomputeHexes();
+    if (regenerate) state.posterSeed = (state.posterSeed || 0) + 1;
     statusUpdater('Rendering…');
-    await renderCompositePNG(exportState.hiCap, exportState.hexes, elements, exportState, state.exportMode);
+    await renderCompositePNG(exportState.hiCap, exportState.hexes, elements, exportState, state.exportMode, state.exportAlgo, state.posterSeed || 0);
     statusUpdater('Frozen');
   };
 
   const toggleMode = async () => {
     play('click');
-    state.exportMode = state.exportMode === 'immersive' ? 'existing' : 'immersive';
+    state.exportMode = state.exportMode === 'poster' ? 'existing' : 'poster';
     syncModeUI();
-    if (elements.compositeOverlay.classList.contains('open')) await rerender();
+    if (elements.compositeOverlay.classList.contains('open')) await rerender({ regenerate: state.exportMode === 'poster' });
+  };
+
+  const cycleExportAlgo = async () => {
+    play('click');
+    const i = EXPORT_ALGOS.indexOf(state.exportAlgo);
+    state.exportAlgo = EXPORT_ALGOS[(i + 1 + EXPORT_ALGOS.length) % EXPORT_ALGOS.length];
+    syncModeUI();
+    if (elements.compositeOverlay.classList.contains('open')) await rerender({ recompute: true });
+  };
+
+  const regeneratePoster = async () => {
+    if (state.exportMode !== 'poster') return;
+    play('click');
+    await rerender({ regenerate: true });
   };
 
   const freezeNow = async () => {
     play('freeze');
+    state.exportAlgo = state.exportAlgo || state.algo || 'kmeans';
+    syncModeUI();
+
     const source = getSource();
     const video = getVideoElement();
 
@@ -458,10 +524,9 @@ export function initComposite(elements, state, statusUpdater, toast) {
 
     try {
       statusUpdater('Exporting…');
-      const hexes = computeFreezeHexesFromCrop(hiCap, 0, 0, hiCap.width, hiCap.height, state);
       exportState.hiCap = hiCap;
-      exportState.hexes = hexes;
-      await renderCompositePNG(hiCap, hexes, elements, exportState, state.exportMode);
+      recomputeHexes();
+      await renderCompositePNG(hiCap, exportState.hexes, elements, exportState, state.exportMode, state.exportAlgo, state.posterSeed || 0);
       statusUpdater('Frozen');
     } catch (err) {
       console.error(err);
@@ -512,7 +577,11 @@ export function initComposite(elements, state, statusUpdater, toast) {
   on(elements.shareSaveBtn, 'click', shareOrSave);
   on(elements.downloadBtn, 'click', download);
   on(elements.exportModeBtn, 'click', () => { toggleMode(); });
+  on(elements.exportAlgoBtn, 'click', () => { cycleExportAlgo(); });
+  on(elements.regenerateBtn, 'click', () => { regeneratePoster(); });
+  on(elements.compositeImg, 'click', () => { regeneratePoster(); });
   if (elements.exportModeCcBtn) on(elements.exportModeCcBtn, 'click', () => { toggleMode(); });
+  if (elements.exportAlgoCcBtn) on(elements.exportAlgoCcBtn, 'click', () => { cycleExportAlgo(); });
 
   syncModeUI();
 }
